@@ -103,7 +103,21 @@ const mapboxBaseMap = new ol.layer.Tile({
     visible: false,
     preload: 15,
 });
-const baseMaps = [osmBaseMap, esriMapGroup, mapboxBaseMap];
+
+const esriMap = new TileLayer({
+    source: new Source({
+        attributions:
+            'Tiles © <a href="https://services.arcgisonline.com/ArcGIS/' +
+            'rest/services/World_Topo_Map/MapServer">ArcGIS</a>',
+        url:
+            "https://server.arcgisonline.com/ArcGIS/rest/services/" +
+            "World_Topo_Map/MapServer/tile/{z}/{y}/{x}",
+    }),
+    crossOrigin: "anonymous",
+    visible: false,
+});
+
+const baseMaps = [osmBaseMap, esriMapGroup, mapboxBaseMap, esriMap];
 
 // Minimap
 const overviewMapControl = new OverviewMap({
@@ -258,41 +272,79 @@ function hideSpinner() {
     map.getTargetElement().classList.remove("spinner");
 }
 
+window.addEventListener("resize", () => {
+    if (window.innerWidth <= 768) {
+        map.removeControl(mousePositionControl);
+    } else {
+        if (!map.getControls().getArray().includes(mousePositionControl)) {
+            map.addControl(mousePositionControl);
+        }
+    }
+});
+
+function setBasemap(mapType, element = null) {
+    document.getElementById("active-basemap").src =
+        element?.nextElementSibling?.src ?? element?.querySelector("img")?.src;
+    if (mapType === "osm") {
+        setOsmBasemap();
+    } else if (mapType === "bing") {
+        setBingmapBasemap();
+    } else if (mapType === "mapbox") {
+        setMapboxBasemap();
+    } else if (mapType === "esriTerrain") {
+        setEsriBasemap();
+    }
+
+    localStorage.setItem("basemap", mapType);
+}
+
+function toggleOptions() {
+    document.querySelector(".basemap-options").classList.toggle("flex");
+}
+
+function initBasemap() {
+    const savedBasemap = localStorage.getItem("basemap");
+    if (savedBasemap) {
+        const element = document.querySelector(
+            `input[name='basemap'][value='${savedBasemap}']`
+        ).parentElement;
+        setBasemap(savedBasemap, element);
+    } else {
+        const checkedInput = document.querySelector(
+            "input[name='basemap']:checked"
+        );
+        setBasemap(checkedInput.value, checkedInput.parentElement);
+    }
+}
+initBasemap();
+
 function setOsmBasemap() {
     osmBaseMap.setVisible(true);
     esriMapGroup.setVisible(false);
     mapboxBaseMap.setVisible(false);
+    esriMap.setVisible(false);
 }
 
 function setBingmapBasemap() {
     osmBaseMap.setVisible(false);
     esriMapGroup.setVisible(true);
     mapboxBaseMap.setVisible(false);
+    esriMap.setVisible(false);
 }
 
 function setMapboxBasemap() {
     osmBaseMap.setVisible(false);
     esriMapGroup.setVisible(false);
     mapboxBaseMap.setVisible(true);
+    esriMap.setVisible(false);
 }
 
-$("#basemap").change(function (e) {
-    e.preventDefault();
-    switch ($("#basemap").val()) {
-        case "osm":
-            setOsmBasemap();
-            break;
-        case "esri":
-            setBingmapBasemap();
-            break;
-        case "mapbox":
-            setMapboxBasemap();
-            break;
-        default:
-            setOsmBasemap();
-            break;
-    }
-});
+function setEsriBasemap() {
+    osmBaseMap.setVisible(false);
+    esriMapGroup.setVisible(false);
+    mapboxBaseMap.setVisible(false);
+    esriMap.setVisible(true);
+}
 
 // Layer Click Event
 const vectorSourceEventClick = new VectorSource();
@@ -325,6 +377,7 @@ let geojsonArea;
 let drawingRunning;
 let drawed;
 let minimapVisible = true;
+let listener;
 
 /**
  * Vector source for drawing.
@@ -565,7 +618,7 @@ function addInteraction(type = "Polygon") {
 
         // Show feature properties after drawing
         if (draw) {
-            $("#featureProperties").removeClass("d-none");
+            $("#featureProperties").removeClass("hidden");
         }
     });
 }
@@ -579,7 +632,7 @@ function drawingStart() {
     drawingRunning = true;
     drawed = null;
     buttonStateDrawing();
-    $("#featureProperties").addClass("d-none");
+    $("#featureProperties").addClass("hidden");
     $("#drawerGeojson").html("");
 }
 
@@ -612,7 +665,10 @@ function drawingEnd() {
     map.removeInteraction(draw);
 
     // Unset the listener to avoid memory leaks
-    unByKey(listener);
+    if (listener) {
+        unByKey(listener);
+        listener = null;
+    }
 
     buttonStateDrawing();
 }
@@ -662,8 +718,8 @@ function createMeasureTooltip() {
 function buttonStateDrawing() {
     $("#drawPolygonBtn").html(
         drawingRunning
-            ? "Batal"
-            : "<i class='fas fa-pencil-ruler'></i>&nbsp;&nbsp; gambar polygon"
+            ? "Cancel Drawing"
+            : "<i class='ri-pencil-line'></i>&nbsp; Draw Polygon"
     );
     $("#drawPolygonBtn")
         .removeClass()
@@ -681,8 +737,8 @@ $("#drawPolygonBtn").click(function (e) {
         $("#featurePropertiesForm")[0].reset();
     }
 });
-$("#batalFeatureProperties").click(function (e) {
-    $("#featureProperties").addClass("d-none");
+$("#cancelFeatureProperties").click(function (e) {
+    $("#featureProperties").addClass("hidden");
     $("#drawerGeojson").html("");
     if (vectorLayerDrawing) {
         map.removeLayer(vectorLayerDrawing);
@@ -742,13 +798,13 @@ function zoomOut() {
 function toggleMinimap(button) {
     if (minimapVisible) {
         hideMinimap();
+        button.classList.remove("rotate-180");
         if (button) {
-            button.classList.add("rotate-180");
         }
     } else {
         showMinimap();
         if (button) {
-            button.classList.remove("rotate-180");
+            button.classList.add("rotate-180");
         }
     }
 }
@@ -799,13 +855,19 @@ function hideMinimap() {
     }
 }
 
-// Export functions to global scope for access from HTML
-window.zoomIn = zoomIn;
-window.zoomOut = zoomOut;
-window.toggleMinimap = toggleMinimap;
-
 document.addEventListener("DOMContentLoaded", function () {
     if (!minimapVisible) {
         toggleMinimap();
     }
 });
+
+// Export functions to global scope for access from HTML
+window.map = map;
+window.zoomIn = zoomIn;
+window.zoomOut = zoomOut;
+window.toggleMinimap = toggleMinimap;
+window.setBasemap = setBasemap;
+window.setBingmapBasemap = setBingmapBasemap;
+window.setMapboxBasemap = setMapboxBasemap;
+window.setOsmBasemap = setOsmBasemap;
+window.setEsriBasemap = setEsriBasemap;

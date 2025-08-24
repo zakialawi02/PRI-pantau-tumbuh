@@ -5,7 +5,7 @@
 <a class="nav-link hover:text-accent! translate-y-4 transform text-sm font-bold transition-all duration-300 hover:scale-105 md:translate-y-0 md:opacity-100" href="{{ route('about-pri') }}" style="animation-delay: 0.2s;">About PRI</a>
 <!-- Services Mega Menu -->
 <div class="group relative" id="services-mega-menu">
-    <button class="nav-link hover:text-accent! peer flex translate-y-4 transform items-center text-sm font-bold transition-all duration-300 hover:scale-105 md:translate-y-0 md:opacity-100" type="button" style="animation-delay: 0.3s;">
+    <button class="nav-link hover:text-accent! peer flex translate-y-4 transform items-center text-sm font-bold uppercase transition-all duration-300 hover:scale-105 md:translate-y-0 md:opacity-100" type="button" style="animation-delay: 0.3s;">
         Services
         <svg class="ms-2.5 h-2.5 w-2.5 transition-transform duration-200 group-hover:rotate-180" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 10 6">
             <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m1 1 4 4 4-4" />

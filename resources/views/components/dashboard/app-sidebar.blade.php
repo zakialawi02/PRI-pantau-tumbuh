@@ -19,7 +19,7 @@
         <hr class="bg-foreground/40 h-px border-0">
 
         <!-- Content -->
-        <div class="[&::-webkit-scrollbar-thumb]:bg-primary [&::-webkit-scrollbar-track]:bg-primary-muted h-full overflow-y-auto [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar]:w-1.5">
+        <div class="[&::-webkit-scrollbar-thumb]:bg-primary [&::-webkit-scrollbar-track]:bg-primary-foreground h-full overflow-y-auto [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar]:w-1.5">
             <nav class="flex w-full flex-col flex-wrap p-3">
                 <ul class="flex flex-col space-y-1">
                     <x-dashboard.nav-item route="/" icon="ri-home-4-line" text="Home" />

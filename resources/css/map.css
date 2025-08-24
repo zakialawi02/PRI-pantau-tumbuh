@@ -1,14 +1,6 @@
-#map {
+.map {
     width: 100%;
     height: 100%;
-    min-height: 300px; /* Fallback minimum height */
-}
-
-/* Ensure map container has proper dimensions */
-.map-container {
-    height: 100%;
-    width: 100%;
-    min-height: 300px;
 }
 
 /* Fix for flex layout height inheritance */
@@ -92,7 +84,7 @@
     border-top-color: #000;
     border-radius: 50%;
     animation: spin 1s linear infinite;
-    z-index: 9999;
+    z-index: 40;
 }
 
 @keyframes spin {
@@ -142,32 +134,106 @@
     border-top-color: #ffcc33;
 }
 
+/* Basemap Switcher */
+.basemap-switcher {
+    position: absolute;
+    bottom: 50px;
+    left: 5px;
+    background: white;
+    padding: 6px;
+    border-radius: 5px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    z-index: 5;
+}
+
+.basemap-options {
+    display: none;
+    flex-direction: row;
+    gap: 6px;
+    margin-left: 8px;
+}
+
+.basemap-switcher:hover .basemap-options {
+    display: flex;
+}
+
+.basemap-option {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 5px;
+    cursor: pointer;
+    border-radius: 5px;
+    transition: background 0.3s;
+}
+
+.basemap-option img {
+    width: 50px;
+    height: 50px;
+    border-radius: 4px;
+}
+
+.basemap-option input[type="radio"] {
+    display: none;
+}
+
+.basemap-switcher span {
+    font-size: 11px;
+}
+
+.basemap-option.active {
+    background: rgba(0, 0, 0, 0.1);
+}
+
+.trigger-basemap {
+    cursor: pointer;
+}
+
+.nav-map-active {
+    color: var(--color-background);
+    background-color: var(--color-primary);
+    opacity: 0.6;
+    padding: 3px 1px;
+    border-radius: 8px;
+}
+
+@media (max-width: 767px) {
+    .responsive-drawer {
+        border-radius: 1rem 1rem 0 0;
+        bottom: 0 !important;
+        top: auto !important;
+        width: 100% !important;
+    }
+}
+
+@media (min-width: 768px) {
+    .responsive-drawer {
+        position: relative;
+        border-radius: 0;
+        transform: translateY(0) !important;
+        max-height: 100% !important;
+        height: 100% !important;
+        bottom: auto !important;
+        left: auto !important;
+        right: auto !important;
+        width: 0;
+        transition: width 0.3s ease-in-out;
+    }
+
+    .responsive-drawer[data-drawer-state="open"] {
+        width: 20rem;
+    }
+
+    .responsive-drawer[data-drawer-state="closed"] {
+        width: 0;
+    }
+}
+
 /* RESPONSIVE */
 @media screen and (max-width: 768px) {
-    #map {
-        min-height: calc(
-            100vh - 120px
-        ); /* Account for header and other elements */
-        min-height: calc(
-            100dvh - 120px
-        ); /* Dynamic viewport height for better mobile support */
-        height: 100%;
-    }
-
-    /* Handle mobile browser UI height variations */
-    .map-container {
-        min-height: calc(100vh - 120px);
-        min-height: calc(100dvh - 120px);
-    }
-
-    /* Ensure full height layout on mobile */
-    .flex-container-full-height {
-        height: 100vh;
-        height: 100dvh; /* Dynamic viewport height */
-        min-height: 100vh;
-        min-height: 100dvh;
-    }
-
     #attribution {
         display: none;
     }
@@ -185,6 +251,12 @@
     .ol-custom-overviewmap.ol-uncollapsible {
         bottom: 20px;
         right: 20px;
+    }
+
+    .nav-map-active {
+        border-radius: 9999px;
+        opacity: 90;
+        padding: 4px 16px;
     }
 }
 

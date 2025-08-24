@@ -47,14 +47,14 @@
     </head>
 
     @php
-        $classes = 'bg-background text-foreground min-h-screen font-sans antialiased';
+        $classes = 'text-foreground min-h-screen font-sans antialiased';
     @endphp
 
     <body {{ $attributes->merge(['class' => $classes]) }}>
 
         {{ $slot }}
 
-
+        <script src="https://cdn.jsdelivr.net/npm/flowbite@3.1.2/dist/flowbite.min.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11.11.0/dist/sweetalert2.all.min.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/ol@v10.6.0/dist/ol.js"></script>
         <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.11.0/proj4.min.js" integrity="sha512-JfEOeAU2TD7AtE3xJPSBwBFCxURVqQCysNBwOnNhEJS9LgTHTWGSyYd11JUBOaJ+xVHPaA0ZhLin365CapD8EQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>

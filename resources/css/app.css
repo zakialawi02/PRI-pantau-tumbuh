@@ -7,6 +7,7 @@
 @plugin '@tailwindcss/forms';
 @plugin '@tailwindcss/typography';
 @plugin '@tailwindcss/aspect-ratio';
+@plugin 'tailwind-scrollbar';
 
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 @source '../../storage/framework/views/*.php';
@@ -230,6 +231,36 @@ button.btn {
 
 .badge {
     @apply text-xs font-medium me-2 px-2.5 py-0.5 rounded-sm text-primary-foreground;
+}
+
+.btn-sm {
+    @apply px-2 py-1 text-sm rounded-md text-primary-foreground;
+}
+
+.btn-primary {
+    @apply bg-primary text-primary-foreground;
+}
+.btn-primary:hover {
+    @apply bg-primary/90;
+}
+.btn-primary:focus {
+    @apply ring-pink-100 ring-primary ring-offset-2;
+}
+.btn-primary:disabled {
+    @apply bg-primary/50 cursor-not-allowed;
+}
+
+.btn-danger {
+    @apply bg-error text-neutral;
+}
+.btn-danger:hover {
+    @apply bg-error/90;
+}
+.btn-danger:focus {
+    @apply ring-1 ring-error ring-offset-2;
+}
+.btn-danger:disabled {
+    @apply bg-error/50 cursor-not-allowed;
 }
 
 /* Datatables */

@@ -1,6 +1,5 @@
 import "./bootstrap";
 import "./navigation";
-import "flowbite";
 
 $.ajaxSetup({
     headers: {
@@ -45,10 +44,12 @@ $(document).ready(function () {
     const savedTheme = localStorage.getItem("theme") || "light";
     applyTheme(savedTheme);
     // Toggle tema saat tombol diklik
-    themeToggle.addEventListener("click", function () {
-        const newTheme = document.documentElement.classList.contains("dark")
-            ? "light"
-            : "dark";
-        applyTheme(newTheme);
-    });
+    if (themeToggle) {
+        themeToggle.addEventListener("click", function () {
+            const newTheme = document.documentElement.classList.contains("dark")
+                ? "light"
+                : "dark";
+            applyTheme(newTheme);
+        });
+    }
 });
