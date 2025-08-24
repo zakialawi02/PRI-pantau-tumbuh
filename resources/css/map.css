@@ -1,0 +1,202 @@
+#map {
+    width: 100%;
+    height: 100%;
+    min-height: 300px; /* Fallback minimum height */
+}
+
+/* Ensure map container has proper dimensions */
+.map-container {
+    height: 100%;
+    width: 100%;
+    min-height: 300px;
+}
+
+/* Fix for flex layout height inheritance */
+.flex-container-full-height {
+    height: 100vh;
+    overflow: hidden;
+}
+
+.flex-container-full-height > * {
+    min-height: 0;
+    flex-shrink: 0;
+}
+
+/* Mouse Position */
+.ol-custom-mouse-position {
+    padding: 0.3rem 0.5rem;
+    background-color: #ffffff;
+    border-radius: 5px;
+    color: #303030;
+    font-size: 0.8rem;
+}
+
+/* Scaleline */
+.ol-scale-line {
+    max-width: 200px;
+    background-color: #ffffff;
+    padding: 0.2rem 0.8rem;
+}
+
+.ol-scale-line-inner {
+    display: flex;
+    border: 0 solid grey;
+    transition: none;
+}
+
+/* attribution */
+.ol-attribution {
+    top: auto;
+    bottom: 0;
+    left: auto;
+    right: 0;
+    width: max-content;
+    max-width: max-content;
+}
+
+/* minimap */
+.ol-custom-overviewmap,
+.ol-custom-overviewmap.ol-uncollapsible {
+    top: auto;
+    bottom: 60px;
+    left: auto;
+    right: 5px;
+    transition: all 0.3s ease;
+    z-index: 100;
+}
+
+.ol-custom-overviewmap button {
+    display: none;
+}
+
+.ol-custom-overviewmap:not(.ol-collapsed) {
+    border: 2px solid var(--color-foreground);
+    box-shadow: 0 4px 12px var(--color-foreground);
+    background-color: var(--color-background);
+}
+
+.ol-custom-overviewmap .ol-overviewmap-map {
+    border: none;
+    width: 15rem;
+}
+
+.spinner::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 40px;
+    height: 40px;
+    margin: -20px 0 0 -20px;
+    border: 4px solid rgba(0, 0, 0, 0.3);
+    border-top-color: #000;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    z-index: 9999;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* measure tooltip */
+.ol-tooltip {
+    position: relative;
+    background: rgba(0, 0, 0, 0.5);
+    border-radius: 4px;
+    color: white;
+    padding: 4px 8px;
+    opacity: 0.7;
+    white-space: nowrap;
+    font-size: 12px;
+    cursor: default;
+    user-select: none;
+}
+
+.ol-tooltip-measure {
+    opacity: 1;
+    font-weight: bold;
+}
+
+.ol-tooltip-static {
+    background-color: #ffcc33;
+    color: black;
+    border: 1px solid white;
+}
+
+.ol-tooltip-measure:before,
+.ol-tooltip-static:before {
+    border-top: 6px solid rgba(0, 0, 0, 0.5);
+    border-right: 6px solid transparent;
+    border-left: 6px solid transparent;
+    content: "";
+    position: absolute;
+    bottom: -6px;
+    margin-left: -7px;
+    left: 50%;
+}
+
+.ol-tooltip-static:before {
+    border-top-color: #ffcc33;
+}
+
+/* RESPONSIVE */
+@media screen and (max-width: 768px) {
+    #map {
+        min-height: calc(
+            100vh - 120px
+        ); /* Account for header and other elements */
+        min-height: calc(
+            100dvh - 120px
+        ); /* Dynamic viewport height for better mobile support */
+        height: 100%;
+    }
+
+    /* Handle mobile browser UI height variations */
+    .map-container {
+        min-height: calc(100vh - 120px);
+        min-height: calc(100dvh - 120px);
+    }
+
+    /* Ensure full height layout on mobile */
+    .flex-container-full-height {
+        height: 100vh;
+        height: 100dvh; /* Dynamic viewport height */
+        min-height: 100vh;
+        min-height: 100dvh;
+    }
+
+    #attribution {
+        display: none;
+    }
+
+    .ol-scale-line {
+        max-width: 500px;
+    }
+
+    /* Responsive minimap adjustments */
+    .ol-custom-overviewmap .ol-overviewmap-map {
+        width: 12rem;
+    }
+
+    .ol-custom-overviewmap,
+    .ol-custom-overviewmap.ol-uncollapsible {
+        bottom: 20px;
+        right: 20px;
+    }
+}
+
+/* Extra small devices */
+@media screen and (max-width: 480px) {
+    .ol-custom-overviewmap .ol-overviewmap-map {
+        width: 10rem;
+    }
+
+    .ol-custom-overviewmap,
+    .ol-custom-overviewmap.ol-uncollapsible {
+        bottom: 50px;
+        right: 5px;
+    }
+}
