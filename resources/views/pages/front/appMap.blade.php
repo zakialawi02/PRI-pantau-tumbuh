@@ -12,7 +12,7 @@
     <aside class="border-border bg-background group fixed inset-y-0 left-0 z-50 hidden h-screen w-64 -translate-x-full border-r px-1.5 py-3 transition-all duration-150 md:relative md:flex md:w-12 md:translate-x-0 md:flex-col md:justify-between hover:md:w-48" id="sidebar">
         <!-- Sidebar Nav Menu -->
         <div class="mt-10 flex w-full flex-col space-y-6">
-            <button class="hover:text-accent flex items-center space-x-2 p-1 transition-colors" data-drawer-target="drawer-sidebar-left-panel1" data-drawer-show="drawer-sidebar-left-panel1" data-drawer-backdrop="false" type="button" aria-controls="drawer-sidebar-left-panel1">
+            <button class="hover:text-accent nav-map-active flex items-center space-x-2 p-1 transition-colors" data-drawer-target="drawer-sidebar-left-panel1" data-drawer-show="drawer-sidebar-left-panel1" data-drawer-backdrop="false" type="button" aria-controls="drawer-sidebar-left-panel1">
                 <span class="text-xl">📡</span>
                 <span class="hidden whitespace-nowrap text-sm font-medium group-hover:inline-block">My Data</span>
             </button>
@@ -144,7 +144,7 @@
             </button>
             <!-- Scrollable Container -->
             <div class="flex space-x-2 overflow-x-hidden scroll-smooth" id="scroll-container">
-                <button class="bg-neutral inline-flex items-center space-x-2 rounded-full border border-gray-300 px-4 py-1 text-sm font-medium" data-drawer-target="drawer-sidebar-left-panel1" data-drawer-show="drawer-sidebar-left-panel1" data-drawer-backdrop="false" type="button" aria-controls="drawer-sidebar-left-panel1">
+                <button class="bg-neutral nav-map-active inline-flex items-center space-x-2 rounded-full border border-gray-300 px-4 py-1 text-sm font-medium" data-drawer-target="drawer-sidebar-left-panel1" data-drawer-show="drawer-sidebar-left-panel1" data-drawer-backdrop="false" type="button" aria-controls="drawer-sidebar-left-panel1">
                     <span class="text-xl">📡</span>
                     <span>My Data</span>
                 </button>
@@ -178,7 +178,7 @@
         <div class="flex h-full flex-1 flex-row">
             <!-- * Left Panel (Push Layout)*  -->
             <!-- Left Panel1 - Responsive Flowbite Drawer -->
-            <div class="bg-background shadow-r-lg responsive-drawer z-60 fixed bottom-0 left-0 right-0 h-0 max-h-[50vh] w-full overflow-hidden transition-all duration-300 ease-in-out md:relative md:inset-auto md:z-auto md:block md:h-full md:max-h-full md:w-0" id="drawer-sidebar-left-panel1" data-drawer-state="closed" data-drawer-placement="left" data-drawer-edge="true" aria-labelledby="drawer-sidebar-left-panel1-label" tabindex="-1">
+            <div class="bg-background shadow-r-lg responsive-drawer z-60 fixed bottom-0 left-0 right-0 h-[50vh] max-h-[50vh] w-full overflow-hidden transition-all duration-300 ease-in-out md:relative md:inset-auto md:z-auto md:block md:h-full md:max-h-full md:w-80" id="drawer-sidebar-left-panel1" data-drawer-state="open" data-drawer-placement="left" data-drawer-edge="true" aria-labelledby="drawer-sidebar-left-panel1-label" tabindex="-1">
                 <div class="w-81 flex h-full min-w-full flex-col p-2 md:min-w-8" id="drawer-sidebar-left-panel1-label">
                     <!-- Header drawer -->
                     <div class="mb-2 flex items-center justify-between">
@@ -197,10 +197,17 @@
                             <p class="mb-6 px-4 text-sm text-gray-500">
                                 You don't have any satellite imagery data yet. Purchase satellite imagery to start monitoring your crops and analyzing plant stress using PRI.
                             </p>
-                            <x-button-primary id="buySatelliteBtn" type="button" size="small">
-                                <i class="ri-shopping-cart-line"></i>
-                                <span>Buy Satellite Imagery</span>
-                            </x-button-primary>
+                            @auth
+                                <x-button-primary id="buySatelliteBtn" type="button" size="small">
+                                    <i class="ri-shopping-cart-line"></i>
+                                    <span>Buy Satellite Imagery</span>
+                                </x-button-primary>
+                            @else
+                                <x-button-primary type="button" onclick="window.location.href='{{ route('login') }}'" size="small">
+                                    <i class="ri-login-box-line"></i>
+                                    <span>Login to Buy Imagery</span>
+                                </x-button-primary>
+                            @endauth
                         </div>
                     </div>
                 </div>
@@ -227,7 +234,7 @@
 
 
             <!-- Map / Content Area -->
-            <div class="relative h-full min-h-0 flex-1 rounded-md rounded-t bg-orange-700 transition-all duration-300 ease-in-out">
+            <div class="bg-background relative h-full min-h-0 flex-1 rounded-md rounded-t transition-all duration-300 ease-in-out">
                 <div class="map" id="map"></div>
 
                 <!-- Right Buttons -->
@@ -335,7 +342,7 @@
 
                         <!-- Feature Properties Form -->
                         <div class="hidden w-full" id="featureProperties">
-                            <form class="space-y-4" id="featurePropertiesForm" action="{{ route('beforeCheckout') }}" method="POST">
+                            <form class="space-y-4" id="featurePropertiesForm" action="{{ route('mapOrder') }}" method="POST">
                                 @csrf
                                 @method('POST')
 
@@ -344,8 +351,8 @@
 
                                 <!-- Feature Name -->
                                 <div class="space-y-2">
-                                    <x-input-label class="text-sm font-medium" for="nama_feature">Field Name</x-input-label>
-                                    <x-text-input class="w-full" id="nama_feature" name="nama_feature" size="small" placeholder="Enter field/region name" />
+                                    <x-input-label class="text-sm font-medium" for="name_feature">Field Name</x-input-label>
+                                    <x-text-input class="w-full" id="name_feature" name="name_feature" size="small" placeholder="Enter field/region name" required />
                                 </div>
 
                                 <!-- Area Information -->
@@ -353,14 +360,36 @@
                                     <div class="space-y-2">
                                         <x-input-label class="text-sm font-medium" for="luas">Area</x-input-label>
                                         <div class="border-muted rounded border bg-gray-50 p-2 text-sm" id="measurementOutput">
-                                            <span class="text-gray-500">Calculate area...</span>
+                                            <div class="flex items-center text-gray-500">
+                                                <i class="ri-crop-line mr-2"></i>
+                                                <span>Calculate area...</span>
+                                            </div>
                                         </div>
                                     </div>
 
                                     <div class="space-y-2">
                                         <x-input-label class="text-sm font-medium" for="harga_satuan">Price per Hectare</x-input-label>
-                                        <div class="border-muted rounded border bg-gray-50 p-2 text-sm">
-                                            <p class="mb-0 font-medium text-green-600">US$. 100,00/ha</p>
+                                        <div class="border-muted rounded border p-2 text-sm">
+                                            <select class="border-border focus:border-primary focus:ring-primary w-full rounded border px-2 py-1 text-sm focus:outline-none focus:ring-1" id="plan_id" name="plan_id">
+                                                @if (isset($plans) && count($plans) > 0)
+                                                    @php
+                                                        $hasVisiblePlans = false;
+                                                        $sortedPlans = $plans->where('isShow', true)->sortBy('price_per_hectare');
+                                                        $lowestPricePlan = $sortedPlans->first();
+                                                    @endphp
+                                                    @foreach ($sortedPlans as $index => $plan)
+                                                        @php $hasVisiblePlans = true; @endphp
+                                                        <option data-price="{{ $plan->price_per_hectare }}" value="{{ $plan->id }}" {{ $plan->id === $lowestPricePlan->id ? 'selected' : '' }}>
+                                                            {{ $plan->name }} - {{ $plan->currency }} {{ number_format($plan->price_per_hectare, 2) }}/ha
+                                                        </option>
+                                                    @endforeach
+                                                    @if (!$hasVisiblePlans)
+                                                        <option value="" selected disabled>No plans available</option>
+                                                    @endif
+                                                @else
+                                                    <option value="" selected disabled>No plans available</option>
+                                                @endif
+                                            </select>
                                         </div>
                                     </div>
                                 </div>
@@ -369,7 +398,7 @@
                                 <div class="space-y-2">
                                     <x-input-label class="text-sm font-medium" for="harga">Total Price</x-input-label>
                                     <div class="border-muted bg-muted/60 rounded border p-2 text-sm" id="priceOutput">
-                                        <span class="text-gray-500">Total will be calculated...</span>
+                                        <span class="font-semibold text-blue-600" id="total_price">Total will be calculated...</span>
                                     </div>
                                 </div>
 
@@ -592,6 +621,72 @@
                 const buyingPanel = document.getElementById('buyingPanel');
                 buyingPanel.classList.add('hidden');
             });
+
+            // Price calculation functions
+            function calculateTotalPrice() {
+                const planSelect = document.getElementById('plan_id');
+                const selectedOption = planSelect.options[planSelect.selectedIndex];
+                const pricePerHectare = parseFloat(selectedOption.dataset.price) || 0;
+
+                // Get area from global variable (set when polygon is drawn)
+                const areaInSquareMeters = window.geojsonArea || 0;
+                const areaInHectares = areaInSquareMeters / 10000; // Convert m² to hectares
+
+                const totalPrice = areaInHectares * pricePerHectare;
+
+                // Update the display
+                const totalPriceElement = document.getElementById('total_price');
+                const priceContainer = totalPriceElement.parentElement;
+
+                if (areaInHectares > 0 && pricePerHectare > 0) {
+                    totalPriceElement.innerHTML = `
+                        <div class="flex justify-between items-center">
+                            <span class="text-lg font-bold text-green-700">US$${totalPrice.toFixed(2)}</span>
+                            <i class="ri-money-dollar-circle-line text-green-600 text-xl"></i>
+                        </div>
+                        <div class="text-xs text-gray-600 mt-1">
+                            ${areaInHectares.toFixed(4)} hectares × US$${pricePerHectare.toFixed(2)}/hectare
+                        </div>
+                    `;
+                    priceContainer.classList.remove('bg-muted/60', 'border-muted');
+                    priceContainer.classList.add('bg-green-50', 'border-green-300', 'shadow-sm');
+
+                    // Add a subtle animation
+                    priceContainer.style.transform = 'scale(1.02)';
+                    setTimeout(() => {
+                        priceContainer.style.transform = 'scale(1)';
+                    }, 200);
+                } else if (areaInHectares > 0 && pricePerHectare === 0) {
+                    totalPriceElement.innerHTML = `
+                        <div class="flex items-center text-amber-600">
+                            <i class="ri-alert-line mr-2"></i>
+                            Please select a plan to calculate price
+                        </div>
+                    `;
+                    priceContainer.classList.remove('bg-green-50', 'border-green-300', 'shadow-sm');
+                    priceContainer.classList.add('bg-amber-50', 'border-amber-300');
+                } else {
+                    totalPriceElement.innerHTML = `
+                        <div class="flex items-center text-gray-500">
+                            <i class="ri-information-line mr-2"></i>
+                            Draw an area to calculate price
+                        </div>
+                    `;
+                    priceContainer.classList.remove('bg-green-50', 'border-green-300', 'shadow-sm', 'bg-amber-50', 'border-amber-300');
+                    priceContainer.classList.add('bg-muted/60', 'border-muted');
+                }
+
+                // Add transition for smooth color changes
+                priceContainer.style.transition = 'all 0.3s ease-in-out';
+            }
+
+            // Event listener for plan change
+            document.getElementById('plan_id').addEventListener('change', function() {
+                calculateTotalPrice();
+            });
+
+            // Make calculateTotalPrice available globally for map.js
+            window.calculateTotalPrice = calculateTotalPrice;
         </script>
     @endpush
 </x-app-front-map-layout>

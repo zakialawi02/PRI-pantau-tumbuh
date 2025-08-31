@@ -60,6 +60,14 @@
         <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.11.0/proj4.min.js" integrity="sha512-JfEOeAU2TD7AtE3xJPSBwBFCxURVqQCysNBwOnNhEJS9LgTHTWGSyYd11JUBOaJ+xVHPaA0ZhLin365CapD8EQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
         <script src="https://cdn.jsdelivr.net/npm/geotiff@2.1.4-beta.0/dist-browser/geotiff.min.js"></script>
 
+
+        <!-- Supporting Components -->
+        <x-toast />
+        <x-alert-modal />
+        <x-dependencies._messageAlert />
+
+        <script src="https://cdn.jsdelivr.net/npm/flowbite@3.1.2/dist/flowbite.min.js"></script>
+
         @stack('javascript')
         {{ $javascript ?? '' }}
     </body>

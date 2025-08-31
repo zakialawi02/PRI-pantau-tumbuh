@@ -7,6 +7,7 @@ export default defineConfig({
         laravel({
             input: [
                 "resources/css/app.css",
+                "resources/css/map.css",
                 "resources/js/app.js",
                 "resources/js/app-dashboard.js",
                 "resources/js/map.js",

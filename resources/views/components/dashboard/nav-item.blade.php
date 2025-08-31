@@ -10,7 +10,7 @@
 @endphp
 
 <li class="{{ $isActive }} {{ $active }} group">
-    <a href="{{ $href }}" {{ $attributes->merge(['class' => "$class group flex items-center rounded-lg px-2 py-1.5 text-foreground hover:bg-secondary hover:text-secondary-foreground " . ($isActive ? 'bg-primary text-primary-foreground' : '')]) }}>
+    <a href="{{ $href }}" {{ $attributes->merge(['class' => "$class group flex items-center rounded-lg px-2 py-1.5 text-foreground hover:bg-secondary hover:text-secondary-foreground " . ($isActive || $active ? 'bg-primary text-primary-foreground' : '')]) }}>
         @if ($icon)
             <i class="{{ $icon }}"></i>
         @endif

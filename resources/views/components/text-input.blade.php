@@ -10,4 +10,4 @@
     $sizeClasses = $sizes[$size] ?? $sizes['normal'];
 @endphp
 
-<input @disabled($disabled) {{ $attributes->merge(['class' => 'focus:ring-primary focus:border-primary block w-full rounded-lg bg-input/50 border border-ring text-foreground ' . $sizeClasses]) }}>
+<input @disabled($disabled) {{ $attributes->merge(['class' => 'focus:ring-primary focus:border-primary block w-full rounded-lg bg-input border border-ring text-foreground ' . $sizeClasses]) }}>

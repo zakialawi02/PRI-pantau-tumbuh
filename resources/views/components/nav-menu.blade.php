@@ -16,6 +16,21 @@
     <div class="divide-neutral bg-background invisible absolute left-1/2 top-full z-50 mt-1 w-max max-w-4xl -translate-x-1/2 transform divide-y rounded-lg opacity-0 shadow-lg transition-all duration-300 ease-in-out group-hover:visible group-hover:opacity-100">
         <div class="p-4">
             <div class="grid gap-5 md:grid-cols-2">
+                <!-- Dashboard App Services -->
+                <div>
+                    <h3 class="text-foreground mb-4 flex items-center text-lg font-semibold">
+                        <i class="ri-side-bar-line text-primary"></i>
+                        Dashboard App
+                    </h3>
+                    <ul class="space-y-2 text-left">
+                        <li>
+                            <a class="hover:bg-primary/50 text-foreground block rounded-md p-1 text-left text-sm font-semibold transition-colors duration-200" href="{{ route('appMap') }}">
+                                <div class="font-semibold">Dashboard App Imagery</div>
+                                <span class="text-foreground/60 text-xs capitalize">Interactive imagery dashboard and analysis tools.</span>
+                            </a>
+                        </li>
+                    </ul>
+                </div>
                 <!-- Remote Sensing Services -->
                 <div>
                     <h3 class="text-foreground mb-4 flex items-center text-lg font-semibold">

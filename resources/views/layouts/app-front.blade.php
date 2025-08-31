@@ -54,6 +54,11 @@
         <!-- Footer -->
         <x-fragment.footer />
 
+        <!-- Supporting Components -->
+        <x-toast />
+        <x-alert-modal />
+        <x-dependencies._messageAlert />
+
         <script src="https://cdn.jsdelivr.net/npm/flowbite@3.1.2/dist/flowbite.min.js"></script>
         @stack('javascript')
         {{ $javascript ?? '' }}
