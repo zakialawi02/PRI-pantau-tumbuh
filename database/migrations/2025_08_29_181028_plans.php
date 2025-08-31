@@ -16,6 +16,7 @@ return new class extends Migration
             $table->string('name'); // e.g. "Standard", "Premium"
             $table->decimal('price_per_hectare', 10, 2); // ex: 100.00
             $table->string('currency', 10)->default('USD');
+            $table->boolean('is_show')->default(false);
             $table->timestamps();
         });
     }

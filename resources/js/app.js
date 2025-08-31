@@ -8,6 +8,16 @@ $.ajaxSetup({
 });
 
 // Fungsi untuk menghitung waktu relatif (misal: 2 hours ago)
+/**
+ * Calculates and returns a human-readable relative time string from a given date
+ *
+ * @param {string} dateStr - The date string to calculate relative time from
+ * @returns {string} A formatted relative time string (e.g., "2 hours ago", "just now")
+ *
+ * @example
+ * timeAgo("2023-12-01T10:00:00Z") // Returns "2 days ago"
+ * timeAgo("2023-12-03T11:55:00Z") // Returns "5 minutes ago"
+ */
 function timeAgo(dateStr) {
     const date = new Date(dateStr);
     const seconds = Math.floor((new Date() - date) / 1000);
@@ -28,7 +38,56 @@ function timeAgo(dateStr) {
     }
     return "just now";
 }
+/**
+ * Formats a date string into a human-readable custom date format
+ *
+ * @param {string} dateString - The date string to format (ISO format or any valid date string)
+ * @param {Object} customOptions - Custom formatting options (optional)
+ * @param {string} locale - Locale string for formatting (optional, defaults to "en-US")
+ * @param {string} fallback - Fallback string when date is invalid (optional, defaults to "-")
+ * @returns {string} A formatted date string or fallback if input is invalid
+ *
+ * @example
+ * formatCustomDate("2023-12-01T14:30:00Z") // Returns "Dec 1, 2023, 13:30"
+ * formatCustomDate("2023-12-01T14:30:00Z", { year: "2-digit" }) // Returns "Dec 1, 23, 13:30"
+ * formatCustomDate("2023-12-01T14:30:00Z", null, "id-ID") // Returns "1 Des 2023, 14.30"
+ * formatCustomDate("", null, null, "No date") // Returns "No date"
+ */
+function formatCustomDate(
+    dateString,
+    customOptions = null,
+    locale = "en-US",
+    fallback = "-"
+) {
+    if (!dateString) {
+        return fallback;
+    }
+
+    const defaultOptions = {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+    };
+
+    const options = customOptions
+        ? { ...defaultOptions, ...customOptions }
+        : defaultOptions;
+
+    try {
+        const date = new Date(dateString);
+        if (isNaN(date.getTime())) {
+            return fallback;
+        }
+        return date.toLocaleDateString(locale, options);
+    } catch (error) {
+        return fallback;
+    }
+}
 window.timeAgo = timeAgo;
+window.formatCustomDate = formatCustomDate;
 
 $(document).ready(function () {
     const themeToggle = document.getElementById("theme-toggle");

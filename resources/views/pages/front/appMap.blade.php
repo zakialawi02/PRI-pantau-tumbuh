@@ -362,13 +362,20 @@
                                         <div class="border-muted rounded border bg-gray-50 p-2 text-sm">
                                             <select class="w-full rounded border border-gray-300 bg-white px-2 py-1 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500" id="plan_id" name="plan_id">
                                                 @if (isset($plans) && count($plans) > 0)
+                                                    @php $hasVisiblePlans = false; @endphp
                                                     @foreach ($plans as $index => $plan)
-                                                        <option data-price="{{ $plan->price_per_hectare }}" value="{{ $plan->id }}" {{ $index === 0 ? 'selected' : '' }}>
-                                                            {{ $plan->name }} - US${{ number_format($plan->price_per_hectare, 2) }}/ha
-                                                        </option>
+                                                        @if ($plan->isShow)
+                                                            @php $hasVisiblePlans = true; @endphp
+                                                            <option data-price="{{ $plan->price_per_hectare }}" value="{{ $plan->id }}" {{ $index === 0 ? 'selected' : '' }}>
+                                                                {{ $plan->name }} - US${{ number_format($plan->price_per_hectare, 2) }}/ha
+                                                            </option>
+                                                        @endif
                                                     @endforeach
+                                                    @if (!$hasVisiblePlans)
+                                                        <option value="" selected disabled>No plans available</option>
+                                                    @endif
                                                 @else
-                                                    <option value="" disabled>No plans available</option>
+                                                    <option value="" selected disabled>No plans available</option>
                                                 @endif
                                             </select>
                                         </div>

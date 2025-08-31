@@ -1,13 +1,14 @@
-@section('title', $data['title'] ?? '')
-@section('meta_description', '')
+@section('title', 'Plans Management')
+@section('meta_description', 'Manage subscription plans and pricing')
 
 <x-app-layout>
     <section class="p-1 md:p-4">
         <x-card>
-            <div class="mb-3 flex items-center justify-end px-2 align-middle">
-                <x-button-primary id="createNewUser" data-modal-target="userModal" data-modal-toggle="userModal" type="button">
-                    <i class="ri-user-add-line"></i>
-                    <span>Add User</span>
+            <div class="mb-3 flex items-center justify-between px-2 align-middle">
+                <h2 class="text-foreground text-xl font-semibold">Plans Management</h2>
+                <x-button-primary id="createNewPlan" data-modal-target="planModal" data-modal-toggle="planModal" type="button">
+                    <i class="ri-add-line"></i>
+                    <span>Add Plan</span>
                 </x-button-primary>
             </div>
 
@@ -16,13 +17,11 @@
                     <thead>
                         <tr>
                             <th scope="col">No.</th>
-                            <th scope="col">Photo</th>
-                            <th scope="col">Name</th>
-                            <th scope="col">Username</th>
-                            <th scope="col">Email</th>
-                            <th scope="col">Role</th>
-                            <th scope="col">Registered</th>
-                            <th scope="col">Verified</th>
+                            <th scope="col">Plan Name</th>
+                            <th scope="col">Price per Hectare</th>
+                            <th scope="col">Total Subscriptions</th>
+                            <th scope="col">Status</th>
+                            <th scope="col">Created</th>
                             <th scope="col">Action</th>
                         </tr>
                     </thead>
@@ -35,16 +34,16 @@
     </section>
 
     <!-- Main modal -->
-    <div class="z-60 fixed left-0 right-0 top-0 hidden h-[calc(100%-1rem)] max-h-full w-full items-center justify-center overflow-y-auto overflow-x-hidden md:inset-0" id="userModal" aria-hidden="true" tabindex="-1">
+    <div class="z-60 fixed left-0 right-0 top-0 hidden h-[calc(100%-1rem)] max-h-full w-full items-center justify-center overflow-y-auto overflow-x-hidden md:inset-0" id="planModal" aria-hidden="true" tabindex="-1">
         <div class="relative max-h-full w-full max-w-2xl p-4">
             <!-- Modal content -->
             <div class="bg-background border-border relative rounded-lg border shadow-sm">
                 <!-- Modal header -->
                 <div class="border-foreground/30 flex items-center justify-between rounded-t border-b p-2 md:p-3">
                     <h3 class="modal-title text-foreground text-xl font-semibold">
-                        Add User
+                        Add Plan
                     </h3>
-                    <button class="text-foreground/70 hover:bg-background hover:text-foreground ms-auto inline-flex h-8 w-8 items-center justify-center rounded-lg bg-transparent text-sm" data-modal-hide="userModal" type="button">
+                    <button class="text-foreground/70 hover:bg-background hover:text-foreground ms-auto inline-flex h-8 w-8 items-center justify-center rounded-lg bg-transparent text-sm" data-modal-hide="planModal" type="button">
                         <svg class="h-3 w-3" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 14 14">
                             <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m1 1 6 6m0 0 6 6M7 7l6-6M7 7l-6 6" />
                         </svg>
@@ -61,57 +60,40 @@
                         <span class="sr-only">Loading...</span>
                     </div>
 
-                    <form class="" id="userForm" method="post" action="">
+                    <form class="" id="planForm" method="post" action="">
                         @csrf
                         <input id="_method" name="_method" type="hidden">
 
                         <div class="space-y-2.5">
-                            <!-- Name -->
+                            <!-- Plan Name -->
                             <div>
-                                <x-input-label for="name" :value="__('Name')" />
-                                <x-text-input class="px-1! py-1.5! mt-1 block w-full" id="name" name="name" type="text" :value="old('name')" required autofocus autocomplete="name" placeholder="John Doe" />
+                                <x-input-label for="name" :value="__('Plan Name')" />
+                                <x-text-input class="px-1! py-1.5! mt-1 block w-full" id="name" name="name" type="text" :value="old('name')" required autofocus autocomplete="name" placeholder="Standard Plan" />
                             </div>
 
                             <div class="flex w-full flex-col items-center justify-between gap-2 md:flex-row">
-                                <!-- Username -->
+                                <!-- Price per Hectare -->
                                 <div class="w-full md:w-1/2">
-                                    <x-input-label for="username" :value="__('Username')" />
-                                    <x-text-input class="px-1! py-1.5! block w-full" id="username" name="username" type="text" :value="old('username')" required autocomplete="username" placeholder="johndoe" />
+                                    <x-input-label for="price_per_hectare" :value="__('Price per Hectare')" />
+                                    <x-text-input class="px-1! py-1.5! block w-full" id="price_per_hectare" name="price_per_hectare" type="number" step="0.01" min="0" :value="old('price_per_hectare')" required placeholder="100.00" />
                                 </div>
 
-                                <!-- role -->
+                                <!-- Currency -->
                                 <div class="w-full md:w-1/2">
-                                    <x-input-label for="role" :value="__('Role')" />
-                                    <select class="focus:ring-primary focus:border-primary border-ring bg-input/50 text-foreground block w-full rounded-lg border p-2" id="role" name="role">
-                                        @foreach ($roles as $role)
-                                            <option value="{{ $role }}">{{ ucfirst($role) }}</option>
-                                        @endforeach
+                                    <x-input-label for="currency" :value="__('Currency')" />
+                                    <select class="focus:ring-primary focus:border-primary border-ring bg-input/50 text-foreground block w-full rounded-lg border p-2" id="currency" name="currency">
+                                        <option value="USD">USD - US Dollar</option>
+                                        <option value="IDR">IDR - Indonesian Rupiah</option>
+                                        <option value="EUR">EUR - Euro</option>
+                                        <option value="GBP">GBP - British Pound</option>
                                     </select>
                                 </div>
                             </div>
 
-                            <div class="mt-4 flex w-full flex-col items-center justify-between gap-2 md:flex-row">
-
-                                <!-- Email Address -->
-                                <div class="w-full md:w-1/2">
-                                    <x-input-label for="email" :value="__('Email')" />
-                                    <x-text-input class="px-1! py-1.5! mt-1 block w-full" id="email" name="email" type="email" :value="old('email')" required autocomplete="email" placeholder="name@mail.com" />
-                                </div>
-
-                                <div class="w-full md:w-1/2">
-                                    <x-input-label for="verified" :value="__('Verified Status')" />
-                                    <select class="focus:ring-primary focus:border-primary border-ring bg-input/50 text-foreground block w-full rounded-lg border p-2" id="email_verified_at" name="email_verified_at">
-                                        <option value="1">Yes</option>
-                                        <option value="0">No</option>
-                                    </select>
-                                </div>
-                            </div>
-
-                            <!-- Password -->
-                            <div class="mt-4">
-                                <x-input-label for="password" :value="__('Password')" />
-                                <x-text-input class="px-1! py-1.5! mt-1 block w-full" id="password" name="password" type="password" required autocomplete="new-password" />
-                                <span class="text-back-muted" id="passwordHelpBlock"></span>
+                            <!-- Is Show -->
+                            <div class="flex items-center">
+                                <input class="focus:ring-primary focus:border-primary border-ring bg-input/50 text-primary mr-2 rounded" id="isShow" name="isShow" type="checkbox" value="1">
+                                <x-input-label class="mb-0" for="isShow" :value="__('Show this plan publicly')" />
                             </div>
                         </div>
                     </form>
@@ -121,7 +103,7 @@
                     <x-button-primary id="saveBtn" type="submit">
                         Save
                     </x-button-primary>
-                    <x-button-light data-modal-hide="userModal" type="button">
+                    <x-button-light data-modal-hide="planModal" type="button">
                         Close
                     </x-button-light>
                 </div>
@@ -166,7 +148,7 @@
                         }
                     },
                     order: [
-                        [2, 'asc']
+                        [1, 'asc']
                     ],
                     columns: [{
                             data: 'DT_RowIndex',
@@ -175,37 +157,40 @@
                             searchable: false
                         },
                         {
-                            data: 'photo',
-                            name: 'photo',
-                            orderable: false,
-                            searchable: false
-                        },
-                        {
                             data: 'name',
                             name: 'name'
                         },
                         {
-                            data: 'username',
-                            name: 'username'
+                            data: 'price_per_hectare',
+                            name: 'price_per_hectare',
+                            render: function(data, type, full, meta) {
+                                return full.currency + ' ' + data.toLocaleString();
+                            }
                         },
                         {
-                            data: 'email',
-                            name: 'email'
+                            data: 'subscriptions_count',
+                            name: 'subscriptions_count',
+                            orderable: true,
+                            searchable: false
                         },
                         {
-                            data: 'role',
-                            name: 'role'
+                            data: 'isShow',
+                            name: 'isShow',
+                            orderable: true,
+                            searchable: false,
+                            render: function(data, type, full, meta) {
+                                if (data) {
+                                    return '<span class="bg-success/20 text-success px-2 py-1 rounded-full text-xs font-medium">Visible</span>';
+                                } else {
+                                    return '<span class="bg-error/20 text-error px-2 py-1 rounded-full text-xs font-medium">Hidden</span>';
+                                }
+                            }
                         },
                         {
                             data: 'created_at',
                             name: 'created_at',
-                            render: function(data) {
-                                return formatCustomDate(data);
-                            }
-                        },
-                        {
-                            data: 'email_verified_at',
-                            name: 'email_verified_at',
+                            orderable: true,
+                            searchable: false,
                             render: function(data) {
                                 return formatCustomDate(data);
                             }
@@ -221,9 +206,9 @@
 
                 const cardErrorMessages = `<div id="body-messages" class="mb-3 rounded-md bg-error/30 p-4 text-sm text-error" role="alert"></div>`;
 
-                const modal = new Modal(document.getElementById('userModal'), {
+                const modal = new Modal(document.getElementById('planModal'), {
                     onHide: () => {
-                        // Hapus parameter user_id dari URL
+                        // Hapus parameter plan_id dari URL
                         let newUrl = window.location.pathname;
                         window.history.pushState({
                             path: newUrl
@@ -236,27 +221,26 @@
                     });
                 });
 
-
-                // Open modal for creating new user
-                $('#createNewUser').click(function() {
+                // Open modal for creating new plan
+                $('#createNewPlan').click(function() {
                     $(".modal-loader-data").hide()
-                    $("#userForm").show();
-                    $('#userModal').find('.modal-title').text('Add User');
-                    $('#userForm').attr('method', 'POST');
+                    $("#planForm").show();
+                    $('#planModal').find('.modal-title').text('Add Plan');
+                    $('#planForm').attr('method', 'POST');
                     $('#_method').val('POST');
-                    $('#userForm').trigger("reset");
-                    $('#userForm').attr('action', '{{ route('admin.users.store') }}');
+                    $('#planForm').trigger("reset");
+                    $('#isShow').prop('checked', false);
+                    $('#planForm').attr('action', '{{ route('admin.plans.store') }}');
                     $('#saveBtn').text('Create');
                     $("#error-messages").html("");
-                    $("#passwordHelpBlock").html("");
                 });
 
-                // Save new or updated user
+                // Save new or updated plan
                 $('#saveBtn').on('click', function(e) {
                     e.preventDefault();
-                    const formData = $('#userForm').serialize();
-                    const formAction = $('#userForm').attr('action');
-                    const method = $('#userForm').attr('method');
+                    const formData = $('#planForm').serialize();
+                    const formAction = $('#planForm').attr('action');
+                    const method = $('#planForm').attr('method');
 
                     $.ajax({
                         type: method,
@@ -272,7 +256,6 @@
                             MyZkToast.success(response.message);
                         },
                         error: function(error) {
-                            // console.log(messages);
                             displayErrors(error.responseJSON.errors);
                         },
                         complete: function() {
@@ -281,92 +264,89 @@
                     });
                 });
 
-                // Edit user
-                $('body').on('click', '.editUser', function() {
+                // Edit plan
+                $('body').on('click', '.editPlan', function() {
                     $(".modal-loader-data").show();
-                    $("#userForm").hide();
+                    $("#planForm").hide();
                     $('#saveBtn').prop('disabled', true);
-                    $('#userModal').find('.modal-title').text('Edit User');
+                    $('#planModal').find('.modal-title').text('Edit Plan');
                     $("#error-messages").html("");
-                    $("#passwordHelpBlock").html("blank if you don't want to change");
-                    const userId = $(this).data('id');
-                    // Tampilkan ID User di URL tanpa reload halaman
-                    let newUrl = window.location.pathname + "?user_id=" + userId;
+                    const planId = $(this).data('id');
+                    // Tampilkan ID Plan di URL tanpa reload halaman
+                    let newUrl = window.location.pathname + "?plan_id=" + planId;
                     window.history.replaceState({}, '', newUrl);
                     modal.show();
-                    getUserData(userId);
+                    getPlanData(planId);
                 });
 
-                // Delete user
-                $('body').on('click', '.deleteUser', function(e) {
+                // Delete plan
+                $('body').on('click', '.deletePlan', function(e) {
                     e.preventDefault();
-                    const userId = $(this).data('id');
-                    const url = `{{ route('admin.users.destroy', ':userId') }}`.replace(':userId', userId);
+                    const planId = $(this).data('id');
+                    const url = `{{ route('admin.plans.destroy', ':planId') }}`.replace(':planId', planId);
 
                     ZkPopAlert.show({
-                        message: "Are you sure you want to delete this user?",
+                        message: "Are you sure you want to delete this plan?",
                         confirmText: "Yes, delete it",
                         cancelText: "No, cancel",
                         onConfirm: () => {
-                            deleteUser(userId);
+                            deletePlan(planId);
                         }
                     });
                 });
 
-                function deleteUser(userId) {
+                function deletePlan(planId) {
                     $.ajax({
                         type: "DELETE",
-                        url: `{{ route('admin.users.destroy', ':userId') }}`.replace(':userId', userId),
+                        url: `{{ route('admin.plans.destroy', ':planId') }}`.replace(':planId', planId),
                         success: function(response) {
                             $('#myTable').DataTable().ajax.reload();
                             MyZkToast.success(response.message);
                         },
                         error: function(error) {
                             console.log(error);
-                            MyZkToast.error(error.statusText)
+                            MyZkToast.error(error?.responseJSON?.message ?? error.statusText)
                         }
                     });
                 }
 
                 // Cek URL saat halaman dimuat
                 let params = new URLSearchParams(window.location.search);
-                if (params.has("user_id")) {
-                    let userId = params.get("user_id");
+                if (params.has("plan_id")) {
+                    let planId = params.get("plan_id");
                     $(".modal-loader-data").show();
-                    $("#userForm").hide();
+                    $("#planForm").hide();
                     $('#saveBtn').prop('disabled', true);
-                    $('#userModal').find('.modal-title').text('Edit User');
+                    $('#planModal').find('.modal-title').text('Edit Plan');
                     $("#error-messages").html("");
-                    $("#passwordHelpBlock").html("blank if you don't want to change");
                     setTimeout(() => {
                         modal.show();
                     }, 800);
-                    getUserData(userId);
+                    getPlanData(planId);
                 }
 
-                function getUserData(userId) {
-                    // Panggil AJAX untuk menampilkan data user_id
-                    $.get(`{{ route('admin.users.show', ':userId') }}`.replace(':userId', userId))
+                function getPlanData(planId) {
+                    // Panggil AJAX untuk menampilkan data plan_id
+                    $.get(`{{ route('admin.plans.show', ':planId') }}`.replace(':planId', planId))
                         .done(function(data) {
                             $(".modal-loader-data").hide();
-                            $("#userForm").show();
+                            $("#planForm").show();
                             $('#saveBtn').prop('disabled', false);
-                            $('#userForm').attr('action', `{{ route('admin.users.update', ':userId') }}`.replace(':userId', userId));
+                            $('#planForm').attr('action', `{{ route('admin.plans.update', ':planId') }}`.replace(':planId', planId));
                             $('#saveBtn').text('Update');
                             $('#_method').val('PUT');
                             $('#name').val(data.name);
-                            $('#username').val(data.username);
-                            $('#role').val(data.role);
-                            $('#email').val(data.email);
-                            $('#email_verified_at').val(data.email_verified_at ? 1 : 0);
+                            $('#price_per_hectare').val(data.price_per_hectare);
+                            $('#currency').val(data.currency);
+                            $('#isShow').prop('checked', data.isShow);
                         })
                         .fail(function(jqXHR, textStatus, errorThrown) {
-                            console.error("Error fetching user data:", textStatus, errorThrown);
+                            console.error("Error fetching plan data:", textStatus, errorThrown);
                             displayErrors({
                                 general: [`${textStatus}: ${errorThrown}`]
                             });
                             $(".modal-loader-data").hide();
-                            $("#userForm").hide();
+                            $("#planForm").hide();
                             $('#saveBtn').prop('disabled', true);
                         });
 

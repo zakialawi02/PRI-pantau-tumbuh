@@ -41,7 +41,7 @@
                                 Due Date
                             </th>
                             <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider" scope="col">
-                                Created Date
+                                Order Date
                             </th>
                             <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider" scope="col">
                                 Action
@@ -116,8 +116,8 @@
                                     <p class="text-base-content text-sm" id="modal-payment-method">-</p>
                                 </div>
                                 <div>
-                                    <label class="text-foreground block text-sm font-medium">Created Date</label>
-                                    <p class="text-base-content text-sm" id="modal-created-date">-</p>
+                                    <label class="text-foreground block text-sm font-medium">Order Date</label>
+                                    <p class="text-base-content text-sm" id="modal-order-date">-</p>
                                 </div>
                             </div>
                         </div>
@@ -233,12 +233,38 @@
                         {
                             data: 'due_date',
                             name: 'due_date',
-                            className: 'px-3 py-2 whitespace-nowrap text-sm'
+                            className: 'px-3 py-2 whitespace-nowrap text-sm',
+                            render: function(data) {
+                                if (!data) return '-';
+
+                                const dueDate = new Date(data);
+                                const now = new Date();
+
+                                let dateString = formatCustomDate(data);
+
+                                // Check if overdue
+                                if (dueDate < now) {
+                                    dateString += ' <span class="ml-2 inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-800">Overdue</span>';
+                                } else {
+                                    // Check if due within 2 hours
+                                    const timeDifference = dueDate.getTime() - now.getTime();
+                                    const hoursUntilDue = timeDifference / (1000 * 60 * 60);
+
+                                    if (hoursUntilDue <= 2 && hoursUntilDue > 0) {
+                                        dateString += ' <span class="ml-2 inline-flex items-center rounded-full bg-orange-100 px-2.5 py-0.5 text-xs font-medium text-orange-800">Due Soon</span>';
+                                    }
+                                }
+
+                                return dateString;
+                            }
                         },
                         {
                             data: 'created_at',
                             name: 'created_at',
-                            className: 'px-3 py-2 whitespace-nowrap text-sm'
+                            className: 'px-3 py-2 whitespace-nowrap text-sm',
+                            render: function(data) {
+                                return formatCustomDate(data);
+                            }
                         },
                         {
                             data: 'action',
@@ -285,13 +311,7 @@
                                     minimumFractionDigits: 2
                                 }) + ' ' + payment.currency.toUpperCase());
                                 $('#modal-payment-method').text(payment.payment_method.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()));
-                                $('#modal-created-date').text(new Date(payment.created_at).toLocaleDateString('en-US', {
-                                    year: 'numeric',
-                                    month: 'short',
-                                    day: 'numeric',
-                                    hour: '2-digit',
-                                    minute: '2-digit'
-                                }));
+                                $('#modal-order-date').text(formatCustomDate(payment.created_at));
 
                                 // Set status badge with proper styling
                                 const statusConfig = {

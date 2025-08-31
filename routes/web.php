@@ -1,17 +1,20 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\MapController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\PlansController;
+use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\DashboardController;
-use App\Http\Controllers\MapController;
-use App\Http\Controllers\PaymentController;
 
 
 Route::prefix('dashboard')->name('admin.')->group(function () {
     Route::middleware(['auth', 'verified', 'role:superadmin'])->group(function () {
         Route::resource('users', UserController::class)->except('create', 'edit');
+
+        Route::resource('plans', PlansController::class)->except('create', 'edit');
     });
 
     Route::middleware(['auth', 'verified', 'role:superadmin,admin'])->group(function () {
@@ -71,7 +74,5 @@ Route::get('/high-resolution-pri-estimation-map-with-ai', function () {
 })->name('pri-estimation-map-ai');
 
 Route::get('/app/imagery', [MapController::class, 'index'])->name('appMap');
-
-
 
 require __DIR__ . '/auth.php';

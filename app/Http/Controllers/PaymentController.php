@@ -181,26 +181,6 @@ class PaymentController extends Controller
                     };
                     return '<span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full ' . $statusConfig['class'] . '">' . $statusConfig['text'] . '</span>';
                 })
-                ->editColumn('created_at', function ($data) {
-                    return $data->created_at ? $data->created_at->format("d M Y H:i") : '-';
-                })
-                ->addColumn('due_date', function ($data) {
-                    if ($data->due_date) {
-                        $dueDate = Carbon::parse($data->due_date);
-                        $now = Carbon::now();
-
-                        $formatted = $dueDate->format("d M Y H:i");
-
-                        if ($dueDate->isPast() && $data->status !== 'paid') {
-                            return '<span class="text-red-600 font-medium">' . $formatted . ' (Overdue)</span>';
-                        } elseif ($dueDate->isToday()) {
-                            return '<span class="text-yellow-600 font-medium">' . $formatted . ' (Due Today)</span>';
-                        } else {
-                            return $formatted;
-                        }
-                    }
-                    return '-';
-                })
                 ->editColumn('payment_method', function ($data) {
                     return ucwords(str_replace('_', ' ', $data->payment_method ?? 'Manual'));
                 })

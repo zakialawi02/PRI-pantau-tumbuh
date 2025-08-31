@@ -14,13 +14,27 @@ class PlanSeeder extends Seeder
      */
     public function run(): void
     {
-        DB::table('plans')->insert([
-            'id' => (string) Str::uuid(),
-            'name' => 'Standard',
-            'price_per_hectare' => 1.5,
-            'currency' => 'USD',
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
+        $plans = [
+            [
+                'id' => (string) Str::uuid(),
+                'name' => 'Standard',
+                'price_per_hectare' => 1.50,
+                'currency' => 'USD',
+                'is_show' => true,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'id' => (string) Str::uuid(),
+                'name' => 'Enterprise',
+                'price_per_hectare' => 5.00,
+                'currency' => 'USD',
+                'is_show' => false,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+        ];
+
+        DB::table('plans')->insert($plans);
     }
 }

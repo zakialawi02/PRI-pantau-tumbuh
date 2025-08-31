@@ -19,10 +19,12 @@ class Plan extends Model
         'name',
         'price_per_hectare',
         'currency',
+        'isShow',
     ];
 
     protected $casts = [
         'price_per_hectare' => 'decimal:2',
+        'isShow' => 'boolean',
     ];
 
     public function subscriptions()
