@@ -197,7 +197,7 @@
                             <p class="mb-6 px-4 text-sm text-gray-500">
                                 You don't have any satellite imagery data yet. Purchase satellite imagery to start monitoring your crops and analyzing plant stress using PRI.
                             </p>
-                            <x-button-primary type="button">
+                            <x-button-primary id="buySatelliteBtn" type="button" size="small">
                                 <i class="ri-shopping-cart-line"></i>
                                 <span>Buy Satellite Imagery</span>
                             </x-button-primary>
@@ -302,12 +302,12 @@
             </div>
         </div>
 
-        <div class="z-60 bg-background absolute bottom-0 left-0 max-h-[60%] w-full max-w-full overflow-hidden rounded-t-xl shadow-xl transition-all duration-300 ease-in-out md:bottom-auto md:left-auto md:right-2 md:top-1/2 md:max-w-[30rem] md:-translate-y-1/2 md:transform md:rounded-xl" id="propertyPanel">
+        <div class="z-60 bg-background absolute bottom-0 left-0 hidden max-h-[60%] w-full max-w-full overflow-hidden rounded-t-xl shadow-xl transition-all duration-300 ease-in-out md:bottom-auto md:left-auto md:right-2 md:top-1/2 md:max-w-[30rem] md:-translate-y-1/2 md:transform md:rounded-xl" id="buyingPanel">
             <div class="flex h-full w-full min-w-full flex-col p-2" id="drawer-sidebar-left-panel1-label">
                 <!-- Header drawer -->
                 <div class="mb-2 flex items-center justify-between">
                     <h2 class="text-lg font-semibold">Purchase a field</h2>
-                    <button class="hover:text-primary/80 text-gray-500" data-drawer-hide="drawer-sidebar-left-panel1" type="button">✕</button>
+                    <button class="hover:text-primary/80 close-panel-btn text-gray-500" id="buyingPanelCloseBtn" data-drawer-hide="drawer-sidebar-left-panel1" type="button">✕</button>
                 </div>
                 <!-- Drawer content -->
                 <div class="flex h-full max-h-96 flex-1 flex-col overflow-hidden">
@@ -335,7 +335,7 @@
 
                         <!-- Feature Properties Form -->
                         <div class="hidden w-full" id="featureProperties">
-                            <form class="space-y-4" id="featurePropertiesForm" action="{{ route('beforeCheckout') }}" method="POST">
+                            <form class="space-y-4" id="featurePropertiesForm" action="{{ route('mapOrder') }}" method="POST">
                                 @csrf
                                 @method('POST')
 
@@ -344,8 +344,8 @@
 
                                 <!-- Feature Name -->
                                 <div class="space-y-2">
-                                    <x-input-label class="text-sm font-medium" for="nama_feature">Field Name</x-input-label>
-                                    <x-text-input class="w-full" id="nama_feature" name="nama_feature" size="small" placeholder="Enter field/region name" />
+                                    <x-input-label class="text-sm font-medium" for="name_feature">Field Name</x-input-label>
+                                    <x-text-input class="w-full" id="name_feature" name="name_feature" size="small" placeholder="Enter field/region name" />
                                 </div>
 
                                 <!-- Area Information -->
@@ -581,6 +581,16 @@
                         }
                     });
                 }
+            });
+
+            // Buy Satellite Button Event
+            document.getElementById('buySatelliteBtn').addEventListener('click', function() {
+                const buyingPanel = document.getElementById('buyingPanel');
+                buyingPanel.classList.remove('hidden');
+            });
+            document.getElementById('buyingPanelCloseBtn').addEventListener('click', function() {
+                const buyingPanel = document.getElementById('buyingPanel');
+                buyingPanel.classList.add('hidden');
             });
         </script>
     @endpush

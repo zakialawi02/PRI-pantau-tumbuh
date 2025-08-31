@@ -60,7 +60,7 @@
                     Lihat Peta Interaktif
                 </x-button-primary>
             @elseif (Auth::check())
-                <x-button-primary href="{{ route('buyCitra') }}">
+                <x-button-primary href="{{ route('appMap') }}">
                     Beli Akses Sekarang
                 </x-button-primary>
             @else

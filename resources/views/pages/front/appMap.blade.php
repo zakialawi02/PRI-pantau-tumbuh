@@ -227,7 +227,7 @@
 
 
             <!-- Map / Content Area -->
-            <div class="relative h-full min-h-0 flex-1 rounded-md rounded-t bg-orange-700 transition-all duration-300 ease-in-out">
+            <div class="bg-background relative h-full min-h-0 flex-1 rounded-md rounded-t transition-all duration-300 ease-in-out">
                 <div class="map" id="map"></div>
 
                 <!-- Right Buttons -->
@@ -335,7 +335,7 @@
 
                         <!-- Feature Properties Form -->
                         <div class="hidden w-full" id="featureProperties">
-                            <form class="space-y-4" id="featurePropertiesForm" action="{{ route('beforeCheckout') }}" method="POST">
+                            <form class="space-y-4" id="featurePropertiesForm" action="{{ route('mapOrder') }}" method="POST">
                                 @csrf
                                 @method('POST')
 
@@ -344,8 +344,8 @@
 
                                 <!-- Feature Name -->
                                 <div class="space-y-2">
-                                    <x-input-label class="text-sm font-medium" for="nama_feature">Field Name</x-input-label>
-                                    <x-text-input class="w-full" id="nama_feature" name="nama_feature" size="small" placeholder="Enter field/region name" />
+                                    <x-input-label class="text-sm font-medium" for="name_feature">Field Name</x-input-label>
+                                    <x-text-input class="w-full" id="name_feature" name="name_feature" size="small" placeholder="Enter field/region name" required />
                                 </div>
 
                                 <!-- Area Information -->
@@ -360,7 +360,17 @@
                                     <div class="space-y-2">
                                         <x-input-label class="text-sm font-medium" for="harga_satuan">Price per Hectare</x-input-label>
                                         <div class="border-muted rounded border bg-gray-50 p-2 text-sm">
-                                            <p class="mb-0 font-medium text-green-600">US$. 100,00/ha</p>
+                                            <select class="w-full rounded border border-gray-300 bg-white px-2 py-1 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500" id="plan_id" name="plan_id">
+                                                @if (isset($plans) && count($plans) > 0)
+                                                    @foreach ($plans as $index => $plan)
+                                                        <option data-price="{{ $plan->price_per_hectare }}" value="{{ $plan->id }}" {{ $index === 0 ? 'selected' : '' }}>
+                                                            {{ $plan->name }} - US${{ number_format($plan->price_per_hectare, 2) }}/ha
+                                                        </option>
+                                                    @endforeach
+                                                @else
+                                                    <option value="" disabled>No plans available</option>
+                                                @endif
+                                            </select>
                                         </div>
                                     </div>
                                 </div>

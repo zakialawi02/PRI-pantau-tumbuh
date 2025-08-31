@@ -7,66 +7,62 @@
         <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
             <!-- Form kiri -->
             <x-card class="md:order-0 order-2 space-y-4 md:col-span-2">
-                <h2 class="border-b pb-2 text-lg font-semibold">Data Diri</h2>
+                <h2 class="border-b pb-2 text-lg font-semibold">Personal data</h2>
 
                 <form class="" id="form-ajuan" action="{{ route('checkout.payment') }}" method="post" enctype="multipart/form-data" autocomplete="off">
                     @csrf
                     @method('POST')
+
+                    <input id="order_id" name="order_id" type="hidden" value="{{ request('id') ?? '' }}" />
+
                     <!-- Nama -->
                     <div class="mb-3">
-                        <x-input-label for="name">Nama</x-input-label>
-                        <x-text-input id="name" name="name" value="{{ old('name') }}" size="small" required />
+                        <x-input-label for="name">Name</x-input-label>
+                        <x-text-input id="name" name="name" value="{{ Auth::user()->name }}" readonly size="small" required />
                         <x-input-error class="mt-2" :messages="$errors->get('name')" />
                     </div>
 
                     <!-- Email -->
                     <div class="mb-3">
                         <x-input-label for="email">Email</x-input-label>
-                        <x-text-input id="email" name="email" value="{{ old('email') }}" size="small" required />
+                        <x-text-input id="email" name="email" value="{{ Auth::user()->email }}" readonly size="small" required />
                         <x-input-error class="mt-2" :messages="$errors->get('email')" />
                     </div>
 
                     <!-- Kontak -->
                     <div class="mb-3">
-                        <x-input-label for="phone">Kontak Telepon</x-input-label>
+                        <x-input-label for="phone">Phone</x-input-label>
                         <x-text-input id="phone" name="phone" value="{{ old('phone') }}" size="small" required />
                         <x-input-error class="mt-2" :messages="$errors->get('phone')" />
                     </div>
-
+                    <!-- Plans -->
+                    <div class="mb-3">
+                        <x-input-label for="plan">Plans</x-input-label>
+                        <div class="rounded-md border bg-gray-50 p-3">
+                            <div class="font-medium">{{ $data['plan']['name'] ?? 'Plan Name' }}</div>
+                            <div class="text-sm text-gray-600">{{ $data['price_currency'] ?? 'USD' }} {{ $data['price_per_hectare'] }}/ha</div>
+                        </div>
+                    </div>
+                    <!-- Area -->
+                    <div class="mb-3">
+                        <x-input-label for="area_hectares">Area</x-input-label>
+                        <div id="amount">{{ $data['area_hectares'] }} ha</div>
+                    </div>
                     <!-- Total -->
                     <div class="mb-3">
-                        <x-input-label for="amount">Total Harga</x-input-label>
-                        <div id="amount">Rp. xxxx</div>
-
+                        <x-input-label for="amount">Total Price</x-input-label>
+                        <div id="amount">{{ $data['total_price'] }} {{ $data['price_currency'] ?? 'USD' }}</div>
                     </div>
 
                     <!-- Informasi Bank -->
-                    <h2 class="mb-3 border-b pb-2 text-lg font-semibold">Informasi Bank Pengirim</h2>
+                    <h2 class="mb-3 border-b pb-2 text-lg font-semibold">Payment</h2>
 
-                    <!-- Nama Bank -->
                     <div class="mb-3">
-                        <x-input-label for="sender_bank">Nama Bank Pengirim</x-input-label>
-                        <select class="w-full rounded-md border px-3 py-2 focus:outline-none focus:ring focus:ring-green-200">
-                            <option>Pilih Bank</option>
-                            <option>BCA</option>
-                            <option>Mandiri</option>
-                            <option>BNI</option>
-                            <option>BRI</option>
+                        <x-input-label for="payment_method">Payment Method</x-input-label>
+                        <select class="w-full rounded-md border px-3 py-2 focus:outline-none focus:ring focus:ring-green-200" id="payment_method" name="payment_method">
+                            <option value="bank_transfer">Bank Transfer</option>
                         </select>
-                    </div>
-
-                    <!-- Nama Pengirim -->
-                    <div class="mb-3">
-                        <x-input-label class="mb-1 block text-sm font-medium" for="sender_name_bank">Nama Pengirim</x-input-label>
-                        <x-text-input id="sender_name_bank" name="sender_name_bank" value="{{ old('sender_name_bank') }}" size="small" required />
-                        <x-input-error class="mt-2" :messages="$errors->get('sender_name_bank')" />
-                    </div>
-
-                    <!-- No Rekening -->
-                    <div class="mb-3">
-                        <x-input-label class="mb-1 block text-sm font-medium">No. Rekening Pengirim</x-input-label>
-                        <x-text-input id="sender_bank_number" name="sender_bank_number" value="{{ old('sender_bank_number') }}" size="small" required />
-                        <x-input-error class="mt-2" :messages="$errors->get('sender_bank_number')" />
+                        <x-input-error class="mt-2" :messages="$errors->get('payment_method')" />
                     </div>
 
                     <!-- Tombol -->

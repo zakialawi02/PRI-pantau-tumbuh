@@ -75,4 +75,19 @@ class User extends Authenticatable implements MustVerifyEmail
 
         return []; // Return kosong jika driver tidak dikenali
     }
+
+    public function fieldAreas()
+    {
+        return $this->hasMany(FieldArea::class);
+    }
+
+    public function subscriptions()
+    {
+        return $this->hasMany(Subscription::class);
+    }
+
+    public function paymentsVerified()
+    {
+        return $this->hasMany(Payment::class, 'verified_by'); // admin yang verifikasi
+    }
 }

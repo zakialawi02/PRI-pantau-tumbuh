@@ -5,6 +5,7 @@ use App\Http\Controllers\HomeController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\MapController;
 use App\Http\Controllers\PaymentController;
 
 
@@ -26,9 +27,18 @@ Route::prefix('dashboard')->name('admin.')->group(function () {
         Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
         Route::patch('/photo-profile', [ProfileController::class, 'updatePhoto'])->name('profile.photo-update');
         Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+
+        // Payment
+        Route::get('/payment', [PaymentController::class, 'index'])->name('payment.index');
+        Route::get('/payment/{payment}', [PaymentController::class, 'showPayment'])->name('payment.show');
     });
 });
 
+Route::middleware(['auth', 'verified'])->group(function () {
+    Route::post('/map-order', [PaymentController::class, 'mapOrder'])->name('mapOrder');
+    Route::get('/checkout', [PaymentController::class, 'checkoutOrder'])->name('checkoutOrder');
+    Route::post('/checkout', [PaymentController::class, 'checkout'])->name('checkout.payment');
+});
 
 Route::get('/admin', function () {
     return redirect('/dashboard');
@@ -60,16 +70,8 @@ Route::get('/high-resolution-pri-estimation-map-with-ai', function () {
     return view('pages.front.petaEstimasiPRIResolusiTinggi');
 })->name('pri-estimation-map-ai');
 
-Route::get('/buy-citra', function () {
-    return view('pages.front.buyCitra');
-})->name('buyCitra');
+Route::get('/app/imagery', [MapController::class, 'index'])->name('appMap');
 
-Route::get('/map', function () {
-    return view('pages.front.map');
-})->name('map');
 
-Route::post('/before-checkout', [PaymentController::class, 'beforeCheckout'])->name('beforeCheckout');
-Route::get('/checkout', [PaymentController::class, 'checkout'])->name('checkout');
-Route::post('/checkout', [PaymentController::class, 'checkoutPayment'])->name('checkout.payment');
 
 require __DIR__ . '/auth.php';
