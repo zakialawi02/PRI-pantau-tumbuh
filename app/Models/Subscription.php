@@ -29,6 +29,13 @@ class Subscription extends Model
         'status',
     ];
 
+    protected $casts = [
+        'price_per_hectare' => 'decimal:2',
+        'total_price' => 'decimal:2',
+        'start_date' => 'datetime',
+        'end_date' => 'datetime',
+    ];
+
     public function user()
     {
         return $this->belongsTo(User::class);

@@ -8,6 +8,9 @@
                         <h1 class="mb-2 text-3xl font-bold">INVOICE</h1>
                         <p class="text-background">Invoice #{{ $payment->id }}</p>
                         <p class="text-background">Date: {{ $payment->created_at->format('F d, Y H:i:s') }}</p>
+                        @if (isset($payment->due_date))
+                            <p class="text-background">Due Date: {{ \Carbon\Carbon::parse($payment->due_date)->format('F d, Y H:i') }}</p>
+                        @endif
                     </div>
                     <div class="text-right">
                         <h2 class="text-xl font-semibold">PantauTumbuh.id</h2>
@@ -20,6 +23,37 @@
 
             <!-- Invoice Content -->
             <div class="p-6">
+                <!-- Due Date Notice (if overdue) -->
+                @if (isset($payment->due_date) && \Carbon\Carbon::parse($payment->due_date)->isPast() && $payment->status !== 'paid')
+                    <div class="mb-6">
+                        <div class="rounded-lg border border-red-300 bg-red-100 p-4">
+                            <div class="flex items-center">
+                                <svg class="mr-3 h-6 w-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                                <div>
+                                    <h4 class="font-semibold text-red-800">Payment Overdue</h4>
+                                    <p class="text-sm text-red-600">This invoice was due on {{ \Carbon\Carbon::parse($payment->due_date)->format('F d, Y') }}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                @elseif(isset($payment->due_date) && $payment->status !== 'paid')
+                    <div class="mb-6">
+                        <div class="rounded-lg border border-yellow-300 bg-yellow-100 p-4">
+                            <div class="flex items-center">
+                                <svg class="mr-3 h-6 w-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                                <div>
+                                    <h4 class="font-semibold text-yellow-800">Payment Due</h4>
+                                    <p class="text-sm text-yellow-600">Payment is due by {{ \Carbon\Carbon::parse($payment->due_date)->format('F d, Y H:i') }}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                @endif
+
                 <!-- Bill To Section -->
                 <div class="mb-8">
                     <h3 class="text-base-content mb-3 text-lg font-semibold">Bill To:</h3>
@@ -70,6 +104,12 @@
                                 <span class="text-base-content-muted">Tax (0%):</span>
                                 <span class="font-medium">0.00 {{ $payment->currency }}</span>
                             </div>
+                            @if (isset($payment->due_date))
+                                <div class="border-border flex items-center justify-between border-b py-2">
+                                    <span class="text-base-content-muted">Due Date:</span>
+                                    <span class="font-medium">{{ \Carbon\Carbon::parse($payment->due_date)->format('M d, Y') }}</span>
+                                </div>
+                            @endif
                             <div class="border-border flex items-center justify-between border-t-2 py-3">
                                 <span class="text-base-content text-lg font-semibold">Total:</span>
                                 <span class="text-primary text-lg font-bold">{{ number_format($payment->amount, 2) }} {{ $payment->currency }}</span>
@@ -98,11 +138,19 @@
                                     <p class="text-base-content-muted">PT ABCDEFG</p>
                                 </div>
                             </div>
+                            @if (isset($payment->due_date))
+                                <p class="mt-3 text-sm text-blue-700">
+                                    <strong>Payment Due:</strong> Please complete payment by {{ \Carbon\Carbon::parse($payment->due_date)->format('F d, Y H:i') }}.
+                                </p>
+                            @endif
                             <p class="mt-3 text-sm text-blue-700">
                                 <strong>Note:</strong> After transfer, please upload your payment proof below for admin verification.
                             </p>
                         @else
                             <p class="text-blue-800">Payment Method: <span class="font-semibold">{{ ucfirst($payment->payment_method) }}</span></p>
+                            @if (isset($payment->due_date))
+                                <p class="mt-2 text-sm text-blue-700">Payment due by: {{ \Carbon\Carbon::parse($payment->due_date)->format('F d, Y H:i') }}</p>
+                            @endif
                             <p class="mt-2 text-sm text-blue-700">Please proceed with payment through the related gateway.</p>
                         @endif
                     </div>
@@ -119,20 +167,24 @@
                                     <div>
                                         <x-input-label for="bank_name">Sender Bank</x-input-label>
                                         <x-text-input name="bank_name" size="small" placeholder="e.g., BCA, Mandiri" required />
+                                        <x-input-error class="mt-2" :messages="$errors->get('bank_name')" />
                                     </div>
                                     <div>
                                         <x-input-label for="account_number">Sender Account Number</x-input-label>
                                         <x-text-input name="account_number" size="small" placeholder="e.g., 1234567890" required />
+                                        <x-input-error class="mt-2" :messages="$errors->get('account_number')" />
                                     </div>
                                 </div>
                                 <div>
                                     <x-input-label for="account_name">Account Holder Name</x-input-label>
                                     <x-text-input name="account_name" size="small" placeholder="Enter account holder name" required />
+                                    <x-input-error class="mt-2" :messages="$errors->get('account_name')" />
                                 </div>
                                 <div>
                                     <label class="text-foreground mb-2 block text-sm font-medium">Upload Transfer Receipt</label>
                                     <input class="border-border file:bg-info/20 hover:file:bg-info/50 focus:ring-info w-full rounded-md border px-3 py-2 file:mr-4 file:rounded-md file:border-0 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-blue-700 focus:border-transparent focus:outline-none focus:ring-2" name="proof_image" type="file" accept="image/*" required>
                                     <p class="text-base-content-muted/200 mt-1 text-xs">Accepted formats: JPG, PNG, PDF (Max: 1MB)</p>
+                                    <x-input-error class="mt-2" :messages="$errors->get('proof_image')" />
                                 </div>
                                 <x-button-primary class="w-full">
                                     Upload Payment Proof

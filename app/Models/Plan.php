@@ -21,6 +21,10 @@ class Plan extends Model
         'currency',
     ];
 
+    protected $casts = [
+        'price_per_hectare' => 'decimal:2',
+    ];
+
     public function subscriptions()
     {
         return $this->hasMany(Subscription::class);

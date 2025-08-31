@@ -15,8 +15,8 @@ Route::prefix('dashboard')->name('admin.')->group(function () {
     });
 
     Route::middleware(['auth', 'verified', 'role:superadmin,admin'])->group(function () {
-        Route::get('/requestContributor', [UserController::class, 'requestContributor'])->name('requestContributor.index');
-        Route::delete('/requestContributor/{requestContributor:id}', [UserController::class, 'destroyRequestContributor'])->name('requestContributor.destroy');
+        Route::put('/payments/{payment}/status', [PaymentController::class, 'updateStatus'])->name('payment.updateStatus');
+        Route::get('/payments/{payment}/data', [PaymentController::class, 'getPaymentData'])->name('payment.getData');
     });
 
     Route::middleware(['auth', 'verified'])->group(function () {

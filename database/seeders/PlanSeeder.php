@@ -17,7 +17,7 @@ class PlanSeeder extends Seeder
         DB::table('plans')->insert([
             'id' => (string) Str::uuid(),
             'name' => 'Standard',
-            'price_per_hectare' => 10.00,
+            'price_per_hectare' => 1.5,
             'currency' => 'USD',
             'created_at' => now(),
             'updated_at' => now(),

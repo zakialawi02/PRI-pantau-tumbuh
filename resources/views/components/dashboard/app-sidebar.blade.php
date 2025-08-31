@@ -26,13 +26,13 @@
                     <x-dashboard.nav-item route="admin.dashboard" icon="ri-dashboard-line" text="Dashboard" />
                     <x-dashboard.nav-item route="appMap" icon="ri-side-bar-line" text="Apps Map" />
                     @if (Auth::user()->role !== 'user')
-                        <x-dashboard.nav-dropdown icon="ri-article-line" text="Articles Posts" :items="[['route' => 'admin.posts.index', 'text' => 'Posts'], ['route' => 'admin.posts.create', 'text' => 'Create Post']]" />
+                        <x-dashboard.nav-dropdown icon="ri-currency-line" text="Plans" :items="[['route' => 'admin.plans.index', 'text' => 'Plans List'], ['route' => 'admin.plans.create', 'text' => 'Voucher']]" />
                     @endif
 
                     <div class="text-base-content-muted px-1 pt-3 text-sm font-bold">
                         <p>Manage</p>
                     </div>
-                    <x-dashboard.nav-item route="admin.payment.index" active="admin.payment.*" icon="ri-currency-line" text="Payment" />
+                    <x-dashboard.nav-item route="admin.payment.index" icon="ri-currency-line" text="Payment" />
                     <x-dashboard.nav-item route="#" icon="ri-notification-3-line" text="Notification" />
                     @if (Auth::user()->role == 'superadmin')
                         <x-dashboard.nav-item route="admin.users.index" icon="ri-user-line" text="User" />

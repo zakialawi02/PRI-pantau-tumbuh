@@ -33,6 +33,14 @@ class Payment extends Model
         'payment_method',
         'transaction_ref',
         'paid_at',
+        'due_date',
+    ];
+
+    protected $casts = [
+        'due_date' => 'datetime',
+        'paid_at' => 'datetime',
+        'verified_at' => 'datetime',
+        'amount' => 'decimal:2',
     ];
 
     public function subscription()

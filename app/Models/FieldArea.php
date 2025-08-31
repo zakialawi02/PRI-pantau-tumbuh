@@ -24,7 +24,11 @@ class FieldArea extends Model
         'geom',
     ];
 
-    // relasi
+    protected $casts = [
+        'geom' => 'array',
+        'deleted_at' => 'datetime',
+    ];
+
     public function user()
     {
         return $this->belongsTo(User::class);
