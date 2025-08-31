@@ -122,7 +122,7 @@ class PlansController extends Controller
     public function destroy(Plan $plan): JsonResponse
     {
         // Check if plan has active subscriptions
-        if ($plan->subscriptions()->count() > 0) {
+        if ($plan->subscriptions()->exists()) {
             return response()->json([
                 'success' => false,
                 'message' => 'Cannot delete plan that has active subscriptions.'

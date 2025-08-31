@@ -41,7 +41,7 @@
                     </button>
 
                     <!-- Authenticated User Dropdown -->
-                    <div class="bg-background text-foreground divide-foreground/50 border-border z-60 w-50 absolute right-0 mt-2 hidden list-none divide-y rounded-lg border shadow-lg" id="user-dropdown">
+                    <div class="bg-background text-foreground divide-foreground/50 border-border w-50 absolute right-0 z-50 mt-2 hidden list-none divide-y rounded-lg border shadow-lg" id="user-dropdown">
                         <div class="px-4 py-3">
                             <span class="block text-sm font-medium">{{ Str::limit(Auth::user()->name, 25) }}</span>
                             <span class="block truncate text-sm text-gray-500">{{ Str::limit(Auth::user()->email, 25) }}</span>
@@ -87,7 +87,7 @@
                     </button>
 
                     <!-- Guest User Dropdown -->
-                    <div class="bg-background text-foreground divide-foreground/50 border-border z-60 w-50 absolute right-0 mt-2 hidden list-none divide-y rounded-lg border shadow-lg" id="guest-dropdown">
+                    <div class="bg-background text-foreground divide-foreground/50 border-border w-50 absolute right-0 z-50 mt-2 hidden list-none divide-y rounded-lg border shadow-lg" id="guest-dropdown">
                         <ul class="py-2" role="menu" aria-labelledby="guest-menu-button">
                             <li role="none">
                                 <a class="hover:bg-muted flex items-center px-4 py-2 text-sm transition-colors" href="{{ route('login') }}" role="menuitem">
@@ -160,14 +160,6 @@
                     <span class="text-xl">📜</span>
                     <span>Reports</span>
                 </button>
-                <button class="bg-neutral inline-flex items-center space-x-2 rounded-full border border-gray-300 px-4 py-1 text-sm font-medium">
-                    <span class="text-xl">⚙️</span>
-                    <span>Settings</span>
-                </button>
-                <button class="bg-neutral inline-flex items-center space-x-2 rounded-full border border-gray-300 px-4 py-1 text-sm font-medium">
-                    <span class="text-xl">👤</span>
-                    <span>Profile</span>
-                </button>
             </div>
             <!-- Arrow Right -->
             <button class="bg-neutral border-foreground/70 hover:bg-muted absolute right-0 top-1/2 z-10 mx-0.5 -translate-y-1/2 rounded-full border px-1 py-0.5" id="scroll-right">
@@ -178,7 +170,7 @@
         <div class="flex h-full flex-1 flex-row">
             <!-- * Left Panel (Push Layout)*  -->
             <!-- Left Panel1 - Responsive Flowbite Drawer -->
-            <div class="bg-background shadow-r-lg responsive-drawer z-60 fixed bottom-0 left-0 right-0 h-[50vh] max-h-[50vh] w-full overflow-hidden transition-all duration-300 ease-in-out md:relative md:inset-auto md:z-auto md:block md:h-full md:max-h-full md:w-80" id="drawer-sidebar-left-panel1" data-drawer-state="open" data-drawer-placement="left" data-drawer-edge="true" aria-labelledby="drawer-sidebar-left-panel1-label" tabindex="-1">
+            <div class="bg-background shadow-r-lg responsive-drawer fixed bottom-0 left-0 right-0 z-50 h-[50vh] max-h-[50vh] w-full overflow-hidden transition-all duration-300 ease-in-out md:relative md:inset-auto md:z-auto md:block md:h-full md:max-h-full md:w-80" id="drawer-sidebar-left-panel1" data-drawer-state="open" data-drawer-placement="left" data-drawer-edge="true" aria-labelledby="drawer-sidebar-left-panel1-label" tabindex="-1">
                 <div class="w-81 flex h-full min-w-full flex-col p-2 md:min-w-8" id="drawer-sidebar-left-panel1-label">
                     <!-- Header drawer -->
                     <div class="mb-2 flex items-center justify-between">
@@ -214,7 +206,7 @@
             </div>
 
             <!-- Left Panel2 - Responsive Flowbite Drawer -->
-            <div class="bg-background shadow-r-lg responsive-drawer z-60 fixed bottom-0 left-0 right-0 h-0 max-h-[50vh] w-full overflow-hidden transition-all duration-300 ease-in-out md:relative md:inset-auto md:z-auto md:block md:h-full md:max-h-full md:w-0" id="drawer-sidebar-left-panel2" data-drawer-state="closed" data-drawer-placement="left" data-drawer-edge="true" aria-labelledby="drawer-sidebar-left-panel2-label" tabindex="-1">
+            <div class="bg-background shadow-r-lg responsive-drawer fixed bottom-0 left-0 right-0 z-50 h-0 max-h-[50vh] w-full overflow-hidden transition-all duration-300 ease-in-out md:relative md:inset-auto md:z-auto md:block md:h-full md:max-h-full md:w-0" id="drawer-sidebar-left-panel2" data-drawer-state="closed" data-drawer-placement="left" data-drawer-edge="true" aria-labelledby="drawer-sidebar-left-panel2-label" tabindex="-1">
                 <div class="flex h-full min-w-full flex-col p-2 md:min-w-80" id="drawer-sidebar-left-panel2-label">
                     <div class="mb-2 flex items-center justify-between">
                         <h2 class="text-lg font-semibold">Analytics</h2>
@@ -309,7 +301,7 @@
             </div>
         </div>
 
-        <div class="z-60 bg-background absolute bottom-0 left-0 hidden max-h-[60%] w-full max-w-full overflow-hidden rounded-t-xl shadow-xl transition-all duration-300 ease-in-out md:bottom-auto md:left-auto md:right-2 md:top-1/2 md:max-w-[30rem] md:-translate-y-1/2 md:transform md:rounded-xl" id="buyingPanel">
+        <div class="bg-background absolute bottom-0 left-0 z-50 hidden max-h-[60%] w-full max-w-full overflow-hidden rounded-t-xl shadow-xl transition-all duration-300 ease-in-out md:bottom-auto md:left-auto md:right-2 md:top-1/2 md:max-w-[30rem] md:-translate-y-1/2 md:transform md:rounded-xl" id="buyingPanel">
             <div class="flex h-full w-full min-w-full flex-col p-2" id="drawer-sidebar-left-panel1-label">
                 <!-- Header drawer -->
                 <div class="mb-2 flex items-center justify-between">

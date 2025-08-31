@@ -94,7 +94,6 @@ class PaymentController extends Controller
 
         // Buat Subscription
         $subscription = Subscription::create([
-            'id'               => Str::uuid(),
             'user_id'          => $user->id,
             'field_area_id'    => $field->id,
             'plan_id'          => $plan->id,
@@ -107,7 +106,6 @@ class PaymentController extends Controller
 
         // Buat Payment
         $payment = Payment::create([
-            'id'              => Str::uuid(),
             'subscription_id' => $subscription->id,
             'name'            => $user->name,
             'email'           => $user->email,
