@@ -586,6 +586,7 @@ function addInteraction(type = "Polygon") {
                 tooltipCoord = geom.getLastCoordinate();
             }
             geojsonArea = getArea(geom);
+            window.geojsonArea = geojsonArea;
             measureTooltipElement.innerHTML = output;
             measureTooltip.setPosition(tooltipCoord);
         });
@@ -619,6 +620,11 @@ function addInteraction(type = "Polygon") {
         // Show feature properties after drawing
         if (draw) {
             $("#featureProperties").removeClass("hidden");
+        }
+
+        // Calculate total price after drawing
+        if (typeof window.calculateTotalPrice === "function") {
+            window.calculateTotalPrice();
         }
     });
 }
@@ -871,3 +877,4 @@ window.setBingmapBasemap = setBingmapBasemap;
 window.setMapboxBasemap = setMapboxBasemap;
 window.setOsmBasemap = setOsmBasemap;
 window.setEsriBasemap = setEsriBasemap;
+window.geojsonArea = geojsonArea;

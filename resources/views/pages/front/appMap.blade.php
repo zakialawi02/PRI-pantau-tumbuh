@@ -353,23 +353,28 @@
                                     <div class="space-y-2">
                                         <x-input-label class="text-sm font-medium" for="luas">Area</x-input-label>
                                         <div class="border-muted rounded border bg-gray-50 p-2 text-sm" id="measurementOutput">
-                                            <span class="text-gray-500">Calculate area...</span>
+                                            <div class="flex items-center text-gray-500">
+                                                <i class="ri-crop-line mr-2"></i>
+                                                <span>Calculate area...</span>
+                                            </div>
                                         </div>
                                     </div>
 
                                     <div class="space-y-2">
                                         <x-input-label class="text-sm font-medium" for="harga_satuan">Price per Hectare</x-input-label>
-                                        <div class="border-muted rounded border bg-gray-50 p-2 text-sm">
-                                            <select class="w-full rounded border border-gray-300 bg-white px-2 py-1 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500" id="plan_id" name="plan_id">
+                                        <div class="border-muted rounded border p-2 text-sm">
+                                            <select class="border-border focus:border-primary focus:ring-primary w-full rounded border px-2 py-1 text-sm focus:outline-none focus:ring-1" id="plan_id" name="plan_id">
                                                 @if (isset($plans) && count($plans) > 0)
-                                                    @php $hasVisiblePlans = false; @endphp
-                                                    @foreach ($plans as $index => $plan)
-                                                        @if ($plan->isShow)
-                                                            @php $hasVisiblePlans = true; @endphp
-                                                            <option data-price="{{ $plan->price_per_hectare }}" value="{{ $plan->id }}" {{ $index === 0 ? 'selected' : '' }}>
-                                                                {{ $plan->name }} - US${{ number_format($plan->price_per_hectare, 2) }}/ha
-                                                            </option>
-                                                        @endif
+                                                    @php
+                                                        $hasVisiblePlans = false;
+                                                        $sortedPlans = $plans->where('isShow', true)->sortBy('price_per_hectare');
+                                                        $lowestPricePlan = $sortedPlans->first();
+                                                    @endphp
+                                                    @foreach ($sortedPlans as $index => $plan)
+                                                        @php $hasVisiblePlans = true; @endphp
+                                                        <option data-price="{{ $plan->price_per_hectare }}" value="{{ $plan->id }}" {{ $plan->id === $lowestPricePlan->id ? 'selected' : '' }}>
+                                                            {{ $plan->name }} - {{ $plan->currency }} {{ number_format($plan->price_per_hectare, 2) }}/ha
+                                                        </option>
                                                     @endforeach
                                                     @if (!$hasVisiblePlans)
                                                         <option value="" selected disabled>No plans available</option>
@@ -386,7 +391,7 @@
                                 <div class="space-y-2">
                                     <x-input-label class="text-sm font-medium" for="harga">Total Price</x-input-label>
                                     <div class="border-muted bg-muted/60 rounded border p-2 text-sm" id="priceOutput">
-                                        <span class="text-gray-500">Total will be calculated...</span>
+                                        <span class="font-semibold text-blue-600" id="total_price">Total will be calculated...</span>
                                     </div>
                                 </div>
 
@@ -609,6 +614,72 @@
                 const buyingPanel = document.getElementById('buyingPanel');
                 buyingPanel.classList.add('hidden');
             });
+
+            // Price calculation functions
+            function calculateTotalPrice() {
+                const planSelect = document.getElementById('plan_id');
+                const selectedOption = planSelect.options[planSelect.selectedIndex];
+                const pricePerHectare = parseFloat(selectedOption.dataset.price) || 0;
+
+                // Get area from global variable (set when polygon is drawn)
+                const areaInSquareMeters = window.geojsonArea || 0;
+                const areaInHectares = areaInSquareMeters / 10000; // Convert m² to hectares
+
+                const totalPrice = areaInHectares * pricePerHectare;
+
+                // Update the display
+                const totalPriceElement = document.getElementById('total_price');
+                const priceContainer = totalPriceElement.parentElement;
+
+                if (areaInHectares > 0 && pricePerHectare > 0) {
+                    totalPriceElement.innerHTML = `
+                        <div class="flex justify-between items-center">
+                            <span class="text-lg font-bold text-green-700">US$${totalPrice.toFixed(2)}</span>
+                            <i class="ri-money-dollar-circle-line text-green-600 text-xl"></i>
+                        </div>
+                        <div class="text-xs text-gray-600 mt-1">
+                            ${areaInHectares.toFixed(4)} hectares × US$${pricePerHectare.toFixed(2)}/hectare
+                        </div>
+                    `;
+                    priceContainer.classList.remove('bg-muted/60', 'border-muted');
+                    priceContainer.classList.add('bg-green-50', 'border-green-300', 'shadow-sm');
+
+                    // Add a subtle animation
+                    priceContainer.style.transform = 'scale(1.02)';
+                    setTimeout(() => {
+                        priceContainer.style.transform = 'scale(1)';
+                    }, 200);
+                } else if (areaInHectares > 0 && pricePerHectare === 0) {
+                    totalPriceElement.innerHTML = `
+                        <div class="flex items-center text-amber-600">
+                            <i class="ri-alert-line mr-2"></i>
+                            Please select a plan to calculate price
+                        </div>
+                    `;
+                    priceContainer.classList.remove('bg-green-50', 'border-green-300', 'shadow-sm');
+                    priceContainer.classList.add('bg-amber-50', 'border-amber-300');
+                } else {
+                    totalPriceElement.innerHTML = `
+                        <div class="flex items-center text-gray-500">
+                            <i class="ri-information-line mr-2"></i>
+                            Draw an area to calculate price
+                        </div>
+                    `;
+                    priceContainer.classList.remove('bg-green-50', 'border-green-300', 'shadow-sm', 'bg-amber-50', 'border-amber-300');
+                    priceContainer.classList.add('bg-muted/60', 'border-muted');
+                }
+
+                // Add transition for smooth color changes
+                priceContainer.style.transition = 'all 0.3s ease-in-out';
+            }
+
+            // Event listener for plan change
+            document.getElementById('plan_id').addEventListener('change', function() {
+                calculateTotalPrice();
+            });
+
+            // Make calculateTotalPrice available globally for map.js
+            window.calculateTotalPrice = calculateTotalPrice;
         </script>
     @endpush
 </x-app-front-map-layout>
