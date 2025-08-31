@@ -69,6 +69,7 @@ const World_Boundaries_and_Places = new TileLayer({
         url: "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
         maxZoom: 18,
         crossOrigin: "anonymous",
+        attributions: '© <a href="https://www.esri.com/">Esri</a>',
     }),
 });
 const World_Imagery = new TileLayer({
@@ -76,6 +77,8 @@ const World_Imagery = new TileLayer({
         url: "https://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
         maxZoom: 18,
         crossOrigin: "anonymous",
+        attributions:
+            '© <a href="https://www.esri.com/">Esri</a>, © <a href="https://www.digitalglobe.com/">DigitalGlobe</a>, © <a href="http://www.geoeye.com/">GeoEye</a>, © <a href="https://www.i-cubed.com/">i-cubed</a>, © <a href="https://www.usda.gov/">USDA</a>, © <a href="https://www.usgs.gov/">USGS</a>, © <a href="https://www.aerogrid.com/">AeroGRID</a>, © <a href="https://www.igncorporation.com/">IGN</a>, and the GIS User Community',
     }),
 });
 const World_Transportation = new TileLayer({
@@ -83,6 +86,7 @@ const World_Transportation = new TileLayer({
         url: "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}",
         maxZoom: 18,
         crossOrigin: "anonymous",
+        attributions: '© <a href="https://www.esri.com/">Esri</a>',
     }),
 });
 
@@ -96,6 +100,8 @@ const mapboxBaseURL =
 const mapboxStyleId = "mapbox/streets-v11";
 const mapboxSource = new XYZ({
     url: mapboxBaseURL.replace("{id}", mapboxStyleId),
+    attributions:
+        '© <a href="https://www.mapbox.com/about/maps/">Mapbox</a> © <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a> <strong><a href="https://www.mapbox.com/map-feedback/" target="_blank">Improve this map</a></strong>',
 });
 const mapboxBaseMap = new ol.layer.Tile({
     source: mapboxSource,
@@ -160,11 +166,9 @@ const scaleControl = new ScaleLine({
 const mousePositionControl = new MousePosition({
     target: document.getElementById("mousePosition"),
     coordinateFormat: function (coordinate) {
-        const { formattedLon, formattedLat } = coordinateFormatIndo(
-            coordinate,
-            "dd"
-        );
-
+        const [lon, lat] = coordinate;
+        const formattedLon = lon.toFixed(6);
+        const formattedLat = lat.toFixed(6);
         return (
             "Long: " + formattedLon + " &nbsp&nbsp&nbsp  Lat: " + formattedLat
         );
@@ -173,45 +177,6 @@ const mousePositionControl = new MousePosition({
     placeholder: "Long: - &nbsp&nbsp&nbsp  Lat: -",
     className: "ol-custom-mouse-position",
 });
-
-/**
- * Formats the given coordinate into a specific format for Indo coordinates.
- *
- * @param {Array<number>} coordinate - The coordinate to be formatted. It should be an array with two elements: [longitude, latitude].
- * @param {string} [format="dd"] - The format to use for the coordinate. It can be "dd" for decimal degrees, or "dms" for degrees, minutes, and seconds.
- * @return {Object} An object containing the formatted longitude and latitude.
- * @example
- * dd=> {"formattedLon": "112.74719° BT", "formattedLat": "7.26786° LS"}
- * or
- * dms=> {"formattedLon": "112° 47' 17.00\" BT", "formattedLat": "7° 24' 46.00\" LS"}
- */
-function coordinateFormatIndo(coordinate, format = "dd") {
-    const lon = coordinate[0];
-    const lat = coordinate[1];
-
-    const lonDirection = lon < 0 ? "BB" : "BT";
-    const latDirection = lat < 0 ? "LS" : "LU"; // LS: Lintang Selatan, LU: Lintang Utara
-
-    if (format === "dms") {
-        const convertToDMS = (coord, direction) => {
-            const absoluteCoord = Math.abs(coord);
-            const degrees = Math.floor(absoluteCoord);
-            const minutes = Math.floor((absoluteCoord - degrees) * 60);
-            const seconds = (
-                (absoluteCoord - degrees - minutes / 60) *
-                3600
-            ).toFixed(2);
-            return `${degrees}° ${minutes}' ${seconds}" ${direction}`;
-        };
-        const formattedLon = convertToDMS(lon, lonDirection);
-        const formattedLat = convertToDMS(lat, latDirection);
-        return { formattedLon, formattedLat };
-    } else {
-        const formattedLon = `${Math.abs(lon).toFixed(5)}° ${lonDirection}`;
-        const formattedLat = `${Math.abs(lat).toFixed(5)}° ${latDirection}`;
-        return { formattedLon, formattedLat };
-    }
-}
 
 //** STYLE ***/
 // marker style

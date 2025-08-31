@@ -12,7 +12,7 @@
     <aside class="border-border bg-background group fixed inset-y-0 left-0 z-50 hidden h-screen w-64 -translate-x-full border-r px-1.5 py-3 transition-all duration-150 md:relative md:flex md:w-12 md:translate-x-0 md:flex-col md:justify-between hover:md:w-48" id="sidebar">
         <!-- Sidebar Nav Menu -->
         <div class="mt-10 flex w-full flex-col space-y-6">
-            <button class="hover:text-accent flex items-center space-x-2 p-1 transition-colors" data-drawer-target="drawer-sidebar-left-panel1" data-drawer-show="drawer-sidebar-left-panel1" data-drawer-backdrop="false" type="button" aria-controls="drawer-sidebar-left-panel1">
+            <button class="hover:text-accent nav-map-active flex items-center space-x-2 p-1 transition-colors" data-drawer-target="drawer-sidebar-left-panel1" data-drawer-show="drawer-sidebar-left-panel1" data-drawer-backdrop="false" type="button" aria-controls="drawer-sidebar-left-panel1">
                 <span class="text-xl">📡</span>
                 <span class="hidden whitespace-nowrap text-sm font-medium group-hover:inline-block">My Data</span>
             </button>
@@ -144,7 +144,7 @@
             </button>
             <!-- Scrollable Container -->
             <div class="flex space-x-2 overflow-x-hidden scroll-smooth" id="scroll-container">
-                <button class="bg-neutral inline-flex items-center space-x-2 rounded-full border border-gray-300 px-4 py-1 text-sm font-medium" data-drawer-target="drawer-sidebar-left-panel1" data-drawer-show="drawer-sidebar-left-panel1" data-drawer-backdrop="false" type="button" aria-controls="drawer-sidebar-left-panel1">
+                <button class="bg-neutral nav-map-active inline-flex items-center space-x-2 rounded-full border border-gray-300 px-4 py-1 text-sm font-medium" data-drawer-target="drawer-sidebar-left-panel1" data-drawer-show="drawer-sidebar-left-panel1" data-drawer-backdrop="false" type="button" aria-controls="drawer-sidebar-left-panel1">
                     <span class="text-xl">📡</span>
                     <span>My Data</span>
                 </button>
@@ -178,7 +178,7 @@
         <div class="flex h-full flex-1 flex-row">
             <!-- * Left Panel (Push Layout)*  -->
             <!-- Left Panel1 - Responsive Flowbite Drawer -->
-            <div class="bg-background shadow-r-lg responsive-drawer z-60 fixed bottom-0 left-0 right-0 h-0 max-h-[50vh] w-full overflow-hidden transition-all duration-300 ease-in-out md:relative md:inset-auto md:z-auto md:block md:h-full md:max-h-full md:w-0" id="drawer-sidebar-left-panel1" data-drawer-state="closed" data-drawer-placement="left" data-drawer-edge="true" aria-labelledby="drawer-sidebar-left-panel1-label" tabindex="-1">
+            <div class="bg-background shadow-r-lg responsive-drawer z-60 fixed bottom-0 left-0 right-0 h-[50vh] max-h-[50vh] w-full overflow-hidden transition-all duration-300 ease-in-out md:relative md:inset-auto md:z-auto md:block md:h-full md:max-h-full md:w-80" id="drawer-sidebar-left-panel1" data-drawer-state="open" data-drawer-placement="left" data-drawer-edge="true" aria-labelledby="drawer-sidebar-left-panel1-label" tabindex="-1">
                 <div class="w-81 flex h-full min-w-full flex-col p-2 md:min-w-8" id="drawer-sidebar-left-panel1-label">
                     <!-- Header drawer -->
                     <div class="mb-2 flex items-center justify-between">
@@ -197,10 +197,17 @@
                             <p class="mb-6 px-4 text-sm text-gray-500">
                                 You don't have any satellite imagery data yet. Purchase satellite imagery to start monitoring your crops and analyzing plant stress using PRI.
                             </p>
-                            <x-button-primary id="buySatelliteBtn" type="button" size="small">
-                                <i class="ri-shopping-cart-line"></i>
-                                <span>Buy Satellite Imagery</span>
-                            </x-button-primary>
+                            @auth
+                                <x-button-primary id="buySatelliteBtn" type="button" size="small">
+                                    <i class="ri-shopping-cart-line"></i>
+                                    <span>Buy Satellite Imagery</span>
+                                </x-button-primary>
+                            @else
+                                <x-button-primary type="button" onclick="window.location.href='{{ route('login') }}'" size="small">
+                                    <i class="ri-login-box-line"></i>
+                                    <span>Login to Buy Imagery</span>
+                                </x-button-primary>
+                            @endauth
                         </div>
                     </div>
                 </div>

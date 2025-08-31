@@ -7,7 +7,7 @@
         <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
             <!-- Form kiri -->
             <x-card class="md:order-0 order-2 space-y-4 md:col-span-2">
-                <h2 class="border-b pb-2 text-lg font-semibold">Personal data</h2>
+                <h2 class="border-border border-b pb-2 text-lg font-semibold">Personal data</h2>
 
                 <form class="" id="form-ajuan" action="{{ route('checkout.payment') }}" method="post" enctype="multipart/form-data" autocomplete="off">
                     @csrf
@@ -35,10 +35,11 @@
                         <x-text-input id="phone" name="phone" value="{{ old('phone') }}" size="small" required />
                         <x-input-error class="mt-2" :messages="$errors->get('phone')" />
                     </div>
+
                     <!-- Plans -->
                     <div class="mb-3">
                         <x-input-label for="plan">Plans</x-input-label>
-                        <div class="rounded-md border bg-gray-50 p-3">
+                        <div class="border-primary/80 rounded-md border bg-gray-50 p-3">
                             <div class="font-medium">{{ $data['plan']['name'] ?? 'Plan Name' }}</div>
                             <div class="text-sm text-gray-600">{{ $data['price_currency'] ?? 'USD' }} {{ $data['price_per_hectare'] }}/ha</div>
                         </div>
@@ -55,11 +56,11 @@
                     </div>
 
                     <!-- Informasi Bank -->
-                    <h2 class="mb-3 border-b pb-2 text-lg font-semibold">Payment</h2>
+                    <h2 class="border-border mb-3 border-b pb-2 text-lg font-semibold">Payment</h2>
 
                     <div class="mb-3">
                         <x-input-label for="payment_method">Payment Method</x-input-label>
-                        <select class="w-full rounded-md border px-3 py-2 focus:outline-none focus:ring focus:ring-green-200" id="payment_method" name="payment_method">
+                        <select class="focus:ring-primary ring-primary/80 border-ring w-full rounded-md border px-3 py-2 focus:outline-none focus:ring" id="payment_method" name="payment_method">
                             <option value="bank_transfer">Bank Transfer</option>
                         </select>
                         <x-input-error class="mt-2" :messages="$errors->get('payment_method')" />
@@ -77,15 +78,12 @@
             <!-- Map kanan -->
             <x-card class="order-1 space-y-4 self-start">
                 <div>
-                    <h2 class="border-b pb-2 text-lg font-semibold">Preview Map</h2>
+                    <h2 class="border-border border-b pb-2 text-lg font-semibold">Preview Map</h2>
                     <div class="mt-3 h-64 w-full overflow-hidden rounded-md border">
                         <div class="map" id="map"></div>
                         <div class="hidden md:block" id="mousePosition"></div>
                     </div>
-                    <div class="mt-2 space-x-3 text-sm text-gray-600">
-                        <span>Long: -</span>
-                        <span>Lat: -</span>
-                    </div>
+                    <div class="mt-2 space-x-3 text-sm text-gray-600" id="coordinateDisplay"> </div>
                 </div>
             </x-card>
 
@@ -152,6 +150,7 @@
                     url: "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
                     maxZoom: 18,
                     crossOrigin: "anonymous",
+                    attributions: '© <a href="https://www.esri.com/">Esri</a>',
                 }),
             });
             const World_Imagery = new TileLayer({
@@ -159,6 +158,7 @@
                     url: "https://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
                     maxZoom: 18,
                     crossOrigin: "anonymous",
+                    attributions: '© <a href="https://www.esri.com/">Esri</a>, © <a href="https://www.digitalglobe.com/">DigitalGlobe</a>, © <a href="http://www.geoeye.com/">GeoEye</a>, © <a href="https://www.i-cubed.com/">i-cubed</a>, © <a href="https://www.usda.gov/">USDA</a>, © <a href="https://www.usgs.gov/">USGS</a>, © <a href="https://www.aerogrid.com/">AeroGRID</a>, © <a href="https://www.igncorporation.com/">IGN</a>, and the GIS User Community',
                 }),
             });
             const World_Transportation = new TileLayer({
@@ -166,6 +166,7 @@
                     url: "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}",
                     maxZoom: 18,
                     crossOrigin: "anonymous",
+                    attributions: '© <a href="https://www.esri.com/">Esri</a>',
                 }),
             });
 
@@ -174,18 +175,13 @@
                 visible: true,
             });
 
-            // Mouse Position
+            // Mouse Position Control
             const mousePositionControl = new MousePosition({
-                target: document.getElementById("mousePosition"),
+                target: document.getElementById("coordinateDisplay"),
                 coordinateFormat: function(coordinate) {
-                    const {
-                        formattedLon,
-                        formattedLat
-                    } = coordinateFormatIndo(
-                        coordinate,
-                        "dd"
-                    );
-
+                    const [lon, lat] = coordinate;
+                    const formattedLon = lon.toFixed(6);
+                    const formattedLat = lat.toFixed(6);
                     return (
                         "Long: " + formattedLon + " &nbsp&nbsp&nbsp  Lat: " + formattedLat
                     );
@@ -194,52 +190,6 @@
                 placeholder: "Long: - &nbsp&nbsp&nbsp  Lat: -",
                 className: "ol-custom-mouse-position",
             });
-
-            /**
-             * Formats the given coordinate into a specific format for Indo coordinates.
-             *
-             * @param {Array<number>} coordinate - The coordinate to be formatted. It should be an array with two elements: [longitude, latitude].
-             * @param {string} [format="dd"] - The format to use for the coordinate. It can be "dd" for decimal degrees, or "dms" for degrees, minutes, and seconds.
-             * @return {Object} An object containing the formatted longitude and latitude.
-             * @example
-             * dd=> {"formattedLon": "112.74719° BT", "formattedLat": "7.26786° LS"}
-             * or
-             * dms=> {"formattedLon": "112° 47' 17.00\" BT", "formattedLat": "7° 24' 46.00\" LS"}
-             */
-            function coordinateFormatIndo(coordinate, format = "dd") {
-                const lon = coordinate[0];
-                const lat = coordinate[1];
-
-                const lonDirection = lon < 0 ? "BB" : "BT";
-                const latDirection = lat < 0 ? "LS" : "LU"; // LS: Lintang Selatan, LU: Lintang Utara
-
-                if (format === "dms") {
-                    const convertToDMS = (coord, direction) => {
-                        const absoluteCoord = Math.abs(coord);
-                        const degrees = Math.floor(absoluteCoord);
-                        const minutes = Math.floor((absoluteCoord - degrees) * 60);
-                        const seconds = (
-                            (absoluteCoord - degrees - minutes / 60) *
-                            3600
-                        ).toFixed(2);
-                        return `${degrees}° ${minutes}' ${seconds}" ${direction}`;
-                    };
-                    const formattedLon = convertToDMS(lon, lonDirection);
-                    const formattedLat = convertToDMS(lat, latDirection);
-                    return {
-                        formattedLon,
-                        formattedLat
-                    };
-                } else {
-                    const formattedLon = `${Math.abs(lon).toFixed(5)}° ${lonDirection}`;
-                    const formattedLat = `${Math.abs(lat).toFixed(5)}° ${latDirection}`;
-                    return {
-                        formattedLon,
-                        formattedLat
-                    };
-                }
-            }
-
 
             // Init To Canvas/View
             let map = new Map({
@@ -252,7 +202,6 @@
                 ],
 
                 view: view,
-
 
                 controls: [
                     new Zoom(),

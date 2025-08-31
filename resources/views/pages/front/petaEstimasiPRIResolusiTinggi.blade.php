@@ -50,50 +50,15 @@
             <li>Hasil estimasi lebih konsisten di berbagai kondisi</li>
         </ul>
         <p>
-            Hasil estimasi ini kemudian diproses dan ditampilkan secara interaktif melalui Google Earth Engine di bawah ini.
+            Hasil estimasi ini kemudian diproses dan ditampilkan secara interaktif.
         </p>
 
         <!-- Call to Action Button -->
         <div class="mt-8 flex justify-center space-x-3">
-            @if (Auth::check() && Auth::user()->is_subscribed)
-                <x-button-primary href="/products" variant="outline">
-                    Lihat Peta Interaktif
-                </x-button-primary>
-            @elseif (Auth::check())
-                <x-button-primary href="{{ route('appMap') }}">
-                    Beli Akses Sekarang
-                </x-button-primary>
-            @else
-                <x-button-primary href="{{ route('login') }}">
-                    Login untuk Akses
-                </x-button-primary>
-                <x-button-primary href="{{ route('register') }}" variant="outline">
-                    Daftar untuk Akses
-                </x-button-primary>
-            @endif
+            <x-button-primary href="{{ route('appMap') }}">
+                Go to Dashboard Apps
+            </x-button-primary>
         </div>
     </section>
-    <!-- Map Intro End -->
-
-    @push('css')
-        <link href="https://cdn.jsdelivr.net/npm/sweetalert2@11.11.0/dist/sweetalert2.min.css" rel="stylesheet">
-    @endpush
-
-    @push('javascript')
-        <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11.11.0/dist/sweetalert2.all.min.js"></script>
-
-        <script>
-            @if (!Auth::check() || !Auth::user()->is_subscribed)
-                Swal.fire({
-                    title: "Maaf!",
-                    text: "Fitur ini merupakan fitur berbayar!",
-                    icon: "warning",
-                    timer: 3000,
-                    timerProgressBar: true,
-                    confirmButtonText: "Ok"
-                })
-            @endif
-        </script>
-    @endpush
 
 </x-app-front-layout>
