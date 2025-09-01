@@ -1,21 +1,56 @@
-MIT License
+PRI Pantau Tumbuh Limited Use License
 
-Copyright (c) 2024 Ahmad zaki Alawi
+Copyright (c) 2025 Zaki Alawi
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+Permission is hereby granted to use this software ("PRI Pantau Tumbuh") under the following terms and conditions:
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+PERMITTED USES:
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+1. non-commercial use for educational, research, or evaluation purposes
+2. Code review and security auditing (with proper attribution)
+
+PROHIBITED USES:
+
+1. Commercial use, including but not limited to:
+
+    - Selling, licensing, or distributing the software or derivative works
+    - Using the software in any commercial product or service
+    - Offering the software as a service (SaaS)
+    - Using the software to generate revenue directly or indirectly
+
+2. Redistribution in any form, including:
+
+    - Publishing to public repositories without explicit permission
+    - Sharing complete or partial copies of the codebase
+    - Creating derivative works for public distribution
+
+3. Reverse engineering for competitive purposes
+4. Removing or modifying copyright notices or license terms
+
+REQUIREMENTS:
+
+1. All copies must retain this license notice and copyright statement
+2. Any use must include proper attribution to the original authors
+3. Modifications must be clearly documented and marked
+4. No use of the "PRI Pantau Tumbuh" name or trademarks without permission
+
+COMMERCIAL LICENSING:
+Commercial use requires a separate commercial license. Contact hallo@zakialawi.my.id for commercial licensing inquiries.
+
+INTELLECTUAL PROPERTY:
+This software contains proprietary algorithms, methodologies, and implementations for satellite-based plant monitoring. All intellectual property rights are reserved.
+
+WARRANTY DISCLAIMER:
+THIS SOFTWARE IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+TERMINATION:
+This license is automatically terminated if you violate any of these terms. Upon termination, you must immediately cease all use and destroy all copies of the software.
+
+GOVERNING LAW:
+This license is governed by International law.
+
+For questions about this license, contact: hallo@zakialawi.my.id
+
+---
+
+Note: This is a restrictive license designed to protect the commercial value of the PRI Pantau Tumbuh system while allowing limited use for legitimate purposes.

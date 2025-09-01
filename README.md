@@ -1,50 +1,28 @@
-# StarterPack Laravel
+# PRI Pantau Tumbuh - Project
 
-Welcome to the Laravel 12 Starter Pack! This repository provides a solid foundation for building robust and scalable web applications using Laravel 12.
+## Overview
 
-A comprehensive Laravel starter template with essential features and best practices built-in (Laravel 12 + blade + tailwindcss + Basic Auth).
+PRI Pantau Tumbuh is a smart satellite-based monitoring system for accurately detecting plant health and stress. This project provides a comprehensive solution for monitoring growth patterns and developmental milestones
 
 ## Table of Contents
 
--   [Features](#features)
--   [Requirements](#requirements)
 -   [Installation](#installation)
 -   [Configuration](#configuration)
 -   [Usage](#usage)
--   [Project Structure](#project-structure)
+-   [Contributing](#contributing)
 -   [Development](#development)
 -   [Testing](#testing)
 -   [Deployment](#deployment)
--   [Contributing](#contributing)
 -   [License](#license)
 -   [Support](#Support)
-
-## Features
-
--   **Laravel Framework**: Built on the latest stable version of Laravel 12 + blade
--   **Authentication**: Complete user authentication system
--   **Authorization**: Role-based access control (RBAC)
--   **Database**: Pre-configured database migrations and seeders
--   **API Support**: RESTful API endpoints with proper documentation
--   **Frontend**: Modern frontend setup with Tailwind CSS
--   **Testing**: Comprehensive test suite with Pest
--   **Code Quality**: ESLint, Prettier, and PHP CS Fixer configurations
-
-## Requirements
-
--   PHP >= 8.1
--   Composer
--   Node.js >= 16.x
--   NPM or Yarn
--   MySQL/PostgreSQL/SQLite
--   Redis (optional)
+-   [Changelog](#Changelog)
 
 ## Installation
 
 1. **Clone the repository**
 
     ```bash
-    git clone https://github.com/zakialawi02/starter-pack-laravel12.git
+    git clone https://github.com/zakialawi02/PRI-pantau-tumbuh
     cd starterpack-laravel12
     ```
 
@@ -85,7 +63,7 @@ A comprehensive Laravel starter template with essential features and best practi
 Update your `.env` file with the following configurations:
 
 ```env
-APP_NAME="StarterPack Laravel"
+APP_NAME="PantauTumbuh.id"
 APP_ENV=local
 APP_KEY=base64:your-app-key
 APP_DEBUG=true
@@ -94,10 +72,16 @@ APP_URL=http://localhost
 DB_CONNECTION=mysql
 DB_HOST=127.0.0.1
 DB_PORT=3306
-DB_DATABASE=starterpack_laravel
+DB_DATABASE=pantau-tumbuh-db
 DB_USERNAME=root
 DB_PASSWORD=
 ```
+
+-   `DB_HOST` - Database host
+-   `DB_PORT` - Database port
+-   `DB_DATABASE` - Database name
+-   `DB_USERNAME` - Database username
+-   `DB_PASSWORD` - Database password
 
 ### Database Configuration
 
@@ -137,49 +121,6 @@ After running the seeders, you can login with:
 -   **Email**: user@mail.com
 -   **Password**: user
 
-## Project Structure
-
-```
-starterpack-laravel12/
-├── app/
-│   ├── Http/
-│   │   ├── Controllers/
-│   │   │   ├─ Api/
-│   │   │   │  └─ Auth/
-│   │   │   └─ Auth/
-│   │   ├── Middleware/
-│   │   └── Requests/
-│   ├── Models/
-│   └── Services/
-├── bootstrap/
-├── config/
-├── database/
-│   ├── migrations/
-│   ├── seeders/
-│   └── factories/
-├── docs/
-├── public/
-├── resources/
-│   ├── views/
-│   │   ├── auth/
-│   │   ├── components/
-│   │   ├── layouts/
-│   │   └── pages/
-│   ├── js/
-│   └── css/
-├── routes/
-│   ├── api
-│   │   └── auth.php
-│   ├── api.php
-│   ├── auth.php
-│   └── web.php
-├── storage/
-├── tests/
-│   ├── Feature/
-│   └── Unit/
-└── vendor/
-```
-
 ## Development
 
 ### Code Style
@@ -200,27 +141,11 @@ npm run lint
 npm run format
 ```
 
-## Testing
-
-### Running Tests
+### Testing
 
 ```bash
-# Run all tests
 php artisan test
-
-# Run specific test suite
-php artisan test --testsuite=Feature
-php artisan test --testsuite=Unit
-
-# Run tests with coverage
-php artisan test --coverage
 ```
-
-### Writing Tests
-
--   Place feature tests in `tests/Feature/`
--   Place unit tests in `tests/Unit/`
--   Follow the naming convention: `{ClassName}Test.php`
 
 ## Deployment
 
@@ -248,28 +173,6 @@ php artisan test --coverage
     php artisan migrate --force
     ```
 
-## API Documentation
-
-API documentation is available at `docs/` or [API DOCS](https://documenter.getpostman.com/view/25223819/2sAYkLoHLh)
-
-### Authentication
-
-The API uses Laravel Sanctum for authentication. Include the bearer token in your requests:
-
-```bash
-Authorization: Bearer {your-token}
-```
-
-### Example Endpoints
-
--   `POST /api/auth/login` - Login
--   `POST /api/auth/register` - Register
--   `GET /api/users` - Get all users
--   `POST /api/users` - Create a new user
--   `GET /api/users/{id}` - Get user by ID
--   `PUT /api/users/{id}` - Update user
--   `DELETE /api/users/{id}` - Delete user
-
 ## Contributing
 
 1. Fork the repository
@@ -285,11 +188,41 @@ Authorization: Bearer {your-token}
 -   Update documentation as needed
 -   Ensure all tests pass before submitting PR
 
+### Common Issues
+
+#### Database Connection Error
+
+-   Verify database credentials in `.env`
+-   Ensure database server is running
+-   Check network connectivity
+
+#### Permission Errors
+
+-   Verify file permissions for storage directories
+-   Ensure web server has appropriate access rights
+
+#### Performance Issues
+
+-   Enable caching mechanisms
+-   Optimize database queries
+-   Check server resources
+
 ## Security
 
 If you discover any security vulnerabilities, please send an email to hallo@zakialawi.my.id instead of using the issue tracker.
 
 ## Support and Donations
+
+For additional support, please:
+
+1. Check the troubleshooting section
+2. Review existing issues in the repository
+3. Create a new issue with detailed information
+4. Contact the development team
+
+-   **Documentation**: [Wiki](https://github.com/zakialawi02/PRI-pantau-tumbuh/wiki)
+-   **Issues**: [GitHub Issues](https://github.com/zakialawi02/PRI-pantau-tumbuh/issues)
+-   **Discussions**: [GitHub Discussions](https://github.com/zakialawi02/PRI-pantau-tumbuh/discussions)
 
 If you find this project useful and would like to support its further development, you can make a donation via the following platforms:
 
@@ -299,31 +232,10 @@ Every contribution you make is greatly appreciated. Thank you!
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the **PRI Pantau Tumbuh Limited Use License**. See the [LICENSE](LICENSE) file for details.
 
-## Support and Donations
+**Important**: This is a restrictive license that allows limited non-commercial use only. Commercial use requires a separate license. Contact hallo@zakialawi.my.id for commercial licensing inquiries.
 
-If you find this project useful and would like to support its further development, you can make a donation via the following platforms:
+## Changelog
 
-https://ko-fi.com/zakialawi
-
-Every contribution you make is greatly appreciated. Thank you!
-
--   **Documentation**: [Wiki](https://github.com/zakialawi02/starterpack-laravel12/wiki)
--   **Issues**: [GitHub Issues](https://github.com/zakialawi02/starterpack-laravel12/issues)
--   **Discussions**: [GitHub Discussions](https://github.com/zakialawi02/starterpack-laravel12/discussions)
-
-## Acknowledgments
-
--   [Laravel Framework](https://laravel.com/)
--   [Tailwind CSS](https://tailwindcss.com/)
--   [Vite](https://vitejs.dev/)
--   All contributors who have helped make this project better
-
----
-
-**Happy Coding! 🚀**
-
----
-
-_Note: This README is a general template. Please ensure to update it with specific details about your project, including features, installation instructions, usage guidelines, and contribution policies._
+See CHANGELOG.md for a detailed list of changes and updates.
