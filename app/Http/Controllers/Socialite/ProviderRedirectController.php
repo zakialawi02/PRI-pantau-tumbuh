@@ -11,7 +11,7 @@ class ProviderRedirectController extends Controller
     public function __invoke(Request $request, string $provider)
     {
         if (!in_array($provider, ['github', 'google', 'facebook'])) {
-            redirect()->route('login')->withErrors(['provider' => 'Invalid provider']);
+            return redirect()->route('login')->withErrors(['provider' => 'Invalid provider']);
         }
 
         try {
