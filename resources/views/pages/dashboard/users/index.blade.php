@@ -194,7 +194,12 @@
                         },
                         {
                             data: 'role',
-                            name: 'role'
+                            name: 'role',
+                            render: function(data, type, row) {
+                                return '<span class="badge bg-' +
+                                    (data === 'superadmin' ? 'warning' : (data === 'admin' ? 'primary' : 'secondary')) +
+                                    '">' + data + '</span>';
+                            }
                         },
                         {
                             data: 'created_at',

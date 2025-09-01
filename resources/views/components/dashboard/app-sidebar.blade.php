@@ -22,13 +22,20 @@
         <div class="[&::-webkit-scrollbar-thumb]:bg-primary [&::-webkit-scrollbar-track]:bg-primary-foreground h-full overflow-y-auto [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar]:w-1.5">
             <nav class="flex w-full flex-col flex-wrap p-3">
                 <ul class="flex flex-col space-y-1">
+                    @php
+                        $userRole = Auth::user()->role;
+                        $isAdmin = in_array($userRole, ['admin', 'superadmin']);
+                        $isUser = $userRole === 'user';
+                        $isSuperadmin = $userRole === 'superadmin';
+                    @endphp
+
                     <!-- Main Navigation -->
                     <x-dashboard.nav-item route="/" icon="ri-home-4-line" text="Home" />
                     <x-dashboard.nav-item route="admin.dashboard" icon="ri-dashboard-line" text="Dashboard" />
                     <x-dashboard.nav-item route="appMap" icon="ri-side-bar-line" text="Apps Map" />
 
                     <!-- Admin & Superadmin Only -->
-                    @if (Auth::user()->role !== 'user')
+                    @if (!$isUser)
                         <x-dashboard.nav-dropdown icon="ri-currency-line" text="Plans" :items="[['route' => 'admin.plans.index', 'text' => 'Plans List'], ['route' => 'admin.plans.create', 'text' => 'Voucher']]" />
                     @endif
 
@@ -36,12 +43,20 @@
                     <li class="text-base-content-muted px-1 pt-3 text-sm font-bold">
                         <span>Manage</span>
                     </li>
-                    <x-dashboard.nav-item route="admin.subscription.index" icon="ri-vip-crown-line" text="My Subscription" />
+
+                    <!-- Subscription Management -->
+                    @if ($isAdmin)
+                        <x-dashboard.nav-item route="admin.subscription.index" icon="ri-vip-crown-line" text="Subscription" />
+                    @elseif ($isUser)
+                        <x-dashboard.nav-item route="admin.subscription.index" icon="ri-vip-crown-line" text="My Subscription" />
+                    @endif
+
+                    <!-- Common Management Items -->
                     <x-dashboard.nav-item route="admin.payment.index" icon="ri-currency-line" text="Payment" />
                     <x-dashboard.nav-item route="#" icon="ri-notification-3-line" text="Notification" />
 
-                    <!-- Superadmin Only -->
-                    @if (Auth::user()->role === 'superadmin')
+                    <!-- Superadmin Only Section -->
+                    @if ($isSuperadmin)
                         <x-dashboard.nav-item route="admin.users.index" icon="ri-user-line" text="User" />
                         <x-dashboard.nav-item route="docs" icon="ri-file-list-3-line" text="Route Docs" target="_blank" />
 

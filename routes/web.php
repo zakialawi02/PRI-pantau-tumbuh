@@ -8,17 +8,23 @@ use App\Http\Controllers\PlansController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\Socialite\ProviderCallbackController;
+use App\Http\Controllers\Socialite\ProviderRedirectController;
 use App\Http\Controllers\SubscriptionController;
+
+
+Route::get('/auth/{provider}/redirect', ProviderRedirectController::class)->name('auth.redirect');
+Route::get('/auth/{provider}/callback', ProviderCallbackController::class)->name('auth.callback');
 
 
 Route::prefix('dashboard')->name('admin.')->group(function () {
     Route::middleware(['auth', 'verified', 'role:superadmin'])->group(function () {
         Route::resource('users', UserController::class)->except('create', 'edit');
-
-        Route::resource('plans', PlansController::class)->except('create', 'edit');
     });
 
     Route::middleware(['auth', 'verified', 'role:superadmin,admin'])->group(function () {
+        Route::resource('plans', PlansController::class)->except('create', 'edit');
+
         Route::put('/payments/{payment}/status', [PaymentController::class, 'updateStatus'])->name('payment.updateStatus');
         Route::get('/payments/{payment}/data', [PaymentController::class, 'getPaymentData'])->name('payment.getData');
     });
@@ -41,7 +47,7 @@ Route::prefix('dashboard')->name('admin.')->group(function () {
     });
 });
 
-Route::middleware(['auth', 'verified'])->group(function () {
+Route::middleware(['auth'])->group(function () {
     Route::post('/map-order', [PaymentController::class, 'mapOrder'])->name('mapOrder');
     Route::get('/checkout', [PaymentController::class, 'checkoutOrder'])->name('checkoutOrder');
     Route::post('/checkout', [PaymentController::class, 'checkout'])->name('checkout.payment');

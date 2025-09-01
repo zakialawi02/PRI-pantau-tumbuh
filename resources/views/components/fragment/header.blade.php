@@ -9,7 +9,9 @@
 
             <!-- Logo kiri -->
             <div class="flex flex-1 justify-start">
-                <x-application-logo class="h-10 w-auto" />
+                <a href="{{ route('home') }}">
+                    <x-application-logo class="h-10 w-auto" />
+                </a>
             </div>
 
             <!-- Menu Tengah -->

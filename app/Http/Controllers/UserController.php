@@ -33,12 +33,7 @@ class UserController extends Controller
                 ->addColumn('photo', function ($data) {
                     return '<img src="' . asset($data->profile_photo_path) . '" width="30">';
                 })
-                ->editColumn('role', function ($data) {
-                    return '<span class="badge bg-' .
-                        ($data->role === 'superadmin' ? 'success' : ($data->role === 'admin' ? 'primary' : 'secondary'))
-                        . '">' . $data->role . '</span>';
-                })
-                ->rawColumns(['role', 'photo', 'action'])
+                ->rawColumns(['photo', 'action'])
                 ->removeColumn(['profile_photo_path', 'updated_at', 'id'])
                 ->make(true);
         }

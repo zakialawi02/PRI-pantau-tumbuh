@@ -54,6 +54,12 @@
     <body class="font-sans antialiased">
         {{ $slot }}
 
+
+        <!-- Supporting Components -->
+        <x-toast />
+        <x-alert-modal />
+        <x-dependencies._messageAlert />
+
         <script src="https://cdn.jsdelivr.net/npm/flowbite@3.1.2/dist/flowbite.min.js"></script>
         <script>
             function togglePassword(id) {
