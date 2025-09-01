@@ -242,15 +242,14 @@
         max-width: 500px;
     }
 
-    /* Responsive minimap adjustments */
     .ol-custom-overviewmap .ol-overviewmap-map {
         width: 12rem;
     }
 
     .ol-custom-overviewmap,
     .ol-custom-overviewmap.ol-uncollapsible {
-        bottom: 20px;
-        right: 20px;
+        bottom: 55px;
+        right: 5px;
     }
 
     .nav-map-active {
@@ -262,13 +261,4 @@
 
 /* Extra small devices */
 @media screen and (max-width: 480px) {
-    .ol-custom-overviewmap .ol-overviewmap-map {
-        width: 10rem;
-    }
-
-    .ol-custom-overviewmap,
-    .ol-custom-overviewmap.ol-uncollapsible {
-        bottom: 50px;
-        right: 5px;
-    }
 }

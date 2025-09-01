@@ -148,15 +148,15 @@
                     <span class="text-xl">📡</span>
                     <span>My Data</span>
                 </button>
-                <button class="bg-neutral inline-flex items-center space-x-2 rounded-full border border-gray-300 px-4 py-1 text-sm font-medium" data-drawer-target="drawer-sidebar-left-panel2" data-drawer-show="drawer-sidebar-left-panel2" data-drawer-backdrop="false" type="button" aria-controls="drawer-sidebar-left-panel2">
+                <button class="bg-neutral inline-flex items-center space-x-2 rounded-full border border-gray-300 px-3 py-1 text-sm font-medium" data-drawer-target="drawer-sidebar-left-panel2" data-drawer-show="drawer-sidebar-left-panel2" data-drawer-backdrop="false" type="button" aria-controls="drawer-sidebar-left-panel2">
                     <span class="text-xl">📊</span>
                     <span>Analytics</span>
                 </button>
-                <button class="bg-neutral inline-flex items-center space-x-2 rounded-full border border-gray-300 px-4 py-1 text-sm font-medium">
+                <button class="bg-neutral inline-flex items-center space-x-2 rounded-full border border-gray-300 px-3 py-1 text-sm font-medium">
                     <span class="text-xl">🌱</span>
                     <span>Growth</span>
                 </button>
-                <button class="bg-neutral inline-flex items-center space-x-2 rounded-full border border-gray-300 px-4 py-1 text-sm font-medium">
+                <button class="bg-neutral inline-flex items-center space-x-2 rounded-full border border-gray-300 px-3 py-1 text-sm font-medium">
                     <span class="text-xl">📜</span>
                     <span>Reports</span>
                 </button>
@@ -247,7 +247,7 @@
 
                 <!-- * Bottom Buttons * -->
                 <!-- Basemap Buttons -->
-                <div class="absolute bottom-8 left-0 z-40 flex items-end space-x-2 text-xs md:left-2 md:text-base">
+                <div class="fixed bottom-8 left-0 z-40 flex items-end space-x-2 text-xs md:absolute md:left-2 md:text-base">
                     <div class="basemap-switcher font-medium">
                         <div class="trigger-basemap font-bold" onclick="toggleOptions()">
                             <img id="active-basemap" src="{{ asset('assets/img/icon/here_satelliteday.png') }}" alt="Active Basemap" />
@@ -279,13 +279,13 @@
                 </div>
 
                 <!-- Info map controls -->
-                <div class="absolute bottom-11 left-0 flex items-end space-x-2 text-xs md:left-2 md:text-base">
+                <div class="fixed bottom-11 left-0 flex items-end space-x-2 text-xs md:absolute md:left-2 md:text-base">
                     <div class="relative hidden md:block" id="mousePosition"></div>
                     <div class="relative -mb-2" id="scaleline"></div>
                 </div>
 
                 <!-- Bottom Date Selector -->
-                <div class="absolute bottom-1 left-2 flex flex-wrap space-x-1 text-xs md:text-sm">
+                <div class="fixed bottom-1 left-2 flex flex-wrap space-x-1 text-xs md:absolute md:text-sm">
                     <div class="bg-muted flex space-x-1 rounded-md p-1">
                         <button class="bg-neutral rounded px-1 py-0.5">1D</button>
                         <button class="bg-primary rounded px-1 py-0.5">1W</button>
