@@ -47,7 +47,7 @@ Route::prefix('dashboard')->name('admin.')->group(function () {
     });
 });
 
-Route::middleware(['auth', 'verified', 'username.required'])->group(function () {
+Route::middleware(['auth'])->group(function () {
     Route::post('/map-order', [PaymentController::class, 'mapOrder'])->name('mapOrder');
     Route::get('/checkout', [PaymentController::class, 'checkoutOrder'])->name('checkoutOrder');
     Route::post('/checkout', [PaymentController::class, 'checkout'])->name('checkout.payment');
