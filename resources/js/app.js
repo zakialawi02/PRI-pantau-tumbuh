@@ -39,22 +39,24 @@ function timeAgo(dateStr) {
     return "just now";
 }
 /**
- * Formats a date string into a human-readable custom date format
+ * Formats a date string into a customizable, localized date format
  *
- * @param {string} dateString - The date string to format (ISO format or any valid date string)
- * @param {Object} customOptions - Custom formatting options (optional)
- * @param {string} locale - Locale string for formatting (optional, defaults to "en-US")
- * @param {string} fallback - Fallback string when date is invalid (optional, defaults to "-")
- * @returns {string} A formatted date string or fallback if input is invalid
+ * @param {string|null|undefined} dateString - The date string to format (ISO format recommended)
+ * @param {boolean} [includeTime=true] - Whether to include time in the formatted output
+ * @param {Object|null} [customOptions=null] - Custom formatting options to override defaults
+ * @param {string} [locale="en-US"] - The locale to use for formatting (e.g., "en-US", "id-ID")
+ * @param {string} [fallback="-"] - The fallback value to return if formatting fails
+ * @returns {string} A formatted date string or the fallback value
  *
  * @example
- * formatCustomDate("2023-12-01T14:30:00Z") // Returns "Dec 1, 2023, 13:30"
- * formatCustomDate("2023-12-01T14:30:00Z", { year: "2-digit" }) // Returns "Dec 1, 23, 13:30"
- * formatCustomDate("2023-12-01T14:30:00Z", null, "id-ID") // Returns "1 Des 2023, 14.30"
- * formatCustomDate("", null, null, "No date") // Returns "No date"
+ * formatCustomDate("2023-12-01T10:30:00Z") // Returns "Dec 1, 2023, 10:30"
+ * formatCustomDate("2023-12-01", false) // Returns "Dec 1, 2023"
+ * formatCustomDate("", true, null, "en-US", "No date") // Returns "No date"
+ * formatCustomDate("2023-12-01", true, { weekday: "long" }, "id-ID") // Returns custom format
  */
 function formatCustomDate(
     dateString,
+    includeTime = true,
     customOptions = null,
     locale = "en-US",
     fallback = "-"
@@ -67,10 +69,13 @@ function formatCustomDate(
         day: "numeric",
         month: "short",
         year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: false,
     };
+
+    if (includeTime) {
+        defaultOptions.hour = "2-digit";
+        defaultOptions.minute = "2-digit";
+        defaultOptions.hour12 = false;
+    }
 
     const options = customOptions
         ? { ...defaultOptions, ...customOptions }

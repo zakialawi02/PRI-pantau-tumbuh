@@ -1,3 +1,5 @@
+@section('title', $data['title'] ?? '')
+
 <x-app-layout>
     <section class="p-1 md:p-4">
         <x-card class="p-0!">

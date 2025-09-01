@@ -18,8 +18,8 @@ return new class extends Migration
             $table->uuid('plan_id');
             $table->decimal('price_per_hectare', 10, 2); // snapshot harga plan
             $table->decimal('total_price', 30, 2); // calculated (area * price_per_hectare)
-            $table->date('start_date');
-            $table->date('end_date'); // satu bulan ke depan
+            $table->date('start_date')->nullable();
+            $table->date('end_date')->nullable(); // satu bulan ke depan
             $table->enum('status', ['active', 'expired', 'cancelled', 'trial', 'awaiting_payment', 'suspended'])->default('active');
             $table->timestamps();
 

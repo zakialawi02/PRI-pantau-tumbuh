@@ -219,6 +219,19 @@
                     ],
                 });
 
+                // Handle pagination URL updates
+                table.on('draw', function() {
+                    var info = table.page.info();
+                    var currentPage = info.page + 1;
+                    var pageLength = info.length;
+
+                    // Update URL parameters
+                    var newUrl = new URL(window.location);
+                    newUrl.searchParams.set('page', currentPage);
+                    newUrl.searchParams.set('limit', pageLength);
+                    window.history.replaceState({}, '', newUrl);
+                });
+
                 const cardErrorMessages = `<div id="body-messages" class="mb-3 rounded-md bg-error/30 p-4 text-sm text-error" role="alert"></div>`;
 
                 const modal = new Modal(document.getElementById('userModal'), {
@@ -378,24 +391,6 @@
                         $('#body-messages').append(`<span>${message[0]}</span><br>`);
                     });
                 }
-
-                // Fungsi untuk memperbarui URL dengan parameter baru
-                function updateURLParams() {
-                    let page = table.page() + 1; // Ambil halaman saat ini (DataTables mulai dari 0)
-                    let limit = table.page.len(); // Ambil jumlah data per halaman
-                    let url = new URL(window.location.href);
-                    url.searchParams.set('page', page);
-                    url.searchParams.set('limit', limit);
-                    window.history.pushState({}, '', url); // Perbarui URL tanpa reload
-                }
-                // Event listener untuk paging
-                table.on('page.dt', function() {
-                    updateURLParams();
-                });
-                // Event listener tambahan untuk perubahan limit dropdown DataTables
-                $('.dt-length select').on('change', function() {
-                    updateURLParams();
-                });
             });
         </script>
     @endpush

@@ -63,7 +63,9 @@ class PaymentController extends Controller
             return redirect()->to('/app/imagery')->with('error', 'Application data not found');
         }
 
-        return view('pages.front.checkout', compact('data'));
+        $data['title'] = 'Checkout';
+
+        return view('pages.front.order.checkout', compact('data'));
     }
 
     public function checkout(Request $request)
@@ -100,7 +102,7 @@ class PaymentController extends Controller
             'price_per_hectare' => $plan->price_per_hectare,
             'total_price'      => $cacheData['total_price'],
             'start_date'       => Carbon::now(),
-            'end_date'         => Carbon::now()->addMonth(),
+            // 'end_date'         => Carbon::now()->addMonth(),
             'status'           => 'awaiting_payment',
         ]);
 
@@ -208,7 +210,11 @@ class PaymentController extends Controller
             }
         }
 
-        return view('pages.dashboard.payment.payment-order', compact('payment'));
+        $data = [
+            'title' => 'Payment Order',
+        ];
+
+        return view('pages.dashboard.payment.payment-order', compact('data', 'payment'));
     }
 
     public function updateStatus(Request $request, $id)
@@ -239,7 +245,8 @@ class PaymentController extends Controller
         // Update subscription status if payment is paid
         if ($request->status === 'paid' && $oldStatus !== 'paid') {
             $payment->subscription->update([
-                'status' => 'active'
+                // 'start_date' => now(),
+                'status' => 'active',
             ]);
         }
 

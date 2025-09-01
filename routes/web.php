@@ -8,6 +8,7 @@ use App\Http\Controllers\PlansController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\SubscriptionController;
 
 
 Route::prefix('dashboard')->name('admin.')->group(function () {
@@ -34,6 +35,9 @@ Route::prefix('dashboard')->name('admin.')->group(function () {
         // Payment
         Route::get('/payment', [PaymentController::class, 'index'])->name('payment.index');
         Route::get('/payment/{payment}', [PaymentController::class, 'showPayment'])->name('payment.show');
+
+        // subscription
+        Route::get('/my-subscription', [SubscriptionController::class, 'index'])->name('subscription.index');
     });
 });
 
