@@ -27,6 +27,7 @@ class ProviderCallbackController extends Controller
         ], [
             'name' => $socialUser->name,
             'email' => $socialUser->email,
+            'email_verified_at' => now(),
             'username' => $username,
             'provider_token' => $socialUser->token,
             'provider_refresh_token' => $socialUser->refreshToken,
@@ -46,33 +47,29 @@ class ProviderCallbackController extends Controller
     private function generateUsername($socialUser, $provider)
     {
         // Try to get username from provider
-        $username = null;
-
-        if ($provider === 'github' && isset($socialUser->nickname)) {
-            $username = $socialUser->nickname;
-        } elseif ($provider === 'google' && isset($socialUser->nickname)) {
-            $username = $socialUser->user['given_name'];
-        } elseif ($provider === 'facebook' && isset($socialUser->nickname)) {
-            $username = $socialUser->nickname;
-        }
+        $username = $socialUser->getNickname() ?? null;
 
         // If no username from provider, generate from name or email
         if (!$username) {
             if (!empty($socialUser->name)) {
                 // Use name and convert to username format
-                $username = strtolower(str_replace(' ', '_', $socialUser->name));
+                $username = strtolower(str_replace(' ', '_', $socialUser->name)) . '_' . rand(1000, 9999);
             } else {
                 // Use email prefix as fallback
-                $username = strtolower(explode('@', $socialUser->email)[0]);
+                $username = strtolower(explode('@', $socialUser->email)[0]) . '_' . rand(1000, 9999);
             }
         }
 
         // Clean username (remove special characters, keep only alphanumeric and underscore)
         $username = preg_replace('/[^a-z0-9_]/', '', strtolower($username));
 
-        // Add 5 random numbers at the end
-        $randomNumbers = str_pad(rand(0, 99999), 5, '0', STR_PAD_LEFT);
-        $username = $username . '_' . $randomNumbers;
+        // Ensure username is unique
+        $baseUsername = $username;
+        $counter = 1;
+        while (User::where('username', $username)->exists()) {
+            $username = $baseUsername . '_' . $counter;
+            $counter++;
+        }
 
         return $username;
     }
