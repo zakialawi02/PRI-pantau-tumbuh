@@ -14,6 +14,7 @@
         "laravel/sanctum": "^4.0",
         "laravel/tinker": "^2.10.1",
         "propaganistas/laravel-disposable-email": "^2.4",
+        "sentry/sentry-laravel": "^4.15",
         "yajra/laravel-datatables": "12.0",
         "yajra/laravel-datatables-oracle": "12.0"
     },

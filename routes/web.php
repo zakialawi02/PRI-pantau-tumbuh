@@ -14,11 +14,11 @@ use App\Http\Controllers\SubscriptionController;
 Route::prefix('dashboard')->name('admin.')->group(function () {
     Route::middleware(['auth', 'verified', 'role:superadmin'])->group(function () {
         Route::resource('users', UserController::class)->except('create', 'edit');
-
-        Route::resource('plans', PlansController::class)->except('create', 'edit');
     });
 
     Route::middleware(['auth', 'verified', 'role:superadmin,admin'])->group(function () {
+        Route::resource('plans', PlansController::class)->except('create', 'edit');
+
         Route::put('/payments/{payment}/status', [PaymentController::class, 'updateStatus'])->name('payment.updateStatus');
         Route::get('/payments/{payment}/data', [PaymentController::class, 'getPaymentData'])->name('payment.getData');
     });
