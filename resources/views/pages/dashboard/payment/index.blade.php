@@ -57,7 +57,7 @@
     </section>
 
     <!-- Payment Details Modal (Flowbite) -->
-    <div class="fixed left-0 right-0 top-0 z-50 hidden h-[calc(100%-1rem)] max-h-full w-full items-center justify-center overflow-y-auto overflow-x-hidden md:inset-0" id="paymentModal" id="payment-modal" data-modal-backdrop="static" data-modal-keyboard="false" aria-hidden="true" tabindex="-1">
+    <div class="fixed left-0 right-0 top-0 z-50 hidden h-[calc(100%-1rem)] max-h-full w-full items-center justify-center overflow-y-auto overflow-x-hidden md:inset-0" id="payment-modal" data-modal-backdrop="static" data-modal-keyboard="false" aria-hidden="true" tabindex="-1">
         <div class="relative max-h-full w-full max-w-2xl p-4">
             <!-- Modal content -->
             <div class="bg-background relative rounded-lg shadow">
@@ -289,7 +289,7 @@
                     window.history.replaceState({}, '', newUrl);
                 });
 
-                const paymentModal = new Modal(document.getElementById('paymentModal'), {
+                const paymentModal = new Modal(document.getElementById('payment-modal'), {
                     backdrop: 'static',
                 });
                 $(document).on('click', '[data-modal-hide="payment-modal"]', function() {
