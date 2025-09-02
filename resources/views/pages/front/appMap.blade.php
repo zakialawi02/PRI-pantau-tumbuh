@@ -231,15 +231,15 @@
 
                 <!-- Right Buttons -->
                 <div class="absolute right-2 top-1/2 flex -translate-y-1/2 flex-col space-y-1 text-base md:text-lg">
-                    <button class="bg-neutral hover:bg-muted rounded px-1.5 py-0.5 transition-colors" title="Zoom In" onclick="zoomIn()">
+                    <button class="bg-neutral hover:bg-muted rounded px-2 py-1 text-xl font-bold transition-colors" title="Zoom In" onclick="zoomIn()">
                         +
                         <span class="sr-only">Zoom In</span>
                     </button>
-                    <button class="bg-neutral hover:bg-muted rounded px-1.5 py-0.5 transition-colors" title="Zoom Out" onclick="zoomOut()">
-                        -
+                    <button class="bg-neutral hover:bg-muted rounded px-2 py-1 text-xl font-bold transition-colors" title="Zoom Out" onclick="zoomOut()">
+                        –
                         <span class="sr-only">Zoom Out</span>
                     </button>
-                    <button class="bg-neutral hover:bg-muted rotate-180 rounded px-1.5 py-0.5 transition-colors" id="minimapToggleBtn" title="Toggle Minimap" onclick="toggleMinimap(this)">
+                    <button class="bg-neutral hover:bg-muted rotate-180 rounded px-2 py-1 text-xl font-bold transition-colors" id="minimapToggleBtn" title="Toggle Minimap" onclick="toggleMinimap(this)">
                         <i class="ri-arrow-left-double-line"></i>
                         <span class="sr-only">Toggle Minimap</span>
                     </button>
@@ -247,7 +247,7 @@
 
                 <!-- * Bottom Buttons * -->
                 <!-- Basemap Buttons -->
-                <div class="fixed bottom-8 left-0 z-40 flex items-end space-x-2 text-xs md:absolute md:left-2 md:text-base">
+                <div class="absolute bottom-8 left-0 z-40 flex items-end space-x-2 text-xs md:left-2 md:text-base">
                     <div class="basemap-switcher font-medium">
                         <div class="trigger-basemap font-bold" onclick="toggleOptions()">
                             <img id="active-basemap" src="{{ asset('assets/img/icon/here_satelliteday.png') }}" alt="Active Basemap" />
@@ -279,13 +279,13 @@
                 </div>
 
                 <!-- Info map controls -->
-                <div class="fixed bottom-11 left-0 flex items-end space-x-2 text-xs md:absolute md:left-2 md:text-base">
+                <div class="absolute bottom-11 left-0 flex items-end space-x-2 text-xs md:left-2 md:text-base">
                     <div class="relative hidden md:block" id="mousePosition"></div>
                     <div class="relative -mb-2" id="scaleline"></div>
                 </div>
 
                 <!-- Bottom Date Selector -->
-                <div class="fixed bottom-1 left-2 flex flex-wrap space-x-1 text-xs md:absolute md:text-sm">
+                <div class="absolute bottom-1 left-2 flex flex-wrap space-x-1 text-xs md:text-sm">
                     <div class="bg-muted flex space-x-1 rounded-md p-1">
                         <button class="bg-neutral rounded px-1 py-0.5">1D</button>
                         <button class="bg-primary rounded px-1 py-0.5">1W</button>
