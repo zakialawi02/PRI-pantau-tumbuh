@@ -3,95 +3,177 @@
 <x-app-front-layout>
     <div class="mx-auto max-w-7xl p-4 md:p-8">
         <!-- Judul -->
-        <h1 class="mb-6 text-2xl font-bold">Checkout</h1>
+        <div class="mb-8 text-center">
+            <h1 class="text-foreground text-3xl font-bold">Complete Your Order</h1>
+            <p class="text-base-content-muted mt-2">Review your order details and complete the payment</p>
+        </div>
 
         <!-- Container utama -->
-        <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <!-- Form kiri -->
-            <x-card class="md:order-0 order-2 space-y-4 md:col-span-2">
-                <h2 class="border-border border-b pb-2 text-lg font-semibold">Personal data</h2>
-
-                <form class="" id="form-ajuan" action="{{ route('checkout.payment') }}" method="post" enctype="multipart/form-data" autocomplete="off">
-                    @csrf
-                    @method('POST')
-
-                    <input id="order_id" name="order_id" type="hidden" value="{{ request('id') ?? '' }}" />
-
-                    <!-- Nama -->
-                    <div class="mb-3">
-                        <x-input-label for="name">Name</x-input-label>
-                        <x-text-input id="name" name="name" value="{{ Auth::user()->name }}" readonly size="small" required />
-                        <x-input-error class="mt-2" :messages="$errors->get('name')" />
-                    </div>
-
-                    <!-- Email -->
-                    <div class="mb-3">
-                        <x-input-label for="email">Email</x-input-label>
-                        <x-text-input id="email" name="email" value="{{ Auth::user()->email }}" readonly size="small" required />
-                        <x-input-error class="mt-2" :messages="$errors->get('email')" />
-                    </div>
-
-                    <!-- Kontak -->
-                    <div class="mb-3">
-                        <x-input-label for="phone">Phone</x-input-label>
-                        <x-text-input id="phone" name="phone" value="{{ old('phone') }}" size="small" required />
-                        <x-input-error class="mt-2" :messages="$errors->get('phone')" />
-                    </div>
-
-                    <!-- Plans -->
-                    <div class="mb-3">
-                        <x-input-label for="plan">Plans</x-input-label>
-                        <div class="border-primary/80 rounded-md border bg-gray-50 p-3">
-                            <div class="font-medium">{{ $data['plan']['name'] ?? 'Plan Name' }}</div>
-                            <div class="text-sm text-gray-600">{{ $data['price_currency'] ?? 'USD' }} {{ $data['price_per_hectare'] }}/ha</div>
+        <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
+            <!-- Mobile: Field Preview (Above) | Desktop: Right Column -->
+            <div class="order-1 lg:order-2 lg:col-span-1">
+                <x-card class="sticky top-14 space-y-4">
+                    <div>
+                        <h2 class="border-border text-foreground border-b pb-3 text-xl font-semibold">Field Preview</h2>
+                        <div class="mt-4 h-80 w-full overflow-hidden rounded-lg border">
+                            <div class="map" id="map"></div>
+                            <div class="hidden md:block" id="mousePosition"></div>
                         </div>
+                        <div class="text-base-content-muted mt-3 space-x-3 text-sm" id="coordinateDisplay"> </div>
                     </div>
-                    <!-- Area -->
-                    <div class="mb-3">
-                        <x-input-label for="area_hectares">Area</x-input-label>
-                        <div id="amount">{{ $data['area_hectares'] }} ha</div>
-                    </div>
-                    <!-- Total -->
-                    <div class="mb-3">
-                        <x-input-label for="amount">Total Price</x-input-label>
-                        <div id="amount">{{ $data['total_price'] }} {{ $data['price_currency'] ?? 'USD' }}</div>
-                    </div>
+                </x-card>
+            </div>
 
-                    <!-- Informasi Bank -->
-                    <h2 class="border-border mb-3 border-b pb-2 text-lg font-semibold">Payment</h2>
+            <!-- Form kiri -->
+            <div class="order-2 lg:order-1 lg:col-span-2">
+                <x-card class="space-y-6">
+                    <div>
+                        <h2 class="border-border text-foreground border-b pb-3 text-xl font-semibold">Personal Information</h2>
 
-                    <div class="mb-3">
-                        <x-input-label for="payment_method">Payment Method</x-input-label>
-                        <select class="focus:ring-primary ring-primary/80 border-ring w-full rounded-md border px-3 py-2 focus:outline-none focus:ring" id="payment_method" name="payment_method">
-                            <option value="bank_transfer">Bank Transfer</option>
-                        </select>
-                        <x-input-error class="mt-2" :messages="$errors->get('payment_method')" />
+                        <form class="mt-4" id="form-ajuan" action="{{ route('checkout.payment') }}" method="post" enctype="multipart/form-data" autocomplete="off">
+                            @csrf
+                            @method('POST')
+
+                            <input id="order_id" name="order_id" type="hidden" value="{{ request('id') ?? '' }}" />
+
+                            <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                <!-- Nama -->
+                                <div class="md:col-span-2">
+                                    <x-input-label for="name">Full Name</x-input-label>
+                                    <x-text-input id="name" name="name" value="{{ Auth::user()->name }}" readonly size="normal" required />
+                                    <x-input-error class="mt-2" :messages="$errors->get('name')" />
+                                </div>
+
+                                <!-- Email -->
+                                <div class="md:col-span-2">
+                                    <x-input-label for="email">Email Address</x-input-label>
+                                    <x-text-input id="email" name="email" value="{{ Auth::user()->email }}" readonly size="normal" required />
+                                    <x-input-error class="mt-2" :messages="$errors->get('email')" />
+                                </div>
+
+                                <!-- Kontak -->
+                                <div class="md:col-span-2">
+                                    <x-input-label for="phone">Phone Number</x-input-label>
+                                    <x-text-input id="phone" name="phone" value="{{ old('phone') }}" size="normal" required />
+                                    <x-input-error class="mt-2" :messages="$errors->get('phone')" />
+                                </div>
+                            </div>
+
+                            <!-- Order Summary -->
+                            <div class="mt-6">
+                                <h2 class="border-border text-foreground border-b pb-1 text-xl font-semibold">Order Summary</h2>
+
+                                <div class="mt-3 space-y-3">
+                                    <!-- Plans -->
+                                    <div class="border-border flex justify-between border-b pb-1">
+                                        <div>
+                                            <h3 class="text-foreground font-medium">{{ $data['plan']['name'] ?? 'Plan Name' }}</h3>
+                                            <p class="text-base-content-muted text-sm">{{ $data['price_currency'] ?? 'USD' }} {{ $data['price_per_hectare'] }}/ha</p>
+                                        </div>
+                                        <div class="text-right">
+                                            <p class="text-foreground font-medium">{{ $data['area_hectares'] }} ha</p>
+                                            <p class="text-foreground text-lg">{{ $data['price_currency'] ?? 'USD' }} {{ $data['total_price'] }} </p>
+                                        </div>
+                                    </div>
+
+                                    <!-- Tax -->
+                                    <div class="border-border flex justify-between border-b pb-1">
+                                        <div>
+                                            <h3 class="text-foreground font-medium">Tax</h3>
+                                            <p class="text-base-content-muted text-sm">0%</p>
+                                        </div>
+                                        <div class="text-right">
+                                            <p class="text-foreground text-lg">{{ $data['price_currency'] ?? 'USD' }} 0.00</p>
+                                        </div>
+                                    </div>
+
+                                    <!-- Total -->
+                                    <div class="flex justify-between pt-2">
+                                        <h3 class="text-foreground text-lg font-semibold">Total</h3>
+                                        <p class="text-primary text-xl font-bold">{{ $data['price_currency'] ?? 'USD' }} {{ $data['total_price'] }} </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Payment Method -->
+                            <div class="mt-6">
+                                <h2 class="border-border text-foreground border-b pb-3 text-xl font-semibold">Payment Method</h2>
+
+                                <div class="mt-4 space-y-3">
+                                    <label class="border-border hover:bg-muted/50 flex items-center rounded-lg border p-4">
+                                        <input class="text-primary focus:ring-primary h-5 w-5 rounded-full border-gray-300 focus:ring-2" name="payment_method" type="radio" value="bank_transfer" checked>
+                                        <div class="ml-4">
+                                            <span class="text-foreground block text-base font-medium">Bank Transfer (Indonesia Bank)</span>
+                                            <span class="text-base-content-muted block text-sm">Pay directly from your bank account</span>
+                                        </div>
+                                    </label>
+
+                                    <label class="border-border hover:bg-muted/50 flex items-center rounded-lg border p-4">
+                                        <input class="text-primary focus:ring-primary h-5 w-5 rounded-full border-gray-300 focus:ring-2" name="payment_method" type="radio" value="paypal">
+                                        <div class="ml-4">
+                                            <span class="text-foreground block text-base font-medium">PayPal</span>
+                                            <span class="text-base-content-muted block text-sm">Pay with your PayPal account</span>
+                                        </div>
+                                    </label>
+
+                                    <label class="border-border hover:bg-muted/50 flex items-center rounded-lg border p-4">
+                                        <input class="text-primary focus:ring-primary h-5 w-5 rounded-full border-gray-300 focus:ring-2" name="payment_method" type="radio" value="stripe" disabled>
+                                        <div class="ml-4">
+                                            <span class="text-foreground block text-base font-medium">Credit Card (Stripe)</span>
+                                            <span class="text-base-content-muted block text-sm">Pay with credit card</span>
+                                        </div>
+                                    </label>
+
+                                    <label class="border-border flex items-center rounded-lg border p-4 opacity-50">
+                                        <input class="text-primary focus:ring-primary h-5 w-5 rounded-full border-gray-300 focus:ring-2" name="payment_method" type="radio" value="manual" disabled>
+                                        <div class="ml-4">
+                                            <span class="text-foreground block text-base font-medium">Manual Payment</span>
+                                            <span class="text-base-content-muted block text-sm">Pay manually (for testing)</span>
+                                            <span class="mt-1 inline-block rounded bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-800">Disabled</span>
+                                        </div>
+                                    </label>
+                                </div>
+                                <x-input-error class="mt-2" :messages="$errors->get('payment_method')" />
+                            </div>
+
+                            <!-- Additional fields for bank transfer -->
+                            <div class="mt-6 hidden" id="bankTransferFields">
+                                <h3 class="border-border text-foreground border-b pb-3 text-lg font-semibold">Bank Transfer Details</h3>
+                                <div class="mt-3 grid grid-cols-1 gap-4 md:grid-cols-2">
+                                    <div>
+                                        <x-input-label for="bank_name">Bank Name</x-input-label>
+                                        <x-text-input id="bank_name" name="bank_name" value="{{ old('bank_name') }}" size="normal" />
+                                        <x-input-error class="mt-2" :messages="$errors->get('bank_name')" />
+                                    </div>
+                                    <div>
+                                        <x-input-label for="account_name">Account Name</x-input-label>
+                                        <x-text-input id="account_name" name="account_name" value="{{ old('account_name') }}" size="normal" />
+                                        <x-input-error class="mt-2" :messages="$errors->get('account_name')" />
+                                    </div>
+                                    <div class="md:col-span-2">
+                                        <x-input-label for="account_number">Account Number</x-input-label>
+                                        <x-text-input id="account_number" name="account_number" value="{{ old('account_number') }}" size="normal" />
+                                        <x-input-error class="mt-2" :messages="$errors->get('account_number')" />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Tombol -->
+                            <div class="mt-8">
+                                <x-button-primary class="w-full py-3 text-base" type="submit">
+                                    Complete Payment
+                                </x-button-primary>
+
+                                <p class="text-base-content-muted mt-3 text-center text-sm">
+                                    By completing your payment, you agree to our <a class="text-primary hover:underline" href="#">Terms of Service</a> and <a class="text-primary hover:underline" href="#">Privacy Policy</a>.
+                                </p>
+                            </div>
+                        </form>
                     </div>
-
-                    <!-- Tombol -->
-                    <div class="my-4 mb-3">
-                        <x-button-primary class="w-full" type="submit">
-                            Checkout
-                        </x-button-primary>
-                    </div>
-                </form>
-            </x-card>
-
-            <!-- Map kanan -->
-            <x-card class="order-1 space-y-4 self-start">
-                <div>
-                    <h2 class="border-border border-b pb-2 text-lg font-semibold">Preview Map</h2>
-                    <div class="mt-3 h-64 w-full overflow-hidden rounded-md border">
-                        <div class="map" id="map"></div>
-                        <div class="hidden md:block" id="mousePosition"></div>
-                    </div>
-                    <div class="mt-2 space-x-3 text-sm text-gray-600" id="coordinateDisplay"> </div>
-                </div>
-            </x-card>
-
+                </x-card>
+            </div>
         </div>
     </div>
-
 
     @push('css')
         <link href="https://cdn.jsdelivr.net/npm/ol@v10.6.0/ol.css" rel="stylesheet">
@@ -99,7 +181,7 @@
         <style>
             #map {
                 width: 100%;
-                height: 50vh;
+                height: 100%;
             }
         </style>
     @endpush
@@ -108,6 +190,18 @@
         <script src="https://cdn.jsdelivr.net/npm/ol@v10.6.0/dist/ol.js"></script>
 
         <script>
+            // Show/hide bank transfer fields based on payment method selection
+            document.querySelectorAll('input[name="payment_method"]').forEach(radio => {
+                radio.addEventListener('change', function() {
+                    const bankTransferFields = document.getElementById('bankTransferFields');
+                    if (this.value === 'bank_transfer') {
+                        bankTransferFields.classList.remove('hidden');
+                    } else {
+                        bankTransferFields.classList.add('hidden');
+                    }
+                });
+            });
+
             let Map = ol.Map;
             let View = ol.View;
             let Source = ol.source.ImageTile;
@@ -237,7 +331,7 @@
             map.addLayer(vectorLayer);
             const extent = vectorSource.getExtent();
             map.getView().fit(extent, {
-                padding: [100, 100, 100, 100],
+                padding: [50, 50, 50, 50],
                 duration: 1000,
             });
         </script>

@@ -31,7 +31,7 @@ return new class extends Migration
             $table->uuid('verified_by')->nullable(); // admin yang verifikasi
 
             // Kolom untuk integrasi payment gateway (future proof)
-            $table->string('payment_method')->nullable(); // manual, stripe, midtrans, dll
+            $table->string('payment_method')->nullable(); // bank_transfer, paypal, stripe, midtrans, dll
             $table->string('transaction_ref')->nullable(); // reference id dari gateway
             $table->timestamp('paid_at')->nullable(); // waktu pembayaran berhasil
 

@@ -24,6 +24,7 @@ Homestead.yaml
 Thumbs.db
 
 # Ignore Python venv
+/scripts
 scripts/venv/
 
 # Ignore Python cache

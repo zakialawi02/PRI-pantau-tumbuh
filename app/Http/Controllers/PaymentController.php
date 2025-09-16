@@ -12,6 +12,9 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Yajra\DataTables\Facades\DataTables;
+use App\Services\PaymentGatewayFactory;
+use Exception;
+use Illuminate\Support\Facades\Log;
 
 class PaymentController extends Controller
 {
@@ -85,47 +88,92 @@ class PaymentController extends Controller
 
         $user = Auth::user();
 
-        $field = FieldArea::create([
-            'user_id'   => $user->id,
-            'name'      => $cacheData['name_feature'],
-            'area_ha'   => $cacheData['area_hectares'],
-            'geom'      => $cacheData['geometry'], // harus disesuaikan dengan tipe geometry (WKT/GeoJSON)
-        ]);
+        try {
+            $field = FieldArea::create([
+                'user_id'   => $user->id,
+                'name'      => $cacheData['name_feature'],
+                'area_ha'   => $cacheData['area_hectares'],
+                'geom'      => $cacheData['geometry'], // harus disesuaikan dengan tipe geometry (WKT/GeoJSON)
+            ]);
 
-        $plan = $cacheData['plan'];
+            $plan = $cacheData['plan'];
 
-        // Buat Subscription
-        $subscription = Subscription::create([
-            'user_id'          => $user->id,
-            'field_area_id'    => $field->id,
-            'plan_id'          => $plan->id,
-            'price_per_hectare' => $plan->price_per_hectare,
-            'total_price'      => $cacheData['total_price'],
-            'start_date'       => Carbon::now(),
-            // 'end_date'         => Carbon::now()->addMonth(),
-            'status'           => 'awaiting_payment',
-        ]);
+            // Buat Subscription
+            $subscription = Subscription::create([
+                'user_id'          => $user->id,
+                'field_area_id'    => $field->id,
+                'plan_id'          => $plan->id,
+                'price_per_hectare' => $plan->price_per_hectare,
+                'total_price'      => $cacheData['total_price'],
+                'start_date'       => Carbon::now(),
+                // 'end_date'         => Carbon::now()->addMonth(),
+                'status'           => 'awaiting_payment',
+            ]);
 
-        // Buat Payment
-        $payment = Payment::create([
-            'subscription_id' => $subscription->id,
-            'name'            => $user->name,
-            'email'           => $user->email,
-            'phone'           => $request->phone,
-            'amount'          => $cacheData['total_price'],
-            'currency'        => $plan->currency,
-            'status'          => 'pending',
-            'due_date'        => Carbon::now()->addDays(2), // 2 hari kedepan'
-            'payment_method'  => $request->payment_method ?? 'manual',
-            'bank_name'      => $request->bank_name ?? 'bank transfer',
-            'account_name'    => $request->account_name,
-            'account_number'  => $request->account_number,
-        ]);
+            // Buat Payment
+            $payment = Payment::create([
+                'subscription_id' => $subscription->id,
+                'name'            => $user->name,
+                'email'           => $user->email,
+                'phone'           => $request->phone,
+                'amount'          => $cacheData['total_price'],
+                'currency'        => $plan->currency,
+                'status'          => 'pending',
+                'due_date'        => Carbon::now()->addDays(2), // 2 hari kedepan'
+                'payment_method'  => $request->payment_method ?? 'manual',
+                'bank_name'      => ($request->payment_method === 'bank_transfer') ? ($request->bank_name ?? 'bank transfer') : null,
+                'account_name'    => $request->account_name,
+                'account_number'  => $request->account_number,
+            ]);
 
-        Cache::forget($request->order_id);
+            Cache::forget($request->order_id);
 
-        return redirect()->route('admin.payment.show', $payment->id)
-            ->with('success', 'Your order has been successfully placed. Please make payment.');
+            // Process payment if a gateway is selected
+            $gatewayName = $request->input('payment_method');
+
+            // Only process through gateway if it's not manual payment
+            if ($gatewayName && $gatewayName !== 'manual' && $gatewayName !== 'bank_transfer') {
+                try {
+                    $gateway = PaymentGatewayFactory::make($gatewayName);
+
+                    $paymentData = [
+                        'amount' => $cacheData['total_price'],
+                        'currency' => $plan->currency,
+                        'description' => 'Payment for ' . $plan->name . ' plan',
+                        'return_url' => route('admin.payment.show', $payment->id),
+                        'cancel_url' => route('checkoutOrder', ['id' => $request->order_id])
+                    ];
+
+                    $result = $gateway->charge($paymentData);
+                    // dd($result);
+                    if ($result['status'] === 'success' || $result['status'] === 'APPROVED') {
+                        // Update payment with transaction details
+                        $payment->update([
+                            'transaction_ref' => $result['transaction_id'],
+                            'status' => 'pending', // Still pending until confirmed
+                            'updated_at' => now(),
+                        ]);
+
+                        // Redirect to payment gateway
+                        if (isset($result['approval_url'])) {
+                            return redirect()->away($result['approval_url']);
+                        }
+                    } else {
+                        // Log error and continue with manual process
+                        Log::error("Payment gateway error: " . ($result['message'] ?? 'Unknown error'));
+                    }
+                } catch (Exception $e) {
+                    Log::error("Payment processing error: " . $e->getMessage());
+                    // Continue with manual payment process
+                }
+            }
+
+            return redirect()->route('admin.payment.show', $payment->id)
+                ->with('success', 'Your order has been successfully placed. Please make payment.');
+        } catch (Exception $e) {
+            Log::error("Checkout error: " . $e->getMessage());
+            return redirect()->to('/app/imagery')->with('error', 'An error occurred during checkout. Please try again.');
+        }
     }
 
     public function index()
@@ -169,22 +217,10 @@ class PaymentController extends Controller
                 ->editColumn('amount', function ($data) {
                     return '<span class="font-medium text-base-content">' . number_format($data->amount, 2) . ' ' . strtoupper($data->currency) . '</span>';
                 })
-                ->editColumn('status', function ($data) {
-                    $statusConfig = match ($data->status) {
-                        'paid' => ['class' => 'bg-green-100 text-green-800', 'text' => 'Paid'],
-                        'pending' => ['class' => 'bg-yellow-100 text-yellow-800', 'text' => 'Pending'],
-                        'waiting_verification' => ['class' => 'bg-blue-100 text-blue-800', 'text' => 'Waiting Verification'],
-                        'failed' => ['class' => 'bg-red-100 text-red-800', 'text' => 'Failed'],
-                        'refunded' => ['class' => 'bg-gray-100 text-gray-800', 'text' => 'Refunded'],
-                        'chargeback' => ['class' => 'bg-red-100 text-red-800', 'text' => 'Chargeback'],
-                        default => ['class' => 'bg-gray-100 text-gray-800', 'text' => 'Unknown']
-                    };
-                    return '<span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full ' . $statusConfig['class'] . '">' . $statusConfig['text'] . '</span>';
-                })
                 ->editColumn('payment_method', function ($data) {
                     return ucwords(str_replace('_', ' ', $data->payment_method ?? 'Manual'));
                 })
-                ->rawColumns(['status', 'action', 'amount', 'due_date'])
+                ->rawColumns(['action', 'amount', 'due_date'])
                 ->removeColumn(['id', 'subscription_id', 'updated_at'])
                 ->make(true);
         }
@@ -215,6 +251,66 @@ class PaymentController extends Controller
         ];
 
         return view('pages.dashboard.payment.payment-order', compact('data', 'payment'));
+    }
+
+    /**
+     * Process PayPal payment for an existing payment order
+     */
+    public function processPayPalPayment(Request $request, $paymentId)
+    {
+        try {
+            $payment = Payment::findOrFail($paymentId);
+
+            // Check if payment is already paid
+            if ($payment->status === 'paid') {
+                return redirect()->route('admin.payment.show', $payment->id)
+                    ->with('error', 'This payment has already been processed.');
+            }
+
+            // Check if payment method is PayPal
+            if ($payment->payment_method !== 'paypal') {
+                return redirect()->route('admin.payment.show', $payment->id)
+                    ->with('error', 'This payment is not set up for PayPal processing.');
+            }
+
+            // Initialize PayPal service
+            $gateway = PaymentGatewayFactory::make('paypal');
+
+            $paymentData = [
+                'amount' => (float) $payment->amount,
+                'currency' => $payment->currency,
+                'description' => 'Payment for ' . $payment->subscription->plan->name . ' plan',
+                'return_url' => route('admin.payment.callback', ['gateway' => 'paypal']) . '?paymentId=' . $payment->id,
+                'cancel_url' => route('admin.payment.show', $payment->id)
+            ];
+
+            $result = $gateway->charge($paymentData);
+
+            // dd($result);
+            if ($result['status'] === 'success') {
+                // Update payment with transaction details
+                $payment->update([
+                    'transaction_ref' => $result['transaction_id'],
+                    'status' => 'pending' // Still pending until confirmed
+                ]);
+
+                // Redirect to PayPal
+                if (isset($result['approval_url'])) {
+                    return redirect()->away($result['approval_url']);
+                }
+            } else {
+                // Log error
+                Log::error("PayPal payment processing error: " . ($result['message'] ?? 'Unknown error'));
+
+                return redirect()->route('admin.payment.show', $payment->id)
+                    ->with('error', 'Failed to process PayPal payment. Please try again.');
+            }
+        } catch (Exception $e) {
+            Log::error("PayPal payment processing error: " . $e->getMessage());
+
+            return redirect()->route('admin.payment.show', $payment->id)
+                ->with('error', 'An error occurred while processing your PayPal payment. Please try again.');
+        }
     }
 
     public function updateStatus(Request $request, $id)
@@ -281,8 +377,60 @@ class PaymentController extends Controller
                 'email' => $payment->email,
                 'phone' => $payment->phone,
                 'payment_method' => $payment->payment_method,
+                'paid_at' => $payment->paid_at ? $payment->paid_at->format('Y-m-d H:i:s') : null,
                 'created_at' => $payment->created_at->format('Y-m-d H:i:s')
             ]
         ]);
+    }
+
+    /**
+     * Handle payment gateway callbacks
+     */
+    public function handleGatewayCallback(Request $request, string $gateway)
+    {
+        try {
+            // Get payment ID from request
+            $paymentId = $request->get('paymentId') ?? $request->get('id');
+
+            if (!$paymentId) {
+                return redirect()->route('admin.payment.index')->with('error', 'Invalid payment request.');
+            }
+
+            $payment = Payment::findOrFail($paymentId);
+
+            // Verify payment with gateway
+            $gatewayService = PaymentGatewayFactory::make($gateway);
+            $status = $gatewayService->getTransactionStatus($payment->transaction_ref);
+            // dd($gatewayService);
+            // dd($status);
+            if ($status['status'] === 'APPROVED' || $status['status'] === 'completed') {
+                // Update payment status
+                $payment->update([
+                    'status' => 'paid',
+                    'paid_at' => now(),
+                    'updated_at' => now(),
+                ]);
+
+                // Update subscription
+                $payment->subscription->update([
+                    'status' => 'active',
+                    'updated_at' => now(),
+                ]);
+
+                return redirect()->route('admin.payment.show', $payment->id)
+                    ->with('success', 'Payment completed successfully.');
+            } else {
+                $payment->update([
+                    'status' => 'failed',
+                    'updated_at' => now(),
+                ]);
+
+                return redirect()->route('admin.payment.show', $payment->id)
+                    ->with('error', 'Payment failed or cancelled.');
+            }
+        } catch (Exception $e) {
+            Log::error("Payment callback error: " . $e->getMessage());
+            return redirect()->route('admin.payment.index')->with('error', 'Payment processing error.');
+        }
     }
 }
