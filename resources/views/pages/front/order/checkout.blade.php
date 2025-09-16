@@ -116,11 +116,12 @@
                                         </div>
                                     </label>
 
-                                    <label class="border-border hover:bg-muted/50 flex items-center rounded-lg border p-4">
+                                    <label class="border-border flex items-center rounded-lg border p-4 opacity-50">
                                         <input class="text-primary focus:ring-primary h-5 w-5 rounded-full border-gray-300 focus:ring-2" name="payment_method" type="radio" value="stripe" disabled>
                                         <div class="ml-4">
                                             <span class="text-foreground block text-base font-medium">Credit Card (Stripe)</span>
                                             <span class="text-base-content-muted block text-sm">Pay with credit card</span>
+                                            <span class="mt-1 inline-block rounded bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-800">Disabled</span>
                                         </div>
                                     </label>
 

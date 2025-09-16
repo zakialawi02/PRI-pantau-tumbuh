@@ -140,27 +140,34 @@ class PaymentController extends Controller
                         'amount' => $cacheData['total_price'],
                         'currency' => $plan->currency,
                         'description' => 'Payment for ' . $plan->name . ' plan',
-                        'return_url' => route('admin.payment.show', $payment->id),
-                        'cancel_url' => route('checkoutOrder', ['id' => $request->order_id])
+                        'return_url' => route('admin.payment.callback', ['gateway' => $gatewayName]) . '?paymentId=' . $payment->id,
+                        'cancel_url' => route('admin.payment.show', $payment->id),
+                        'payment_id' => $payment->id // Pass payment ID for callback
                     ];
 
                     $result = $gateway->charge($paymentData);
                     // dd($result);
-                    if ($result['status'] === 'success' || $result['status'] === 'APPROVED') {
+                    if ($result['status'] === 'success') {
                         // Update payment with transaction details
                         $payment->update([
                             'transaction_ref' => $result['transaction_id'],
-                            'status' => 'pending', // Still pending until confirmed
-                            'updated_at' => now(),
+                            'status' => 'pending' // Still pending until confirmed
                         ]);
 
-                        // Redirect to payment gateway
+                        // Redirect to PayPal
                         if (isset($result['approval_url'])) {
                             return redirect()->away($result['approval_url']);
                         }
+
+                        // Fallback if no approval URL
+                        return redirect()->route('admin.payment.show', $payment->id)
+                            ->with('success', 'Payment processed successfully. Please complete the payment on PayPal.');
                     } else {
-                        // Log error and continue with manual process
-                        Log::error("Payment gateway error: " . ($result['message'] ?? 'Unknown error'));
+                        // Log error
+                        Log::error("PayPal payment processing error: " . ($result['message'] ?? 'Unknown error'));
+
+                        return redirect()->route('admin.payment.show', $payment->id)
+                            ->with('error', 'Failed to process PayPal payment. Please try again.');
                     }
                 } catch (Exception $e) {
                     Log::error("Payment processing error: " . $e->getMessage());
@@ -281,12 +288,12 @@ class PaymentController extends Controller
                 'currency' => $payment->currency,
                 'description' => 'Payment for ' . $payment->subscription->plan->name . ' plan',
                 'return_url' => route('admin.payment.callback', ['gateway' => 'paypal']) . '?paymentId=' . $payment->id,
-                'cancel_url' => route('admin.payment.show', $payment->id)
+                'cancel_url' => route('admin.payment.show', $payment->id),
+                'payment_id' => $payment->id // Pass payment ID for callback
             ];
 
             $result = $gateway->charge($paymentData);
 
-            // dd($result);
             if ($result['status'] === 'success') {
                 // Update payment with transaction details
                 $payment->update([
@@ -298,6 +305,10 @@ class PaymentController extends Controller
                 if (isset($result['approval_url'])) {
                     return redirect()->away($result['approval_url']);
                 }
+
+                // Fallback if no approval URL
+                return redirect()->route('admin.payment.show', $payment->id)
+                    ->with('success', 'Payment processed successfully. Please complete the payment on PayPal.');
             } else {
                 // Log error
                 Log::error("PayPal payment processing error: " . ($result['message'] ?? 'Unknown error'));
@@ -397,36 +408,67 @@ class PaymentController extends Controller
             }
 
             $payment = Payment::findOrFail($paymentId);
-
-            // Verify payment with gateway
             $gatewayService = PaymentGatewayFactory::make($gateway);
-            $status = $gatewayService->getTransactionStatus($payment->transaction_ref);
-            // dd($gatewayService);
-            // dd($status);
-            if ($status['status'] === 'APPROVED' || $status['status'] === 'completed') {
-                // Update payment status
-                $payment->update([
-                    'status' => 'paid',
-                    'paid_at' => now(),
-                    'updated_at' => now(),
-                ]);
 
-                // Update subscription
-                $payment->subscription->update([
-                    'status' => 'active',
-                    'updated_at' => now(),
-                ]);
+            // For PayPal, we need to capture the payment first
+            if ($gateway === 'paypal') {
+                $paymentResult = $gatewayService->capturePayment($payment->transaction_ref);
 
-                return redirect()->route('admin.payment.show', $payment->id)
-                    ->with('success', 'Payment completed successfully.');
+                if ($paymentResult['status'] === 'success') {
+                    // Update payment status
+                    $payment->update([
+                        'status' => 'paid',
+                        'paid_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+
+                    // Update subscription
+                    $payment->subscription->update([
+                        'status' => 'active',
+                        'updated_at' => now(),
+                    ]);
+
+                    return redirect()->route('admin.payment.show', $payment->id)
+                        ->with('success', 'Payment completed successfully.');
+                } else {
+                    $payment->update([
+                        'status' => 'failed',
+                        'updated_at' => now(),
+                    ]);
+
+                    return redirect()->route('admin.payment.show', $payment->id)
+                        ->with('error', 'Payment failed or cancelled.');
+                }
             } else {
-                $payment->update([
-                    'status' => 'failed',
-                    'updated_at' => now(),
-                ]);
+                // For other gateways, use the existing getTransactionStatus method
+                $gatewayService = PaymentGatewayFactory::make($gateway);
+                $status = $gatewayService->getTransactionStatus($payment->transaction_ref);
 
-                return redirect()->route('admin.payment.show', $payment->id)
-                    ->with('error', 'Payment failed or cancelled.');
+                if (strtolower($status['status']) === 'completed') {
+                    // Update payment status
+                    $payment->update([
+                        'status' => 'paid',
+                        'paid_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+
+                    // Update subscription
+                    $payment->subscription->update([
+                        'status' => 'active',
+                        'updated_at' => now(),
+                    ]);
+
+                    return redirect()->route('admin.payment.show', $payment->id)
+                        ->with('success', 'Payment completed successfully.');
+                } else {
+                    $payment->update([
+                        'status' => 'failed',
+                        'updated_at' => now(),
+                    ]);
+
+                    return redirect()->route('admin.payment.show', $payment->id)
+                        ->with('error', 'Payment failed or cancelled.');
+                }
             }
         } catch (Exception $e) {
             Log::error("Payment callback error: " . $e->getMessage());
