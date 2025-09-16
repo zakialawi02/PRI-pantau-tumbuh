@@ -1,4 +1,4 @@
-<aside class="w-65 z-38 bg-neutral border-foreground/30 fixed inset-y-0 start-0 h-full -translate-x-full transform border-e transition-all duration-300 lg:bottom-0 lg:end-auto lg:block lg:translate-x-0" id="sidebar-multi-level-sidebar" role="dialog" aria-label="Sidebar" tabindex="-1">
+<aside class="w-65 bg-neutral border-foreground/30 fixed inset-y-0 start-0 z-40 h-full -translate-x-full transform border-e transition-all duration-300 lg:bottom-0 lg:end-auto lg:block lg:translate-x-0" id="sidebar-multi-level-sidebar" role="dialog" aria-label="Sidebar" tabindex="-1">
     <div class="relative flex h-full max-h-full flex-col">
         <div class="align-center flex items-center px-5 py-1.5">
             <!-- Logo -->

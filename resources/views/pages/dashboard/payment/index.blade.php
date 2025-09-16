@@ -223,7 +223,44 @@
                         {
                             data: 'status',
                             name: 'status',
-                            className: 'px-3 py-2 whitespace-nowrap text-sm'
+                            className: 'px-3 py-2 whitespace-nowrap text-sm',
+                            render: function(data, type, row) {
+                                const statusConfig = {
+                                    'paid': {
+                                        class: 'bg-green-100 text-green-800',
+                                        text: 'Paid'
+                                    },
+                                    'pending': {
+                                        class: 'bg-yellow-100 text-yellow-800',
+                                        text: 'Pending'
+                                    },
+                                    'waiting_verification': {
+                                        class: 'bg-blue-100 text-blue-800',
+                                        text: 'Waiting Verification'
+                                    },
+                                    'failed': {
+                                        class: 'bg-red-100 text-red-800',
+                                        text: 'Failed'
+                                    },
+                                    'refunded': {
+                                        class: 'bg-gray-100 text-gray-800',
+                                        text: 'Refunded'
+                                    },
+                                    'chargeback': {
+                                        class: 'bg-red-100 text-red-800',
+                                        text: 'Chargeback'
+                                    },
+                                    default: {
+                                        class: 'bg-gray-100 text-gray-800',
+                                        text: 'Unknown'
+                                    }
+                                };
+
+                                const config = statusConfig[data] || statusConfig.default;
+                                return `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${config.class}">
+                                    ${config.text}
+                                </span>`;
+                            }
                         },
                         {
                             data: 'payment_method',
@@ -234,7 +271,7 @@
                             data: 'due_date',
                             name: 'due_date',
                             className: 'px-3 py-2 whitespace-nowrap text-sm',
-                            render: function(data) {
+                            render: function(data, type, row) {
                                 if (!data) return '-';
 
                                 const dueDate = new Date(data);
@@ -242,17 +279,27 @@
 
                                 let dateString = formatCustomDate(data);
 
-                                // Check if overdue
-                                if (dueDate < now) {
+                                // If payment is paid, show paid_at date
+                                if (row.status === 'paid' && row.paid_at) {
+                                    dateString += '<br><span class="text-xs text-gray-500">Paid: ' + formatCustomDate(row.paid_at) + '</span>';
+                                }
+
+                                // Check if overdue (only if not paid)
+                                if (row.status !== 'paid' && dueDate < now) {
                                     dateString += ' <span class="ml-2 inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-800">Overdue</span>';
-                                } else {
-                                    // Check if due within 2 hours
+                                } else if (row.status !== 'paid') {
+                                    // Check if due within 2 hours (only if not paid)
                                     const timeDifference = dueDate.getTime() - now.getTime();
                                     const hoursUntilDue = timeDifference / (1000 * 60 * 60);
 
                                     if (hoursUntilDue <= 2 && hoursUntilDue > 0) {
                                         dateString += ' <span class="ml-2 inline-flex items-center rounded-full bg-orange-100 px-2.5 py-0.5 text-xs font-medium text-orange-800">Due Soon</span>';
                                     }
+                                }
+
+                                // If payment is paid, show paid status instead of overdue
+                                if (row.status === 'paid' && row.paid_at) {
+                                    dateString += ' <span class="ml-2 inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800">Paid</span>';
                                 }
 
                                 return dateString;
@@ -291,6 +338,7 @@
 
                 const paymentModal = new Modal(document.getElementById('payment-modal'), {
                     backdrop: 'static',
+                    backdropClasses: 'bg-foreground/60 fixed inset-0 z-40',
                 });
                 $(document).on('click', '[data-modal-hide="payment-modal"]', function() {
                     paymentModal.hide();
@@ -358,7 +406,13 @@
                                     class: 'bg-gray-100 text-gray-800',
                                     text: 'Unknown'
                                 };
-                                $('#modal-status').attr('class', 'inline-flex px-2 py-1 text-xs font-semibold rounded-full ' + status.class).text(status.text);
+
+                                let statusText = status.text;
+                                if (payment.status === 'paid' && payment.paid_at) {
+                                    statusText += ' (' + formatCustomDate(payment.paid_at) + ')';
+                                }
+
+                                $('#modal-status').attr('class', 'inline-flex px-2 py-1 text-xs font-semibold rounded-full ' + status.class).html(statusText);
 
                                 @if (in_array(auth()->user()->role, ['superadmin', 'admin']))
                                     // Set current status in select dropdown
