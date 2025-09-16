@@ -413,7 +413,6 @@ class PaymentController extends Controller
             // For PayPal, we need to capture the payment first
             if ($gateway === 'paypal') {
                 $paymentResult = $gatewayService->capturePayment($payment->transaction_ref);
-
                 if ($paymentResult['status'] === 'success') {
                     // Update payment status
                     $payment->update([
@@ -437,7 +436,7 @@ class PaymentController extends Controller
                     ]);
 
                     return redirect()->route('admin.payment.show', $payment->id)
-                        ->with('error', 'Payment failed or cancelled.');
+                        ->with('error', 'Payment failed or cancelled. ' . $paymentResult['status'] . ':  ' . $paymentResult['message']);
                 }
             } else {
                 // For other gateways, use the existing getTransactionStatus method

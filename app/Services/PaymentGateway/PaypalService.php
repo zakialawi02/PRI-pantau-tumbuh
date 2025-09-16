@@ -103,7 +103,7 @@ class PaypalService implements PaymentGatewayInterface
             } else {
                 // Log the full response for debugging
                 Log::error('PayPal capture failed response: ' . json_encode($response));
-                throw new Exception('Failed to capture PayPal payment: ' . ($response['message'] ?? 'Unknown error'));
+                throw new Exception('Failed to capture PayPal payment: ' . ($response['error']['name'] ?? 'Unknown error'));
             }
         } catch (Exception $e) {
             Log::error('PayPal capture error: ' . $e->getMessage());
