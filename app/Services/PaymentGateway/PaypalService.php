@@ -19,6 +19,12 @@ class PaypalService implements PaymentGatewayInterface
         $this->paypal->setCurrency($config['currency'] ?? 'USD');
     }
 
+    private function prepareForApiCall(): void
+    {
+        $this->paypal->setApiCredentials(config('paypal'));
+        $this->paypal->getAccessToken();
+    }
+
     /**
      * Charge/Create payment through PayPal
      * This method now creates the order AND captures it immediately
@@ -26,8 +32,7 @@ class PaypalService implements PaymentGatewayInterface
     public function charge(array $data): array
     {
         try {
-            $this->paypal->setApiCredentials(config('paypal'));
-            $this->paypal->getAccessToken();
+            $this->prepareForApiCall();
 
             // Create the order directly
             $responseOrder = $this->paypal->createOrder([
@@ -88,8 +93,7 @@ class PaypalService implements PaymentGatewayInterface
     public function capturePayment(string $transactionId): array
     {
         try {
-            $this->paypal->setApiCredentials(config('paypal'));
-            $this->paypal->getAccessToken();
+            $this->prepareForApiCall();
 
             $response = $this->paypal->capturePaymentOrder($transactionId);
 
@@ -103,7 +107,7 @@ class PaypalService implements PaymentGatewayInterface
             } else {
                 // Log the full response for debugging
                 Log::error('PayPal capture failed response: ' . json_encode($response));
-                throw new Exception('Failed to capture PayPal payment: ' . ($response['message'] ?? 'Unknown error'));
+                throw new Exception('Failed to capture PayPal payment: ' . ($response['error']['name'] ?? 'Unknown error'));
             }
         } catch (Exception $e) {
             Log::error('PayPal capture error: ' . $e->getMessage());
@@ -163,8 +167,7 @@ class PaypalService implements PaymentGatewayInterface
     public function getTransactionStatus(string $transactionId): array
     {
         try {
-            $this->paypal->setApiCredentials(config('paypal'));
-            $this->paypal->getAccessToken();
+            $this->prepareForApiCall();
 
             $response = $this->paypal->showOrderDetails($transactionId);
 
