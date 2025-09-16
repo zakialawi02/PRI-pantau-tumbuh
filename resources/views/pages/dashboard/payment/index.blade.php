@@ -338,7 +338,6 @@
 
                 const paymentModal = new Modal(document.getElementById('payment-modal'), {
                     backdrop: 'static',
-                    backdropClasses: 'bg-foreground/60 fixed inset-0 z-40',
                 });
                 $(document).on('click', '[data-modal-hide="payment-modal"]', function() {
                     paymentModal.hide();

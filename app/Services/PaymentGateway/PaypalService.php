@@ -21,6 +21,7 @@ class PaypalService implements PaymentGatewayInterface
 
     /**
      * Charge/Create payment through PayPal
+     * This method now creates the order AND captures it immediately
      */
     public function charge(array $data): array
     {
@@ -29,7 +30,7 @@ class PaypalService implements PaymentGatewayInterface
             $this->paypal->getAccessToken();
 
             // Create the order directly
-            $response = $this->paypal->createOrder([
+            $responseOrder = $this->paypal->createOrder([
                 "intent" => "CAPTURE",
                 "purchase_units" => [
                     [
@@ -41,33 +42,71 @@ class PaypalService implements PaymentGatewayInterface
                 ],
                 "application_context" => [
                     "cancel_url" => $data['cancel_url'] ?? url('/'),
-                    "return_url" => $data['return_url'] ?? url('/')
+                    "return_url" => $data['return_url'] ?? route('admin.payment.callback', ['gateway' => 'paypal']) . '?paymentId=' . ($data['payment_id'] ?? '')
                 ]
             ]);
 
-            if (isset($response['status']) && $response['status'] === 'CREATED') {
+            if (isset($responseOrder['status']) && $responseOrder['status'] === 'CREATED') {
                 // Get the approval URL
                 $approvalUrl = null;
-                if (isset($response['links'])) {
-                    foreach ($response['links'] as $link) {
+                $captureUrl = null;
+                if (isset($responseOrder['links'])) {
+                    foreach ($responseOrder['links'] as $link) {
                         if ($link['rel'] === 'approve') {
                             $approvalUrl = $link['href'];
-                            break;
+                        }
+                        if ($link['rel'] === 'capture') {
+                            $captureUrl = $link['href'];
                         }
                     }
                 }
-                // dd($response);
+
+                // For PayPal, we return the approval URL for the user to complete payment
+                // The actual capture will happen in the callback
                 return [
                     'status' => 'success',
-                    'transaction_id' => $response['id'],
+                    'transaction_id' => $responseOrder['id'],
                     'approval_url' => $approvalUrl,
-                    'payment_data' => $response
+                    'capture_url' => $captureUrl,
+                    'payment_data' => $responseOrder
                 ];
             } else {
-                throw new Exception('Failed to create PayPal order: ' . ($response['message'] ?? 'Unknown error'));
+                throw new Exception('Failed to create PayPal order: ' . ($responseOrder['message'] ?? 'Unknown error'));
             }
         } catch (Exception $e) {
             Log::error('PayPal charge error: ' . $e->getMessage());
+            return [
+                'status' => 'error',
+                'message' => $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Capture a previously created payment order
+     */
+    public function capturePayment(string $transactionId): array
+    {
+        try {
+            $this->paypal->setApiCredentials(config('paypal'));
+            $this->paypal->getAccessToken();
+
+            $response = $this->paypal->capturePaymentOrder($transactionId);
+
+            if (isset($response['status']) && $response['status'] === 'COMPLETED') {
+                return [
+                    'status' => 'success',
+                    'transaction_id' => $response['id'],
+                    'payer' => $response['payer'] ?? null,
+                    'payment_data' => $response
+                ];
+            } else {
+                // Log the full response for debugging
+                Log::error('PayPal capture failed response: ' . json_encode($response));
+                throw new Exception('Failed to capture PayPal payment: ' . ($response['message'] ?? 'Unknown error'));
+            }
+        } catch (Exception $e) {
+            Log::error('PayPal capture error: ' . $e->getMessage());
             return [
                 'status' => 'error',
                 'message' => $e->getMessage()
@@ -81,12 +120,12 @@ class PaypalService implements PaymentGatewayInterface
     public function refund(string $transactionId, float $amount): array
     {
         try {
-            // For refund, we need to capture the payment first if it's not already captured
-            $captureResponse = $this->paypal->capturePaymentOrder($transactionId);
+            // First, we need to get the order details to find the capture ID
+            $orderDetails = $this->paypal->showOrderDetails($transactionId);
 
-            if (isset($captureResponse['status']) && $captureResponse['status'] === 'COMPLETED') {
-                // Now we can refund
-                $captureId = $captureResponse['purchase_units'][0]['payments']['captures'][0]['id'];
+            if (isset($orderDetails['status']) && $orderDetails['status'] === 'COMPLETED') {
+                // Get the capture ID from the order details
+                $captureId = $orderDetails['purchase_units'][0]['payments']['captures'][0]['id'];
 
                 // Refund the captured payment with correct method signature
                 $refundResponse = $this->paypal->refundCapturedPayment(
@@ -107,7 +146,7 @@ class PaypalService implements PaymentGatewayInterface
                     throw new Exception('Failed to process refund: ' . ($refundResponse['message'] ?? 'Unknown error'));
                 }
             } else {
-                throw new Exception('Failed to capture payment for refund: ' . ($captureResponse['message'] ?? 'Unknown error'));
+                throw new Exception('Failed to get order details for refund: ' . ($orderDetails['message'] ?? 'Unknown error'));
             }
         } catch (Exception $e) {
             Log::error('PayPal refund error: ' . $e->getMessage());
@@ -128,7 +167,7 @@ class PaypalService implements PaymentGatewayInterface
             $this->paypal->getAccessToken();
 
             $response = $this->paypal->showOrderDetails($transactionId);
-            // dd($response);
+
             if (isset($response['status'])) {
                 return [
                     'status' => $response['status'],

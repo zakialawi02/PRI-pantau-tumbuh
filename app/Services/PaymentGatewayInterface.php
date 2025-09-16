@@ -4,7 +4,36 @@ namespace App\Services;
 
 interface PaymentGatewayInterface
 {
-    public function charge(array $data): array; // proses pembayaran
-    public function refund(string $transactionId, float $amount): array; // refund
-    public function getTransactionStatus(string $transactionId): array; // cek status
+    /**
+     * Process a payment charge
+     *
+     * @param array $data Payment data including amount, currency, description, etc.
+     * @return array Result with status and transaction details
+     */
+    public function charge(array $data): array;
+
+    /**
+     * Refund a payment
+     *
+     * @param string $transactionId The transaction ID to refund
+     * @param float $amount The amount to refund
+     * @return array Result with status and refund details
+     */
+    public function refund(string $transactionId, float $amount): array;
+
+    /**
+     * Get the status of a transaction
+     *
+     * @param string $transactionId The transaction ID to check
+     * @return array Result with status and transaction details
+     */
+    public function getTransactionStatus(string $transactionId): array;
+
+    /**
+     * Capture a payment paypal transaction
+     *
+     * @param string $transactionId The transaction ID to capture
+     * @return array Result with status and capture details
+     */
+    public function capturePayment(string $transactionId): array;
 }
