@@ -43,6 +43,22 @@ class Payment extends Model
         'amount' => 'decimal:2',
     ];
 
+    /**
+     * Get the effective status of the payment, considering expiration.
+     *
+     * @return string
+     */
+    public function getCheckAndMarkAsExpiredAttribute()
+    {
+        $status = $this->status;
+
+        if ($this->due_date && now()->isAfter($this->due_date) && $status !== 'paid') {
+            $status = 'expired';
+        }
+
+        return $status;
+    }
+
     public function subscription()
     {
         return $this->belongsTo(Subscription::class);

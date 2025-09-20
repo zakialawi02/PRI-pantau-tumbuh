@@ -1,4 +1,6 @@
 import "./bootstrap";
+import "./variables";
+import "./preline-helpers";
 import "./navigation";
 
 $.ajaxSetup({
@@ -38,13 +40,14 @@ function timeAgo(dateStr) {
     }
     return "just now";
 }
+
 /**
  * Formats a date string into a customizable, localized date format
  *
  * @param {string|null|undefined} dateString - The date string to format (ISO format recommended)
  * @param {boolean} [includeTime=true] - Whether to include time in the formatted output
  * @param {Object|null} [customOptions=null] - Custom formatting options to override defaults
- * @param {string} [locale="en-US"] - The locale to use for formatting (e.g., "en-US", "id-ID")
+ * @param {string} [locale=document.documentElement.lang || "en-US"] - The locale to use for formatting (follows Laravel system locale)
  * @param {string} [fallback="-"] - The fallback value to return if formatting fails
  * @returns {string} A formatted date string or the fallback value
  *
@@ -58,7 +61,7 @@ function formatCustomDate(
     dateString,
     includeTime = true,
     customOptions = null,
-    locale = "en-US",
+    locale = document.documentElement.lang || "en-US",
     fallback = "-"
 ) {
     if (!dateString) {
@@ -93,6 +96,89 @@ function formatCustomDate(
 }
 window.timeAgo = timeAgo;
 window.formatCustomDate = formatCustomDate;
+
+/**
+ * Formats a number into a currency string based on the specified locale and currency code.
+ *
+ * @param {number|string} amount - The amount to format as currency.
+ * @param {string} [currencyCode="USD"] - The ISO currency code (e.g., "IDR", "USD").
+ * @param {string} [locale="en-US"] - The locale to use for formatting (e.g., "id-ID", "en-US").
+ * @param {Object} [options={}] - Additional options to pass to Intl.NumberFormat.
+ * @returns {string} A formatted currency string or "-" if formatting fails.
+ *
+ * @example
+ * formatCurrency(1234567.89) // Returns "$1,234,567.89" for default locale "en-US"
+ * formatCurrency(1234567.89, "IDR", "id-ID") // Returns "Rp1.234.567,89"
+ * formatCurrency("invalid") // Returns "-"
+ */
+function formatCurrency(
+    amount,
+    currencyCode = "USD",
+    locale = document.documentElement.lang || "en-US",
+    // locale = navigator.language || "en-US",
+    options = {}
+) {
+    const defaultOptions = {
+        style: "currency",
+        currency: currencyCode,
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+    };
+
+    const formatterOptions = { ...defaultOptions, ...options };
+
+    try {
+        const numericAmount =
+            typeof amount === "string" ? parseFloat(amount) : amount;
+        if (isNaN(numericAmount)) {
+            return "-";
+        }
+        return new Intl.NumberFormat(locale, formatterOptions).format(
+            numericAmount
+        );
+    } catch (error) {
+        return "-";
+    }
+}
+window.formatCurrency = formatCurrency;
+
+/**
+ * Formats a number into a localized string representation.
+ *
+ * @param {number|string} amount - The number to format.
+ * @param {string} [locale="us-US"] - The locale to use for formatting (e.g., "us-US", "id-ID").
+ * @param {number} [fractionDigits=3] - The number of digits to appear after the decimal point.
+ * @returns {string} A formatted number string or "-" if formatting fails.
+ *
+ * @example
+ * formatNumber(1234567.89) // Returns "1,234,567.890" for locale "us-US" with default 3 fraction digits
+ * formatNumber(1234567.89, "id-ID", 2) // Returns "1.234.567,89" for locale "id-ID" with 2 fraction digits
+ */
+function formatNumber(
+    amount,
+    locale = document.documentElement.lang || "us-US",
+    // locale = navigator.language || "us-US"
+    fractionDigits = 3
+) {
+    try {
+        // Convert to number if it's a string
+        const numericAmount =
+            typeof amount === "string" ? parseFloat(amount) : amount;
+
+        // Check if it's a valid number
+        if (isNaN(numericAmount) || !isFinite(numericAmount)) {
+            return "-";
+        }
+
+        return new Intl.NumberFormat(locale, {
+            minimumFractionDigits: fractionDigits,
+            maximumFractionDigits: fractionDigits,
+        }).format(numericAmount);
+    } catch (error) {
+        return "-";
+    }
+}
+window.formatNumber = formatNumber;
 
 /**
  * Formats the given coordinate into a specific format for Indo coordinates.
@@ -133,27 +219,3 @@ function coordinateFormatIndo(coordinate, format = "dd") {
     }
 }
 window.coordinateFormatIndo = coordinateFormatIndo;
-
-$(document).ready(function () {
-    const themeToggle = document.getElementById("theme-toggle");
-    const iconSun = document.getElementById("icon-sun");
-    const iconMoon = document.getElementById("icon-moon");
-    function applyTheme(theme) {
-        document.documentElement.classList.toggle("dark", theme === "dark");
-        localStorage.setItem("theme", theme);
-        iconSun ? iconSun.classList.toggle("hidden", theme !== "dark") : null;
-        iconMoon ? iconMoon.classList.toggle("hidden", theme === "dark") : null;
-    }
-    // Cek tema saat ini
-    const savedTheme = localStorage.getItem("theme") || "light";
-    applyTheme(savedTheme);
-    // Toggle tema saat tombol diklik
-    if (themeToggle) {
-        themeToggle.addEventListener("click", function () {
-            const newTheme = document.documentElement.classList.contains("dark")
-                ? "light"
-                : "dark";
-            applyTheme(newTheme);
-        });
-    }
-});

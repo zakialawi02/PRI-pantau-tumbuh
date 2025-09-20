@@ -25,7 +25,7 @@
                         <span class="sr-only">Close modal</span>
                     </button>
                     <div class="p-4 text-center md:p-5">
-                        <div id="zk-popup-icon" class="mx-auto mb-3"></div>
+                        <div id="zk-popup-icon" class="mx-auto mb-4"></div>
                         <h3 id="zk-popup-message" class="mb-5 text-lg font-normal"></h3>
                         <button id="zk-popup-confirm" class="text-sm px-4 py-2 text-center rounded-lg">Yes</button>
                         <button id="zk-popup-cancel" class="ms-3 text-sm px-4 py-2 rounded-lg">No</button>
@@ -68,40 +68,11 @@
                 cancelButton.textContent = cancelText || 'No';
                 cancelButton.className = cancelClass || "ms-3 text-sm px-4 py-2 text-gray-900 bg-white border border-gray-200 rounded-lg hover:bg-gray-100 focus:z-10 focus:outline-none focus:ring-4 focus:ring-gray-100";
 
-                this.popupContent.className = `relative z-10 max-w-md w-full p-3 rounded-lg shadow-sm ${popupClass || 'bg-background text-foreground border border-border'}`;
-                this.backdrop.className = `absolute inset-0 ${backdropClass || 'bg-gray-800/50'}`;
-
-                confirmButton.onclick = () => {
-                    if (onConfirm) onConfirm();
-                    this.hide();
-                };
-
-                this.popup.classList.remove('hidden');
-            }
-
-            alert({
-                message,
-                icon,
-                confirmText,
-                confirmClass,
-                popupClass,
-                backdropClass,
-            }) {
-                document.getElementById('zk-popup-message').textContent = message;
-                const iconContainer = document.getElementById('zk-popup-icon');
-                iconContainer.innerHTML = icon ? icon : '<svg class="h-12 w-12 mx-auto text-yellow-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd" /></svg>';
-
-                const confirmButton = document.getElementById('zk-popup-confirm');
-                confirmButton.textContent = confirmText || 'Ok';
-                confirmButton.className = confirmClass || "ms-3 text-sm px-4 py-2 text-gray-900 bg-white border border-gray-200 rounded-lg hover:bg-gray-100 focus:z-10 focus:outline-none focus:ring-4 focus:ring-gray-100";
-
-                const cancelButton = document.getElementById('zk-popup-cancel');
-                cancelButton.remove();
-
                 this.popupContent.className = `relative z-10 max-w-md w-full p-4 rounded-lg shadow-sm ${popupClass || 'bg-background text-foreground border border-border'}`;
                 this.backdrop.className = `absolute inset-0 ${backdropClass || 'bg-gray-800/50'}`;
 
                 confirmButton.onclick = () => {
+                    if (onConfirm) onConfirm();
                     this.hide();
                 };
 

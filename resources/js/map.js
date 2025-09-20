@@ -167,8 +167,16 @@ const mousePositionControl = new MousePosition({
     target: document.getElementById("mousePosition"),
     coordinateFormat: function (coordinate) {
         const [lon, lat] = coordinate;
-        const formattedLon = lon.toFixed(6);
-        const formattedLat = lat.toFixed(6);
+        const formattedLon = formatNumber(
+            lon,
+            document.documentElement.lang,
+            6
+        );
+        const formattedLat = formatNumber(
+            lat,
+            document.documentElement.lang,
+            6
+        );
         return (
             "Long: " + formattedLon + " &nbsp&nbsp&nbsp  Lat: " + formattedLat
         );
@@ -458,9 +466,11 @@ const formatArea = function (polygon) {
     const area = getArea(polygon);
     let output;
     if (area > 10000) {
-        output = Math.round((area / 10000) * 100) / 100 + " ha";
+        output =
+            formatNumber(area / 10000, document.documentElement.lang, 2) +
+            " ha";
     } else {
-        output = Math.round(area * 100) / 100 + " m²";
+        output = formatNumber(area, document.documentElement.lang, 2) + " m²";
     }
     return output;
 };
@@ -578,7 +588,7 @@ function addInteraction(type = "Polygon") {
 
         // Display measurement result in the #measurementOutput div
         document.getElementById("measurementOutput").innerHTML =
-            measureTooltipElement.innerHTML;
+            formatNumber(geojsonArea / 10000) + " ha"; // Convert m² to hectares;
 
         drawingEnd();
 

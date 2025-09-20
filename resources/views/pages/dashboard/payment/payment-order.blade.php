@@ -9,9 +9,9 @@
                     <div class="mb-4 md:mb-0">
                         <h1 class="mb-2 text-3xl font-bold">INVOICE</h1>
                         <p class="text-background">Invoice #{{ $payment->id }}</p>
-                        <p class="text-background">Date: {{ $payment->created_at->format('F d, Y H:i:s') }}</p>
+                        <p class="text-background">Date: {{ $payment->created_at->isoFormat('LL, HH:mm') }}</p>
                         @if (isset($payment->due_date))
-                            <p class="text-background">Due Date: {{ \Carbon\Carbon::parse($payment->due_date)->format('F d, Y H:i') }}</p>
+                            <p class="text-background">Due Date: {{ $payment->due_date->isoFormat('LL, HH:mm') }}</p>
                         @endif
                     </div>
                     <div class="text-left md:text-right">
@@ -109,7 +109,7 @@
                                 </svg>
                                 <div>
                                     <h4 class="font-semibold text-red-800">Payment Overdue</h4>
-                                    <p class="text-sm text-red-600">This invoice was due on {{ \Carbon\Carbon::parse($payment->due_date)->format('F d, Y H:i') }}</p>
+                                    <p class="text-sm text-red-600">This invoice was due on {{ $payment->due_date->isoFormat('LL, HH:mm') }}</p>
                                 </div>
                             </div>
                         </div>
@@ -123,7 +123,7 @@
                                 </svg>
                                 <div>
                                     <h4 class="font-semibold text-yellow-800">Payment Due</h4>
-                                    <p class="text-sm text-yellow-600">Payment is due by {{ \Carbon\Carbon::parse($payment->due_date)->format('F d, Y H:i') }}</p>
+                                    <p class="text-sm text-yellow-600">Payment is due by {{ $payment->due_date->isoFormat('LL, HH:mm') }}</p>
                                 </div>
                             </div>
                         </div>
@@ -159,9 +159,9 @@
                                         <div class="font-medium">{{ $payment->subscription->plan->name }}</div>
                                         <div class="text-base-content-muted text-sm">Field: {{ $payment->subscription->fieldArea->name }}</div>
                                     </td>
-                                    <td class="border-border border px-4 py-3 text-center">{{ $payment->subscription->fieldArea->area_ha }} ha</td>
-                                    <td class="border-border border px-4 py-3 text-center">{{ number_format($payment->subscription->price_per_hectare, 2) }} {{ $payment->currency }}</td>
-                                    <td class="border-border border px-4 py-3 text-right font-medium">{{ number_format($payment->amount, 2) }} {{ $payment->currency }}</td>
+                                    <td class="border-border border px-4 py-3 text-center">{{ Number::format($payment->subscription->fieldArea->area_ha, locale: app()->getLocale()) }} ha</td>
+                                    <td class="border-border border px-4 py-3 text-center">{{ Number::currency($payment->subscription->price_per_hectare, $payment->currency, app()->getLocale()) }}</td>
+                                    <td class="border-border border px-4 py-3 text-right font-medium">{{ Number::currency($payment->subscription->price_per_hectare * $payment->subscription->fieldArea->area_ha, $payment->currency, app()->getLocale()) }}</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -174,21 +174,21 @@
                         <div class="bg-base-content-muted/20 rounded-lg p-4">
                             <div class="border-border flex items-center justify-between border-b py-2">
                                 <span class="text-base-content-muted">Subtotal:</span>
-                                <span class="font-medium">{{ number_format($payment->amount, 2) }} {{ $payment->currency }}</span>
+                                <span class="font-medium">{{ Number::currency($payment->amount, $payment->currency, app()->getLocale()) }}</span>
                             </div>
                             <div class="border-border flex items-center justify-between border-b py-2">
                                 <span class="text-base-content-muted">Tax (0%):</span>
-                                <span class="font-medium">0.00 {{ $payment->currency }}</span>
+                                <span class="font-medium">{{ Number::currency(0, $payment->currency, app()->getLocale()) }}</span>
                             </div>
                             @if (isset($payment->due_date))
                                 <div class="border-border flex items-center justify-between border-b py-2">
                                     <span class="text-base-content-muted">Due Date:</span>
-                                    <span class="font-medium">{{ \Carbon\Carbon::parse($payment->due_date)->format('M d, Y') }}</span>
+                                    <span class="font-medium">{{ $payment->due_date->isoFormat('DD MMM YYYY, HH:mm') }}</span>
                                 </div>
                             @endif
                             <div class="border-border flex items-center justify-between border-t-2 py-3">
                                 <span class="text-base-content text-lg font-semibold">Total:</span>
-                                <span class="text-primary text-lg font-bold">{{ number_format($payment->amount, 2) }} {{ $payment->currency }}</span>
+                                <span class="text-primary text-lg font-bold">{{ Number::currency($payment->amount, $payment->currency, app()->getLocale()) }}</span>
                             </div>
                         </div>
                     </div>
@@ -229,7 +229,7 @@
                                 </div>
                                 @if (isset($payment->due_date))
                                     <p class="mt-3 text-sm text-blue-700">
-                                        <strong>Payment Due:</strong> Please complete payment by {{ \Carbon\Carbon::parse($payment->due_date)->format('F d, Y H:i') }}.
+                                        <strong>Payment Due:</strong> Please complete payment by {{ $payment->due_date->isoFormat('LL, HH:mm') }}.
                                     </p>
                                 @endif
                                 <p class="mt-3 text-sm text-blue-700">
@@ -246,7 +246,7 @@
                                 <h4 class="text-info mb-2 font-semibold">PayPal Payment</h4>
                                 <p class="text-blue-800">Click the button below to proceed with your PayPal payment.</p>
                                 @if (isset($payment->due_date))
-                                    <p class="mt-2 text-sm text-blue-700">Payment due by: {{ \Carbon\Carbon::parse($payment->due_date)->format('F d, Y H:i') }}</p>
+                                    <p class="mt-2 text-sm text-blue-700">Payment due by: {{ $payment->due_date->isoFormat('LL, HH:mm') }}</p>
                                 @endif
                                 <div class="mt-4">
                                     @if ($payment->status === 'pending')

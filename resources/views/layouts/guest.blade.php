@@ -8,11 +8,24 @@
         <meta name="csrf-token" content="{{ csrf_token() }}">
 
         <title>@yield('title', config('app.name'))</title>
-        <meta content="@yield('meta_description', '') name="description"">
-        <meta name="author" content="Ahmad Zaki Alawi" />
+
+        <!-- SEO Meta Tags -->
+        <meta name="description" content="@yield('meta_description', '')">
+        <meta name="author" content="@yield('meta_author', 'Ahmad Zaki Alawi')">
+        <meta name="keywords" content="@yield('meta_keywords', '')">
+
+        <!-- Open Graph Meta Tags -->
+        <meta property="og:title" content="@yield('og_title', config('app.name'))" />
+        <meta property="og:type" content="@yield('og_type', 'website')" />
+        <meta property="og:url" content="@yield('og_url', url()->current())" />
+        <meta property="og:description" content="@yield('og_description', config('app.name'))" />
+        <meta property="og:image" content="@yield('og_image', asset('assets/img/favicon.png'))" />
+
+        <!-- Other Meta Tags -->
+        <meta name="robots" content="@yield('meta_robots', 'index,follow')">
+        <link href="{{ url()->current() }}" rel="canonical">
 
         <link type="image/png" href="{{ asset('/assets/img/favicon.png') }}" rel="icon">
-
         <link href="https://cdnjs.cloudflare.com/ajax/libs/remixicon/4.6.0/remixicon.min.css" rel="stylesheet" integrity="sha512-XcIsjKMcuVe0Ucj/xgIXQnytNwBttJbNjltBV18IOnru2lDPe9KRRyvCXw6Y5H415vbBLRm8+q6fmLUU7DfO6Q==" crossorigin="anonymous" referrerpolicy="no-referrer" />
 
         <style>
@@ -42,7 +55,7 @@
         <!-- Scripts -->
         <script>
             (function() {
-                if (localStorage.getItem("theme") === "dark") {
+                if (localStorage.getItem("hs_theme") === "dark") {
                     document.documentElement.classList.add("dark");
                 }
             })();
@@ -54,13 +67,6 @@
     <body class="font-sans antialiased">
         {{ $slot }}
 
-
-        <!-- Supporting Components -->
-        <x-toast />
-        <x-alert-modal />
-        <x-dependencies._messageAlert />
-
-        <script src="https://cdn.jsdelivr.net/npm/flowbite@3.1.2/dist/flowbite.min.js"></script>
         <script>
             function togglePassword(id) {
                 const input = document.getElementById(id);
@@ -77,6 +83,13 @@
                 }
             }
         </script>
+
+        <!-- Supporting Components -->
+        <x-toast />
+        <x-alert-modal />
+        <x-dependencies._messageAlert />
+
+
         @stack('javascript')
         {{ $javascript ?? '' }}
     </body>

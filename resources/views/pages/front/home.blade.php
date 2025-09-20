@@ -228,19 +228,19 @@
                 </div>
             </div>
 
-            <!-- Accordion FAQ pakai Flowbite -->
-            <div class="space-y-3" id="faq-accordion" data-accordion="collapse">
+            <!-- Accordion FAQ  -->
+            <div class="hs-accordion-group space-y-3">
                 <!-- FAQ 1 -->
-                <div class="from-background/80 via-background/50 to-background/80 border-foreground/10 hover:border-primary/30 group relative overflow-hidden rounded-xl border bg-gradient-to-r backdrop-blur-sm transition-all duration-300 hover:shadow-xl">
-                    <h2 id="faq-heading-1">
-                        <button class="text-foreground hover:text-primary group-hover:from-primary/5 group-hover:to-accent/5 flex w-full items-center justify-between p-3 text-left font-semibold transition-all duration-300 group-hover:bg-gradient-to-r group-hover:via-transparent" data-accordion-target="#faq-body-1" type="button" aria-expanded="false" aria-controls="faq-body-1">
+                <div class="hs-accordion from-background/80 via-background/50 to-background/80 border-foreground/10 hover:border-primary/30 group relative overflow-hidden rounded-xl border bg-gradient-to-r backdrop-blur-sm transition-all duration-300 hover:shadow-xl" id="faq-1">
+                    <h2 class="hs-accordion-heading" id="faq-heading-1">
+                        <button class="hs-accordion-toggle text-foreground hover:text-primary group-hover:from-primary/5 group-hover:to-accent/5 flex w-full items-center justify-between p-3 text-left font-semibold transition-all duration-300 group-hover:bg-gradient-to-r group-hover:via-transparent" type="button" aria-expanded="false" aria-controls="faq-body-1">
                             <span class="text-lg md:text-xl">What is the Photochemical Reflectance Index (PRI)?</span>
                             <div class="bg-primary/10 group-hover:bg-primary/20 flex h-10 w-10 items-center justify-center rounded-full transition-all duration-300">
-                                <i class="ri-arrow-down-s-line text-xl transition-transform duration-300 peer-aria-expanded:rotate-180"></i>
+                                <i class="ri-arrow-down-s-line hs-accordion-active:rotate-180 text-xl transition-transform duration-300"></i>
                             </div>
                         </button>
                     </h2>
-                    <div class="hidden" id="faq-body-1" aria-labelledby="faq-heading-1">
+                    <div class="hs-accordion-content hidden" id="faq-body-1" aria-labelledby="faq-heading-1">
                         <div class="border-foreground/10 border-t px-3 pb-3">
                             <div class="flex items-start space-x-4 pt-4">
                                 <div class="bg-primary/20 mt-1 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full">
@@ -255,16 +255,16 @@
                 </div>
 
                 <!-- FAQ 2 -->
-                <div class="from-background/80 via-background/50 to-background/80 border-foreground/10 hover:border-primary/30 group relative overflow-hidden rounded-xl border bg-gradient-to-r backdrop-blur-sm transition-all duration-300 hover:shadow-xl">
-                    <h2 id="faq-heading-2">
-                        <button class="text-foreground hover:text-primary group-hover:from-primary/5 group-hover:to-accent/5 flex w-full items-center justify-between p-3 text-left font-semibold transition-all duration-300 group-hover:bg-gradient-to-r group-hover:via-transparent" data-accordion-target="#faq-body-2" type="button" aria-expanded="false" aria-controls="faq-body-2">
+                <div class="hs-accordion from-background/80 via-background/50 to-background/80 border-foreground/10 hover:border-primary/30 group relative overflow-hidden rounded-xl border bg-gradient-to-r backdrop-blur-sm transition-all duration-300 hover:shadow-xl" id="faq-2">
+                    <h2 class="hs-accordion-heading" id="faq-heading-2">
+                        <button class="hs-accordion-toggle text-foreground hover:text-primary group-hover:from-primary/5 group-hover:to-accent/5 flex w-full items-center justify-between p-3 text-left font-semibold transition-all duration-300 group-hover:bg-gradient-to-r group-hover:via-transparent" type="button" aria-expanded="false" aria-controls="faq-body-2">
                             <span class="text-lg md:text-xl">Why use Sentinel-2 satellite imagery?</span>
                             <div class="bg-primary/10 group-hover:bg-primary/20 flex h-10 w-10 items-center justify-center rounded-full transition-all duration-300">
-                                <i class="ri-arrow-down-s-line text-xl transition-transform duration-300 peer-aria-expanded:rotate-180"></i>
+                                <i class="ri-arrow-down-s-line hs-accordion-active:rotate-180 text-xl transition-transform duration-300"></i>
                             </div>
                         </button>
                     </h2>
-                    <div class="hidden" id="faq-body-2" aria-labelledby="faq-heading-2">
+                    <div class="hs-accordion-content hidden" id="faq-body-2" aria-labelledby="faq-heading-2">
                         <div class="border-foreground/10 border-t px-3 pb-3">
                             <div class="flex items-start space-x-4 pt-4">
                                 <div class="bg-primary/20 mt-1 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full">
@@ -279,16 +279,16 @@
                 </div>
 
                 <!-- FAQ 3 -->
-                <div class="from-background/80 via-background/50 to-background/80 border-foreground/10 hover:border-primary/30 group relative overflow-hidden rounded-xl border bg-gradient-to-r backdrop-blur-sm transition-all duration-300 hover:shadow-xl">
-                    <h2 id="faq-heading-3">
-                        <button class="text-foreground hover:text-primary group-hover:from-primary/5 group-hover:to-accent/5 flex w-full items-center justify-between p-3 text-left font-semibold transition-all duration-300 group-hover:bg-gradient-to-r group-hover:via-transparent" data-accordion-target="#faq-body-3" type="button" aria-expanded="false" aria-controls="faq-body-3">
+                <div class="hs-accordion from-background/80 via-background/50 to-background/80 border-foreground/10 hover:border-primary/30 group relative overflow-hidden rounded-xl border bg-gradient-to-r backdrop-blur-sm transition-all duration-300 hover:shadow-xl" id="faq-3">
+                    <h2 class="hs-accordion-heading" id="faq-heading-3">
+                        <button class="hs-accordion-toggle text-foreground hover:text-primary group-hover:from-primary/5 group-hover:to-accent/5 flex w-full items-center justify-between p-3 text-left font-semibold transition-all duration-300 group-hover:bg-gradient-to-r group-hover:via-transparent" type="button" aria-expanded="false" aria-controls="faq-body-3">
                             <span class="text-lg md:text-xl">What types of crops can be monitored with PRI?</span>
                             <div class="bg-primary/10 group-hover:bg-primary/20 flex h-10 w-10 items-center justify-center rounded-full transition-all duration-300">
-                                <i class="ri-arrow-down-s-line text-xl transition-transform duration-300 peer-aria-expanded:rotate-180"></i>
+                                <i class="ri-arrow-down-s-line hs-accordion-active:rotate-180 text-xl transition-transform duration-300"></i>
                             </div>
                         </button>
                     </h2>
-                    <div class="hidden" id="faq-body-3" aria-labelledby="faq-heading-3">
+                    <div class="hs-accordion-content hidden" id="faq-body-3" aria-labelledby="faq-heading-3">
                         <div class="border-foreground/10 border-t px-3 pb-3">
                             <div class="flex items-start space-x-4 pt-4">
                                 <div class="bg-primary/20 mt-1 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full">
@@ -303,16 +303,16 @@
                 </div>
 
                 <!-- FAQ 4 -->
-                <div class="from-background/80 via-background/50 to-background/80 border-foreground/10 hover:border-primary/30 group relative overflow-hidden rounded-xl border bg-gradient-to-r backdrop-blur-sm transition-all duration-300 hover:shadow-xl">
-                    <h2 id="faq-heading-4">
-                        <button class="text-foreground hover:text-primary group-hover:from-primary/5 group-hover:to-accent/5 flex w-full items-center justify-between p-3 text-left font-semibold transition-all duration-300 group-hover:bg-gradient-to-r group-hover:via-transparent" data-accordion-target="#faq-body-4" type="button" aria-expanded="false" aria-controls="faq-body-4">
+                <div class="hs-accordion from-background/80 via-background/50 to-background/80 border-foreground/10 hover:border-primary/30 group relative overflow-hidden rounded-xl border bg-gradient-to-r backdrop-blur-sm transition-all duration-300 hover:shadow-xl" id="faq-4">
+                    <h2 class="hs-accordion-heading" id="faq-heading-4">
+                        <button class="hs-accordion-toggle text-foreground hover:text-primary group-hover:from-primary/5 group-hover:to-accent/5 flex w-full items-center justify-between p-3 text-left font-semibold transition-all duration-300 group-hover:bg-gradient-to-r group-hover:via-transparent" type="button" aria-expanded="false" aria-controls="faq-body-4">
                             <span class="text-lg md:text-xl">Do I need special equipment to use this service?</span>
                             <div class="bg-primary/10 group-hover:bg-primary/20 flex h-10 w-10 items-center justify-center rounded-full transition-all duration-300">
-                                <i class="ri-arrow-down-s-line text-xl transition-transform duration-300 peer-aria-expanded:rotate-180"></i>
+                                <i class="ri-arrow-down-s-line hs-accordion-active:rotate-180 text-xl transition-transform duration-300"></i>
                             </div>
                         </button>
                     </h2>
-                    <div class="hidden" id="faq-body-4" aria-labelledby="faq-heading-4">
+                    <div class="hs-accordion-content hidden" id="faq-body-4" aria-labelledby="faq-heading-4">
                         <div class="border-foreground/10 border-t px-3 pb-3">
                             <div class="flex items-start space-x-4 pt-4">
                                 <div class="bg-primary/20 mt-1 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full">
@@ -327,16 +327,16 @@
                 </div>
 
                 <!-- FAQ 5 -->
-                <div class="from-background/80 via-background/50 to-background/80 border-foreground/10 hover:border-primary/30 group relative overflow-hidden rounded-xl border bg-gradient-to-r backdrop-blur-sm transition-all duration-300 hover:shadow-xl">
-                    <h2 id="faq-heading-5">
-                        <button class="text-foreground hover:text-primary group-hover:from-primary/5 group-hover:to-accent/5 flex w-full items-center justify-between p-3 text-left font-semibold transition-all duration-300 group-hover:bg-gradient-to-r group-hover:via-transparent" data-accordion-target="#faq-body-5" type="button" aria-expanded="false" aria-controls="faq-body-5">
+                <div class="hs-accordion from-background/80 via-background/50 to-background/80 border-foreground/10 hover:border-primary/30 group relative overflow-hidden rounded-xl border bg-gradient-to-r backdrop-blur-sm transition-all duration-300 hover:shadow-xl" id="faq-5">
+                    <h2 class="hs-accordion-heading" id="faq-heading-5">
+                        <button class="hs-accordion-toggle text-foreground hover:text-primary group-hover:from-primary/5 group-hover:to-accent/5 flex w-full items-center justify-between p-3 text-left font-semibold transition-all duration-300 group-hover:bg-gradient-to-r group-hover:via-transparent" type="button" aria-expanded="false" aria-controls="faq-body-5">
                             <span class="text-lg md:text-xl">How frequently is the data updated?</span>
                             <div class="bg-primary/10 group-hover:bg-primary/20 flex h-10 w-10 items-center justify-center rounded-full transition-all duration-300">
-                                <i class="ri-arrow-down-s-line text-xl transition-transform duration-300 peer-aria-expanded:rotate-180"></i>
+                                <i class="ri-arrow-down-s-line hs-accordion-active:rotate-180 text-xl transition-transform duration-300"></i>
                             </div>
                         </button>
                     </h2>
-                    <div class="hidden" id="faq-body-5" aria-labelledby="faq-heading-5">
+                    <div class="hs-accordion-content hidden" id="faq-body-5" aria-labelledby="faq-heading-5">
                         <div class="border-foreground/10 border-t px-3 pb-3">
                             <div class="flex items-start space-x-4 pt-4">
                                 <div class="bg-primary/20 mt-1 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full">
@@ -351,16 +351,16 @@
                 </div>
 
                 <!-- FAQ 6 -->
-                <div class="from-background/80 via-background/50 to-background/80 border-foreground/10 hover:border-primary/30 group relative overflow-hidden rounded-xl border bg-gradient-to-r backdrop-blur-sm transition-all duration-300 hover:shadow-xl">
-                    <h2 id="faq-heading-6">
-                        <button class="text-foreground hover:text-primary group-hover:from-primary/5 group-hover:to-accent/5 flex w-full items-center justify-between p-3 text-left font-semibold transition-all duration-300 group-hover:bg-gradient-to-r group-hover:via-transparent" data-accordion-target="#faq-body-6" type="button" aria-expanded="false" aria-controls="faq-body-6">
+                <div class="hs-accordion from-background/80 via-background/50 to-background/80 border-foreground/10 hover:border-primary/30 group relative overflow-hidden rounded-xl border bg-gradient-to-r backdrop-blur-sm transition-all duration-300 hover:shadow-xl" id="faq-6">
+                    <h2 class="hs-accordion-heading" id="faq-heading-6">
+                        <button class="hs-accordion-toggle text-foreground hover:text-primary group-hover:from-primary/5 group-hover:to-accent/5 flex w-full items-center justify-between p-3 text-left font-semibold transition-all duration-300 group-hover:bg-gradient-to-r group-hover:via-transparent" type="button" aria-expanded="false" aria-controls="faq-body-6">
                             <span class="text-lg md:text-xl">Is this service free or paid?</span>
                             <div class="bg-primary/10 group-hover:bg-primary/20 flex h-10 w-10 items-center justify-center rounded-full transition-all duration-300">
-                                <i class="ri-arrow-down-s-line text-xl transition-transform duration-300 peer-aria-expanded:rotate-180"></i>
+                                <i class="ri-arrow-down-s-line hs-accordion-active:rotate-180 text-xl transition-transform duration-300"></i>
                             </div>
                         </button>
                     </h2>
-                    <div class="hidden" id="faq-body-6" aria-labelledby="faq-heading-6">
+                    <div class="hs-accordion-content hidden" id="faq-body-6" aria-labelledby="faq-heading-6">
                         <div class="border-foreground/10 border-t px-3 pb-3">
                             <div class="flex items-start space-x-4 pt-4">
                                 <div class="bg-primary/20 mt-1 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full">

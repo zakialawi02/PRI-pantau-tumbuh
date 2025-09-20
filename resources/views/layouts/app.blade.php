@@ -7,21 +7,26 @@
         <meta http-equiv="X-UA-Compatible" content="ie=edge">
 
         <title>@yield('title') • {{ config('app.name') }}</title>
-        <meta content="@yield('meta_description', '') name="description">
-        <meta name="author" content="@yield('meta_author', 'Ahmad Zaki Alawi')">
 
+        <!-- SEO Meta Tags -->
+        <meta name="description" content="@yield('meta_description', '')">
+        <meta name="author" content="@yield('meta_author', 'Ahmad Zaki Alawi')">
+        <meta name="keywords" content="@yield('meta_keywords', '')">
+
+        <!-- Open Graph Meta Tags -->
         <meta property="og:title" content="@yield('og_title', config('app.name'))" />
         <meta property="og:type" content="@yield('og_type', 'website')" />
         <meta property="og:url" content="@yield('og_url', url()->current())" />
         <meta property="og:description" content="@yield('og_description', config('app.name'))" />
         <meta property="og:image" content="@yield('og_image', asset('assets/img/favicon.png'))" />
 
-        <link type="image/png" href="{{ asset('/assets/img/favicon.png') }}" rel="icon">
-
+        <!-- Other Meta Tags -->
         <meta name="robots" content="@yield('meta_robots', 'index,follow')">
         <link href="{{ url()->current() }}" rel="canonical">
 
         <meta name="csrf-token" content="{{ csrf_token() }}">
+
+        <link type="image/png" href="{{ asset('/assets/img/favicon.png') }}" rel="icon">
 
         <link href="https://cdnjs.cloudflare.com/ajax/libs/remixicon/4.6.0/remixicon.min.css" rel="stylesheet" integrity="sha512-XcIsjKMcuVe0Ucj/xgIXQnytNwBttJbNjltBV18IOnru2lDPe9KRRyvCXw6Y5H415vbBLRm8+q6fmLUU7DfO6Q==" crossorigin="anonymous" referrerpolicy="no-referrer" />
 
@@ -31,7 +36,7 @@
         <!-- Scripts -->
         <script>
             (function() {
-                if (localStorage.getItem("theme") === "dark") {
+                if (localStorage.getItem("hs_theme") === "dark") {
                     document.documentElement.classList.add("dark");
                 }
             })();
@@ -44,14 +49,13 @@
         <div class="sticky inset-x-0 top-0 z-20">
             <!-- ========== HEADER ========== -->
             <x-dashboard.app-header />
-            <!-- ========== END HEADER ========== -->
 
-            <!-- Breadcrumb Section -->
-            <div class="relative -mt-px">
-                <div class="border-foreground/30 bg-neutral z-20 border-y px-4 sm:px-6 lg:hidden lg:px-8">
+            <div class="-mt-px">
+                <!-- Breadcrumb Section -->
+                <div class="border-foreground/20 bg-neutral inset-x-0 top-0 z-20 border-y px-4 sm:px-6 lg:hidden lg:px-8">
                     <div class="flex items-center py-2">
                         <!-- Navigation Toggle -->
-                        <button class="focus:outline-hidden border-foreground/70 text-foreground hover:text-foreground/70 focus:text-foreground/70 flex size-8 items-center justify-center gap-x-2 rounded-md border" data-drawer-target="sidebar-multi-level-sidebar" data-drawer-toggle="sidebar-multi-level-sidebar" aria-controls="sidebar-multi-level-sidebar" aria-expanded="false">
+                        <button class="focus:outline-hidden border-foreground/20 text-foreground/80 hover:text-foregrounnd/55 focus:text-foregrounnd/55 flex size-8 items-center justify-center gap-x-2 rounded-lg border disabled:pointer-events-none disabled:opacity-50" data-hs-overlay="#hs-application-sidebar" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="hs-application-sidebar" aria-label="Toggle navigation">
                             <span class="sr-only">Toggle Navigation</span>
                             <i class="ri-sidebar-unfold-line text-xl"></i>
                         </button>
@@ -59,37 +63,33 @@
 
                         <!-- Breadcrumb -->
                         <x-dashboard.breadcrumb :items="generate_breadcrumbs()" />
-
-                        <!-- End Breadcrumb -->
                     </div>
                 </div>
             </div>
-            <!-- End Breadcrumb Section -->
         </div>
+        <!-- ========== END HEADER ========== -->
 
-        <!-- Sidebar -->
+        <!-- SIDEBAR -->
         <x-dashboard.app-sidebar />
-        <!-- End Sidebar -->
+        <!-- End SIDEBAR -->
 
         <!-- ========== MAIN CONTENT ========== -->
-        <!-- Content -->
-        <main class="relative min-h-screen w-full lg:ps-64">
-            <div class="space-y-1 p-2 sm:p-1">
-                <!-- your content goes here ... -->
-
+        <!-- CONTENT -->
+        <div class="w-full lg:ps-64">
+            <div class="space-y-2 p-2 sm:p-3">
                 {{ $slot }}
-
             </div>
-        </main>
-        <!-- End Content -->
+        </div>
+        <!-- End CONTENT -->
         <!-- ========== END MAIN CONTENT ========== -->
+
 
         <!-- Supporting Components -->
         <x-toast />
         <x-alert-modal />
         <x-dependencies._messageAlert />
 
-        <script src="https://cdn.jsdelivr.net/npm/flowbite@3.1.2/dist/flowbite.min.js"></script>
+
         <script>
             $(document).on("click", ".zk-delete-data", function(e) {
                 e.preventDefault();

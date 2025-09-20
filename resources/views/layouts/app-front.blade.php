@@ -19,6 +19,7 @@
         <meta property="og:image" content="@yield('og_image', asset('assets/img/favicon.png'))" />
 
         <meta name="robots" content="@yield('meta_robots', 'index,follow')">
+        <link href="{{ url()->current() }}" rel="canonical">
 
         <meta name="csrf-token" content="{{ csrf_token() }}">
 
@@ -34,7 +35,7 @@
         <!-- Scripts -->
         <script>
             (function() {
-                if (localStorage.getItem("theme") === "dark") {
+                if (localStorage.getItem("hs_theme") === "dark") {
                     document.documentElement.classList.add("dark");
                 }
             })();
@@ -59,7 +60,6 @@
         <x-alert-modal />
         <x-dependencies._messageAlert />
 
-        <script src="https://cdn.jsdelivr.net/npm/flowbite@3.1.2/dist/flowbite.min.js"></script>
         @stack('javascript')
         {{ $javascript ?? '' }}
     </body>

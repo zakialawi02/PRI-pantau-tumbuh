@@ -92,7 +92,7 @@
                             <div class="space-y-3 text-left">
                                 <div class="text-background flex justify-between">
                                     <span>Mass:</span>
-                                    <span class="text-background font-semibold">1.2 tons</span>
+                                    <span class="text-background font-semibold">{{ Number::format(1.2, locale: app()->getLocale()) }} tons</span>
                                 </div>
                                 <div class="text-background flex justify-between">
                                     <span>Orbit:</span>

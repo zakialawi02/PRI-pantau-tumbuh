@@ -25,8 +25,8 @@ Route::prefix('dashboard')->name('admin.')->group(function () {
     Route::middleware(['auth', 'verified', 'role:superadmin,admin'])->group(function () {
         Route::resource('plans', PlansController::class)->except('create', 'edit');
 
-        Route::put('/payments/{payment}/status', [PaymentController::class, 'updateStatus'])->name('payment.updateStatus');
-        Route::get('/payments/{payment}/data', [PaymentController::class, 'getPaymentData'])->name('payment.getData');
+        Route::put('/payment/{payment}/status', [PaymentController::class, 'updateStatus'])->name('payment.updateStatus');
+        Route::get('/payment/{payment}/data', [PaymentController::class, 'getPaymentData'])->name('payment.getData');
     });
 
     Route::middleware(['auth', 'verified'])->group(function () {
@@ -42,12 +42,11 @@ Route::prefix('dashboard')->name('admin.')->group(function () {
         Route::get('/payment', [PaymentController::class, 'index'])->name('payment.index');
         Route::get('/payment/{payment}', [PaymentController::class, 'showPayment'])->name('payment.show');
         Route::post('/payment/{payment}/paypal', [PaymentController::class, 'processPayPalPayment'])->name('payment.process.paypal');
-
-        // Payment gateway callback
         Route::get('/payment/callback/{gateway}', [PaymentController::class, 'handleGatewayCallback'])->name('payment.callback');
 
         // subscription
         Route::get('/my-subscription', [SubscriptionController::class, 'index'])->name('subscription.index');
+        Route::get('/subscription/{subscription}', [SubscriptionController::class, 'show'])->name('subscription.show');
     });
 });
 
@@ -90,6 +89,10 @@ Route::get('/high-resolution-pri-estimation-map-with-ai', function () {
 Route::get('/payment-success', function () {
     return view('pages.front.order.payment-success');
 });
+
+Route::get('/sandbox-payment', function () {
+    return view('pages.front.order.sandbox-payment');
+})->name('sandbox.payment');
 
 Route::get('/app/imagery', [MapController::class, 'index'])->name('appMap');
 

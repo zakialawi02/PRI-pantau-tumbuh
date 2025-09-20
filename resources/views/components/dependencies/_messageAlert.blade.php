@@ -14,9 +14,4 @@
             MyZkToast.error("{{ session('message') }}")
         </script>
     @endif
-    @if (session('provider'))
-        <script>
-            MyZkToast.error("{{ session('provider') }}")
-        </script>
-    @endif
 @endpush

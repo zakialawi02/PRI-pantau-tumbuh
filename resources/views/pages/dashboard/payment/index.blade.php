@@ -56,38 +56,43 @@
         </x-card>
     </section>
 
-    <!-- Payment Details Modal (Flowbite) -->
-    <div class="fixed left-0 right-0 top-0 z-50 hidden h-[calc(100%-1rem)] max-h-full w-full items-center justify-center overflow-y-auto overflow-x-hidden md:inset-0" id="payment-modal" data-modal-backdrop="static" data-modal-keyboard="false" aria-hidden="true" tabindex="-1">
-        <div class="relative max-h-full w-full max-w-2xl p-4">
-            <!-- Modal content -->
-            <div class="bg-background relative rounded-lg shadow">
-                <!-- Modal header -->
-                <div class="flex items-center justify-between rounded-t border-b p-4 md:p-5">
-                    <h3 class="text-base-content text-xl font-semibold">
+    <!-- Payment Details Modal  -->
+    <div class="hs-overlay z-80 pointer-events-none fixed start-0 top-0 hidden size-full overflow-y-auto overflow-x-hidden" id="payment-modal" role="dialog" aria-labelledby="payment-modal-label" tabindex="-1">
+        <div class="hs-overlay-animation-target hs-overlay-open:scale-100 hs-overlay-open:opacity-100 m-3 flex min-h-[calc(100%-56px)] scale-95 items-center opacity-0 transition-all duration-200 ease-in-out sm:mx-auto sm:w-full sm:max-w-lg">
+            <div class="shadow-2xs border-foreground/20 bg-background pointer-events-auto flex w-full flex-col rounded-xl border">
+                <div class="border-foreground/20 flex items-center justify-between border-b px-4 py-3">
+                    <h3 class="modal-title text-foreground font-semibold">
                         Payment Details
                     </h3>
-                    <button class="hover:text-base-content text-base-content-muted hover:bg-base-content/50 ms-auto inline-flex h-8 w-8 items-center justify-center rounded-lg bg-transparent text-sm" data-modal-hide="payment-modal" type="button">
-                        <svg class="h-3 w-3" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 14 14">
-                            <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m1 1 6 6m0 0 6 6M7 7l6-6M7 7l-6 6" />
+                    <button class="focus:outline-hidden hover:bg-foreground/20 focus:bg-foreground/20 text-foreground/80 inline-flex size-8 items-center justify-center gap-x-2 rounded-full border border-transparent disabled:pointer-events-none disabled:opacity-50" data-hs-overlay="#payment-modal" type="button" aria-label="Close">
+                        <span class="sr-only">Close</span>
+                        <svg class="size-4 shrink-0" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M18 6 6 18"></path>
+                            <path d="m6 6 12 12"></path>
                         </svg>
-                        <span class="sr-only">Close modal</span>
                     </button>
                 </div>
-                <!-- Modal body -->
-                <div class="space-y-4 p-4 md:p-5">
-                    <div class="flex items-center justify-center py-8" id="payment-loading">
-                        <div class="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]" role="status">
-                            <span class="!absolute !-m-px !h-px !w-px !overflow-hidden !whitespace-nowrap !border-0 !p-0 ![clip:rect(0,0,0,0)]">Loading...</span>
-                        </div>
-                        <span class="text-base-content-muted ml-2">Loading payment details...</span>
+                <div class="modal-body overflow-y-auto p-4">
+                    <div class="hidden animate-pulse" id="modal-loader-data" role="status">
+                        <div class="bg-base-content-muted mx-auto mb-4 h-2.5 w-60 rounded-full"></div>
+                        <div class="w-50 bg-base-content-muted mx-auto mb-4 h-2.5 rounded-full"></div>
+                        <span class="sr-only">Loading...</span>
                     </div>
 
-                    <div class="hidden" id="payment-content">
+                    <div class="" id="payment-content">
                         <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
                             <div class="space-y-3">
                                 <div>
                                     <label class="text-foreground block text-sm font-medium">Invoice Number</label>
                                     <p class="text-base-content text-sm" id="modal-invoice-number">-</p>
+                                </div>
+                                <div>
+                                    <label class="text-foreground block text-sm font-medium">Name of Field</label>
+                                    <p class="text-base-content text-sm" id="modal-field-name">-</p>
+                                </div>
+                                <div>
+                                    <label class="text-foreground block text-sm font-medium">Field Area</label>
+                                    <p class="text-base-content text-sm" id="modal-field-area">-</p>
                                 </div>
                                 <div>
                                     <label class="text-foreground block text-sm font-medium">Customer Name</label>
@@ -123,7 +128,7 @@
                         </div>
 
                         @if (in_array(auth()->user()->role, ['superadmin', 'admin']))
-                            <div class="border-border mt-6 border-t pt-4">
+                            <div class="border-border mt-6 border-t pt-4" id="payment-status-update">
                                 <h4 class="text-base-content mb-3 text-lg font-medium">Update Payment Status</h4>
                                 <form class="space-y-4" id="status-update-form" action="">
                                     @csrf
@@ -148,12 +153,6 @@
                             </div>
                         @endif
                     </div>
-                </div>
-                <!-- Modal footer -->
-                <div class="border-border flex items-center rounded-b border-t p-4 md:p-5">
-                    <x-button-light data-modal-hide="payment-modal" type="button" size="small">
-                        Close
-                    </x-button-light>
                 </div>
             </div>
         </div>
@@ -218,45 +217,17 @@
                         {
                             data: 'amount',
                             name: 'amount',
-                            className: 'px-3 py-2 whitespace-nowrap text-sm'
+                            className: 'px-3 py-2 whitespace-nowrap text-sm',
+                            render: function(data, type, full, meta) {
+                                return formatCurrency(data, full.currency);
+                            }
                         },
                         {
                             data: 'status',
                             name: 'status',
                             className: 'px-3 py-2 whitespace-nowrap text-sm',
                             render: function(data, type, row) {
-                                const statusConfig = {
-                                    'paid': {
-                                        class: 'bg-green-100 text-green-800',
-                                        text: 'Paid'
-                                    },
-                                    'pending': {
-                                        class: 'bg-yellow-100 text-yellow-800',
-                                        text: 'Pending'
-                                    },
-                                    'waiting_verification': {
-                                        class: 'bg-blue-100 text-blue-800',
-                                        text: 'Waiting Verification'
-                                    },
-                                    'failed': {
-                                        class: 'bg-red-100 text-red-800',
-                                        text: 'Failed'
-                                    },
-                                    'refunded': {
-                                        class: 'bg-gray-100 text-gray-800',
-                                        text: 'Refunded'
-                                    },
-                                    'chargeback': {
-                                        class: 'bg-red-100 text-red-800',
-                                        text: 'Chargeback'
-                                    },
-                                    default: {
-                                        class: 'bg-gray-100 text-gray-800',
-                                        text: 'Unknown'
-                                    }
-                                };
-
-                                const config = statusConfig[data] || statusConfig.default;
+                                const config = STATUS_CONFIG_BADGE_COLOR[data] || STATUS_CONFIG_BADGE_COLOR.default;
                                 return `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${config.class}">
                                     ${config.text}
                                 </span>`;
@@ -333,110 +304,106 @@
                     var newUrl = new URL(window.location);
                     newUrl.searchParams.set('page', currentPage);
                     newUrl.searchParams.set('limit', pageLength);
-                    window.history.replaceState({}, '', newUrl);
                 });
 
-                const paymentModal = new Modal(document.getElementById('payment-modal'), {
-                    backdrop: 'static',
-                });
-                $(document).on('click', '[data-modal-hide="payment-modal"]', function() {
-                    paymentModal.hide();
-                });
+                const modalInstance = HSOverlay.getInstance('#payment-modal', true);
+                if (modalInstance && modalInstance.element) {
+                    // Listen for the close event
+                    modalInstance.element.on('close', function() {
+                        // Remove payment_id parameter from URL if present
+                        let url = new URL(window.location);
+                        if (url.searchParams.has('payment_id')) {
+                            url.searchParams.delete('payment_id');
+                            window.history.replaceState({}, '', url);
+                        }
+                    });
+                }
 
                 // Open payment modal when .payment-status button is clicked
                 $('body').on('click', '.payment-status', function(e) {
                     e.preventDefault();
                     currentPaymentId = $(this).data('id');
 
-                    paymentModal.show();
-
                     // Show loading state
-                    $('#payment-loading').removeClass('hidden');
-                    $('#payment-content').addClass('hidden');
+                    $('#modal-loader-data').show();
+                    $('#payment-content').hide();
 
-                    // Fetch payment data
+                    // Tampilkan ID Payment di URL tanpa reload halaman
+                    let newUrl = new URL(window.location);
+                    newUrl.searchParams.set('payment_id', currentPaymentId);
+                    window.history.pushState({}, '', newUrl);
+                    openModal('#payment-modal')
+                    getPaymentStatus(currentPaymentId);
+                });
+
+                function getPaymentStatus(paymentId) {
                     $.ajax({
                         type: 'GET',
-                        url: `/dashboard/payments/${currentPaymentId}/data`,
+                        url: `{{ route('admin.payment.getData', ':payment_id') }}`.replace(':payment_id', paymentId),
+
                         success: function(response) {
                             if (response.success) {
                                 const payment = response.payment;
 
-                                // Populate modal with payment data
-                                $('#modal-invoice-number').text('#' + payment.id.substr(0, 8));
-                                $('#modal-customer-name').text(payment.name || '-');
-                                $('#modal-email').text(payment.email || '-');
-                                $('#modal-phone').text(payment.phone || '-');
-                                $('#modal-amount').text(parseFloat(payment.amount).toLocaleString('en-US', {
-                                    minimumFractionDigits: 2
-                                }) + ' ' + payment.currency.toUpperCase());
-                                $('#modal-payment-method').text(payment.payment_method.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()));
-                                $('#modal-order-date').text(formatCustomDate(payment.created_at));
-
-                                // Set status badge with proper styling
-                                const statusConfig = {
-                                    'paid': {
-                                        class: 'bg-green-100 text-green-800',
-                                        text: 'Paid'
-                                    },
-                                    'pending': {
-                                        class: 'bg-yellow-100 text-yellow-800',
-                                        text: 'Pending'
-                                    },
-                                    'waiting_verification': {
-                                        class: 'bg-blue-100 text-blue-800',
-                                        text: 'Waiting Verification'
-                                    },
-                                    'failed': {
-                                        class: 'bg-red-100 text-red-800',
-                                        text: 'Failed'
-                                    },
-                                    'refunded': {
-                                        class: 'bg-gray-100 text-gray-800',
-                                        text: 'Refunded'
-                                    },
-                                    'chargeback': {
-                                        class: 'bg-red-100 text-red-800',
-                                        text: 'Chargeback'
-                                    }
-                                };
-
-                                const status = statusConfig[payment.status] || {
-                                    class: 'bg-gray-100 text-gray-800',
-                                    text: 'Unknown'
-                                };
-
-                                let statusText = status.text;
-                                if (payment.status === 'paid' && payment.paid_at) {
-                                    statusText += ' (' + formatCustomDate(payment.paid_at) + ')';
-                                }
-
-                                $('#modal-status').attr('class', 'inline-flex px-2 py-1 text-xs font-semibold rounded-full ' + status.class).html(statusText);
-
-                                @if (in_array(auth()->user()->role, ['superadmin', 'admin']))
-                                    // Set current status in select dropdown
-                                    $('#payment-status-select').val(payment.status);
-                                @endif
-
-                                // Hide loading and show content
-                                $('#payment-loading').addClass('hidden');
-                                $('#payment-content').removeClass('hidden');
+                                parsingPaymentData(payment);
                             } else {
                                 if (MyZkToast) {
                                     MyZkToast.error('Failed to load payment data');
                                 }
-                                paymentModal.hide();
+                                closeModal('#payment-modal');
                             }
                         },
                         error: function(xhr) {
                             console.error('Error fetching payment data:', xhr);
                             if (MyZkToast) {
-                                MyZkToast.error('Failed to load payment data');
+                                MyZkToast.error(xhr?.responseJSON?.message || 'Failed to load payment data');
                             }
-                            paymentModal.hide();
+                            closeModal('#payment-modal');
+                        },
+                        complete: function() {
+                            // Hide loading state
+                            $('#modal-loader-data').hide();
+                            $('#payment-content').show();
                         }
                     });
-                });
+                }
+
+                function parsingPaymentData(paymentData) {
+                    // Populate modal with payment data
+                    $('#modal-invoice-number').text('#' + paymentData?.id.substr(0, 8));
+                    $('#modal-customer-name').text(paymentData?.name || '-');
+                    $('#modal-email').text(paymentData?.email || '-');
+                    $('#modal-phone').text(paymentData?.phone || '-');
+                    $('#modal-amount').text(formatCurrency(paymentData?.amount, paymentData?.currency));
+                    $('#modal-payment-method').text(paymentData?.payment_method.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()));
+                    $('#modal-order-date').text(formatCustomDate(paymentData?.created_at));
+
+                    $('#modal-field-area').text((formatNumber(paymentData?.field_area?.area_ha) || '-') + ' ha');
+                    $('#modal-field-name').text(paymentData?.field_area?.name || '-');
+
+                    let statusText = '';
+                    const config = STATUS_CONFIG_BADGE_COLOR[paymentData?.status] || STATUS_CONFIG_BADGE_COLOR.default;
+
+                    // If status is paid and paid_at exists, show paid_at time
+                    if (paymentData?.status === 'paid' && paymentData?.paid_at) {
+                        statusText = `${config.text} at ${formatCustomDate(paymentData?.paid_at)}`;
+                    } else {
+                        statusText = config.text;
+                    }
+
+                    $('#modal-status').removeClass().addClass('inline-flex rounded-full px-2 py-1 text-xs font-semibold ' + config.class).text(statusText);
+
+                    @if (in_array(auth()->user()->role, ['superadmin', 'admin']))
+                        $('#payment-status-select').val(paymentData?.status);
+
+
+                        if (paymentData?.status === 'expired' || paymentData?.status === 'paid') {
+                            $('#payment-status-update').hide();
+                        } else {
+                            $('#payment-status-update').show();
+                        }
+                    @endif
+                }
 
 
                 @if (in_array(auth()->user()->role, ['superadmin', 'admin']))
@@ -467,7 +434,7 @@
                             },
                             success: function(response) {
                                 if (response.success) {
-                                    paymentModal.hide();
+                                    closeModal('#payment-modal');
                                     table.ajax.reload();
 
                                     MyZkToast.success(response.message || 'Payment status updated successfully');

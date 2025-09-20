@@ -44,7 +44,7 @@
                     <div class="bg-background text-foreground divide-foreground/50 border-border w-50 absolute right-0 z-50 mt-2 hidden list-none divide-y rounded-lg border shadow-lg" id="user-dropdown">
                         <div class="px-4 py-3">
                             <span class="block text-sm font-medium">{{ Str::limit(Auth::user()->name, 25) }}</span>
-                            <span class="block truncate text-sm text-gray-500">{{ Str::limit(Auth::user()->email, 25) }}</span>
+                            <span class="text-foreground/50 block truncate text-sm">{{ Str::limit(Auth::user()->email, 25) }}</span>
                         </div>
 
                         <ul class="py-2" role="menu" aria-labelledby="user-menu-button">
@@ -118,9 +118,9 @@
     <div class="flex h-full flex-1 flex-col">
         <!-- Header -->
         <div class="bg-background flex items-center justify-between px-3 py-2 md:px-6">
-            <h1 class="text-xl font-bold md:text-2xl">{{ config('app.name') }}</h1>
+            <a class="text-lg font-bold md:text-xl" href="{{ route('home') }}">{{ config('app.name') }}</a>
             <div class="flex items-center space-x-2 rounded-md">
-                <x-text-input size="small" placeholder="Search..." />
+                <x-text-input class="p-1" size="small" placeholder="Search..." />
             </div>
 
             <!-- Nav Menu -->
@@ -173,20 +173,20 @@
             <div class="bg-background shadow-r-lg responsive-drawer fixed bottom-0 left-0 right-0 z-50 h-[50vh] max-h-[50vh] w-full overflow-hidden transition-all duration-300 ease-in-out md:relative md:inset-auto md:z-auto md:block md:h-full md:max-h-full md:w-80" id="drawer-sidebar-left-panel1" data-drawer-state="open" data-drawer-placement="left" data-drawer-edge="true" aria-labelledby="drawer-sidebar-left-panel1-label" tabindex="-1">
                 <div class="w-81 flex h-full min-w-full flex-col p-2 md:min-w-8" id="drawer-sidebar-left-panel1-label">
                     <!-- Header drawer -->
-                    <div class="mb-2 flex items-center justify-between">
+                    <div class="mb-2 flex items-center justify-between px-3">
                         <h2 class="text-lg font-semibold">My Data</h2>
-                        <button class="hover:text-primary/80 text-gray-500" data-drawer-hide="drawer-sidebar-left-panel1" type="button">✕</button>
+                        <button class="hover:text-primary/80 text-foreground/50" data-drawer-hide="drawer-sidebar-left-panel1" type="button">✕</button>
                     </div>
                     <!-- Drawer content -->
                     <div class="flex-1 space-y-3 overflow-y-auto">
                         <div class="flex flex-col items-center justify-center py-8 text-center">
                             <div class="mb-6">
                                 <div class="bg-muted mx-auto flex h-20 w-20 items-center justify-center rounded-full">
-                                    <i class="ri-database-2-line text-3xl text-gray-400"></i>
+                                    <i class="ri-database-2-line text-foreground/80 text-3xl"></i>
                                 </div>
                             </div>
-                            <h3 class="mb-2 text-lg font-semibold text-gray-700">No Data Available</h3>
-                            <p class="mb-6 px-4 text-sm text-gray-500">
+                            <h3 class="text-foreground/70 mb-2 text-lg font-semibold">No Data Available</h3>
+                            <p class="text-foreground/50 mb-6 px-4 text-sm">
                                 You don't have any satellite imagery data yet. Purchase satellite imagery to start monitoring your crops and analyzing plant stress using PRI.
                             </p>
                             @auth
@@ -208,9 +208,9 @@
             <!-- Left Panel2 - Responsive Flowbite Drawer -->
             <div class="bg-background shadow-r-lg responsive-drawer fixed bottom-0 left-0 right-0 z-50 h-0 max-h-[50vh] w-full overflow-hidden transition-all duration-300 ease-in-out md:relative md:inset-auto md:z-auto md:block md:h-full md:max-h-full md:w-0" id="drawer-sidebar-left-panel2" data-drawer-state="closed" data-drawer-placement="left" data-drawer-edge="true" aria-labelledby="drawer-sidebar-left-panel2-label" tabindex="-1">
                 <div class="flex h-full min-w-full flex-col p-2 md:min-w-80" id="drawer-sidebar-left-panel2-label">
-                    <div class="mb-2 flex items-center justify-between">
+                    <div class="mb-2 flex items-center justify-between px-3">
                         <h2 class="text-lg font-semibold">Analytics</h2>
-                        <button class="hover:text-primary/80 text-gray-500" data-drawer-hide="drawer-sidebar-left-panel2" type="button">
+                        <button class="hover:text-primary/80 text-foreground/50" data-drawer-hide="drawer-sidebar-left-panel2" type="button">
                             ✕
                         </button>
                     </div>
@@ -306,15 +306,15 @@
                 <!-- Header drawer -->
                 <div class="mb-2 flex items-center justify-between">
                     <h2 class="text-lg font-semibold">Purchase a field</h2>
-                    <button class="hover:text-primary/80 close-panel-btn text-gray-500" id="buyingPanelCloseBtn" data-drawer-hide="drawer-sidebar-left-panel1" type="button">✕</button>
+                    <button class="hover:text-primary/80 close-panel-btn text-foreground/50" id="buyingPanelCloseBtn" data-drawer-hide="drawer-sidebar-left-panel1" type="button">✕</button>
                 </div>
                 <!-- Drawer content -->
                 <div class="flex h-full max-h-96 flex-1 flex-col overflow-hidden">
                     <div class="mb-8 flex-1 space-y-3 overflow-y-auto px-1">
                         <!-- Draw Polygon Section -->
-                        <div class="flex flex-col items-center justify-center py-4 text-center">
+                        <div class="flex flex-col items-center justify-center py-2 text-center">
                             <div class="mb-2">
-                                <h3 class="mb-3 text-lg font-semibold text-gray-700">Purchase Satellite Imagery</h3>
+                                <h3 class="text-foreground/70 mb-3 text-lg font-semibold">Purchase Satellite Imagery</h3>
                                 <p class="mb-3 text-xs text-gray-600">Draw a polygon on the map to define your area of interest for satellite imagery analysis.</p>
                                 <x-button-primary id="drawPolygonBtn" type="button" size="small">
                                     <i class="ri-pencil-line"></i>
@@ -325,7 +325,7 @@
                             <!-- GeoJSON Output -->
                             <div class="w-full">
                                 <div class="border-muted mt-3 max-h-11 w-full overflow-auto rounded border bg-gray-50 p-2 text-xs" id="drawerGeojson">
-                                    <span class="text-gray-500">Polygon coordinates will appear here...</span>
+                                    <span class="text-foreground/50">Polygon coordinates will appear here...</span>
                                 </div>
                             </div>
                         </div>
@@ -352,7 +352,7 @@
                                     <div class="space-y-2">
                                         <x-input-label class="text-sm font-medium" for="luas">Area</x-input-label>
                                         <div class="border-muted rounded border bg-gray-50 p-2 text-sm" id="measurementOutput">
-                                            <div class="flex items-center text-gray-500">
+                                            <div class="text-foreground/50 flex items-center">
                                                 <i class="ri-crop-line mr-2"></i>
                                                 <span>Calculate area...</span>
                                             </div>
@@ -371,8 +371,9 @@
                                                     @endphp
                                                     @foreach ($sortedPlans as $index => $plan)
                                                         @php $hasVisiblePlans = true; @endphp
-                                                        <option data-price="{{ $plan->price_per_hectare }}" value="{{ $plan->id }}" {{ $plan->id === $lowestPricePlan->id ? 'selected' : '' }}>
-                                                            {{ $plan->name }} - {{ $plan->currency }} {{ number_format($plan->price_per_hectare, 2) }}/ha
+                                                        <option data-price="{{ $plan->price_per_hectare }}" data-currency="{{ $plan->currency }}" value="{{ $plan->id }}" {{ $plan->id === $lowestPricePlan->id ? 'selected' : '' }}>
+
+                                                            {{ $plan->name }} - {{ Number::currency($plan->price_per_hectare, $plan->currency, app()->getLocale()) }} / ha
                                                         </option>
                                                     @endforeach
                                                     @if (!$hasVisiblePlans)
@@ -619,6 +620,7 @@
                 const planSelect = document.getElementById('plan_id');
                 const selectedOption = planSelect.options[planSelect.selectedIndex];
                 const pricePerHectare = parseFloat(selectedOption.dataset.price) || 0;
+                const currencyCode = selectedOption.dataset.currency || 'USD'; // Get currency code from data attribute
 
                 // Get area from global variable (set when polygon is drawn)
                 const areaInSquareMeters = window.geojsonArea || 0;
@@ -633,11 +635,11 @@
                 if (areaInHectares > 0 && pricePerHectare > 0) {
                     totalPriceElement.innerHTML = `
                         <div class="flex justify-between items-center">
-                            <span class="text-lg font-bold text-green-700">US$${totalPrice.toFixed(2)}</span>
+                            <span class="text-lg font-bold text-green-700">${formatCurrency(totalPrice, currencyCode)}</span>
                             <i class="ri-money-dollar-circle-line text-green-600 text-xl"></i>
                         </div>
                         <div class="text-xs text-gray-600 mt-1">
-                            ${areaInHectares.toFixed(4)} hectares × US$${pricePerHectare.toFixed(2)}/hectare
+                            ${formatNumber(areaInHectares)} hectares × ${formatCurrency(pricePerHectare, currencyCode)}/hectare
                         </div>
                     `;
                     priceContainer.classList.remove('bg-muted/60', 'border-muted');
@@ -659,7 +661,7 @@
                     priceContainer.classList.add('bg-amber-50', 'border-amber-300');
                 } else {
                     totalPriceElement.innerHTML = `
-                        <div class="flex items-center text-gray-500">
+                        <div class="flex items-center text-foreground/50">
                             <i class="ri-information-line mr-2"></i>
                             Draw an area to calculate price
                         </div>

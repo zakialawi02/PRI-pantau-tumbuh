@@ -18,6 +18,158 @@ use Illuminate\Support\Facades\Log;
 
 class PaymentController extends Controller
 {
+
+    public function index()
+    {
+        if (request()->ajax()) {
+            $user = Auth::user();
+            $query = Payment::with(['subscription', 'subscription.user', 'subscription.plan']);
+
+            // Role-based filtering
+            if ($user->role === 'user') {
+                // Users can only see their own payments
+                $query->whereHas('subscription', function ($q) use ($user) {
+                    $q->where('user_id', $user->id);
+                });
+            }
+            // superadmin and admin can see all payments (no additional filtering needed)
+
+            return DataTables::of($query)
+                ->addIndexColumn()
+                ->addColumn('action', function ($data) use ($user) {
+                    $actions = '';
+                    if ($user->role === 'user') {
+                        $actions = '<a href="' . route('admin.payment.show', $data->id) . '" class="inline-flex items-center px-2 py-1 text-xs text-white bg-secondary/80 rounded-full hover:bg-secondary/60 border border-transparent focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-info" title="View Details">';
+                        $actions .= '<i class="ri-eye-line mr-1"></i> View';
+                        $actions .= '</a>';
+                    } else if (in_array($user->role, ['superadmin', 'admin'])) {
+                        $actions .= ' <button type="button" class="inline-flex items-center px-2 py-1 ml-1 text-xs text-white bg-secondary/80 rounded-full hover:bg-secondary/60 border border-transparent focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-info payment-status" data-id="' . $data->id . '" data-modal-target="payment-modal" data-modal-toggle="payment-modal" title="Update Status">';
+                        $actions .= '<i class="ri-eye-line mr-1"></i> View';
+                        $actions .= '</button>';
+                    }
+
+                    return $actions;
+                })
+                ->addColumn('customer_name', function ($data) {
+                    return $data->subscription->user->name ?? $data->name ?? '-';
+                })
+                ->addColumn('invoice_number', function ($data) {
+                    return '#' . substr($data->id, 0, 8);
+                })
+                ->editColumn('status', function ($data) {
+                    return $data->checkAndMarkAsExpired;
+                })
+                ->editColumn('payment_method', function ($data) {
+                    return ucwords(str_replace('_', ' ', $data->payment_method ?? 'Manual'));
+                })
+                ->rawColumns(['action', 'due_date'])
+                ->removeColumn(['id', 'subscription_id', 'updated_at'])
+                ->make(true);
+        }
+
+        $data = [
+            'title' => 'Payment Management',
+        ];
+
+        return view('pages.dashboard.payment.index', compact('data'));
+    }
+
+    public function showPayment($payment)
+    {
+        $payment = Payment::with(['subscription.plan', 'subscription.fieldArea', 'subscription.user'])
+            ->findOrFail($payment);
+
+        $user = Auth::user();
+
+        // If user role is 'user', they can only view their own payments
+        if ($user->role === 'user') {
+            if ($payment->subscription->user_id !== $user->id) {
+                abort(403, 'Unauthorized access to this payment.');
+            }
+        }
+
+        $data = [
+            'title' => 'Payment Order',
+        ];
+
+        return view('pages.dashboard.payment.payment-order', compact('data', 'payment'));
+    }
+
+    public function getPaymentData($id)
+    {
+        // Additional authorization check
+        $user = Auth::user();
+        if (!in_array($user->role, ['superadmin', 'admin'])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized access'
+            ], 403);
+        }
+
+        $payment = Payment::with(['subscription', 'subscription.user', 'subscription.plan', 'subscription.fieldArea', 'verifier'])->findOrFail($id);
+
+        return response()->json([
+            'success' => true,
+            'payment' => [
+                'id' => $payment->id,
+                'status' => $payment->checkAndMarkAsExpired,
+                'amount' => $payment->amount,
+                'currency' => $payment->currency,
+                'name' => $payment->name,
+                'email' => $payment->email,
+                'phone' => $payment->phone,
+                'payment_method' => $payment->payment_method,
+                'due_date' => $payment->due_date ? $payment->due_date->format('Y-m-d H:i:s') : null,
+                'paid_at' => $payment->paid_at ? $payment->paid_at->format('Y-m-d H:i:s') : null,
+                'created_at' => $payment->created_at->format('Y-m-d H:i:s'),
+                'subscription' => $payment->subscription->only('id', 'user_id', 'plan_id', 'field_area_id', 'status', 'start_date', 'due_date'),
+                'field_area' => $payment->subscription->fieldArea->only('id', 'name', 'area_ha'),
+                'verifier' => $payment->verifier ? $payment->verifier->only('id', 'name', 'email', 'phone', 'created_at', 'updated_at') : null,
+            ]
+        ], 200);
+    }
+
+
+    public function updateStatus(Request $request, $id)
+    {
+        // Additional authorization check
+        $user = Auth::user();
+        if (!in_array($user->role, ['superadmin', 'admin'])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized access'
+            ], 403);
+        }
+
+        $request->validate([
+            'status' => 'required|in:pending,waiting_verification,paid,failed,refunded,chargeback',
+        ]);
+
+        $payment = Payment::findOrFail($id);
+        $oldStatus = $payment->status;
+
+        $payment->update([
+            'status' => $request->status,
+            'verified_at' => $request->status === 'paid' ? now() : null,
+            'verified_by' => $request->status === 'paid' ? Auth::id() : null,
+            'paid_at' => $request->status === 'paid' ? now() : $payment->paid_at,
+        ]);
+
+        // Update subscription status if payment is paid
+        if ($request->status === 'paid' && $oldStatus !== 'paid') {
+            $payment->subscription->update([
+                // 'start_date' => now(),
+                'status' => 'active',
+            ]);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Payment status updated successfully',
+            'payment' => $payment
+        ]);
+    }
+
     public function mapOrder(Request $request)
     {
         $request->validate([
@@ -183,83 +335,6 @@ class PaymentController extends Controller
         }
     }
 
-    public function index()
-    {
-
-        if (request()->ajax()) {
-            $user = Auth::user();
-            $query = Payment::with(['subscription', 'subscription.user', 'subscription.plan']);
-
-            // Role-based filtering
-            if ($user->role === 'user') {
-                // Users can only see their own payments
-                $query->whereHas('subscription', function ($q) use ($user) {
-                    $q->where('user_id', $user->id);
-                });
-            }
-            // superadmin and admin can see all payments (no additional filtering needed)
-
-            return DataTables::of($query)
-                ->addIndexColumn()
-                ->addColumn('action', function ($data) use ($user) {
-                    $actions = '';
-                    if ($user->role === 'user') {
-                        $actions = '<a href="' . route('admin.payment.show', $data->id) . '" class="inline-flex items-center px-2 py-1 text-sm font-medium text-background bg-info border border-transparent rounded-md hover:bg-info/80 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-info" title="View Details">';
-                        $actions .= '<i class="ri-eye-fill"></i>';
-                        $actions .= '</a>';
-                    } else if (in_array($user->role, ['superadmin', 'admin'])) {
-                        $actions .= ' <button type="button" class="inline-flex items-center px-2 py-1 ml-1 text-sm font-medium text-background bg-info border border-transparent rounded-md hover:bg-info/80 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-info payment-status" data-id="' . $data->id . '" data-modal-target="payment-modal" data-modal-toggle="payment-modal" title="Update Status">';
-                        $actions .= '<i class="ri-eye-fill"></i>';
-                        $actions .= '</button>';
-                    }
-
-                    return $actions;
-                })
-                ->addColumn('customer_name', function ($data) {
-                    return $data->subscription->user->name ?? $data->name ?? '-';
-                })
-                ->addColumn('invoice_number', function ($data) {
-                    return '#' . substr($data->id, 0, 8);
-                })
-                ->editColumn('amount', function ($data) {
-                    return '<span class="font-medium text-base-content">' . number_format($data->amount, 2) . ' ' . strtoupper($data->currency) . '</span>';
-                })
-                ->editColumn('payment_method', function ($data) {
-                    return ucwords(str_replace('_', ' ', $data->payment_method ?? 'Manual'));
-                })
-                ->rawColumns(['action', 'amount', 'due_date'])
-                ->removeColumn(['id', 'subscription_id', 'updated_at'])
-                ->make(true);
-        }
-
-        $data = [
-            'title' => 'Payment Management',
-        ];
-
-        return view('pages.dashboard.payment.index', compact('data'));
-    }
-
-    public function showPayment($payment)
-    {
-        $payment = Payment::with(['subscription.plan', 'subscription.fieldArea', 'subscription.user'])
-            ->findOrFail($payment);
-
-        $user = Auth::user();
-
-        // If user role is 'user', they can only view their own payments
-        if ($user->role === 'user') {
-            if ($payment->subscription->user_id !== $user->id) {
-                abort(403, 'Unauthorized access to this payment.');
-            }
-        }
-
-        $data = [
-            'title' => 'Payment Order',
-        ];
-
-        return view('pages.dashboard.payment.payment-order', compact('data', 'payment'));
-    }
-
     /**
      * Process PayPal payment for an existing payment order
      */
@@ -322,76 +397,6 @@ class PaymentController extends Controller
             return redirect()->route('admin.payment.show', $payment->id)
                 ->with('error', 'An error occurred while processing your PayPal payment. Please try again.');
         }
-    }
-
-    public function updateStatus(Request $request, $id)
-    {
-        // Additional authorization check
-        $user = Auth::user();
-        if (!in_array($user->role, ['superadmin', 'admin'])) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Unauthorized access'
-            ], 403);
-        }
-
-        $request->validate([
-            'status' => 'required|in:pending,waiting_verification,paid,failed,refunded,chargeback',
-        ]);
-
-        $payment = Payment::findOrFail($id);
-        $oldStatus = $payment->status;
-
-        $payment->update([
-            'status' => $request->status,
-            'verified_at' => $request->status === 'paid' ? now() : null,
-            'verified_by' => $request->status === 'paid' ? Auth::id() : null,
-            'paid_at' => $request->status === 'paid' ? now() : $payment->paid_at,
-        ]);
-
-        // Update subscription status if payment is paid
-        if ($request->status === 'paid' && $oldStatus !== 'paid') {
-            $payment->subscription->update([
-                // 'start_date' => now(),
-                'status' => 'active',
-            ]);
-        }
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Payment status updated successfully',
-            'payment' => $payment
-        ]);
-    }
-
-    public function getPaymentData($id)
-    {
-        // Additional authorization check
-        $user = Auth::user();
-        if (!in_array($user->role, ['superadmin', 'admin'])) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Unauthorized access'
-            ], 403);
-        }
-
-        $payment = Payment::findOrFail($id);
-
-        return response()->json([
-            'success' => true,
-            'payment' => [
-                'id' => $payment->id,
-                'status' => $payment->status,
-                'amount' => $payment->amount,
-                'currency' => $payment->currency,
-                'name' => $payment->name,
-                'email' => $payment->email,
-                'phone' => $payment->phone,
-                'payment_method' => $payment->payment_method,
-                'paid_at' => $payment->paid_at ? $payment->paid_at->format('Y-m-d H:i:s') : null,
-                'created_at' => $payment->created_at->format('Y-m-d H:i:s')
-            ]
-        ]);
     }
 
     /**

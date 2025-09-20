@@ -1,21 +1,14 @@
 @import url("https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@300;400;500;600;700&family=Lato:ital,wght@0,100;0,300;0,400;0,700;0,900;1,100;1,300;1,400;1,700;1,900&family=Merriweather:ital,opsz,wght@0,18..144,300..900;1,18..144,300..900&family=Source+Code+Pro:ital,wght@0,200..900;1,200..900&display=swap");
 
 @import "tailwindcss";
-@import "flowbite/src/themes/default";
-@plugin "flowbite/plugin";
-@source "../../node_modules/flowbite";
+@import "../../node_modules/preline/variants.css";
+@source "../../node_modules/preline/dist/*.js";
 
 @plugin '@tailwindcss/forms';
 @plugin '@tailwindcss/typography';
 @plugin '@tailwindcss/aspect-ratio';
-@plugin 'tailwind-scrollbar';
 
-@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
-@source '../../storage/framework/views/*.php';
-@source '../**/*.blade.php';
-@source '../**/*.js';
-
-@custom-variant dark (&:is(.dark *));
+@custom-variant dark (&:where(.dark, .dark *));
 
 :root {
     --background: #f9f9fa;
@@ -26,8 +19,8 @@
     --primary-foreground: #ffffff;
     --secondary: #5fb0bb;
     --secondary-foreground: #ffffff;
-    --muted: #b7d9b8;
-    --muted-foreground: #27563a;
+    --muted: #7c9a7d;
+    --muted-foreground: #40805a;
     --accent: #d5a727;
     --accent-foreground: #f8f5f0;
     --neutral: #ffffff;
@@ -37,7 +30,7 @@
     --warning: oklch(84.71% 0.199 83.87);
     --error: oklch(71.76% 0.221 22.18);
     --border: #d4d4d4;
-    --input: #eeeeee;
+    --input: #ececec;
     --ring: #34a85a;
     --chart-1: #4caf50;
     --chart-2: #388e3c;
@@ -74,18 +67,18 @@
     --primary-foreground: #ffffff;
     --secondary: #4682b4;
     --secondary-foreground: #e5e5e5;
-    --muted: #444444;
-    --muted-foreground: #a3a3a3;
+    --muted: #686868;
+    --muted-foreground: #8b8b8b;
     --accent: #6495ed;
     --accent-foreground: #e5e5e5;
     --neutral: #2f3436;
-    --neutral-foreground: #e5f0e8;
+    --neutral-foreground: #dbe3dd;
     --info: oklch(72.06% 0.191 231.6);
     --success: oklch(64.8% 0.15 160);
     --warning: oklch(84.71% 0.199 83.87);
     --error: oklch(71.76% 0.221 22.18);
     --border: #444444;
-    --input: #444444;
+    --input: #2e2e2e;
     --ring: #34a85a;
     --chart-1: oklch(0.766 0.1179 145.295);
     --chart-2: oklch(0.7185 0.1417 144.8887);
@@ -171,15 +164,7 @@
     padding-inline: 2rem;
 }
 
-/* List styling fixes */
-ul.list-disc {
-    list-style-type: disc !important;
-    list-style-position: outside !important;
-}
-
-ul.list-disc li {
-    display: list-item !important;
-}
+@custom-variant hover (&:hover);
 
 @layer base {
     body {
@@ -226,7 +211,6 @@ ul.list-disc li {
         opacity: 0.8;
     }
 }
-@custom-variant hover (&:hover);
 
 button.btn {
     @apply px-2 py-[5px] rounded-md text-primary-foreground;

@@ -10,6 +10,7 @@ export default defineConfig({
                 "resources/css/map.css",
                 "resources/js/app.js",
                 "resources/js/app-dashboard.js",
+                "resources/js/preline-helpers.js",
                 "resources/js/map.js",
                 "resources/js/navigation.js",
             ],

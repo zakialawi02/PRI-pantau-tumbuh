@@ -36,23 +36,23 @@
 
                             <input id="order_id" name="order_id" type="hidden" value="{{ request('id') ?? '' }}" />
 
-                            <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                            <div class="grid grid-cols-1 gap-4">
                                 <!-- Nama -->
-                                <div class="md:col-span-2">
+                                <div>
                                     <x-input-label for="name">Full Name</x-input-label>
                                     <x-text-input id="name" name="name" value="{{ Auth::user()->name }}" readonly size="normal" required />
                                     <x-input-error class="mt-2" :messages="$errors->get('name')" />
                                 </div>
 
                                 <!-- Email -->
-                                <div class="md:col-span-2">
+                                <div>
                                     <x-input-label for="email">Email Address</x-input-label>
                                     <x-text-input id="email" name="email" value="{{ Auth::user()->email }}" readonly size="normal" required />
                                     <x-input-error class="mt-2" :messages="$errors->get('email')" />
                                 </div>
 
                                 <!-- Kontak -->
-                                <div class="md:col-span-2">
+                                <div>
                                     <x-input-label for="phone">Phone Number</x-input-label>
                                     <x-text-input id="phone" name="phone" value="{{ old('phone') }}" size="normal" required />
                                     <x-input-error class="mt-2" :messages="$errors->get('phone')" />
@@ -68,11 +68,11 @@
                                     <div class="border-border flex justify-between border-b pb-1">
                                         <div>
                                             <h3 class="text-foreground font-medium">{{ $data['plan']['name'] ?? 'Plan Name' }}</h3>
-                                            <p class="text-base-content-muted text-sm">{{ $data['price_currency'] ?? 'USD' }} {{ $data['price_per_hectare'] }}/ha</p>
+                                            <p class="text-base-content-muted text-sm"> {{ Number::currency($data['price_per_hectare'], $data['price_currency'], app()->getLocale()) }}/ha</p>
                                         </div>
                                         <div class="text-right">
-                                            <p class="text-foreground font-medium">{{ $data['area_hectares'] }} ha</p>
-                                            <p class="text-foreground text-lg">{{ $data['price_currency'] ?? 'USD' }} {{ $data['total_price'] }} </p>
+                                            <p class="text-foreground font-medium">{{ Number::format($data['area_hectares'], locale: app()->getLocale()) }} ha</p>
+                                            <p class="text-foreground text-lg">{{ Number::currency($data['total_price'], $data['price_currency'], app()->getLocale()) }} </p>
                                         </div>
                                     </div>
 
@@ -83,14 +83,14 @@
                                             <p class="text-base-content-muted text-sm">0%</p>
                                         </div>
                                         <div class="text-right">
-                                            <p class="text-foreground text-lg">{{ $data['price_currency'] ?? 'USD' }} 0.00</p>
+                                            <p class="text-foreground text-lg">{{ Number::currency(0, $data['price_currency'], app()->getLocale()) }}</p>
                                         </div>
                                     </div>
 
                                     <!-- Total -->
                                     <div class="flex justify-between pt-2">
                                         <h3 class="text-foreground text-lg font-semibold">Total</h3>
-                                        <p class="text-primary text-xl font-bold">{{ $data['price_currency'] ?? 'USD' }} {{ $data['total_price'] }} </p>
+                                        <p class="text-primary text-xl font-bold">{{ Number::currency($data['total_price'], $data['price_currency'], app()->getLocale()) }} </p>
                                     </div>
                                 </div>
                             </div>
@@ -176,6 +176,10 @@
         </div>
     </div>
 
+    <div class="demo-preview-banner">
+        The application is still in the demo stage, and the payment system is still in sandbox mode. <a class="text-white underline" href="{{ route('sandbox.payment') }}" target="_blank">Read here</a> to complete the sandbox payment simulation.
+    </div>
+
     @push('css')
         <link href="https://cdn.jsdelivr.net/npm/ol@v10.6.0/ol.css" rel="stylesheet">
 
@@ -183,6 +187,21 @@
             #map {
                 width: 100%;
                 height: 100%;
+            }
+
+            .demo-preview-banner {
+                position: fixed;
+                bottom: 0;
+                left: 0;
+                right: 0;
+                background-color: var(--color-warning);
+                color: var(--color-white);
+                text-align: center;
+                padding: 10px;
+                font-weight: bold;
+                font-size: 16px;
+                z-index: 1000;
+                box-shadow: 0 -2px 5px rgba(0, 0, 0, 0.2);
             }
         </style>
     @endpush
@@ -277,8 +296,8 @@
                 target: document.getElementById("coordinateDisplay"),
                 coordinateFormat: function(coordinate) {
                     const [lon, lat] = coordinate;
-                    const formattedLon = lon.toFixed(6);
-                    const formattedLat = lat.toFixed(6);
+                    const formattedLon = formatNumber(lon, document.documentElement.lang, 6);
+                    const formattedLat = formatNumber(lat, document.documentElement.lang, 6);
                     return (
                         "Long: " + formattedLon + " &nbsp&nbsp&nbsp  Lat: " + formattedLat
                     );

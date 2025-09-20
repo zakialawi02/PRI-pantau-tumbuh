@@ -27,8 +27,8 @@ class UserController extends Controller
             return DataTables::of($query)
                 ->addIndexColumn()
                 ->addColumn('action', function ($data) {
-                    return '<button href="#" class="btn bg-primary editUser" data-id="' . $data->id . ' "><span class="ri-edit-box-line" title="Edit"></span></button>
-                <button type="submit" class="btn bg-error deleteUser" data-id="' . $data->id . ' "><span class="ri-delete-bin-line" title="Delete"></span></button>';
+                    return '<button href="#" class="btn bg-primary edit-user" data-id="' . $data->id . ' "><span class="ri-edit-box-line" title="Edit"></span></button>
+                <button type="submit" class="btn bg-error delete-user" data-id="' . $data->id . ' "><span class="ri-delete-bin-line" title="Delete"></span></button>';
                 })
                 ->addColumn('photo', function ($data) {
                     return '<img src="' . asset($data->profile_photo_path) . '" width="30">';
@@ -55,7 +55,7 @@ class UserController extends Controller
     {
         $validated = $request->validate([
             'name' => 'required|max:255',
-            'username' => 'required|min:4|max:25|alpha_dash|unique:users,username',
+            'username' => 'required|min:4|max:25|alpha_num|lowercase|unique:users,username',
             'role' => 'required|in:' . $this->roles,
             'email' => 'required|email|unique:users,email',
             'email_verified_at' => 'nullable',
@@ -86,9 +86,9 @@ class UserController extends Controller
     {
         $validated = $request->validate([
             'name' => 'required|max:255',
-            'username' => 'required|min:4|max:25|alpha_dash|unique:users,username,' . $user?->id,
+            'username' => 'required|min:4|max:25|alpha_num|lowercase|unique:users,username,' . $user?->id,
             'role' => 'required|in:' . $this->roles,
-            'email' => 'required|email|unique:users,email,' . $user?->id,
+            'email' => 'required|email|indisposable|unique:users,email,' . $user?->id,
             'email_verified_at' => 'nullable',
             'password' => 'nullable|min:6',
         ]);
@@ -139,9 +139,16 @@ class UserController extends Controller
      */
     public function destroy(User $user)
     {
-        $admin = User::where('username', 'admin')->first();
+        // Check if the user is admin or superadmin
+        if (in_array($user->username, ['admin', 'superadmin'])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Admin or Superadmin username cannot be deleted.',
+                'errors' => 'Forbidden: Admin or Superadmin username cannot be deleted.',
+            ], 403);
+        }
 
-        User::where('id', $user->id)->delete();
+        $user->delete();
 
         return response()->json(['message' => 'User deleted successfully']);
     }
