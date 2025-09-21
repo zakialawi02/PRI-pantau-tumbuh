@@ -71,8 +71,6 @@
             }
 
             .order-row {
-                display: flex;
-                justify-content: space-between;
                 padding: 8px 0;
                 border-bottom: 1px solid #e9ecef;
             }
@@ -100,6 +98,42 @@
                 background-color: #d4edda;
                 color: #155724;
             }
+
+            /* Table styles for email compatibility */
+            .email-table {
+                width: 100%;
+                border-collapse: collapse;
+            }
+
+            .email-table td {
+                padding: 8px 0;
+            }
+
+            .email-table .label {
+                font-weight: bold;
+            }
+
+            .email-table .value {
+                text-align: right;
+            }
+
+            .summary-table {
+                width: 100%;
+                border-collapse: collapse;
+                margin: 10px 0;
+            }
+
+            .summary-table td {
+                padding: 5px 0;
+            }
+
+            .text-right {
+                text-align: right;
+            }
+
+            .text-center {
+                text-align: center;
+            }
         </style>
     </head>
 
@@ -119,59 +153,65 @@
                 </p>
 
                 <div class="order-details">
-                    <div class="order-row">
-                        <strong>Order Number:</strong>
-                        <span>#{{ substr($payment->id, 0, 8) }}</span>
-                    </div>
-                    <div class="order-row">
-                        <strong>Order Date:</strong>
-                        <span>{{ $payment->created_at->format('F j, Y H:i') }}</span>
-                    </div>
-                    <div class="order-row">
-                        <strong>Payment Method:</strong>
-                        <span>
-                            @if ($payment->payment_method === 'bank_transfer')
-                                Bank Transfer
-                            @elseif($payment->payment_method === 'paypal')
-                                PayPal
-                            @else
-                                {{ ucfirst(str_replace('_', ' ', $payment->payment_method)) }}
-                            @endif
-                        </span>
-                    </div>
-                    <div class="order-row">
-                        <strong>Status:</strong>
-                        <span class="status-badge status-{{ $payment->status }}">{{ ucfirst(str_replace('_', ' ', $payment->status)) }}</span>
-                    </div>
-                    @if ($payment->due_date)
-                        <div class="order-row">
-                            <strong>Payment Due:</strong>
-                            <span>{{ $payment->due_date->format('F j, Y H:i') }}</span>
-                        </div>
-                    @endif
+                    <table class="email-table">
+                        <tr class="order-row">
+                            <td class="label">Order Number:</td>
+                            <td class="value">#{{ substr($payment->id, 0, 8) }}</td>
+                        </tr>
+                        <tr class="order-row">
+                            <td class="label">Order Date:</td>
+                            <td class="value">{{ $payment->created_at->format('F j, Y H:i') }}</td>
+                        </tr>
+                        <tr class="order-row">
+                            <td class="label">Payment Method:</td>
+                            <td class="value">
+                                @if ($payment->payment_method === 'bank_transfer')
+                                    Bank Transfer
+                                @elseif($payment->payment_method === 'paypal')
+                                    PayPal
+                                @else
+                                    {{ ucfirst(str_replace('_', ' ', $payment->payment_method)) }}
+                                @endif
+                            </td>
+                        </tr>
+                        <tr class="order-row">
+                            <td class="label">Status:</td>
+                            <td class="value">
+                                <span class="status-badge status-{{ $payment->status }}">{{ ucfirst(str_replace('_', ' ', $payment->status)) }}</span>
+                            </td>
+                        </tr>
+                        @if ($payment->due_date)
+                            <tr class="order-row">
+                                <td class="label">Payment Due:</td>
+                                <td class="value">{{ $payment->due_date->format('F j, Y H:i') }}</td>
+                            </tr>
+                        @endif
+                    </table>
                 </div>
 
                 <h3>Order Summary</h3>
                 <div class="order-details">
-                    <div class="order-row">
-                        <div>
-                            <span>Plan: {{ $payment->subscription->plan->name }}</span>
-                            <br>
-                            <span style="color: #858585; font-size: 14px;">Field: {{ $payment->subscription->fieldArea->name }}</span>
-                        </div>
-                        <span>{{ Number::format($payment->subscription->fieldArea->area_ha, locale: app()->getLocale()) }} ha</span>
-                    </div>
-                    <div class="order-row">
-                        <span>Rate per Hectare</span>
-                        <span>{{ Number::currency($payment->subscription->price_per_hectare, $payment->currency, app()->getLocale()) }}</span>
-                    </div>
-                    <div class="order-row">
-                        <strong>Total</strong>
-                        <strong class="order-total">{{ Number::currency($payment->amount, $payment->currency, app()->getLocale()) }}</strong>
-                    </div>
+                    <table class="summary-table">
+                        <tr class="order-row">
+                            <td>
+                                <span>Plan: {{ $payment->subscription->plan->name }}</span>
+                                <br>
+                                <span style="color: #858585; font-size: 14px;">Field: {{ $payment->subscription->fieldArea->name }}</span>
+                            </td>
+                            <td class="text-right">{{ Number::format($payment->subscription->fieldArea->area_ha, locale: app()->getLocale()) }} ha</td>
+                        </tr>
+                        <tr class="order-row">
+                            <td>Rate per Hectare</td>
+                            <td class="text-right">{{ Number::currency($payment->subscription->price_per_hectare, $payment->currency, app()->getLocale()) }}</td>
+                        </tr>
+                        <tr class="order-row">
+                            <td><strong>Total</strong></td>
+                            <td class="text-right"><strong class="order-total">{{ Number::currency($payment->amount, $payment->currency, app()->getLocale()) }}</strong></td>
+                        </tr>
+                    </table>
                 </div>
 
-                <p>
+                <p class="text-center">
                     <a class="button" href="{{ route('admin.payment.show', $payment->id) }}">View Order Details</a>
                 </p>
 
