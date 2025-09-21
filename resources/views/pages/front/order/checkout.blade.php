@@ -137,28 +137,6 @@
                                 <x-input-error class="mt-2" :messages="$errors->get('payment_method')" />
                             </div>
 
-                            <!-- Additional fields for bank transfer -->
-                            <div class="mt-6 hidden" id="bankTransferFields">
-                                <h3 class="border-border text-foreground border-b pb-3 text-lg font-semibold">Bank Transfer Details</h3>
-                                <div class="mt-3 grid grid-cols-1 gap-4 md:grid-cols-2">
-                                    <div>
-                                        <x-input-label for="bank_name">Bank Name</x-input-label>
-                                        <x-text-input id="bank_name" name="bank_name" value="{{ old('bank_name') }}" size="normal" />
-                                        <x-input-error class="mt-2" :messages="$errors->get('bank_name')" />
-                                    </div>
-                                    <div>
-                                        <x-input-label for="account_name">Account Name</x-input-label>
-                                        <x-text-input id="account_name" name="account_name" value="{{ old('account_name') }}" size="normal" />
-                                        <x-input-error class="mt-2" :messages="$errors->get('account_name')" />
-                                    </div>
-                                    <div class="md:col-span-2">
-                                        <x-input-label for="account_number">Account Number</x-input-label>
-                                        <x-text-input id="account_number" name="account_number" value="{{ old('account_number') }}" size="normal" />
-                                        <x-input-error class="mt-2" :messages="$errors->get('account_number')" />
-                                    </div>
-                                </div>
-                            </div>
-
                             <!-- Tombol -->
                             <div class="mt-8">
                                 <x-button-primary class="w-full py-3 text-base" type="submit">
@@ -210,18 +188,6 @@
         <script src="https://cdn.jsdelivr.net/npm/ol@v10.6.0/dist/ol.js"></script>
 
         <script>
-            // Show/hide bank transfer fields based on payment method selection
-            document.querySelectorAll('input[name="payment_method"]').forEach(radio => {
-                radio.addEventListener('change', function() {
-                    const bankTransferFields = document.getElementById('bankTransferFields');
-                    if (this.value === 'bank_transfer') {
-                        bankTransferFields.classList.remove('hidden');
-                    } else {
-                        bankTransferFields.classList.add('hidden');
-                    }
-                });
-            });
-
             let Map = ol.Map;
             let View = ol.View;
             let Source = ol.source.ImageTile;

@@ -228,11 +228,11 @@
                                     </div>
                                 </div>
                                 @if (isset($payment->due_date))
-                                    <p class="mt-3 text-sm text-blue-700">
+                                    <p class="text-secondary mt-3 text-sm">
                                         <strong>Payment Due:</strong> Please complete payment by {{ $payment->due_date->isoFormat('LL, HH:mm') }}.
                                     </p>
                                 @endif
-                                <p class="mt-3 text-sm text-blue-700">
+                                <p class="text-secondary mt-3 text-sm">
                                     <strong>Note:</strong> After transfer, please upload your payment proof below for admin verification.
                                 </p>
                             @else
@@ -246,7 +246,7 @@
                                 <h4 class="text-info mb-2 font-semibold">PayPal Payment</h4>
                                 <p class="text-blue-800">Click the button below to proceed with your PayPal payment.</p>
                                 @if (isset($payment->due_date))
-                                    <p class="mt-2 text-sm text-blue-700">Payment due by: {{ $payment->due_date->isoFormat('LL, HH:mm') }}</p>
+                                    <p class="text-secondary mt-2 text-sm">Payment due by: {{ $payment->due_date->isoFormat('LL, HH:mm') }}</p>
                                 @endif
                                 <div class="mt-4">
                                     @if ($payment->status === 'pending')
@@ -292,9 +292,9 @@
                         @else
                             <p class="text-blue-800">Payment Method: <span class="font-semibold">{{ ucfirst($payment->payment_method) }}</span></p>
                             @if (isset($payment->due_date))
-                                <p class="mt-2 text-sm text-blue-700">Payment due by: {{ \Carbon\Carbon::parse($payment->due_date)->format('F d, Y H:i') }}</p>
+                                <p class="text-secondary mt-2 text-sm">Payment due by: {{ \Carbon\Carbon::parse($payment->due_date)->format('F d, Y H:i') }}</p>
                             @endif
-                            <p class="mt-2 text-sm text-blue-700">Please proceed with payment through the related gateway.</p>
+                            <p class="text-secondary mt-2 text-sm">Please proceed with payment through the related gateway.</p>
                         @endif
                     </div>
                 </div>
@@ -304,7 +304,7 @@
                     <div class="mb-8">
                         <h3 class="text-base-content mb-4 text-lg font-semibold">Upload Payment Proof</h3>
                         <div class="border-border bg-base-content-muted/20 rounded-lg border-2 border-dashed p-6">
-                            <form class="space-y-4" action="{{ url('/checkout/' . $payment->id . '/upload-proof') }}" method="POST" enctype="multipart/form-data">
+                            <form class="space-y-4" id="upload-proof-form" action="{{ route('admin.payment.uploadProof', $payment->id) }}" method="POST" enctype="multipart/form-data">
                                 @csrf
                                 <div class="grid gap-4 md:grid-cols-2">
                                     <div>
@@ -325,16 +325,30 @@
                                 </div>
                                 <div>
                                     <label class="text-foreground mb-2 block text-sm font-medium">Upload Transfer Receipt</label>
-                                    <input class="border-border file:bg-info/20 hover:file:bg-info/50 focus:ring-info w-full rounded-md border px-3 py-2 file:mr-4 file:rounded-md file:border-0 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-blue-700 focus:border-transparent focus:outline-none focus:ring-2" name="proof_image" type="file" accept="image/*" required>
-                                    <p class="text-base-content-muted/200 mt-1 text-xs">Accepted formats: JPG, PNG, PDF (Max: 1MB)</p>
+                                    <input class="border-border file:bg-info/20 hover:file:bg-info/50 focus:ring-info file:text-secondary w-full rounded-md border px-3 py-2 file:mr-4 file:rounded-md file:border-0 file:px-4 file:py-2 file:text-sm file:font-semibold focus:border-transparent focus:outline-none focus:ring-2" id="proof_image" name="proof_image" type="file" accept="image/*" required>
+                                    <p class="text-base-content-muted/200 mt-1 text-xs">Accepted formats: JPG, PNG, GIF, SVG (Max: 1MB)</p>
                                     <x-input-error class="mt-2" :messages="$errors->get('proof_image')" />
                                 </div>
-                                <x-button-primary class="w-full">
+                                <x-button-primary class="w-full" id="upload-button" type="submit">
                                     Upload Payment Proof
                                 </x-button-primary>
                             </form>
                         </div>
                     </div>
+
+                    <script>
+                        document.getElementById('upload-proof-form').addEventListener('submit', function(e) {
+                            const fileInput = document.getElementById('proof_image');
+                            const file = fileInput.files[0];
+                            const maxSize = 1 * 1024 * 1024; // 1MB in bytes
+
+                            if (file && file.size > maxSize) {
+                                e.preventDefault();
+                                alert('File size exceeds 1MB limit. Please choose a smaller file.');
+                                return false;
+                            }
+                        });
+                    </script>
                 @endif
 
                 <!-- Footer -->

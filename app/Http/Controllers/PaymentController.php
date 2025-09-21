@@ -11,7 +11,10 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Mail;
 use Yajra\DataTables\Facades\DataTables;
+use App\Mail\OrderConfirmation;
+use App\Mail\PaymentConfirmation;
 use App\Services\PaymentGatewayFactory;
 use Exception;
 use Illuminate\Support\Facades\Log;
@@ -170,6 +173,62 @@ class PaymentController extends Controller
         ]);
     }
 
+    // Method to handle payment proof upload
+    public function uploadProof(Request $request, $paymentId)
+    {
+        $request->validate([
+            'bank_name' => 'required|string|max:100',
+            'account_number' => 'required|numeric',
+            'account_name' => 'required|string|max:100',
+            'proof_image' => 'required|image|mimes:jpeg,png,jpg,gif,svg|max:724',
+        ]);
+
+        $payment = Payment::findOrFail($paymentId);
+
+        // Check if payment is still pending and not expired
+        if ($payment->status !== 'pending' || ($payment->due_date && now()->isAfter($payment->due_date))) {
+            return redirect()->route('admin.payment.show', $payment->id)
+                ->with('error', 'This payment cannot be updated.');
+        }
+
+        // Check if payment method is bank transfer or manual
+        if (!in_array($payment->payment_method, ['bank_transfer', 'manual'])) {
+            return redirect()->route('admin.payment.show', $payment->id)
+                ->with('error', 'Payment proof upload is not available for this payment method.');
+        }
+
+        try {
+            // Handle file upload
+            if ($request->hasFile('proof_image')) {
+                $file = $request->file('proof_image');
+                $timestamp = now()->timestamp;
+                $randomString = uniqid();
+                $extension = $file->getClientOriginalExtension();
+                $newFileName = $timestamp . '_' . $randomString . '.' . $extension;
+
+                // Store file in storage
+                $file->storeAs('payment_proofs', $newFileName, 'public');
+                $path = 'storage/payment_proofs/' . $newFileName;
+            }
+
+            // Update payment with proof details
+            $payment->update([
+                'bank_name' => $request->bank_name,
+                'account_number' => $request->account_number,
+                'account_name' => $request->account_name,
+                'proof_image' => $path ?? null,
+                'status' => 'waiting_verification',
+            ]);
+
+            return redirect()->route('admin.payment.show', $payment->id)
+                ->with('success', 'Payment proof uploaded successfully. Your payment is now waiting for verification.');
+        } catch (Exception $e) {
+            Log::error("Payment proof upload error: " . $e->getMessage());
+            return redirect()->route('admin.payment.show', $payment->id)
+                ->with('error', 'Failed to upload payment proof. Please try again.');
+        }
+    }
+
     public function mapOrder(Request $request)
     {
         $request->validate([
@@ -279,6 +338,14 @@ class PaymentController extends Controller
             ]);
 
             Cache::forget($request->order_id);
+
+            // Send order confirmation email
+            try {
+                Mail::to($user->email)->send(new OrderConfirmation($payment));
+            } catch (Exception $e) {
+                Log::error("Failed to send order confirmation email: " . $e->getMessage());
+                // Continue with the process even if email fails
+            }
 
             // Process payment if a gateway is selected
             $gatewayName = $request->input('payment_method');
@@ -432,6 +499,14 @@ class PaymentController extends Controller
                         'updated_at' => now(),
                     ]);
 
+                    // Send payment confirmation email for successful payments
+                    try {
+                        Mail::to($payment->email)->send(new PaymentConfirmation($payment));
+                    } catch (Exception $e) {
+                        Log::error("Failed to send payment confirmation email: " . $e->getMessage());
+                        // Continue with the process even if email fails
+                    }
+
                     return redirect()->route('admin.payment.show', $payment->id)
                         ->with('success', 'Payment completed successfully.');
                 } else {
@@ -461,6 +536,14 @@ class PaymentController extends Controller
                         'status' => 'active',
                         'updated_at' => now(),
                     ]);
+
+                    // Send payment confirmation email for successful payments
+                    try {
+                        Mail::to($payment->email)->send(new PaymentConfirmation($payment));
+                    } catch (Exception $e) {
+                        Log::error("Failed to send payment confirmation email: " . $e->getMessage());
+                        // Continue with the process even if email fails
+                    }
 
                     return redirect()->route('admin.payment.show', $payment->id)
                         ->with('success', 'Payment completed successfully.');

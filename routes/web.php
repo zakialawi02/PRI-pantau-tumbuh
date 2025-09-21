@@ -36,6 +36,7 @@ Route::prefix('dashboard')->name('admin.')->group(function () {
         Route::get('/payment', [PaymentController::class, 'index'])->name('payment.index');
         Route::get('/payment/{payment}', [PaymentController::class, 'showPayment'])->name('payment.show');
         Route::post('/payment/{payment}/paypal', [PaymentController::class, 'processPayPalPayment'])->name('payment.process.paypal');
+        Route::post('/payment/{payment}/upload-proof', [PaymentController::class, 'uploadProof'])->name('payment.uploadProof');
         Route::get('/payment/callback/{gateway}', [PaymentController::class, 'handleGatewayCallback'])->name('payment.callback');
 
         // subscription
@@ -88,10 +89,6 @@ Route::get('/pri-estimate-map', function () {
 Route::get('/high-resolution-pri-estimation-map-with-ai', function () {
     return view('pages.front.petaEstimasiPRIResolusiTinggi');
 })->name('pri-estimation-map-ai');
-
-Route::get('/payment-success', function () {
-    return view('pages.front.order.payment-success');
-});
 
 Route::get('/sandbox-payment', function () {
     return view('pages.front.order.sandbox-payment');
