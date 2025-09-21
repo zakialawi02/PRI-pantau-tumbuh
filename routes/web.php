@@ -40,7 +40,7 @@ Route::prefix('dashboard')->name('admin.')->group(function () {
         Route::get('/payment/callback/{gateway}', [PaymentController::class, 'handleGatewayCallback'])->name('payment.callback');
 
         // subscription
-        Route::get('/my-subscription', [SubscriptionController::class, 'index'])->name('subscription.index');
+        Route::get('/subscription', [SubscriptionController::class, 'index'])->name('subscription.index');
         Route::get('/subscription/{subscription}', [SubscriptionController::class, 'show'])->name('subscription.show');
     });
 
