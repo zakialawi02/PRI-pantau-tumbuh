@@ -42,12 +42,17 @@ class PaymentController extends Controller
                 ->addColumn('action', function ($data) use ($user) {
                     $actions = '';
                     if ($user->role === 'user') {
-                        $actions = '<a href="' . route('admin.payment.show', $data->id) . '" class="inline-flex items-center px-2 py-1 text-xs text-white bg-secondary/80 rounded-full hover:bg-secondary/60 border border-transparent focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-info" title="View Details">';
+                        $actions = '<a href="' . route('admin.payment.show', $data->id) . '" class="inline-flex items-center px-2 py-1 text-xs text-white bg-secondary/80 rounded-full hover:bg-secondary/60 border border-transparent focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-secondary" title="View Details">';
                         $actions .= '<i class="ri-eye-line mr-1"></i> View';
                         $actions .= '</a>';
-                    } else if (in_array($user->role, ['superadmin', 'admin'])) {
-                        $actions .= ' <button type="button" class="inline-flex items-center px-2 py-1 ml-1 text-xs text-white bg-secondary/80 rounded-full hover:bg-secondary/60 border border-transparent focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-info payment-status" data-id="' . $data->id . '" data-modal-target="payment-modal" data-modal-toggle="payment-modal" title="Update Status">';
+                    } else if (in_array($user->role, ['superadmin'])) {
+                        $actions .= '<button type="button" class="inline-flex items-center px-2 py-1 text-xs text-white bg-secondary/80 rounded-full hover:bg-secondary/60 border border-transparent focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-secondary btn-payment-status" data-id="' . $data->id . '" title="View Details">';
                         $actions .= '<i class="ri-eye-line mr-1"></i> View';
+                        $actions .= '</button>';
+
+                        // Add Update Status button
+                        $actions .= ' <button type="button" class="inline-flex items-center px-2 py-1 text-xs text-white bg-warning/80 rounded-full hover:bg-warning/60 border border-transparent focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-warning btn-update-status" data-id="' . $data->id . '" title="Update Status">';
+                        $actions .= '<i class="ri-edit-line mr-1"></i> Update';
                         $actions .= '</button>';
                     }
 
@@ -116,6 +121,7 @@ class PaymentController extends Controller
             'payment' => [
                 'id' => $payment->id,
                 'status' => $payment->checkAndMarkAsExpired,
+                'payment_proof' => $payment->proof_image,
                 'amount' => $payment->amount,
                 'currency' => $payment->currency,
                 'name' => $payment->name,

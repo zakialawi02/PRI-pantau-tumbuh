@@ -275,6 +275,13 @@
                     $('#saveBtn').text('Create');
                     $("#error-messages").html("");
                     $("#passwordHelpBlock").html("");
+
+                    // Enable fields by default for new users
+                    $('#email').prop('disabled', false);
+                    $('#password').prop('disabled', false);
+                    $('#email').removeClass('bg-gray-100');
+                    $('#password').removeClass('bg-gray-100');
+                    $('#social-login-note').remove();
                 });
 
                 // Save new or updated user
@@ -386,6 +393,27 @@
                             $('#role').val(data.role);
                             $('#email').val(data.email);
                             $('#email_verified_at').val(data.email_verified_at ? 1 : 0);
+
+                            // Check if user logged in via social authentication
+                            if (data.provider_name) {
+                                // Disable email and password fields for social login users
+                                $('#email').prop('disabled', true);
+                                $('#password').prop('disabled', true);
+                                // Add visual indication
+                                $('#email').addClass('bg-gray-100');
+                                $('#password').addClass('bg-gray-100');
+                                // Add note about social login
+                                if ($('#social-login-note').length === 0) {
+                                    $('#password').after('<p id="social-login-note" class="text-muted mt-2 text-sm">Email and Password fields is disabled for social login users</p>');
+                                }
+                            } else {
+                                // Enable fields for regular users
+                                $('#email').prop('disabled', false);
+                                $('#password').prop('disabled', false);
+                                $('#email').removeClass('bg-gray-100');
+                                $('#password').removeClass('bg-gray-100');
+                                $('#social-login-note').remove();
+                            }
                         })
                         .fail(function(jqXHR, textStatus, errorThrown) {
                             console.error("Error fetching user data:", textStatus, errorThrown);
