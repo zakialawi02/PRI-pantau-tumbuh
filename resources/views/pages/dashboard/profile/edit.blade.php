@@ -1,4 +1,4 @@
-@section('title', $data['title'] ?? 'My Profile')
+@section('title', $data['title'] ?? __('My Profile'))
 @section('meta_description', '')
 
 <x-app-layout>
@@ -43,9 +43,11 @@
                 @include('pages.dashboard.profile.partials.update-password-form')
             </div>
 
-            <div class="mt-8 max-w-xl">
-                @include('pages.dashboard.profile.partials.delete-user-form')
-            </div>
+            @if (!Auth::user()->provider_name)
+                <div class="mt-8 max-w-xl">
+                    @include('pages.dashboard.profile.partials.delete-user-form')
+                </div>
+            @endif
         </x-card>
     </div>
 </x-app-layout>

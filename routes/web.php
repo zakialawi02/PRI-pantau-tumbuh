@@ -32,12 +32,6 @@ Route::prefix('dashboard')->name('admin.')->group(function () {
     Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
 
-        // Profile
-        Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
-        Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
-        Route::patch('/photo-profile', [ProfileController::class, 'updatePhoto'])->name('profile.photo-update');
-        Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
-
         // Payment
         Route::get('/payment', [PaymentController::class, 'index'])->name('payment.index');
         Route::get('/payment/{payment}', [PaymentController::class, 'showPayment'])->name('payment.show');
@@ -47,6 +41,15 @@ Route::prefix('dashboard')->name('admin.')->group(function () {
         // subscription
         Route::get('/my-subscription', [SubscriptionController::class, 'index'])->name('subscription.index');
         Route::get('/subscription/{subscription}', [SubscriptionController::class, 'show'])->name('subscription.show');
+    });
+
+
+    Route::middleware(['auth'])->group(function () {
+        // Profile
+        Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
+        Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
+        Route::patch('/photo-profile', [ProfileController::class, 'updatePhoto'])->name('profile.photo-update');
+        Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
     });
 });
 
@@ -93,6 +96,14 @@ Route::get('/payment-success', function () {
 Route::get('/sandbox-payment', function () {
     return view('pages.front.order.sandbox-payment');
 })->name('sandbox.payment');
+
+Route::get('/privacy-policy', function () {
+    return view('pages.front.privacy-policy');
+})->name('privacy-policy');
+
+Route::get('/terms-of-service', function () {
+    return view('pages.front.terms-of-service');
+})->name('terms-of-service');
 
 Route::get('/app/imagery', [MapController::class, 'index'])->name('appMap');
 

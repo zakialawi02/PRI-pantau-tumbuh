@@ -37,9 +37,9 @@
         @enderror
 
         <div class="mt-4 flex items-center gap-4">
-            <x-button-primary>{{ __('Save') }}</x-button-primary>
+            <x-button-primary type="submit">{{ __('Save') }}</x-button-primary>
 
-            @if (session('status') === 'profile-updated')
+            @if (session('status') === 'photo-profile-updated')
                 <p class="text-sm text-gray-600" x-data="{ show: true }" x-show="show" x-transition x-init="setTimeout(() => show = false, 5000)">{{ __('Saved.') }}</p>
             @endif
         </div>
@@ -72,7 +72,7 @@
         </div>
 
         <div>
-            @if (Auth::user()->provider)
+            @if (Auth::user()->provider_name)
                 <div>
                     <x-input-label for="email" :value="__('Email')" />
                     <x-text-input class="mt-1 block w-full" id="email" name="email" type="email" :value="old('email', $user->email)" required autocomplete="username" readonly />
@@ -120,6 +120,11 @@
 
 @push('javascript')
     <script>
+        // Pass PHP translations to JavaScript
+        const translations = {
+            fileSizeError: "{{ __('messages.file_size_error') }}"
+        };
+
         let inputPhoto;
         document.getElementById('photo_profile').addEventListener('change', function(event) {
             const fileInput = event.target;
@@ -134,7 +139,7 @@
 
             if (file) {
                 if (file.size > 1024 * 1024) {
-                    errorMsg.textContent = 'File size must be less than 1MB';
+                    errorMsg.textContent = translations.fileSizeError;
                     preview.src = preview.dataset.originalSrc;
                     fileInput.value = '';
                     inputPhoto = false;

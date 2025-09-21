@@ -102,14 +102,14 @@
                                 Use the following sandbox account credentials to log in:
                             </p>
                             <div class="mt-3 rounded-lg bg-gray-50 p-4">
-                                <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+                                <div class="grid-row-2 grid gap-3">
                                     <div>
                                         <p class="text-sm font-medium text-gray-500">Email</p>
-                                        <p class="font-mono">sb-{{ substr(str_shuffle('abcdefghijklmnopqrstuvwxyz'), 0, 8) }}@personal.example.com</p>
+                                        <p class="font-mono">sb-qpyco46015226@personal.example.com</p>
                                     </div>
                                     <div>
                                         <p class="text-sm font-medium text-gray-500">Password</p>
-                                        <p class="font-mono">sandbox_password</p>
+                                        <p class="font-mono">Wr&+7q6U</p>
                                     </div>
                                 </div>
                             </div>

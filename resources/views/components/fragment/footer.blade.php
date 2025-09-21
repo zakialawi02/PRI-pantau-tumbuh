@@ -55,7 +55,9 @@
         <!-- Bottom Bar -->
         <div class="border-background/20 mt-8 border-t pt-8 text-center">
             <p class="text-background/60 text-sm">
-                © {{ date('Y') }} PantauTumbuh.id. All rights reserved.
+                © {{ date('Y') }} PantauTumbuh.id. All rights reserved. |
+                <a class="text-background/80 hover:text-primary transition-colors duration-300" href="{{ route('privacy-policy') }}">Privacy Policy</a> |
+                <a class="text-background/80 hover:text-primary transition-colors duration-300" href="{{ route('terms-of-service') }}">Terms of Service</a>
             </p>
         </div>
     </div>
