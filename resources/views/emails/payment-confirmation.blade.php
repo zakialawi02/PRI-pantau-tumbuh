@@ -155,7 +155,7 @@
                     <table class="email-table">
                         <tr class="order-row">
                             <td class="label">Order Number:</td>
-                            <td class="value">#{{ substr($payment->id, 0, 8) }}</td>
+                            <td class="value">#{{ $payment->invoice_number ?? substr($payment->id, 0, 16) }}</td>
                         </tr>
                         <tr class="order-row">
                             <td class="label">Order Date:</td>

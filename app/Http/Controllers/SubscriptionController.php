@@ -4,8 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Models\Subscription;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
 use Yajra\DataTables\Facades\DataTables;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 class SubscriptionController extends Controller
 {
@@ -66,21 +68,53 @@ class SubscriptionController extends Controller
         return view('pages.dashboard.subscription.index', compact('data'));
     }
 
-    public function show(Request $request, $id)
+    /**
+     * Display the specified subscription.
+     *
+     * @param  \App\Models\Subscription  $subscription
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function show(Subscription $subscription)
     {
-        $user = Auth::user();
+        try {
+            $user = Auth::user();
 
-        // Build the query based on user role
-        if (in_array($user->role, ['superadmin', 'admin'])) {
-            // Admin can see all subscriptions
-            $subscription = Subscription::with(['user', 'plan', 'fieldArea', 'payments'])->findOrFail($id);
-        } else {
-            // Regular users can only see their own subscriptions
-            $subscription = Subscription::with(['user', 'plan', 'fieldArea', 'payments'])
-                ->where('user_id', $user->id)
-                ->findOrFail($id);
+            // Build the query based on user role
+            if (in_array($user->role, ['superadmin', 'admin'])) {
+                // Admin can see all subscriptions
+                $subscription->load(['user', 'plan', 'fieldArea', 'payments' => function ($query) {
+                    $query->latest()->limit(2);
+                }]);
+            } else {
+                // Regular users can only see their own subscriptions
+                if ($subscription->user_id !== $user->id) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Unauthorized access to this subscription.'
+                    ], 403);
+                }
+
+                $subscription->load(['user', 'plan', 'fieldArea', 'payments' => function ($query) {
+                    $query->latest()->limit(2);
+                }]);
+            }
+
+            return response()->json([
+                'success' => true,
+                'data' => $subscription
+            ], 200);
+        } catch (ModelNotFoundException $e) {
+            Log::error("Subscription Model not found. Error: " . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Subscription not found.'
+            ], 404);
+        } catch (\Exception $e) {
+            Log::error("Error fetching subscription details. Error: " . $e->getMessage(), ['exception' => $e]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Error fetching subscription details.'
+            ], 500);
         }
-
-        return response()->json($subscription, 200);
     }
 }

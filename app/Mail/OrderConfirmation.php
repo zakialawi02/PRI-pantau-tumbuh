@@ -40,7 +40,7 @@ class OrderConfirmation extends Mailable
         }
 
         return new Envelope(
-            subject: 'Order Confirmation - #' . substr($this->payment->id, 0, 8) . ' (' . $paymentMethod . ')',
+            subject: 'Order Confirmation - #' . $this->payment->invoice_number ?? substr($this->payment->id, 0, 16) . ' (' . $paymentMethod . ')',
         );
     }
 

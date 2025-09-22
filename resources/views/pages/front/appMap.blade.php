@@ -118,7 +118,9 @@
     <div class="flex h-full flex-1 flex-col">
         <!-- Header -->
         <div class="bg-background flex items-center justify-between px-3 py-2 md:px-6">
-            <a class="text-lg font-bold md:text-xl" href="{{ route('home') }}">{{ config('app.name') }}</a>
+            <a class="text-lg font-bold md:text-xl" href="{{ route('home') }}">
+                <x-application-logo class="h-7 w-auto dark:invert" alt="Application Logo" />
+            </a>
             <div class="flex items-center space-x-2 rounded-md">
                 <x-text-input class="p-1" size="small" placeholder="Search..." />
             </div>
@@ -178,28 +180,91 @@
                         <button class="hover:text-primary/80 text-foreground/50" data-drawer-hide="drawer-sidebar-left-panel1" type="button">✕</button>
                     </div>
                     <!-- Drawer content -->
-                    <div class="flex-1 space-y-3 overflow-y-auto">
-                        <div class="flex flex-col items-center justify-center py-8 text-center">
-                            <div class="mb-6">
-                                <div class="bg-muted mx-auto flex h-20 w-20 items-center justify-center rounded-full">
-                                    <i class="ri-database-2-line text-foreground/80 text-3xl"></i>
+                    <div class="flex h-full flex-col">
+                        <div class="flex-1 space-y-2 overflow-y-auto p-2">
+                            @auth
+                                @forelse ($activeFieldAreas as $fieldArea)
+                                    <div>
+                                        <label class="border-foreground/10 has-checked:border-muted/80 has-checked:bg-muted/60 has-checked:ring-1 has-checked:ring-muted/80 bg-neutral/80 shadow-xs {{ $fieldArea->subscriptions->status !== 'active' ? 'opacity-50 cursor-not-allowed' : 'hover:bg-muted/50 cursor-pointer' }} flex items-center gap-3 rounded-xl border p-3 text-base font-medium transition-colors" for="fieldArea-{{ $fieldArea->id }}">
+                                            <input class="text-primary focus:ring-primary h-3 w-3 rounded border-gray-300" name="fieldArea" type="checkbox" {{ $fieldArea->subscriptions->status !== 'active' ? 'disabled' : "id=fieldArea-{$fieldArea->id} value=fieldArea-{$fieldArea->id}" }} />
+                                            <div class="flex w-full items-start justify-between">
+                                                <div>
+                                                    <h4 class="text-base font-semibold">{{ ucwords($fieldArea->name) ?? 'Unnamed Field' }}</h4>
+                                                    <p class="text-foreground/70 text-sm">
+                                                        {{ number_format($fieldArea->area_ha, 2) }} ha
+                                                    </p>
+                                                </div>
+
+                                                <div class="flex flex-col items-end">
+                                                    <span class="text-background @if ($fieldArea->subscriptions->status == 'active') bg-success/70
+                                                        @elseif(in_array($fieldArea->subscriptions->status, ['suspended', 'cancelled', 'expired']))
+                                                            bg-destructive/70
+                                                        @else
+                                                            bg-muted/70 @endif mb-1 inline-flex rounded-full px-2 py-1 text-xs font-medium">
+                                                        {{ str_replace('_', ' ', $fieldArea->subscriptions->status) }}
+                                                    </span>
+                                                    <button class="text-foreground/50 hover:text-foreground hover:bg-secondary bg-secondary/60 flex items-center gap-1 rounded-xl p-1 text-sm" title="Zoom to field">
+                                                        <i class="ri-zoom-in-line"></i>
+                                                        <span class="sr-only">Zoom</span>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </label>
+                                    </div>
+                                @empty
+                                    <div class="flex flex-col items-center justify-center py-8 text-center">
+                                        <div class="mb-6">
+                                            <div class="bg-muted mx-auto flex h-20 w-20 items-center justify-center rounded-full">
+                                                <i class="ri-database-2-line text-foreground/80 text-3xl"></i>
+                                            </div>
+                                        </div>
+                                        <h3 class="text-foreground/70 mb-2 text-lg font-semibold">No Data Available</h3>
+                                        <p class="text-foreground/50 mb-6 px-4 text-sm">
+                                            You don't have any satellite imagery data yet. Purchase satellite imagery to start monitoring your crops and analyzing plant stress using PRI.
+                                        </p>
+                                        <x-button-primary id="buySatelliteBtn" type="button" size="small">
+                                            <i class="ri-shopping-cart-line"></i>
+                                            <span>Buy Satellite Imagery</span>
+                                        </x-button-primary>
+                                    </div>
+                                @endforelse
+                            @else
+                                <div class="flex flex-col items-center justify-center py-8 text-center">
+                                    <div class="mb-6">
+                                        <div class="bg-muted mx-auto flex h-20 w-20 items-center justify-center rounded-full">
+                                            <i class="ri-database-2-line text-foreground/80 text-3xl"></i>
+                                        </div>
+                                    </div>
+                                    <h3 class="text-foreground/70 mb-2 text-lg font-semibold">No Data Available</h3>
+                                    <p class="text-foreground/50 mb-6 px-4 text-sm">
+                                        You don't have any satellite imagery data yet. Purchase satellite imagery to start monitoring your crops and analyzing plant stress using PRI.
+                                    </p>
+                                    <x-button-primary type="button" onclick="window.location.href='{{ route('login') }}'" size="small">
+                                        <i class="ri-login-box-line"></i>
+                                        <span>Login to View your or Buy Imagery</span>
+                                    </x-button-primary>
+                                </div>
+                            @endauth
+                        </div>
+
+                        <!-- Sticky Drawer Footer -->
+                        <div class="bg-background border-foreground/10 sticky bottom-0 mt-auto border-t p-3">
+                            <div class="mb-3 flex items-center justify-between">
+                                <div class="text-foreground/70 text-sm">
+                                    @auth
+                                        {{ $activeFieldAreas->where('subscriptions.status', 'active')->count() ?? 0 }} field(s) active
+                                    @else
+                                        <span>Login to access your fields</span>
+                                    @endauth
+                                </div>
+                                <div class="text-foreground/50 text-xs">
+                                    Last updated: null
                                 </div>
                             </div>
-                            <h3 class="text-foreground/70 mb-2 text-lg font-semibold">No Data Available</h3>
-                            <p class="text-foreground/50 mb-6 px-4 text-sm">
-                                You don't have any satellite imagery data yet. Purchase satellite imagery to start monitoring your crops and analyzing plant stress using PRI.
-                            </p>
-                            @auth
-                                <x-button-primary id="buySatelliteBtn" type="button" size="small">
-                                    <i class="ri-shopping-cart-line"></i>
-                                    <span>Buy Satellite Imagery</span>
-                                </x-button-primary>
-                            @else
-                                <x-button-primary type="button" onclick="window.location.href='{{ route('login') }}'" size="small">
-                                    <i class="ri-login-box-line"></i>
-                                    <span>Login to Buy Imagery</span>
-                                </x-button-primary>
-                            @endauth
+                            <x-button-primary id="buySatelliteBtn" type="button" size="small">
+                                <i class="ri-shopping-cart-line"></i>
+                                <span>Buy Satellite Imagery</span>
+                            </x-button-primary>
                         </div>
                     </div>
                 </div>
@@ -287,16 +352,16 @@
                 <!-- Bottom Date Selector -->
                 <div class="absolute bottom-1 left-2 flex flex-wrap space-x-1 text-xs md:text-sm">
                     <div class="bg-muted flex space-x-1 rounded-md p-1">
-                        <button class="bg-neutral rounded px-1 py-0.5">1D</button>
-                        <button class="bg-primary rounded px-1 py-0.5">1W</button>
                         <button class="bg-neutral rounded px-1 py-0.5">1M</button>
+                        <button class="bg-neutral rounded px-1 py-0.5">3M</button>
+                        <button class="bg-neutral rounded px-1 py-0.5">6M</button>
                         <button class="bg-neutral rounded px-1 py-0.5">1Y</button>
                     </div>
 
-                    <button class="bg-neutral rounded px-1 py-0.5">20 Aug 2021</button>
-                    <button class="bg-neutral rounded px-1 py-0.5">20 Aug 2021</button>
-                    <button class="bg-neutral rounded px-1 py-0.5">20 Aug 2021</button>
-                    <button class="bg-primary rounded px-1 py-0.5">20 Aug 2021</button>
+                    <button class="bg-neutral rounded px-1 py-0.5">May 2025</button>
+                    <button class="bg-neutral rounded px-1 py-0.5">Jun 2025</button>
+                    <button class="bg-neutral rounded px-1 py-0.5">Jul 2025</button>
+                    <button class="bg-primary rounded px-1 py-0.5">Aug 2025</button>
                 </div>
             </div>
         </div>
@@ -363,25 +428,13 @@
                                         <x-input-label class="text-sm font-medium" for="harga_satuan">Price per Hectare</x-input-label>
                                         <div class="border-muted rounded border p-2 text-sm">
                                             <select class="border-border focus:border-primary focus:ring-primary w-full rounded border px-2 py-1 text-sm focus:outline-none focus:ring-1" id="plan_id" name="plan_id">
-                                                @if (isset($plans) && count($plans) > 0)
-                                                    @php
-                                                        $hasVisiblePlans = false;
-                                                        $sortedPlans = $plans->where('isShow', true)->sortBy('price_per_hectare');
-                                                        $lowestPricePlan = $sortedPlans->first();
-                                                    @endphp
-                                                    @foreach ($sortedPlans as $index => $plan)
-                                                        @php $hasVisiblePlans = true; @endphp
-                                                        <option data-price="{{ $plan->price_per_hectare }}" data-currency="{{ $plan->currency }}" value="{{ $plan->id }}" {{ $plan->id === $lowestPricePlan->id ? 'selected' : '' }}>
-
-                                                            {{ $plan->name }} - {{ Number::currency($plan->price_per_hectare, $plan->currency, app()->getLocale()) }} / ha
-                                                        </option>
-                                                    @endforeach
-                                                    @if (!$hasVisiblePlans)
-                                                        <option value="" selected disabled>No plans available</option>
-                                                    @endif
-                                                @else
+                                                @forelse($plans->where('isShow', true)->sortBy('price_per_hectare') as $plan)
+                                                    <option data-price="{{ $plan->price_per_hectare }}" data-currency="{{ $plan->currency }}" value="{{ $plan->id }}" {{ $loop->first ? 'selected' : '' }}>
+                                                        {{ $plan->name }} - {{ Number::currency($plan->price_per_hectare, $plan->currency, app()->getLocale()) }} / ha
+                                                    </option>
+                                                @empty
                                                     <option value="" selected disabled>No plans available</option>
-                                                @endif
+                                                @endforelse
                                             </select>
                                         </div>
                                     </div>
@@ -682,5 +735,14 @@
             // Make calculateTotalPrice available globally for map.js
             window.calculateTotalPrice = calculateTotalPrice;
         </script>
+
+        @auth
+            @if (isset($activeFieldAreas) && $activeFieldAreas->count() > 0)
+                <script>
+                    // Pass field areas data to JavaScript
+                    window.activeFieldAreas = @json($activeFieldAreas);
+                </script>
+            @endif
+        @endauth
     @endpush
 </x-app-front-map-layout>

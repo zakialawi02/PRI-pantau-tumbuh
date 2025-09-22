@@ -370,6 +370,7 @@
                     var newUrl = new URL(window.location);
                     newUrl.searchParams.set('page', currentPage);
                     newUrl.searchParams.set('limit', pageLength);
+                    window.history.replaceState({}, '', newUrl);
                 });
 
                 const modalInstance = HSOverlay.getInstance('#payment-modal', true);
@@ -454,8 +455,8 @@
                 }
 
                 function parsingPaymentData(paymentData) {
-                    // Populate modal with payment data
-                    $('#modal-invoice-number').text('#' + paymentData?.id.substr(0, 8));
+                    const invoiceNumber = paymentData?.invoice_number || (paymentData?.id ? paymentData.id.toString().substr(0, 16) : '');
+                    $('#modal-invoice-number').text('#' + invoiceNumber || '-');
                     $('#modal-customer-name').text(paymentData?.name || '-');
                     $('#modal-email').text(paymentData?.email || '-');
                     $('#modal-phone').text(paymentData?.phone || '-');

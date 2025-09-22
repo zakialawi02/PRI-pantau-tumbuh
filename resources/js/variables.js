@@ -13,7 +13,7 @@ const STATUS_CONFIG_BADGE_COLOR = {
         text: "Waiting Verification",
     },
     failed: {
-        class: "bg-red-100 text-red-800",
+        class: "bg-red-200 text-red-800",
         text: "Failed",
     },
     refunded: {
@@ -21,7 +21,7 @@ const STATUS_CONFIG_BADGE_COLOR = {
         text: "Refunded",
     },
     chargeback: {
-        class: "bg-red-100 text-red-800",
+        class: "bg-pink-200 text-pink-800",
         text: "Chargeback",
     },
     active: {
@@ -33,7 +33,7 @@ const STATUS_CONFIG_BADGE_COLOR = {
         text: "Expired",
     },
     cancelled: {
-        class: "bg-yellow-100 text-yellow-800",
+        class: "bg-rose-200 text-rose-800",
         text: "Cancelled",
     },
     trial: {
@@ -45,7 +45,7 @@ const STATUS_CONFIG_BADGE_COLOR = {
         text: "Awaiting Payment",
     },
     suspended: {
-        class: "bg-gray-100 text-gray-800",
+        class: "bg-red-600 text-gray-200",
         text: "Suspended",
     },
     default: {

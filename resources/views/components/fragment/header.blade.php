@@ -15,7 +15,7 @@
             </div>
 
             <!-- Menu Tengah -->
-            <div class="text-foreground {{ $variant === 'transparent' ? 'md:text-background' : '' }} bg-background fixed inset-0 z-40 hidden flex-col items-center justify-center space-y-6 whitespace-nowrap text-center uppercase transition-all duration-500 ease-in-out md:static md:z-auto md:flex md:flex-1 md:flex-row md:justify-center md:space-x-8 md:space-y-0 md:bg-transparent" id="navbar">
+            <div class="{{ $variant === 'transparent' ? 'md:text-background' : '' }} bg-background dark:text-white! fixed inset-0 z-40 hidden flex-col items-center justify-center space-y-6 whitespace-nowrap text-center uppercase transition-all duration-500 ease-in-out md:static md:z-auto md:flex md:flex-1 md:flex-row md:justify-center md:space-x-8 md:space-y-0 md:bg-transparent" id="navbar">
 
                 <!-- Nav Menu -->
                 <x-nav-menu />

@@ -73,103 +73,101 @@
                         </a>
                     </div>
 
-                    @if ($subscriptions->count() > 0)
-                        <div class="overflow-x-auto">
-                            <table class="divide-foreground/20 min-w-full divide-y">
-                                <thead>
-                                    <tr>
-                                        <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Plan</th>
-                                        <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Field Area</th>
-                                        <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Price</th>
-                                        <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Status</th>
-                                    </tr>
-                                </thead>
-                                <tbody class="divide-foreground/10 divide-y">
-                                    @foreach ($subscriptions as $subscription)
+                    @forelse ($subscriptions as $subscription)
+                        @if ($loop->first)
+                            <div class="overflow-x-auto">
+                                <table class="divide-foreground/20 min-w-full divide-y">
+                                    <thead>
                                         <tr>
-                                            <td class="whitespace-nowrap px-4 py-3">
-                                                <div class="text-sm font-medium">{{ $subscription->plan->name ?? 'N/A' }}</div>
-                                            </td>
-                                            <td class="whitespace-nowrap px-4 py-3">
-                                                <div class="text-sm">{{ $subscription->fieldArea->name ?? 'N/A' }}</div>
-                                                <div class="text-foreground/70 text-xs">{{ Number::format($subscription->fieldArea->area_ha ?? 0, locale: app()->getLocale()) }} ha</div>
-                                            </td>
-                                            <td class="whitespace-nowrap px-4 py-3 text-sm">
-                                                {{ Number::currency($subscription->payments[0]->amount, $subscription->payments[0]->currency, app()->getLocale()) }}
-                                            </td>
-                                            <td class="whitespace-nowrap px-4 py-3">
-                                                <span class="@if ($subscription->status == 'active') bg-green-100 text-green-800
-                                                    @elseif($subscription->status == 'expired') bg-red-100 text-red-800
-                                                    @else bg-yellow-100 text-yellow-800 @endif inline-flex rounded-full px-2 text-xs font-semibold leading-5">
-                                                    {{ ucfirst($subscription->status) }}
-                                                </span>
-                                            </td>
+                                            <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Plan</th>
+                                            <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Field Area</th>
+                                            <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Price</th>
+                                            <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Status</th>
                                         </tr>
-                                    @endforeach
-                                </tbody>
+                                    </thead>
+                                    <tbody class="divide-foreground/10 divide-y">
+                        @endif
+                        <tr>
+                            <td class="whitespace-nowrap px-4 py-3">
+                                <div class="text-sm font-medium">{{ $subscription->plan->name ?? 'N/A' }}</div>
+                            </td>
+                            <td class="whitespace-nowrap px-4 py-3">
+                                <div class="text-sm">{{ $subscription->fieldArea->name ?? 'N/A' }}</div>
+                                <div class="text-foreground/70 text-xs">{{ Number::format($subscription->fieldArea->area_ha ?? 0, locale: app()->getLocale()) }} ha</div>
+                            </td>
+                            <td class="whitespace-nowrap px-4 py-3 text-sm">
+                                {{ Number::currency($subscription->payments[0]->amount ?? 0, $subscription->payments[0]->currency ?? 'USD', app()->getLocale()) }}
+                            </td>
+                            <td class="whitespace-nowrap px-4 py-3">
+                                <span class="@if ($subscription->status == 'active') bg-green-100 text-green-800
+                                                @elseif($subscription->status == 'expired') bg-red-100 text-red-800
+                                                @else bg-yellow-100 text-yellow-800 @endif inline-flex rounded-full px-2 text-xs font-semibold leading-5">
+                                    {{ ucfirst($subscription->status) }}
+                                </span>
+                            </td>
+                        </tr>
+                        @if ($loop->last)
+                            </tbody>
                             </table>
-                        </div>
-                    @else
-                        <div class="py-8 text-center">
-                            <i class="ri-file-list-line text-foreground/30 mb-3 text-4xl"></i>
-                            <p class="text-foreground/70">No subscriptions found</p>
-                        </div>
-                    @endif
-                </x-card>
             </div>
+            @endif
+        @empty
+            <div class="py-8 text-center">
+                <i class="ri-file-list-line text-foreground/30 mb-3 text-4xl"></i>
+                <p class="text-foreground/70">No subscriptions found</p>
+            </div>
+            @endforelse
+            </x-card>
+        </div>
 
-            <!-- Payments Section -->
-            <div class="">
-                <x-card>
-                    <div class="mb-4 flex items-center justify-between">
-                        <h2 class="text-xl font-semibold">Recent Payments</h2>
-                        <a class="text-primary text-sm hover:underline" href="{{ route('admin.payment.index') }}">
-                            View All
-                        </a>
-                    </div>
+        <!-- Payments Section -->
+        <div class="">
+            <x-card>
+                <div class="mb-4 flex items-center justify-between">
+                    <h2 class="text-xl font-semibold">Recent Payments</h2>
+                    <a class="text-primary text-sm hover:underline" href="{{ route('admin.payment.index') }}">
+                        View All
+                    </a>
+                </div>
 
-                    @if ($payments->count() > 0)
-                        <div class="space-y-4">
-                            @foreach ($payments as $payment)
-                                <div class="border-foreground/10 rounded-lg border p-3">
-                                    <div class="flex items-start justify-between">
-                                        <div>
-                                            <h3 class="text-sm font-medium">{{ $payment->name }}</h3>
-                                            <p class="text-foreground/70 text-xs">
-                                                {{ $payment->subscription->plan->name ?? 'Subscription' }}
-                                            </p>
-                                        </div>
-                                        <span class="@if ($payment->status == 'paid') bg-green-100 text-green-800
-                                            @elseif($payment->status == 'pending') bg-yellow-100 text-yellow-800
-                                            @elseif($payment->status == 'expired') bg-red-100 text-red-800
-                                            @else bg-gray-100 text-gray-800 @endif rounded-full px-2 py-1 text-xs">
-                                            {{ ucfirst($payment->status) }}
-                                        </span>
-                                    </div>
-                                    <div class="mt-2 flex items-center justify-between">
-                                        <div>
-                                            <div class="text-foreground/70 text-xs">
-                                                {{ Number::format($payment->subscription->fieldArea->area_ha ?? 0, locale: app()->getLocale()) }} ha
-                                            </div>
-                                            <div class="text-sm font-medium">
-                                                {{ Number::currency($payment->amount, $payment->currency, app()->getLocale()) }}
-                                            </div>
-                                        </div>
-                                        <span class="text-foreground/70 text-xs">
-                                            {{ $payment->created_at->isoFormat('D MMM YYYY') }}
-                                        </span>
-                                    </div>
+                @forelse ($payments as $payment)
+                    <div class="border-foreground/10 rounded-lg border p-3">
+                        <div class="flex items-start justify-between">
+                            <div>
+                                <h3 class="text-sm font-medium">{{ $payment->name }}</h3>
+                                <p class="text-foreground/70 text-xs">
+                                    {{ $payment->subscription->plan->name ?? 'Subscription' }}
+                                </p>
+                            </div>
+                            <span class="@if ($payment->status == 'paid') bg-green-100 text-green-800
+                                    @elseif($payment->status == 'pending') bg-yellow-100 text-yellow-800
+                                    @elseif($payment->status == 'expired') bg-red-100 text-red-800
+                                    @else bg-gray-100 text-gray-800 @endif rounded-full px-2 py-1 text-xs">
+                                {{ ucfirst($payment->status) }}
+                            </span>
+                        </div>
+                        <div class="mt-2 flex items-center justify-between">
+                            <div>
+                                <div class="text-foreground/70 text-xs">
+                                    {{ Number::format($payment->subscription->fieldArea->area_ha ?? 0, locale: app()->getLocale()) }} ha
                                 </div>
-                            @endforeach
+                                <div class="text-sm font-medium">
+                                    {{ Number::currency($payment->amount, $payment->currency, app()->getLocale()) }}
+                                </div>
+                            </div>
+                            <span class="text-foreground/70 text-xs">
+                                {{ $payment->created_at->isoFormat('D MMM YYYY') }}
+                            </span>
                         </div>
-                    @else
-                        <div class="py-8 text-center">
-                            <i class="ri-bank-line text-foreground/30 mb-3 text-4xl"></i>
-                            <p class="text-foreground/70">No payments found</p>
-                        </div>
-                    @endif
-                </x-card>
-            </div>
+                    </div>
+                @empty
+                    <div class="py-8 text-center">
+                        <i class="ri-bank-line text-foreground/30 mb-3 text-4xl"></i>
+                        <p class="text-foreground/70">No payments found</p>
+                    </div>
+                @endforelse
+            </x-card>
+        </div>
         </div>
 
         <!-- Quick Actions -->
@@ -185,13 +183,13 @@
                         <i class="ri-bank-line mb-2 block text-2xl"></i>
                         <span class="text-sm">My Payments</span>
                     </a>
-                    <a class="border-foreground/20 hover:bg-foreground/5 rounded-lg border p-4 text-center transition-colors" href="{{ route('admin.profile.edit') }}">
-                        <i class="ri-user-line mb-2 block text-2xl"></i>
-                        <span class="text-sm">Profile Settings</span>
-                    </a>
                     <a class="border-foreground/20 hover:bg-foreground/5 rounded-lg border p-4 text-center transition-colors" href="{{ route('appMap') }}">
                         <i class="ri-map-line mb-2 block text-2xl"></i>
                         <span class="text-sm">Access Map</span>
+                    </a>
+                    <a class="border-foreground/20 hover:bg-foreground/5 rounded-lg border p-4 text-center transition-colors" href="{{ route('admin.field-area.index') }}">
+                        <i class="ri-map-pin-line mb-2 block text-2xl"></i>
+                        <span class="text-sm">My Field Areas</span>
                     </a>
                 </div>
             </x-card>

@@ -50,7 +50,7 @@
                             </th>
                         </tr>
                     </thead>
-                    <tbody class="bg-background divide-y divide-gray-200">
+                    <tbody class="bg-background divide-foreground/20 divide-y">
                         <!-- DataTables will populate this -->
                     </tbody>
                 </table>
@@ -86,44 +86,44 @@
                     <div class="" id="subscription-details">
                         <div class="mb-3 grid grid-cols-1 gap-4 md:grid-cols-2">
                             <div>
-                                <h4 class="text-lg font-medium text-gray-900 dark:text-white">Subscription Information</h4>
+                                <h4 class="text-foreground text-lg font-medium">Subscription Information</h4>
                                 <dl class="mt-2 space-y-2">
                                     <div>
-                                        <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Plan Name</dt>
-                                        <dd class="text-sm text-gray-900 dark:text-white" id="modal-plan-name"></dd>
+                                        <dt class="text-foreground/60 text-sm font-medium">Plan Name</dt>
+                                        <dd class="text-foreground text-sm" id="modal-plan-name"></dd>
                                     </div>
                                     <div>
-                                        <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Field Area</dt>
-                                        <dd class="text-sm text-gray-900 dark:text-white" id="modal-field-area"></dd>
+                                        <dt class="text-foreground/60 text-sm font-medium">Field Area</dt>
+                                        <dd class="text-foreground text-sm" id="modal-field-area"></dd>
                                     </div>
                                     <div>
-                                        <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Total Price</dt>
-                                        <dd class="text-sm text-gray-900 dark:text-white" id="modal-total-price"></dd>
+                                        <dt class="text-foreground/60 text-sm font-medium">Total Price</dt>
+                                        <dd class="text-foreground text-sm" id="modal-total-price"></dd>
                                     </div>
                                     <div>
-                                        <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Status</dt>
-                                        <dd class="text-sm text-gray-900 dark:text-white" id="modal-status"></dd>
+                                        <dt class="text-foreground/60 text-sm font-medium">Status</dt>
+                                        <dd class="text-foreground text-sm" id="modal-status"></dd>
                                     </div>
                                 </dl>
                             </div>
                             <div>
-                                <h4 class="text-lg font-medium text-gray-900 dark:text-white">Date Information</h4>
+                                <h4 class="text-foreground text-lg font-medium">Date Information</h4>
                                 <dl class="mt-2 space-y-2">
                                     <div>
-                                        <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Start Date</dt>
-                                        <dd class="text-sm text-gray-900 dark:text-white" id="modal-start-date"></dd>
+                                        <dt class="text-foreground/60 text-sm font-medium">Start Date</dt>
+                                        <dd class="text-foreground text-sm" id="modal-start-date"></dd>
                                     </div>
                                     <div>
-                                        <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">End Date</dt>
-                                        <dd class="text-sm text-gray-900 dark:text-white" id="modal-end-date"></dd>
+                                        <dt class="text-foreground/60 text-sm font-medium">End Date</dt>
+                                        <dd class="text-foreground text-sm" id="modal-end-date"></dd>
                                     </div>
                                     <div>
-                                        <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Created At</dt>
-                                        <dd class="text-sm text-gray-900 dark:text-white" id="modal-created-at"></dd>
+                                        <dt class="text-foreground/60 text-sm font-medium">Created At</dt>
+                                        <dd class="text-foreground text-sm" id="modal-created-at"></dd>
                                     </div>
                                     <div>
-                                        <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Updated At</dt>
-                                        <dd class="text-sm text-gray-900 dark:text-white" id="modal-updated-at"></dd>
+                                        <dt class="text-foreground/60 text-sm font-medium">Updated At</dt>
+                                        <dd class="text-foreground text-sm" id="modal-updated-at"></dd>
                                     </div>
                                 </dl>
                             </div>
@@ -131,32 +131,55 @@
 
                         @if (in_array(auth()->user()->role, ['superadmin', 'admin']))
                             <div class="mb-3">
-                                <h4 class="text-lg font-medium text-gray-900 dark:text-white">Customer Information</h4>
+                                <h4 class="text-foreground text-lg font-medium">Customer Information</h4>
                                 <dl class="mt-2 space-y-2">
                                     <div>
-                                        <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Customer Name</dt>
-                                        <dd class="text-sm text-gray-900 dark:text-white" id="modal-customer-name"></dd>
+                                        <dt class="text-foreground/60 text-sm font-medium">Customer Name</dt>
+                                        <dd class="text-foreground text-sm" id="modal-customer-name"></dd>
                                     </div>
                                     <div>
-                                        <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Customer Email</dt>
-                                        <dd class="text-sm text-gray-900 dark:text-white" id="modal-customer-email"></dd>
+                                        <dt class="text-foreground/60 text-sm font-medium">Customer Email</dt>
+                                        <dd class="text-foreground text-sm" id="modal-customer-email"></dd>
                                     </div>
                                 </dl>
                             </div>
                         @endif
 
                         <div>
-                            <h4 class="text-lg font-medium text-gray-900 dark:text-white">Payment Information</h4>
+                            <h4 class="text-foreground text-lg font-medium">Payment Information</h4>
                             <dl class="mt-2 space-y-2">
                                 <div>
-                                    <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Payment Status</dt>
-                                    <dd class="text-sm text-gray-900 dark:text-white" id="modal-payment-status"></dd>
+                                    <dt class="text-foreground/60 text-sm font-medium">Payment Status</dt>
+                                    <dd class="text-foreground text-sm" id="modal-payment-status"></dd>
                                 </div>
                                 <div>
-                                    <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Transaction ID</dt>
-                                    <dd class="text-sm text-gray-900 dark:text-white" id="modal-transaction-id"></dd>
+                                    <dt class="text-foreground/60 text-sm font-medium">Transaction ID</dt>
+                                    <dd class="text-foreground text-sm" id="modal-transaction-id"></dd>
                                 </div>
                             </dl>
+
+                            <!-- Payments Table -->
+                            <div class="mt-4" id="payments-table-container">
+                                <h5 class="text-md text-foreground mb-2 font-medium">Payment History</h5>
+                                <div class="overflow-x-auto">
+                                    <table class="divide-foreground/20 min-w-full divide-y">
+                                        <thead class="bg-gray-50">
+                                            <tr>
+                                                <th class="text-foreground/60 px-3 py-2 text-left text-xs font-medium uppercase tracking-wider" scope="col">Invoice</th>
+                                                <th class="text-foreground/60 px-3 py-2 text-left text-xs font-medium uppercase tracking-wider" scope="col">Amount</th>
+                                                <th class="text-foreground/60 px-3 py-2 text-left text-xs font-medium uppercase tracking-wider" scope="col">Status</th>
+                                                <th class="text-foreground/60 px-3 py-2 text-left text-xs font-medium uppercase tracking-wider" scope="col">Payment Date</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="divide-foreground/20 bg-neutral divide-y" id="payments-table-body">
+                                            <!-- Payments will be populated here -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div class="text-foreground/60 mt-2 text-sm" id="payments-limit-note" style="display: none;">
+                                    Showing only the 2 most recent payments. For complete payment history, please check the Payments section.
+                                </div>
+                            </div>
                         </div>
                     </div>
 
@@ -176,7 +199,14 @@
 
     @include('components.dependencies._datatables')
 
+    @push('css')
+        <link href="https://cdn.jsdelivr.net/npm/ol@v10.6.0/ol.css" rel="stylesheet">
+    @endpush
+
     @push('javascript')
+        <script src="https://cdn.jsdelivr.net/npm/ol@v10.6.0/dist/ol.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.11.0/proj4.min.js" integrity="sha512-JfEOeAU2TD7AtE3xJPSBwBFCxURVqQCysNBwOnNhEJS9LgTHTWGSyYd11JUBOaJ+xVHPaA0ZhLin365CapD8EQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+
         <script>
             $(document).ready(function() {
                 let urlParams = new URLSearchParams(window.location.search);
@@ -321,18 +351,20 @@
                         url: `{{ route('admin.subscription.show', ':subscription_id') }}`.replace(':subscription_id', subscriptionId),
                         method: 'GET',
                         success: function(response) {
+                            const subscription = response.data;
+
                             // Hide loader and show details
                             $('#modal-loader-data').addClass('hidden');
                             $('#subscription-details').removeClass('hidden');
 
                             // Populate modal with subscription data
-                            $('#modal-plan-name').text(response.plan?.name || '-');
-                            $('#modal-field-area').text(response.field_area ? formatNumber(response.field_area.area_ha) + ' ha' : '-');
+                            $('#modal-plan-name').text(subscription.plan?.name || '-');
+                            $('#modal-field-area').text(subscription.field_area ? formatNumber(subscription.field_area.area_ha) + ' ha' : '-');
 
-                            $('#modal-total-price').text(response.total_price ? formatCurrency(response.total_price, response?.payments?.[0]?.currency) : '-');
+                            $('#modal-total-price').text(subscription.total_price ? formatCurrency(subscription.total_price, response?.payments?.[0]?.currency) : '-');
 
                             // Status with badge color
-                            const status = response.status || '-';
+                            const status = subscription.status || '-';
                             const statusConfig = window.STATUS_CONFIG_BADGE_COLOR?.[status] || window.STATUS_CONFIG_BADGE_COLOR?.default || {
                                 class: "bg-gray-100 text-gray-800",
                                 text: status
@@ -340,19 +372,19 @@
                             $('#modal-status').html(`<span class="inline-flex rounded-full px-2 py-1 text-xs font-semibold ${statusConfig.class}">${statusConfig.text}</span>`);
 
                             // Format dates
-                            $('#modal-start-date').text(response.start_date ? formatCustomDate(response.start_date, false) : '-');
-                            $('#modal-end-date').text(response.end_date ? formatCustomDate(response.end_date, false) : '-');
-                            $('#modal-created-at').text(response.created_at ? formatCustomDate(response.created_at, true) : '-');
-                            $('#modal-updated-at').text(response.updated_at ? formatCustomDate(response.updated_at, true) : '-');
+                            $('#modal-start-date').text(subscription.start_date ? formatCustomDate(subscription.start_date, false) : '-');
+                            $('#modal-end-date').text(subscription.end_date ? formatCustomDate(subscription.end_date, false) : '-');
+                            $('#modal-created-at').text(subscription.created_at ? formatCustomDate(subscription.created_at, true) : '-');
+                            $('#modal-updated-at').text(subscription.updated_at ? formatCustomDate(subscription.updated_at, true) : '-');
 
                             // Customer information (for admin roles)
                             @if (in_array(auth()->user()->role, ['superadmin', 'admin']))
-                                $('#modal-customer-name').text(response.user?.name || '-');
-                                $('#modal-customer-email').text(response.user?.email || '-');
+                                $('#modal-customer-name').text(subscription.user?.name || '-');
+                                $('#modal-customer-email').text(subscription.user?.email || '-');
                             @endif
 
                             // Payment information
-                            const payment = response.payments?.[0] || null;
+                            const payment = subscription.payments?.[0] || null;
                             if (payment) {
                                 const paymentStatusConfig = window.STATUS_CONFIG_BADGE_COLOR?.[payment.status] || window.STATUS_CONFIG_BADGE_COLOR?.default || {
                                     class: "bg-gray-100 text-gray-800",
@@ -363,6 +395,35 @@
                             } else {
                                 $('#modal-payment-status').text('-');
                                 $('#modal-transaction-id').text('-');
+                            }
+
+                            // Display all payments in a table
+                            const payments = subscription.payments || [];
+                            if (payments.length > 0) {
+                                $('#payments-table-container').show();
+                                let paymentsTableBody = '';
+
+                                payments.forEach(function(payment) {
+                                    const paymentStatusConfig = window.STATUS_CONFIG_BADGE_COLOR?.[payment.status] || window.STATUS_CONFIG_BADGE_COLOR?.default || {
+                                        class: "bg-gray-100 text-gray-800",
+                                        text: payment.status
+                                    };
+
+                                    paymentsTableBody += `
+                                        <tr>
+                                            <td class="whitespace-nowrap px-3 py-2 text-sm text-foreground ">${payment.invoice_number || '-'}</td>
+                                            <td class="whitespace-nowrap px-3 py-2 text-sm text-foreground ">${formatCurrency(payment.amount, payment.currency)}</td>
+                                            <td class="whitespace-nowrap px-3 py-2 text-sm">
+                                                <span class="inline-flex rounded-full px-2 py-1 text-xs font-semibold ${paymentStatusConfig.class}">${paymentStatusConfig.text}</span>
+                                            </td>
+                                            <td class="whitespace-nowrap px-3 py-2 text-sm text-foreground ">${payment.paid_at ? formatCustomDate(payment.paid_at, false) : '-'}</td>
+                                        </tr>
+                                    `;
+                                });
+
+                                $('#payments-table-body').html(paymentsTableBody);
+                            } else {
+                                $('#payments-table-container').hide();
                             }
                         },
                         error: function(xhr, status, error) {

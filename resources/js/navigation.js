@@ -53,6 +53,9 @@ class Navigation {
         this.isTransparent = this.nav?.dataset.variant === "transparent";
 
         this.bindEvents();
+
+        // Check initial scroll position on page load
+        this.handleNavScroll();
     }
 
     bindEvents() {

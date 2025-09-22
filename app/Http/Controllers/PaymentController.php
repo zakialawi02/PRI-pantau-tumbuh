@@ -17,6 +17,7 @@ use App\Mail\OrderConfirmation;
 use App\Mail\PaymentConfirmation;
 use App\Services\PaymentGatewayFactory;
 use Exception;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Log;
 
 class PaymentController extends Controller
@@ -62,7 +63,7 @@ class PaymentController extends Controller
                     return $data->subscription->user->name ?? $data->name ?? '-';
                 })
                 ->addColumn('invoice_number', function ($data) {
-                    return '#' . substr($data->id, 0, 8);
+                    return $data->invoice_number ? '#' . $data->invoice_number : '#' . substr($data->id, 0, 16);
                 })
                 ->editColumn('status', function ($data) {
                     return $data->checkAndMarkAsExpired;
@@ -105,37 +106,53 @@ class PaymentController extends Controller
 
     public function getPaymentData($id)
     {
-        // Additional authorization check
-        $user = Auth::user();
-        if (!in_array($user->role, ['superadmin', 'admin'])) {
+        try {
+            // Additional authorization check
+            $user = Auth::user();
+            if (!in_array($user->role, ['superadmin', 'admin'])) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized access'
+                ], 403);
+            }
+
+            $payment = Payment::with(['subscription', 'subscription.user', 'subscription.plan', 'subscription.fieldArea', 'verifier'])->findOrFail($id);
+
+            return response()->json([
+                'success' => true,
+                'payment' => [
+                    'id' => $payment->id,
+                    'invoice_number' => $payment->invoice_number,
+                    'status' => $payment->checkAndMarkAsExpired,
+                    'payment_proof' => $payment->proof_image,
+                    'amount' => $payment->amount,
+                    'currency' => $payment->currency,
+                    'name' => $payment->name,
+                    'email' => $payment->email,
+                    'phone' => $payment->phone,
+                    'payment_method' => $payment->payment_method,
+                    'due_date' => $payment->due_date ? $payment->due_date->format('Y-m-d H:i:s') : null,
+                    'paid_at' => $payment->paid_at ? $payment->paid_at->format('Y-m-d H:i:s') : null,
+                    'created_at' => $payment->created_at->format('Y-m-d H:i:s'),
+                    'subscription' => $payment->subscription->only('id', 'user_id', 'plan_id', 'field_area_id', 'status', 'start_date', 'due_date'),
+                    'field_area' => $payment->subscription->fieldArea->only('id', 'name', 'area_ha'),
+                    'verifier' => $payment->verifier ? $payment->verifier->only('id', 'name', 'email', 'phone', 'created_at', 'updated_at') : null,
+                ]
+            ], 200);
+        } catch (ModelNotFoundException $e) {
+            Log::error("Payment Model not found. Error: " . $e->getMessage());
             return response()->json([
                 'success' => false,
-                'message' => 'Unauthorized access'
-            ], 403);
+                'message' => 'Payment not found'
+            ], 404);
+        } catch (\Exception $e) {
+            Log::error("An error occurred while retrieving payment data. Error: " . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while retrieving payment data',
+                'error' => $e->getMessage()
+            ], 500);
         }
-
-        $payment = Payment::with(['subscription', 'subscription.user', 'subscription.plan', 'subscription.fieldArea', 'verifier'])->findOrFail($id);
-
-        return response()->json([
-            'success' => true,
-            'payment' => [
-                'id' => $payment->id,
-                'status' => $payment->checkAndMarkAsExpired,
-                'payment_proof' => $payment->proof_image,
-                'amount' => $payment->amount,
-                'currency' => $payment->currency,
-                'name' => $payment->name,
-                'email' => $payment->email,
-                'phone' => $payment->phone,
-                'payment_method' => $payment->payment_method,
-                'due_date' => $payment->due_date ? $payment->due_date->format('Y-m-d H:i:s') : null,
-                'paid_at' => $payment->paid_at ? $payment->paid_at->format('Y-m-d H:i:s') : null,
-                'created_at' => $payment->created_at->format('Y-m-d H:i:s'),
-                'subscription' => $payment->subscription->only('id', 'user_id', 'plan_id', 'field_area_id', 'status', 'start_date', 'due_date'),
-                'field_area' => $payment->subscription->fieldArea->only('id', 'name', 'area_ha'),
-                'verifier' => $payment->verifier ? $payment->verifier->only('id', 'name', 'email', 'phone', 'created_at', 'updated_at') : null,
-            ]
-        ], 200);
     }
 
 

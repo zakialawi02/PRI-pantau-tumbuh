@@ -22,7 +22,7 @@
             </div>
 
             <!-- What is PRI Section -->
-            <div class="mb-8 rounded-xl bg-white p-8 shadow-lg">
+            <div class="bg-neutral mb-8 rounded-xl p-8 shadow-lg">
                 <div class="mb-6 flex items-center">
                     <div class="bg-muted mr-4 flex h-12 w-12 items-center justify-center rounded-lg">
                         <svg class="text-primary h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">

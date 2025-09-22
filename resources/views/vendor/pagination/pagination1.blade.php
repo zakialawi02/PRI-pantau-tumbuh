@@ -3,13 +3,13 @@
         <nav class="flex items-center justify-end space-x-2">
             {{-- Previous Page Link --}}
             @if ($paginator->onFirstPage())
-                <span class="bg-base-200 dark:bg-dark-base-200 cursor-not-allowed rounded p-2 opacity-50">
-                    <svg class="text-muted dark:text-dark-muted h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <span class="bg-neutral cursor-not-allowed rounded p-2 opacity-50">
+                    <svg class="text-muted h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
                     </svg>
                 </span>
             @else
-                <a class="text-dark bg-base-300 hover:bg-primary dark:bg-dark-base-200 dark:text-dark-light dark:hover:bg-dark-primary rounded p-2 transition" href="{{ $paginator->previousPageUrl() }}">
+                <a class="text-foreground bg-background hover:bg-primary rounded p-2 transition" href="{{ $paginator->previousPageUrl() }}">
                     <svg class="h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
                     </svg>
@@ -48,14 +48,14 @@
 
             @foreach ($elements as $element)
                 @if (is_string($element))
-                    <span class="text-muted dark:text-dark-muted px-3 py-1 text-sm">…</span>
+                    <span class="text-muted px-3 py-1 text-sm">…</span>
                 @else
                     @if ($element == $paginator->currentPage())
-                        <span class="bg-primary dark:bg-dark-primary rounded px-3 py-1 text-sm font-semibold text-white">
+                        <span class="bg-primary text-neutral rounded px-3 py-1 text-sm font-semibold">
                             {{ $element }}
                         </span>
                     @else
-                        <a class="text-dark bg-base-300 hover:bg-primary dark:bg-dark-base-200 dark:text-dark-light dark:hover:bg-dark-primary rounded px-3 py-1 text-sm transition hover:text-white" href="{{ $paginator->url($element) }}">
+                        <a class="text-foreground bg-background hover:bg-primary hover:text-neutral rounded px-3 py-1 text-sm transition" href="{{ $paginator->url($element) }}">
                             {{ $element }}
                         </a>
                     @endif
@@ -64,14 +64,14 @@
 
             {{-- Next Page Link --}}
             @if ($paginator->hasMorePages())
-                <a class="text-dark bg-base-300 hover:bg-primary dark:bg-dark-base-200 dark:text-dark-light dark:hover:bg-dark-primary rounded p-2 transition" href="{{ $paginator->nextPageUrl() }}">
+                <a class="text-foreground bg-background hover:bg-primary rounded p-2 transition" href="{{ $paginator->nextPageUrl() }}">
                     <svg class="h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
                     </svg>
                 </a>
             @else
-                <span class="bg-base-200 dark:bg-dark-base-200 cursor-not-allowed rounded p-2 opacity-50">
-                    <svg class="text-muted dark:text-dark-muted h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <span class="bg-neutral cursor-not-allowed rounded p-2 opacity-50">
+                    <svg class="text-muted h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
                     </svg>
                 </span>
@@ -79,7 +79,7 @@
         </nav>
 
         {{-- Info Summary --}}
-        <div class="text-muted dark:text-dark-muted/80 mt-2 text-sm">
+        <div class="text-muted/80 mt-2 text-sm">
             Showing <strong>{{ $paginator->firstItem() }}</strong> to <strong>{{ $paginator->lastItem() }}</strong>
             of <strong>{{ $paginator->total() }}</strong> results ({{ $paginator->lastPage() }} pages)
         </div>

@@ -8,7 +8,7 @@
                 <div class="flex flex-col md:flex-row md:items-start md:justify-between">
                     <div class="mb-4 md:mb-0">
                         <h1 class="mb-2 text-3xl font-bold">INVOICE</h1>
-                        <p class="text-background">Invoice #{{ $payment->id }}</p>
+                        <p class="text-background">Invoice #{{ $payment->invoice_number ?? substr($payment->id, 0, 16) }}</p>
                         <p class="text-background">Date: {{ $payment->created_at->isoFormat('LL, HH:mm') }}</p>
                         @if (isset($payment->due_date))
                             <p class="text-background">Due Date: {{ $payment->due_date->isoFormat('LL, HH:mm') }}</p>

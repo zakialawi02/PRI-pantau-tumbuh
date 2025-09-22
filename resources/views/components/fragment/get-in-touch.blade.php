@@ -78,7 +78,7 @@
                                 <h4 class="text-foreground mb-2 text-lg font-semibold">Phone Number</h4>
                                 <p class="text-foreground/70 leading-relaxed">
                                     <a class="hover:text-primary transition-colors duration-300" href="tel:+6231594730">
-                                        +62 31 594 730
+                                        +62 897 4884 990
                                     </a>
                                 </p>
                             </div>

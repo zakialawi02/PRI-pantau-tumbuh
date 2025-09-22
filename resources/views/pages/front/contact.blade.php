@@ -18,7 +18,7 @@
             </div>
 
             <div class="mx-auto mt-16 max-w-xl">
-                <form class="space-y-6" action="#" method="POST">
+                <form class="space-y-6" id="contactForm" method="POST">
                     @csrf
 
                     <div>
@@ -34,11 +34,6 @@
                     <div>
                         <x-input-label for="phone" :value="__('Phone Number')" />
                         <x-text-input class="block w-full" id="phone" name="phone" type="text" :value="old('phone')" required autocomplete="phone" />
-                    </div>
-
-                    <div>
-                        <x-input-label for="subject" :value="__('Subject')" />
-                        <x-text-input class="mt-1 block w-full" id="subject" name="subject" type="text" required autofocus autocomplete="subject" />
                     </div>
 
                     <div>
@@ -75,7 +70,7 @@
                             </svg>
                         </div>
                         <h4 class="text-foreground mt-4 text-lg font-medium">Phone</h4>
-                        <p class="text-foreground/80 mt-2 text-sm">+62 xxx-xxxx-xxxx</p>
+                        <p class="text-foreground/80 mt-2 text-sm">+62 897 4884 990</p>
                     </div>
 
                     <div class="text-center">
@@ -99,4 +94,42 @@
             </iframe>
         </div>
     </section>
+
+    @push('javascript')
+        <script>
+            document.getElementById("contactForm").addEventListener("submit", function(e) {
+                e.preventDefault();
+
+                let button = e.target.querySelector("button[type='submit']");
+                button.disabled = true;
+                button.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Sending...';
+
+                let data = {
+                    nama: e.target.full_name.value,
+                    email: e.target.email.value,
+                    telepon: e.target.phone.value,
+                    pesan: e.target.message.value,
+                };
+
+
+                fetch("{{ env('CONTACT_FORM_APP_SCRIPT') ?? 'https://script.google.com/macros/s/# ?>' }}", {
+                        method: "POST",
+                        body: JSON.stringify(data),
+                    })
+                    .then((res) => res.json())
+                    .then((response) => {
+                        alert("Message sent successfully");
+                        e.target.reset();
+                    })
+                    .catch((err) => {
+                        alert("Something went wrong. Please try again later.");
+                        console.error(err);
+                    })
+                    .finally(() => {
+                        button.disabled = false;
+                        button.innerHTML = '<i class="fas fa-paper-plane mr-2"></i> Send Message';
+                    });
+            });
+        </script>
+    @endpush
 </x-app-front-layout>

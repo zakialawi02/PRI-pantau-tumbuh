@@ -33,6 +33,10 @@
                                 <i class="ri-group-line mr-2 text-lg"></i>
                                 <span>User Management</span>
                             </a>
+                            <a class="border-foreground/20 hover:bg-foreground/5 rounded-lg border p-3 transition-colors" href="{{ route('admin.field-area.index') }}">
+                                <i class="ri-map-pin-line mr-2 text-lg"></i>
+                                <span>Field Area Management</span>
+                            </a>
                         @endif
                     </div>
                 </x-card>
@@ -53,7 +57,7 @@
                         </div>
                         <div class="flex justify-between">
                             <span class="text-foreground/70">Field Areas:</span>
-                            <span class="font-medium">-</span>
+                            <span class="font-medium">{{ $totalFieldAreas ?? 0 }}</span>
                         </div>
                     </div>
                 </x-card>

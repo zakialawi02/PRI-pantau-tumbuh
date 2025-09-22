@@ -59,109 +59,113 @@
                         </a>
                     </div>
 
-                    @if (isset($recentUsers) && $recentUsers->count() > 0)
-                        <div class="overflow-x-auto">
-                            <table class="divide-foreground/20 min-w-full divide-y">
-                                <thead>
-                                    <tr>
-                                        <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">User</th>
-                                        <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Email</th>
-                                        <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Role</th>
-                                        <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Registered</th>
-                                    </tr>
-                                </thead>
-                                <tbody class="divide-foreground/10 divide-y">
-                                    @foreach ($recentUsers as $user)
+                    @forelse ($recentUsers as $user)
+                        @if ($loop->first)
+                            <div class="overflow-x-auto">
+                                <table class="divide-foreground/20 min-w-full divide-y">
+                                    <thead>
                                         <tr>
-                                            <td class="whitespace-nowrap px-4 py-3">
-                                                <div class="flex items-center">
-                                                    <div class="h-10 w-10 flex-shrink-0">
-                                                        <img class="h-10 w-10 rounded-full" src="{{ asset($user->profile_photo_path) }}" alt="{{ $user->name }}">
-                                                    </div>
-                                                    <div class="ml-4">
-                                                        <div class="text-sm font-medium">{{ $user->name }}</div>
-                                                        <div class="text-foreground/70 text-sm">{{ $user->username }}</div>
-                                                    </div>
-                                                </div>
-                                            </td>
-                                            <td class="whitespace-nowrap px-4 py-3 text-sm">
-                                                {{ $user->email }}
-                                            </td>
-                                            <td class="whitespace-nowrap px-4 py-3">
-                                                <span class="@if ($user->role == 'superadmin') bg-red-100 text-red-800
-                                                    @elseif($user->role == 'admin') bg-blue-100 text-blue-800
-                                                    @else bg-gray-100 text-gray-800 @endif inline-flex rounded-full px-2 text-xs font-semibold leading-5">
-                                                    {{ ucfirst($user->role) }}
-                                                </span>
-                                            </td>
-                                            <td class="text-foreground/70 whitespace-nowrap px-4 py-3 text-sm">
-                                                {{ $user->created_at->isoFormat('D MMM YYYY') }}
-                                            </td>
+                                            <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">User</th>
+                                            <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Email</th>
+                                            <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Role</th>
+                                            <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Registered</th>
                                         </tr>
-                                    @endforeach
-                                </tbody>
-                            </table>
-                        </div>
-                    @else
-                        <div class="py-8 text-center">
-                            <i class="ri-group-line text-foreground/30 mb-3 text-4xl"></i>
-                            <p class="text-foreground/70">No users found</p>
-                        </div>
-                    @endif
-                </x-card>
-            </div>
-
-            <!-- Recent Subscriptions -->
-            <div class="">
-                <x-card>
-                    <div class="mb-4 flex items-center justify-between">
-                        <h2 class="text-xl font-semibold">Recent Active Subscriptions</h2>
-                        <a class="text-primary text-sm hover:underline" href="{{ route('admin.subscription.index') }}">
-                            View All
-                        </a>
-                    </div>
-
-                    @if (isset($recentSubscriptions) && $recentSubscriptions->where('status', 'active')->count() > 0)
-                        <div class="space-y-4">
-                            @foreach ($recentSubscriptions->where('status', 'active') as $subscription)
-                                <div class="border-foreground/10 rounded-lg border p-3">
-                                    <div class="flex items-start justify-between">
-                                        <div>
-                                            <h3 class="text-sm font-medium">{{ $subscription->user->name ?? 'Unknown User' }}</h3>
-                                            <p class="text-foreground/70 text-xs">
-                                                {{ $subscription->plan->name ?? 'N/A' }}
-                                            </p>
-                                        </div>
-                                        <span class="@if ($subscription->status == 'active') bg-green-100 text-green-800
-                                            @elseif($subscription->status == 'expired') bg-red-100 text-red-800
-                                            @else bg-yellow-100 text-yellow-800 @endif rounded-full px-2 py-1 text-xs">
-                                            {{ ucfirst($subscription->status) }}
-                                        </span>
+                                    </thead>
+                                    <tbody class="divide-foreground/10 divide-y">
+                        @endif
+                        <tr>
+                            <td class="whitespace-nowrap px-4 py-3">
+                                <div class="flex items-center">
+                                    <div class="h-10 w-10 flex-shrink-0">
+                                        <img class="h-10 w-10 rounded-full" src="{{ asset($user->profile_photo_path) }}" alt="{{ $user->name }}">
                                     </div>
-                                    <div class="mt-2 flex items-center justify-between">
-                                        <div>
-                                            <div class="text-foreground/70 text-xs">
-                                                {{ Number::format($subscription->fieldArea->area_ha ?? 0, locale: app()->getLocale()) }} ha
-                                            </div>
-                                            <div class="text-sm font-medium">
-                                                {{ Number::currency($subscription->total_price, $subscription->plan->currency, app()->getLocale()) }}
-                                            </div>
-                                        </div>
-                                        <span class="text-foreground/70 text-xs">
-                                            {{ $subscription->created_at->isoFormat('D MMM YYYY') }}
-                                        </span>
+                                    <div class="ml-4">
+                                        <div class="text-sm font-medium">{{ $user->name }}</div>
+                                        <div class="text-foreground/70 text-sm">{{ $user->username }}</div>
                                     </div>
                                 </div>
-                            @endforeach
-                        </div>
-                    @else
-                        <div class="py-8 text-center">
-                            <i class="ri-file-list-line text-foreground/30 mb-3 text-4xl"></i>
-                            <p class="text-foreground/70">No active subscriptions found</p>
-                        </div>
-                    @endif
-                </x-card>
+                            </td>
+                            <td class="whitespace-nowrap px-4 py-3 text-sm">
+                                {{ $user->email }}
+                            </td>
+                            <td class="whitespace-nowrap px-4 py-3">
+                                <span class="@if ($user->role == 'superadmin') bg-red-100 text-red-800
+                                                @elseif($user->role == 'admin') bg-blue-100 text-blue-800
+                                                @else bg-gray-100 text-gray-800 @endif inline-flex rounded-full px-2 text-xs font-semibold leading-5">
+                                    {{ ucfirst($user->role) }}
+                                </span>
+                            </td>
+                            <td class="text-foreground/70 whitespace-nowrap px-4 py-3 text-sm">
+                                {{ $user->created_at->isoFormat('D MMM YYYY') }}
+                            </td>
+                        </tr>
+                        @if ($loop->last)
+                            </tbody>
+                            </table>
             </div>
+            @endif
+        @empty
+            <div class="py-8 text-center">
+                <i class="ri-group-line text-foreground/30 mb-3 text-4xl"></i>
+                <p class="text-foreground/70">No users found</p>
+            </div>
+            @endforelse
+            </x-card>
+        </div>
+
+        <!-- Recent Subscriptions -->
+        <div class="">
+            <x-card>
+                <div class="mb-4 flex items-center justify-between">
+                    <h2 class="text-xl font-semibold">Recent Active Subscriptions</h2>
+                    <a class="text-primary text-sm hover:underline" href="{{ route('admin.subscription.index') }}">
+                        View All
+                    </a>
+                </div>
+
+                @forelse ($recentSubscriptions->where('status', 'active') as $subscription)
+                    @if ($loop->first)
+                        <div class="space-y-4">
+                    @endif
+                    <div class="border-foreground/10 rounded-lg border p-3">
+                        <div class="flex items-start justify-between">
+                            <div>
+                                <h3 class="text-sm font-medium">{{ $subscription->user->name ?? 'Unknown User' }}</h3>
+                                <p class="text-foreground/70 text-xs">
+                                    {{ $subscription->plan->name ?? 'N/A' }}
+                                </p>
+                            </div>
+                            <span class="@if ($subscription->status == 'active') bg-green-100 text-green-800
+                                    @elseif($subscription->status == 'expired') bg-red-100 text-red-800
+                                    @else bg-yellow-100 text-yellow-800 @endif rounded-full px-2 py-1 text-xs">
+                                {{ ucfirst($subscription->status) }}
+                            </span>
+                        </div>
+                        <div class="mt-2 flex items-center justify-between">
+                            <div>
+                                <div class="text-foreground/70 text-xs">
+                                    {{ Number::format($subscription->fieldArea->area_ha ?? 0, locale: app()->getLocale()) }} ha
+                                </div>
+                                <div class="text-sm font-medium">
+                                    {{ Number::currency($subscription->total_price, $subscription->plan->currency, app()->getLocale()) }}
+                                </div>
+                            </div>
+                            <span class="text-foreground/70 text-xs">
+                                {{ $subscription->created_at->isoFormat('D MMM YYYY') }}
+                            </span>
+                        </div>
+                    </div>
+                    @if ($loop->last)
+        </div>
+        @endif
+    @empty
+        <div class="py-8 text-center">
+            <i class="ri-file-list-line text-foreground/30 mb-3 text-4xl"></i>
+            <p class="text-foreground/70">No active subscriptions found</p>
+        </div>
+        @endforelse
+        </x-card>
+        </div>
         </div>
 
         <!-- Second Row -->

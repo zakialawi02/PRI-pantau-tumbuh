@@ -4,13 +4,15 @@ namespace App\Models;
 
 use App\Models\User;
 use App\Models\Subscription;
+use App\Services\InvoiceNumberGenerator;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Payment extends Model
 {
-    use HasFactory, HasUlids;
+    use HasFactory, HasUlids, SoftDeletes;
 
     protected $table = 'payments';
     public $incrementing = false;
@@ -34,6 +36,7 @@ class Payment extends Model
         'transaction_ref',
         'paid_at',
         'due_date',
+        'invoice_number', // Add this line
     ];
 
     protected $casts = [
@@ -42,6 +45,21 @@ class Payment extends Model
         'verified_at' => 'datetime',
         'amount' => 'decimal:2',
     ];
+
+    /**
+     * Boot the model.
+     */
+    protected static function boot()
+    {
+        parent::boot();
+
+        // Generate invoice number when creating a new payment
+        static::creating(function ($payment) {
+            if (empty($payment->invoice_number)) {
+                $payment->invoice_number = InvoiceNumberGenerator::generate();
+            }
+        });
+    }
 
     /**
      * Get the effective status of the payment, considering expiration.

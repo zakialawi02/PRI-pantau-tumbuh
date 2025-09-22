@@ -11,6 +11,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\Socialite\ProviderCallbackController;
 use App\Http\Controllers\Socialite\ProviderRedirectController;
 use App\Http\Controllers\SubscriptionController;
+use App\Http\Controllers\FieldAreaController;
 
 
 Route::get('/auth/{provider}/redirect', ProviderRedirectController::class)->name('auth.redirect');
@@ -42,6 +43,10 @@ Route::prefix('dashboard')->name('admin.')->group(function () {
         // subscription
         Route::get('/subscription', [SubscriptionController::class, 'index'])->name('subscription.index');
         Route::get('/subscription/{subscription}', [SubscriptionController::class, 'show'])->name('subscription.show');
+
+        // field areas
+        Route::get('/field-area', [FieldAreaController::class, 'index'])->name('field-area.index');
+        Route::get('/field-area/{fieldArea}', [FieldAreaController::class, 'show'])->name('fieldArea.show');
     });
 
 

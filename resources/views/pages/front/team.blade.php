@@ -8,13 +8,13 @@
 
 
 <x-app-front-layout>
-    <section class="bg-gradient-to-br from-green-50 via-blue-50 to-emerald-50 py-12">
+    <section class="from-primary/20 via-accent/10 to-warning/20 bg-gradient-to-br py-12">
         <div class="mx-auto mb-16 max-w-7xl px-4 py-6 text-center sm:px-6 lg:px-8">
-            <h1 class="mb-4 text-4xl font-bold text-gray-900">Our Team</h1>
-            <p class="mx-auto max-w-3xl text-lg text-gray-600">
+            <h1 class="text-foreground mb-4 text-4xl font-bold">Our Team</h1>
+            <p class="text-foreground/60 mx-auto max-w-3xl text-lg">
                 Meet the dedicated professionals behind PantauTumbuh.id who are committed to revolutionizing agricultural monitoring through satellite imagery and advanced technology.
             </p>
-            <p class="mx-auto max-w-3xl text-gray-600">
+            <p class="text-foreground/60 mx-auto max-w-3xl">
                 PantauTumbuh.id was developed by a multidisciplinary team consisting of geospatial experts, AI engineers, agronomists, and agricultural practitioners.
             </p>
 
