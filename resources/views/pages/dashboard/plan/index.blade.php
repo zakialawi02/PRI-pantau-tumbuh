@@ -1,5 +1,5 @@
 @section('title', 'Plans Management')
-@section('meta_description', 'Manage subscription plans and pricing')
+@section('meta_description', 'Manage subscription/credit plans and pricing')
 
 <x-app-layout>
     <section class="p-1 md:p-4">
