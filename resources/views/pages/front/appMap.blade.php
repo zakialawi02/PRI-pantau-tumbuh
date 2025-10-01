@@ -261,10 +261,14 @@
                                     Last updated: null
                                 </div>
                             </div>
-                            <x-button-primary id="buySatelliteBtn" type="button" size="small">
-                                <i class="ri-shopping-cart-line"></i>
-                                <span>Buy Satellite Imagery</span>
-                            </x-button-primary>
+                            @auth
+                                @if (!isset($activeFieldAreas) || $activeFieldAreas->count() > 0)
+                                    <x-button-primary id="buySatelliteBtn" type="button" size="small">
+                                        <i class="ri-shopping-cart-line"></i>
+                                        <span>Buy Satellite Imagery</span>
+                                    </x-button-primary>
+                                @endif
+                            @endauth
                         </div>
                     </div>
                 </div>
