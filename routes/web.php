@@ -13,10 +13,8 @@ use App\Http\Controllers\Socialite\ProviderRedirectController;
 use App\Http\Controllers\SubscriptionController;
 use App\Http\Controllers\FieldAreaController;
 
-
 Route::get('/auth/{provider}/redirect', ProviderRedirectController::class)->name('auth.redirect');
 Route::get('/auth/{provider}/callback', ProviderCallbackController::class)->name('auth.callback');
-
 
 Route::prefix('dashboard')->name('admin.')->group(function () {
     Route::middleware(['auth', 'verified', 'role:superadmin'])->group(function () {

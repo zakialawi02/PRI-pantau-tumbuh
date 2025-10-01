@@ -6,7 +6,6 @@ use App\Models\Plan;
 use App\Models\Payment;
 use App\Models\FieldArea;
 use Illuminate\Support\Str;
-use App\Models\Subscription;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
@@ -27,14 +26,12 @@ class PaymentController extends Controller
     {
         if (request()->ajax()) {
             $user = Auth::user();
-            $query = Payment::with(['subscription', 'subscription.user', 'subscription.plan']);
+            $query = Payment::with(['user']);
 
             // Role-based filtering
             if ($user->role === 'user') {
                 // Users can only see their own payments
-                $query->whereHas('subscription', function ($q) use ($user) {
-                    $q->where('user_id', $user->id);
-                });
+                $query->where('user_id', $user->id);
             }
             // superadmin and admin can see all payments (no additional filtering needed)
 
@@ -60,7 +57,7 @@ class PaymentController extends Controller
                     return $actions;
                 })
                 ->addColumn('customer_name', function ($data) {
-                    return $data->subscription->user->name ?? $data->name ?? '-';
+                    return $data->user->name ?? $data->name ?? '-';
                 })
                 ->addColumn('invoice_number', function ($data) {
                     return $data->invoice_number ? '#' . $data->invoice_number : '#' . substr($data->id, 0, 16);
@@ -72,7 +69,7 @@ class PaymentController extends Controller
                     return ucwords(str_replace('_', ' ', $data->payment_method ?? 'Manual'));
                 })
                 ->rawColumns(['action', 'due_date'])
-                ->removeColumn(['id', 'subscription_id', 'updated_at'])
+                ->removeColumn(['id', 'updated_at'])
                 ->make(true);
         }
 
@@ -85,14 +82,13 @@ class PaymentController extends Controller
 
     public function showPayment($payment)
     {
-        $payment = Payment::with(['subscription.plan', 'subscription.fieldArea', 'subscription.user'])
-            ->findOrFail($payment);
+        $payment = Payment::with(['user'])->findOrFail($payment);
 
         $user = Auth::user();
 
         // If user role is 'user', they can only view their own payments
         if ($user->role === 'user') {
-            if ($payment->subscription->user_id !== $user->id) {
+            if ($payment->user_id !== $user->id) {
                 abort(403, 'Unauthorized access to this payment.');
             }
         }
@@ -116,7 +112,7 @@ class PaymentController extends Controller
                 ], 403);
             }
 
-            $payment = Payment::with(['subscription', 'subscription.user', 'subscription.plan', 'subscription.fieldArea', 'verifier'])->findOrFail($id);
+            $payment = Payment::with(['user', 'verifier'])->findOrFail($id);
 
             return response()->json([
                 'success' => true,
@@ -134,8 +130,7 @@ class PaymentController extends Controller
                     'due_date' => $payment->due_date ? $payment->due_date->format('Y-m-d H:i:s') : null,
                     'paid_at' => $payment->paid_at ? $payment->paid_at->format('Y-m-d H:i:s') : null,
                     'created_at' => $payment->created_at->format('Y-m-d H:i:s'),
-                    'subscription' => $payment->subscription->only('id', 'user_id', 'plan_id', 'field_area_id', 'status', 'start_date', 'due_date'),
-                    'field_area' => $payment->subscription->fieldArea->only('id', 'name', 'area_ha'),
+                    'user' => $payment->user->only('id', 'name', 'email', 'phone'),
                     'verifier' => $payment->verifier ? $payment->verifier->only('id', 'name', 'email', 'phone', 'created_at', 'updated_at') : null,
                 ]
             ], 200);
@@ -180,14 +175,6 @@ class PaymentController extends Controller
             'verified_by' => $request->status === 'paid' ? Auth::id() : null,
             'paid_at' => $request->status === 'paid' ? now() : $payment->paid_at,
         ]);
-
-        // Update subscription status if payment is paid
-        if ($request->status === 'paid' && $oldStatus !== 'paid') {
-            $payment->subscription->update([
-                // 'start_date' => now(),
-                'status' => 'active',
-            ]);
-        }
 
         return response()->json([
             'success' => true,
@@ -332,21 +319,11 @@ class PaymentController extends Controller
 
             $plan = $cacheData['plan'];
 
-            // Buat Subscription
-            $subscription = Subscription::create([
-                'user_id'          => $user->id,
-                'field_area_id'    => $field->id,
-                'plan_id'          => $plan->id,
-                'price_per_hectare' => $plan->price_per_hectare,
-                'total_price'      => $cacheData['total_price'],
-                'start_date'       => Carbon::now(),
-                // 'end_date'         => Carbon::now()->addMonth(),
-                'status'           => 'awaiting_payment',
-            ]);
+
 
             // Buat Payment
             $payment = Payment::create([
-                'subscription_id' => $subscription->id,
+                'user_id'         => $user->id,
                 'name'            => $user->name,
                 'email'           => $user->email,
                 'phone'           => $request->phone,
@@ -451,7 +428,7 @@ class PaymentController extends Controller
             $paymentData = [
                 'amount' => (float) $payment->amount,
                 'currency' => $payment->currency,
-                'description' => 'Payment for ' . $payment->subscription->plan->name . ' plan',
+                'description' => 'Payment for service',
                 'return_url' => route('admin.payment.callback', ['gateway' => 'paypal']) . '?paymentId=' . $payment->id,
                 'cancel_url' => route('admin.payment.show', $payment->id),
                 'payment_id' => $payment->id // Pass payment ID for callback
@@ -516,12 +493,6 @@ class PaymentController extends Controller
                         'updated_at' => now(),
                     ]);
 
-                    // Update subscription
-                    $payment->subscription->update([
-                        'status' => 'active',
-                        'updated_at' => now(),
-                    ]);
-
                     // Send payment confirmation email for successful payments
                     try {
                         Mail::to($payment->email)->send(new PaymentConfirmation($payment));
@@ -551,12 +522,6 @@ class PaymentController extends Controller
                     $payment->update([
                         'status' => 'paid',
                         'paid_at' => now(),
-                        'updated_at' => now(),
-                    ]);
-
-                    // Update subscription
-                    $payment->subscription->update([
-                        'status' => 'active',
                         'updated_at' => now(),
                     ]);
 

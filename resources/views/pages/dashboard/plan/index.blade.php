@@ -19,7 +19,6 @@
                             <th scope="col">No.</th>
                             <th scope="col">Plan Name</th>
                             <th scope="col">Price per Hectare</th>
-                            <th scope="col">Total Subscriptions</th>
                             <th scope="col">Status</th>
                             <th scope="col">Created</th>
                             <th scope="col">Action</th>
@@ -161,12 +160,6 @@
                             render: function(data, type, full, meta) {
                                 return formatCurrency(data, full.currency);
                             }
-                        },
-                        {
-                            data: 'subscriptions_count',
-                            name: 'subscriptions_count',
-                            orderable: true,
-                            searchable: false
                         },
                         {
                             data: 'isShow',

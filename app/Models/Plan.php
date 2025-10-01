@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-use App\Models\Subscription;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -27,9 +26,4 @@ class Plan extends Model
         'price_per_hectare' => 'decimal:2',
         'isShow' => 'boolean',
     ];
-
-    public function subscriptions()
-    {
-        return $this->hasMany(Subscription::class);
-    }
 }

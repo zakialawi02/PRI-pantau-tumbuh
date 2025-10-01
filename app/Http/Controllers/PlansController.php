@@ -22,13 +22,10 @@ class PlansController extends Controller
         ];
 
         if ($request->ajax()) {
-            $plans = Plan::withCount('subscriptions');
+            $plans = Plan::query();
 
             return DataTables::of($plans)
                 ->addIndexColumn()
-                ->editColumn('subscriptions_count', function ($plan) {
-                    return (int) ($plan->subscriptions_count ?? 0);
-                })
                 ->addColumn('action', function ($plan) {
                     return '<div class="flex gap-1">
                                 <button type="button" class="edit-plan inline-flex items-center px-2 py-1 bg-secondary border border-transparent rounded-md font-semibold text-xs text-secondary-foreground uppercase tracking-widest hover:bg-secondary/80 focus:bg-secondary/80 active:bg-secondary/70 focus:outline-none focus:ring-2 focus:ring-secondary focus:ring-offset-2" data-id="' . $plan->id . '"><i class="ri-edit-line"></i></button>
@@ -121,14 +118,6 @@ class PlansController extends Controller
      */
     public function destroy(Plan $plan): JsonResponse
     {
-        // Check if plan has active subscriptions
-        if ($plan->subscriptions()->exists()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Cannot delete plan that has active subscriptions.'
-            ], 422);
-        }
-
         $plan->delete();
 
         return response()->json([

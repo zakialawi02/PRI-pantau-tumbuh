@@ -88,9 +88,9 @@ class User extends Authenticatable implements MustVerifyEmail
         return $this->hasMany(FieldArea::class);
     }
 
-    public function subscriptions()
+    public function payments()
     {
-        return $this->hasMany(Subscription::class);
+        return $this->hasMany(Payment::class);
     }
 
     public function paymentsVerified()

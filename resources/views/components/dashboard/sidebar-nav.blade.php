@@ -23,9 +23,8 @@
         <div class="text-base-content-muted border-foreground/20 border-b px-1 pt-3 text-sm font-bold">
             <p>{{ __('Manage') }}</p>
         </div>
-        <!-- Subscription Management -->
+
         <x-dashboard.nav-item href="admin.field-area.index" icon="ri-map-pin-line" text="{{ $isAdmin ? __('Field Area') : __('My Field Area') }}" />
-        <x-dashboard.nav-item href="admin.subscription.index" icon="ri-vip-crown-line" text="{{ $isAdmin ? __('Subscription') : __('My Subscription') }}" />
 
 
         <x-dashboard.nav-item href="admin.payment.index" icon="ri-currency-line" text="{{ __('Payment') }}" />

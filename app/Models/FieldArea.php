@@ -3,7 +3,6 @@
 namespace App\Models;
 
 use App\Models\User;
-use App\Models\Subscription;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -32,10 +31,5 @@ class FieldArea extends Model
     public function user()
     {
         return $this->belongsTo(User::class);
-    }
-
-    public function subscriptions()
-    {
-        return $this->hasOne(Subscription::class);
     }
 }

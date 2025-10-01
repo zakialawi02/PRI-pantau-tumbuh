@@ -34,9 +34,6 @@
                                 Area (ha)
                             </th>
                             <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider" scope="col">
-                                Status
-                            </th>
-                            <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider" scope="col">
                                 Created At
                             </th>
                             <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider" scope="col">
@@ -49,12 +46,11 @@
                             <tr>
                                 <td>{{ $key + 1 }}</td>
                                 @if (in_array(auth()->user()->role, ['superadmin', 'admin']))
-                                    <td>{{ $fieldArea->user->name }}</td>
+                                    <td>{{ $fieldArea->user->name ?? 'Unknown User' }}</td>
                                 @endif
-                                <td>{{ $fieldArea->name }}</td>
+                                <td>{{ $fieldArea->name ?? 'Unnamed Field' }}</td>
                                 <td>{{ Number::format($fieldArea->area_ha ?? 0, locale: app()->getLocale()) }} ha</td>
-                                <td>{{ $fieldArea->subscriptions->status }}</td>
-                                <td>{{ $fieldArea->created_at->isoFormat('LL, HH:mm') }}</td>
+                                <td>{{ $fieldArea->created_at ? $fieldArea->created_at->isoFormat('LL, HH:mm') : 'N/A' }}</td>
                                 <td>
                                     <x-button-primary class="bg-secondary/80 hover:bg-secondary/60 btn-view-area text-neutral inline-flex items-center rounded-full px-2 py-1 text-xs font-medium" data-id="{{ $fieldArea->id }}" type="button" title="View Details" size="small">
                                         <i class="ri-eye-line mr-1"></i> View
@@ -63,7 +59,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td class="text-center" colspan="7">No field areas found</td>
+                                <td class="text-center" colspan="6">No field areas found</td>
                             </tr>
                         @endforelse
                     </tbody>
@@ -115,10 +111,6 @@
                                     <div>
                                         <dt class="text-foreground/60 text-sm font-medium">Area Size</dt>
                                         <dd class="text-foreground text-sm" id="modal-area-size"></dd>
-                                    </div>
-                                    <div>
-                                        <dt class="text-foreground/60 text-sm font-medium">Status</dt>
-                                        <dd class="text-foreground text-sm" id="modal-status-area"></dd>
                                     </div>
                                 </dl>
                             </div>
@@ -320,18 +312,10 @@
                         success: function(response) {
                             if (response.success) {
                                 let data = response.data;
-                                console.log(data);
 
                                 // Populate field information
                                 $('#modal-field-name').text(data.name || '-');
                                 $('#modal-area-size').text((data.area_ha ? formatNumber(data.area_ha) : '-') + ' ha');
-
-                                const status = data?.subscriptions?.status || '-';
-                                const statusConfig = STATUS_CONFIG_BADGE_COLOR?.[data?.subscriptions?.status] || STATUS_CONFIG_BADGE_COLOR?.default || {
-                                    class: "bg-gray-100 text-gray-800",
-                                    text: status
-                                };
-                                $('#modal-status-area').html(`<span class="inline-flex rounded-full px-2 py-1 text-xs font-semibold ${statusConfig.class}">${statusConfig.text}</span>`);
 
                                 // Format dates
                                 let createdAt = data.created_at ? formatCustomDate(data.created_at) : '-';
@@ -364,9 +348,9 @@
                                 $('#field-area-details-error').removeClass('hidden').text(response.message || 'Error fetching data');
                             }
                         },
-                        error: function(xhr) {
+                        error: function(xhr, status, error) {
                             $('#modal-loader-data').addClass('hidden');
-                            $('#field-area-details-error').removeClass('hidden').text('Error fetching data');
+                            $('#field-area-details-error').removeClass('hidden').text('Error fetching data: ' + error);
                         }
                     });
                 }

@@ -27,10 +27,10 @@ class FieldAreaController extends Controller
         // Build the query based on user role
         if (in_array($user->role, ['superadmin', 'admin'])) {
             // Admin can see all field areas
-            $data['query'] = FieldArea::with(['user', 'subscriptions'])->get();
+            $data['query'] = FieldArea::with(['user'])->get();
         } else {
             // Regular users can only see their own field areas
-            $data['query'] = FieldArea::with(['user', 'subscriptions'])->where('user_id', $user->id)->get();
+            $data['query'] = FieldArea::with(['user'])->where('user_id', $user->id)->get();
         }
 
         return view('pages.dashboard.fieldArea.index', compact('data'));
@@ -42,17 +42,18 @@ class FieldAreaController extends Controller
      * @param  \App\Models\FieldArea  $fieldArea
      * @return \Illuminate\Http\JsonResponse
      */
-    public function show(FieldArea $fieldArea)
+    public function show($fieldArea)
     {
         try {
             $user = Auth::user();
 
+            // Find the field area by ID
+            $fieldArea = FieldArea::findOrFail($fieldArea);
+
             // Build the query based on user role
             if (in_array($user->role, ['superadmin', 'admin'])) {
                 // Admin can see all field areas
-                $fieldArea->load(['user', 'subscriptions' => function ($query) {
-                    $query->withTrashed();
-                }]);
+                $fieldArea->load(['user']);
             } else {
                 // Regular users can only see their own field areas
                 if ($fieldArea->user_id !== $user->id) {
@@ -62,9 +63,7 @@ class FieldAreaController extends Controller
                     ], 403);
                 }
 
-                $fieldArea->load(['user', 'subscriptions' => function ($query) {
-                    $query->withTrashed();
-                }]);
+                $fieldArea->load(['user']);
             }
 
             return response()->json([

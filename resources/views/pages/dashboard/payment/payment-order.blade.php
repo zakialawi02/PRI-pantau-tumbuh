@@ -148,20 +148,15 @@
                             <thead class="bg-background">
                                 <tr>
                                     <th class="border-border text-foreground border px-4 py-3 text-left font-semibold">Description</th>
-                                    <th class="border-border text-foreground border px-4 py-3 text-center font-semibold">Area</th>
-                                    <th class="border-border text-foreground border px-4 py-3 text-center font-semibold">Rate per Hectare</th>
                                     <th class="border-border text-foreground border px-4 py-3 text-right font-semibold">Amount</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <tr class="hover:bg-base-content-muted/20">
                                     <td class="border-border border px-4 py-3">
-                                        <div class="font-medium">{{ $payment->subscription->plan->name }}</div>
-                                        <div class="text-base-content-muted text-sm">Field: {{ $payment->subscription->fieldArea->name }}</div>
+                                        <div class="font-medium">Service Payment</div>
                                     </td>
-                                    <td class="border-border border px-4 py-3 text-center">{{ Number::format($payment->subscription->fieldArea->area_ha, locale: app()->getLocale()) }} ha</td>
-                                    <td class="border-border border px-4 py-3 text-center">{{ Number::currency($payment->subscription->price_per_hectare, $payment->currency, app()->getLocale()) }}</td>
-                                    <td class="border-border border px-4 py-3 text-right font-medium">{{ Number::currency($payment->subscription->price_per_hectare * $payment->subscription->fieldArea->area_ha, $payment->currency, app()->getLocale()) }}</td>
+                                    <td class="border-border border px-4 py-3 text-right font-medium">{{ Number::currency($payment->amount, $payment->currency, app()->getLocale()) }}</td>
                                 </tr>
                             </tbody>
                         </table>

@@ -17,7 +17,6 @@ class MapController extends Controller
         $activeFieldAreas = [];
         if (Auth::check()) {
             $activeFieldAreas = FieldArea::where('user_id', Auth::id())
-                ->with('subscriptions')
                 ->get();
         }
 
