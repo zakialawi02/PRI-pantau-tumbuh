@@ -48,7 +48,7 @@
     </head>
 
     @php
-        $classes = 'text-foreground min-h-screen font-sans antialiased';
+        $classes = 'text-foreground bg-background min-h-screen font-sans antialiased';
     @endphp
 
     <body {{ $attributes->merge(['class' => $classes]) }}>
