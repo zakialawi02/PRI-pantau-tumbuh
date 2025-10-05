@@ -139,8 +139,8 @@
                                         <i class="ri-database-2-line text-foreground/80 text-3xl"></i>
                                     </div>
                                 </div>
-                                <h3 class="text-foreground/70 mb-2 text-lg font-semibold">No Data Available</h3>
-                                <p class="text-foreground/50 mb-4 px-4 text-sm">
+                                <h3 class="text-foreground/80 mb-2 text-lg font-semibold">No Data Available</h3>
+                                <p class="text-foreground/70 mb-4 px-4 text-sm">
                                     You don't have any satellite imagery data yet. Purchase satellite imagery to start monitoring your crops and analyzing plant stress using PRI.
                                 </p>
                                 <x-button-primary id="buySatelliteBtn" type="button" size="small">
@@ -267,8 +267,18 @@
             <div class="h-full w-full" id="map"></div>
 
             <!-- Search Bar -->
-            <div class="absolute left-2 right-2 top-12 flex w-1/2 items-center justify-between md:w-1/3">
-                <x-text-input class="p-1" type="text" size="small" placeholder="Search..." />
+            <div class="absolute left-2 right-2 top-12 flex w-1/2 items-center justify-between md:top-2 md:w-1/3">
+                <div class="relative w-full">
+                    <x-text-input class="w-full p-1 pr-8" id="search-location" type="text" size="small" placeholder="Search Location, Address, or Cordinate" />
+                    <!-- Clear button -->
+                    <button class="absolute right-2 top-1/2 hidden -translate-y-1/2 transform text-gray-500 hover:text-gray-700" id="clear-search" type="button">
+                        <i class="ri-close-line text-lg"></i>
+                    </button>
+                </div>
+                <!-- Search Results Recommendation Container -->
+                <div class="absolute left-0 top-full z-50 mt-1 hidden max-h-[300px] w-full overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg" id="search-results-recommendation">
+                    <!-- Results will be dynamically inserted here -->
+                </div>
             </div>
 
             <!-- Right Buttons -->
@@ -288,8 +298,8 @@
             </div>
 
             <!-- * Bottom Buttons * -->
-            <!-- Basemap Buttons -->
             <div class="absolute bottom-8 left-0 z-40 flex items-end space-x-2 text-xs md:left-2 md:text-base">
+                <!-- Basemap Buttons -->
                 <div class="basemap-switcher font-medium">
                     <div class="trigger-basemap font-bold" onclick="toggleOptions()">
                         <img id="active-basemap" src="{{ asset('assets/img/icon/here_satelliteday.png') }}" alt="Active Basemap" />
@@ -316,6 +326,26 @@
                             <img src="{{ asset('assets/img/icon/esri_worldterrain.png') }}" alt="Esri Terrain" />
                             <span>Esri Terrain</span>
                         </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Info panel -->
+            <div class="shadow-soft bottom-22 pointer-events-none absolute left-0 z-40 mx-auto hidden max-w-xl rounded-lg bg-white/90 p-2 ring-1 ring-black/5 backdrop-blur supports-[backdrop-filter]:bg-white/60 sm:right-auto sm:w-[380px] md:left-20" id="panel">
+                <div class="pointer-events-auto">
+                    <div class="flex items-start justify-between gap-2">
+                        <div>
+                            <h2 class="text-base font-semibold" id="panelTitle">Info Panel Title</h2>
+                            <p>Lorem ipsum dolor sit amet consectetur, adipisicing elit. Aspernatur, labore facilis! Fuga, ab molestiae?</p>
+                        </div>
+                        <button class="rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs hover:bg-gray-50" id="btnClear">Clear</button>
+                    </div>
+                    <div class="mt-3 hidden rounded-xl border border-gray-200 bg-white p-3 text-sm" id="routeInfo">
+                        <div class="font-medium">Rute</div>
+                        <div class="mt-1 space-y-1 text-gray-700">
+                            <div id="routeSummary">Belum ada rute.</div>
+                            <div class="nice-scrollbar max-h-40 overflow-auto" id="routeSteps"></div>
+                        </div>
                     </div>
                 </div>
             </div>

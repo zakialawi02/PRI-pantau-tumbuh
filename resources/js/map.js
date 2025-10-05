@@ -187,7 +187,7 @@ const mousePositionControl = new MousePosition({
 });
 
 //** STYLE ***/
-// marker style
+// marker style using custom SVG
 const markerClickedStyle = new Style({
     image: new Icon({
         anchor: [0.5, 0.99],
@@ -196,9 +196,10 @@ const markerClickedStyle = new Style({
         with: 50,
         height: 50,
         opacity: 0.9,
-        src: "./assets/img/map/marker-click.svg",
+        src: "/assets/img/icon/marker.svg",
     }),
 });
+
 // hightlight style
 const hightlightClickedStyle = new ol.style.Style({
     fill: new ol.style.Fill({
@@ -209,6 +210,9 @@ const hightlightClickedStyle = new ol.style.Style({
         width: 2,
     }),
 });
+
+// Custom marker style for search results (same as clicked marker)
+const customMarkerStyle = markerClickedStyle;
 
 // Init To Canvas/View
 let map = new Map({
@@ -228,6 +232,19 @@ let map = new Map({
         attribution,
         mousePositionControl,
     ],
+});
+
+// Add click handler to clear markers when clicking on empty areas
+map.on("click", function (evt) {
+    // Check if we clicked on a feature
+    const feature = map.forEachFeatureAtPixel(evt.pixel, function (feature) {
+        return feature;
+    });
+
+    // If no feature was clicked, clear the markers
+    if (!feature) {
+        vectorSourceEventClick.clear();
+    }
 });
 
 map.on("loadstart", function () {
@@ -342,6 +359,304 @@ function markToClickedPosition(coordinate) {
         vectorSourceEventClick.clear();
     }
     vectorLayerEventClick.getSource().addFeatures([marker]);
+}
+
+// Geocoding
+let searchTimeout;
+const resultsBox = $("#search-results-recommendation");
+const searchLocationInput = $("#search-location");
+const clearSearchButton = $("#clear-search");
+
+// Add event listener for search input
+if (searchLocationInput.length && resultsBox.length) {
+    searchLocationInput.on("input", function (e) {
+        const q = $(this).val().trim();
+        if (!q) {
+            resultsBox.addClass("hidden");
+            clearSearchButton.addClass("hidden");
+            return;
+        }
+
+        // Show clear button when there's text
+        clearSearchButton.removeClass("hidden");
+
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(() => searchPlace(q), 400);
+    });
+
+    // Add event listener for Enter key
+    searchLocationInput.on("keydown", function (e) {
+        if (e.key === "Enter") {
+            e.preventDefault();
+            const q = $(this).val().trim();
+            if (q) {
+                // Clear any pending search
+                clearTimeout(searchTimeout);
+                // Process immediately
+                processSearchOnEnter(q);
+            }
+        }
+    });
+
+    // Add event listener for clear button
+    clearSearchButton.on("click", function () {
+        searchLocationInput.val("");
+        resultsBox.addClass("hidden");
+        clearSearchButton.addClass("hidden");
+        // Clear markers
+        vectorSourceEventClick.clear();
+    });
+
+    // Hide results when clicking outside
+    $(document).on("click", function (e) {
+        if (
+            !searchLocationInput.is(e.target) &&
+            !resultsBox.is(e.target) &&
+            resultsBox.has(e.target).length === 0 &&
+            !clearSearchButton.is(e.target)
+        ) {
+            resultsBox.addClass("hidden");
+        }
+    });
+}
+
+// Function to validate and parse coordinate input
+function parseCoordinateInput(input) {
+    // Remove extra spaces and convert to lowercase
+    input = input.trim().toLowerCase();
+
+    // Don't process if input is too short to be a coordinate
+    if (input.length < 10) {
+        return null;
+    }
+
+    // Regex patterns for different coordinate formats
+    // Format 1: Decimal degrees (lat, lon or lon, lat)
+    const decimalPattern1 = /^(-?\d+\.?\d*)[,\s]+(-?\d+\.?\d*)$/;
+    // Format 2: Degrees, minutes, seconds
+    const dmsPattern =
+        /^(-?\d+)[°\s]+(\d+)[′'\s]+(\d+\.?\d*)[″"\s]*[,\s]+(-?\d+)[°\s]+(\d+)[′'\s]+(\d+\.?\d*)[″"\s]*$/;
+    // Format 3: Degrees and decimal minutes
+    const ddmPattern =
+        /^(-?\d+)[°\s]+(\d+\.?\d*)[′'\s]+[,\s]+(-?\d+)[°\s]+(\d+\.?\d*)[′'\s]*$/;
+
+    let match;
+
+    // Try decimal degrees format
+    if ((match = input.match(decimalPattern1))) {
+        const lat = parseFloat(match[1]);
+        const lon = parseFloat(match[2]);
+
+        // Check if the values are valid coordinates
+        if (isValidCoordinate(lat, lon)) {
+            return [lon, lat]; // Return as [longitude, latitude]
+        }
+
+        // Try swapping lat/lon if the first attempt is invalid
+        if (isValidCoordinate(lon, lat)) {
+            return [lat, lon]; // Return as [longitude, latitude]
+        }
+    }
+
+    // Try DMS format
+    if ((match = input.match(dmsPattern))) {
+        const latDeg = parseInt(match[1]);
+        const latMin = parseInt(match[2]);
+        const latSec = parseFloat(match[3]);
+        const lonDeg = parseInt(match[4]);
+        const lonMin = parseInt(match[5]);
+        const lonSec = parseFloat(match[6]);
+
+        const lat = latDeg + latMin / 60 + latSec / 3600;
+        const lon = lonDeg + lonMin / 60 + lonSec / 3600;
+
+        if (isValidCoordinate(lat, lon)) {
+            return [lon, lat]; // Return as [longitude, latitude]
+        }
+    }
+
+    // Try DDM format
+    if ((match = input.match(ddmPattern))) {
+        const latDeg = parseInt(match[1]);
+        const latMin = parseFloat(match[2]);
+        const lonDeg = parseInt(match[3]);
+        const lonMin = parseFloat(match[4]);
+
+        const lat = latDeg + latMin / 60;
+        const lon = lonDeg + lonMin / 60;
+
+        if (isValidCoordinate(lat, lon)) {
+            return [lon, lat]; // Return as [longitude, latitude]
+        }
+    }
+
+    return null; // Invalid coordinate format
+}
+
+// Function to validate coordinate values
+function isValidCoordinate(lat, lon) {
+    return lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180;
+}
+
+// Function to process search when Enter is pressed
+function processSearchOnEnter(q) {
+    // Check if input is a coordinate
+    const coordinate = parseCoordinateInput(q);
+    if (coordinate) {
+        // If it's a valid coordinate, focus on that location
+        focusPlace(coordinate);
+        resultsBox.addClass("hidden");
+        // Don't clear the input - keep the coordinate value
+        return;
+    }
+
+    // For location names, check if we have search results
+    if (resultsBox.find("button").length > 0) {
+        // Click the first result
+        resultsBox.find("button").first().click();
+    } else {
+        // If no results yet, do a search and then click first result
+        searchPlaceAndClickFirst(q);
+    }
+}
+
+// Function to search and click the first result
+async function searchPlaceAndClickFirst(q) {
+    if (!resultsBox.length) return;
+
+    const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
+        q
+    )}&limit=6&addressdetails=1`;
+
+    try {
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (data.length > 0) {
+            // Focus on the first result
+            const firstResult = data[0];
+            const lon = parseFloat(firstResult.lon);
+            const lat = parseFloat(firstResult.lat);
+            focusPlace([lon, lat]);
+            resultsBox.addClass("hidden");
+            // Don't clear the input - keep the search value
+        } else {
+            // No results found
+            resultsBox.removeClass("hidden");
+            resultsBox.html(
+                '<div class="p-2 text-sm text-gray-500">No results found</div>'
+            );
+        }
+    } catch (error) {
+        console.error("Search error:", error);
+        resultsBox.removeClass("hidden");
+        resultsBox.html(
+            '<div class="p-2 text-sm text-red-500">Search failed. Please try again.</div>'
+        );
+    }
+}
+
+async function searchPlace(q) {
+    if (!resultsBox.length) return;
+
+    // First check if it's a valid coordinate
+    const coordinate = parseCoordinateInput(q);
+    if (coordinate) {
+        // Show "Go to coordinate" option in results
+        resultsBox.removeClass("hidden");
+        resultsBox.html(`
+            <button class="block w-full text-left rounded-lg p-2 hover:bg-gray-100 transition-colors border-b border-gray-100 last:border-b-0" data-coord='${JSON.stringify(
+                coordinate
+            )}'>
+                <div class='font-medium'>Go to Coordinate</div>
+                <div class='text-sm text-gray-600'>${q}</div>
+            </button>
+        `);
+
+        // Add click event to the coordinate result
+        resultsBox
+            .find("button")
+            .first()
+            .on("click", function () {
+                const coord = JSON.parse($(this).data("coord"));
+                focusPlace(coord);
+                resultsBox.addClass("hidden");
+                // Don't clear the input - keep the coordinate value
+            });
+        return;
+    }
+
+    const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
+        q
+    )}&limit=6&addressdetails=1`;
+
+    resultsBox.removeClass("hidden");
+    resultsBox.html(
+        '<div class="p-2 text-sm text-gray-500">Searching...</div>'
+    );
+
+    try {
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (data.length === 0) {
+            resultsBox.html(
+                '<div class="p-2 text-sm text-gray-500">No results found</div>'
+            );
+            return;
+        }
+
+        let resultsHtml = "";
+        data.forEach((item) => {
+            resultsHtml += `<button class="block w-full text-left rounded-lg p-2 hover:bg-gray-100 transition-colors border-b border-gray-100 last:border-b-0" data-lat='${
+                item.lat
+            }' data-lon='${item.lon}'>
+                        <div class='font-medium'>${
+                            item.display_name.split(",")[0]
+                        }</div>
+                        <div class='text-sm text-gray-600'>${item.display_name
+                            .substring(item.display_name.indexOf(",") + 1)
+                            .trim()}</div>
+                    </button>`;
+        });
+
+        resultsBox.html(resultsHtml);
+
+        // Add click event to each result
+        resultsBox.find("button").each(function () {
+            $(this).on("click", function () {
+                const lon = parseFloat($(this).data("lon"));
+                const lat = parseFloat($(this).data("lat"));
+                focusPlace([lon, lat]);
+                resultsBox.addClass("hidden");
+                // Don't clear the input - keep the search value
+            });
+        });
+    } catch (error) {
+        console.error("Search error:", error);
+        resultsBox.html(
+            '<div class="p-2 text-sm text-red-500">Search failed. Please try again.</div>'
+        );
+    }
+}
+
+// Focus place
+function focusPlace(coord) {
+    const c = ol.proj.fromLonLat(coord);
+    map.getView().animate({ center: c, zoom: 15, duration: 800 });
+
+    // Clear previous markers
+    vectorSourceEventClick.clear();
+
+    // Add new marker with custom SVG image
+    const marker = new Feature({ geometry: new Point(c) });
+    marker.setStyle(markerClickedStyle);
+    vectorLayerEventClick.getSource().addFeature(marker);
+}
+
+function updatePanel(t, d) {
+    $("#panelTitle").innerHTML = t;
+    $("#panelDesc").innerHTML = d;
 }
 
 // Global variabel
