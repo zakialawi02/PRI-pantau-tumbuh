@@ -23,38 +23,27 @@ class DashboardController extends Controller
         // Check user role and pass appropriate data
         if (in_array($user->role, ['superadmin', 'admin'])) {
             // Admin dashboard data
-            $data['totalUsers'] = User::count();
-            $data['totalPayments'] = Payment::count();
-            $data['totalFieldAreas'] = FieldArea::count();
+            $totalUsers = User::count();
+            $totalFieldAreas = FieldArea::count();
+            $totalPayments = Payment::where('status', 'paid')->count();
+            $recentPayments = Payment::where('status', 'paid')->with('user')->latest()->take(5)->get();
 
-            $data['recentUsers'] = User::latest()->take(5)->get();
-            $data['recentSubscriptions'] = Subscription::with(['user', 'plan'])->latest()->take(5)->get();
-            $data['recentPayments'] = Payment::with('subscription')->latest()->take(5)->get();
+            $data['totalUsers'] = $totalUsers;
+            $data['totalFieldAreas'] = $totalFieldAreas;
+            $data['totalPayments'] = $totalPayments;
+            $data['recentPayments'] = $recentPayments;
 
-            return view('pages.dashboard.admin-dashboard', $data);
+            return view('pages.dashboard.admin-dashboard', compact('data'));
         } else {
             // Regular user dashboard data
-            $data['userSubscriptions'] = Subscription::where('user_id', $user->id)->count();
-            $data['userPayments'] = Payment::whereHas('subscription', function ($query) use ($user) {
-                $query->where('user_id', $user->id);
-            })->count();
-            $data['userFieldAreas'] = FieldArea::where('user_id', $user->id)->count();
+            $recentPayments = $user->payments()->where('status', 'paid')->latest()->take(5)->get();
+            $totalPayments = $user->payments()->where('status', 'paid')->count();
+            $recentFieldAreas = $user->fieldAreas()->latest()->take(3)->get();
 
-            $data['subscriptions'] = Subscription::with(['plan', 'fieldArea', 'payments'])
-                ->where('user_id', $user->id)
-                ->latest()
-                ->take(5)
-                ->get();
+            $data['recentPayments'] = $recentPayments;
+            $data['recentFieldAreas'] = $recentFieldAreas;
 
-            $data['payments'] = Payment::with('subscription', 'subscription.fieldArea')
-                ->whereHas('subscription', function ($query) use ($user) {
-                    $query->where('user_id', $user->id);
-                })
-                ->latest()
-                ->take(5)
-                ->get();
-
-            return view('pages.dashboard.user-dashboard', $data);
+            return view('pages.dashboard.user-dashboard', compact('data'));
         }
     }
 }

@@ -18,7 +18,7 @@
                         <h2 class="text-xl font-semibold">PantauTumbuh.id</h2>
                         <p class="text-background">Pantau Tumbuh</p>
                         <p class="text-background">+1 (555) 123-4567</p>
-                        <p class="text-background">support@pantautumbuh.id</p>
+                        <p class="text-background">{{ config('app-constants.support_email') }}</p>
                     </div>
                 </div>
             </div>
@@ -148,20 +148,15 @@
                             <thead class="bg-background">
                                 <tr>
                                     <th class="border-border text-foreground border px-4 py-3 text-left font-semibold">Description</th>
-                                    <th class="border-border text-foreground border px-4 py-3 text-center font-semibold">Area</th>
-                                    <th class="border-border text-foreground border px-4 py-3 text-center font-semibold">Rate per Hectare</th>
                                     <th class="border-border text-foreground border px-4 py-3 text-right font-semibold">Amount</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <tr class="hover:bg-base-content-muted/20">
                                     <td class="border-border border px-4 py-3">
-                                        <div class="font-medium">{{ $payment->subscription->plan->name }}</div>
-                                        <div class="text-base-content-muted text-sm">Field: {{ $payment->subscription->fieldArea->name }}</div>
+                                        <div class="font-medium">Purchase credit points</div>
                                     </td>
-                                    <td class="border-border border px-4 py-3 text-center">{{ Number::format($payment->subscription->fieldArea->area_ha, locale: app()->getLocale()) }} ha</td>
-                                    <td class="border-border border px-4 py-3 text-center">{{ Number::currency($payment->subscription->price_per_hectare, $payment->currency, app()->getLocale()) }}</td>
-                                    <td class="border-border border px-4 py-3 text-right font-medium">{{ Number::currency($payment->subscription->price_per_hectare * $payment->subscription->fieldArea->area_ha, $payment->currency, app()->getLocale()) }}</td>
+                                    <td class="border-border border px-4 py-3 text-right font-medium">{{ Number::currency($payment->amount, $payment->currency, app()->getLocale()) }}</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -292,7 +287,7 @@
                         @else
                             <p class="text-blue-800">Payment Method: <span class="font-semibold">{{ ucfirst($payment->payment_method) }}</span></p>
                             @if (isset($payment->due_date))
-                                <p class="text-secondary mt-2 text-sm">Payment due by: {{ \Carbon\Carbon::parse($payment->due_date)->format('F d, Y H:i') }}</p>
+                                <p class="text-secondary mt-2 text-sm">Payment due by: {{ \Carbon\Carbon::parse($payment->due_date)->isoFormat('LL, HH:mm') }}</p>
                             @endif
                             <p class="text-secondary mt-2 text-sm">Please proceed with payment through the related gateway.</p>
                         @endif
@@ -354,7 +349,7 @@
                 <!-- Footer -->
                 <div class="text-base-content-muted/200 border-border border-t pt-6 text-center text-sm">
                     <p>Thank you for choosing PantauTumbuh.id!</p>
-                    <p>For questions about this invoice, please contact our support team at support@pantautumbuh.id</p>
+                    <p>For questions about this invoice, please contact our support team at {{ config('app-constants.support_email') }}</p>
                 </div>
             </div>
         </x-card>

@@ -1,4 +1,4 @@
-<div class="fixed end-4 top-8 z-40 flex flex-col space-y-2" id="zk-toast-container"></div>
+<div class="z-100 fixed end-4 top-8 flex flex-col space-y-2" id="zk-toast-container"></div>
 
 @push('javascript')
     <script>
@@ -85,7 +85,7 @@
                 return {
                     success: `<svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20"><path d="M10 .5a9.5 9.5 0 1 0 9.5 9.5A9.51 9.51 0 0 0 10 .5Zm3.707 8.207-4 4a1 1 0 0 1-1.414 0l-2-2a1 1 0 0 1 1.414-1.414L9 10.586l3.293-3.293a1 1 0 0 1 1.414 1.414Z"/></svg>`,
                     error: `<svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20"><path d="M10 .5a9.5 9.5 0 1 0 9.5 9.5A9.51 9.51 0 0 0 10 .5ZM8.293 8.293a1 1 0 0 1 1.414 0L10 9.586l1.293-1.293a1 1 0 1 1 1.414 1.414L11.414 11l1.293 1.293a1 1 0 0 1-1.414 1.414L10 12.414l-1.293 1.293a1 1 0 1 1-1.414-1.414L8.586 11 7.293 9.707a1 1 0 0 1 0-1.414Z"/></svg>`,
-                    warning: `<svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20"><path d="M9.293 3.293a1 1 0 0 1 1.414 0l6 6a1 1 0 0 1-1.414 1.414L11 6.414V15a1 1 0 1 1-2 0V6.414L4.707 10.707A1 1 0 0 1 3.293 9.293l6-6Z"/></svg>`,
+                    warning: `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" role="img"> <circle cx="12" cy="12" r="10"/> <line x1="12" y1="7" x2="12" y2="13"/> <circle cx="12" cy="17" r="1"/> </svg>`,
                     info: `<svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a8 8 0 1 1-8 8 8 8 0 0 1 8-8Zm0 3a1 1 0 0 0-1 1v4a1 1 0 1 0 2 0V6a1 1 0 0 0-1-1Zm0 10a1.2 1.2 0 1 0 0-2.4A1.2 1.2 0 0 0 10 15Z"/></svg>`,
                 } [type] || "";
             }

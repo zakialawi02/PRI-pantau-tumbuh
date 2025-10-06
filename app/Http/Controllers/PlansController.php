@@ -22,20 +22,23 @@ class PlansController extends Controller
         ];
 
         if ($request->ajax()) {
-            $plans = Plan::withCount('subscriptions');
+            $plans = Plan::query();
 
             return DataTables::of($plans)
                 ->addIndexColumn()
-                ->editColumn('subscriptions_count', function ($plan) {
-                    return (int) ($plan->subscriptions_count ?? 0);
-                })
                 ->addColumn('action', function ($plan) {
                     return '<div class="flex gap-1">
                                 <button type="button" class="edit-plan inline-flex items-center px-2 py-1 bg-secondary border border-transparent rounded-md font-semibold text-xs text-secondary-foreground uppercase tracking-widest hover:bg-secondary/80 focus:bg-secondary/80 active:bg-secondary/70 focus:outline-none focus:ring-2 focus:ring-secondary focus:ring-offset-2" data-id="' . $plan->id . '"><i class="ri-edit-line"></i></button>
                                 <button type="button" class="delete-plan inline-flex items-center px-2 py-1 bg-error border border-transparent rounded-md font-semibold text-xs text-primary-foreground uppercase tracking-widest hover:bg-error/80 focus:bg-error/80 active:bg-secondary/70 focus:outline-none focus:ring-2 focus:ring-secondary focus:ring-offset-2" data-id="' . $plan->id . '"> <i class="ri-delete-bin-line"></i></button>
                             </div>';
                 })
-                ->rawColumns(['action'])
+                ->editColumn('price', function ($plan) {
+                    return $plan->price . ' ' . $plan->currency;
+                })
+                ->editColumn('credit_points', function ($plan) {
+                    return $plan->credit_points . ' credits';
+                })
+                ->rawColumns(['action', 'price', 'credit_points'])
                 ->make(true);
         }
 
@@ -49,9 +52,11 @@ class PlansController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255|unique:plans,name',
-            'price_per_hectare' => 'required|numeric|min:0.01',
+            'credit_points' => 'required|integer|min:1',
+            'price' => 'required|numeric|min:0.01',
             'currency' => 'required|string|max:10',
-            'isShow' => 'boolean'
+            'isShow' => 'boolean',
+            'isFeatured' => 'boolean'
         ]);
 
         if ($validator->fails()) {
@@ -63,9 +68,11 @@ class PlansController extends Controller
 
         $plan = Plan::create([
             'name' => Str::title($request->name),
-            'price_per_hectare' => $request->price_per_hectare,
+            'credit_points' => $request->credit_points,
+            'price' => $request->price,
             'currency' => Str::upper($request->currency),
             'isShow' => $request->boolean('isShow'),
+            'isFeatured' => $request->boolean('isFeatured'),
         ]);
 
         return response()->json([
@@ -90,9 +97,11 @@ class PlansController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255|unique:plans,name,' . $plan->id,
-            'price_per_hectare' => 'required|numeric|min:0.01',
+            'credit_points' => 'required|integer|min:1',
+            'price' => 'required|numeric|min:0.01',
             'currency' => 'required|string|max:10',
-            'isShow' => 'boolean'
+            'isShow' => 'boolean',
+            'isFeatured' => 'boolean'
         ]);
 
         if ($validator->fails()) {
@@ -104,9 +113,11 @@ class PlansController extends Controller
 
         $plan->update([
             'name' => Str::title($request->name),
-            'price_per_hectare' => $request->price_per_hectare,
+            'credit_points' => $request->credit_points,
+            'price' => $request->price,
             'currency' => Str::upper($request->currency),
             'isShow' => $request->boolean('isShow'),
+            'isFeatured' => $request->boolean('isFeatured'),
         ]);
 
         return response()->json([
@@ -121,14 +132,6 @@ class PlansController extends Controller
      */
     public function destroy(Plan $plan): JsonResponse
     {
-        // Check if plan has active subscriptions
-        if ($plan->subscriptions()->exists()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Cannot delete plan that has active subscriptions.'
-            ], 422);
-        }
-
         $plan->delete();
 
         return response()->json([

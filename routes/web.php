@@ -8,19 +8,21 @@ use App\Http\Controllers\PlansController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\FieldAreaController;
+use App\Http\Controllers\ImageryDataController;
+use App\Http\Controllers\UserCreditsController;
 use App\Http\Controllers\Socialite\ProviderCallbackController;
 use App\Http\Controllers\Socialite\ProviderRedirectController;
-use App\Http\Controllers\SubscriptionController;
-use App\Http\Controllers\FieldAreaController;
-
 
 Route::get('/auth/{provider}/redirect', ProviderRedirectController::class)->name('auth.redirect');
 Route::get('/auth/{provider}/callback', ProviderCallbackController::class)->name('auth.callback');
 
-
 Route::prefix('dashboard')->name('admin.')->group(function () {
     Route::middleware(['auth', 'verified', 'role:superadmin'])->group(function () {
         Route::resource('users', UserController::class)->except('create', 'edit');
+        Route::get('user-credits', [UserCreditsController::class, 'index'])->name('user-credits.index');
+        Route::get('user-credits/{user}/add-credits', [UserCreditsController::class, 'showAddCreditsForm'])->name('user-credits.showAddCreditsForm');
+        Route::post('user-credits/{user}/add-credits', [UserCreditsController::class, 'addCredits'])->name('user-credits.addCredits');
     });
 
     Route::middleware(['auth', 'verified', 'role:superadmin,admin'])->group(function () {
@@ -40,13 +42,20 @@ Route::prefix('dashboard')->name('admin.')->group(function () {
         Route::post('/payment/{payment}/upload-proof', [PaymentController::class, 'uploadProof'])->name('payment.uploadProof');
         Route::get('/payment/callback/{gateway}', [PaymentController::class, 'handleGatewayCallback'])->name('payment.callback');
 
-        // subscription
-        Route::get('/subscription', [SubscriptionController::class, 'index'])->name('subscription.index');
-        Route::get('/subscription/{subscription}', [SubscriptionController::class, 'show'])->name('subscription.show');
-
         // field areas
         Route::get('/field-area', [FieldAreaController::class, 'index'])->name('field-area.index');
         Route::get('/field-area/{fieldArea}', [FieldAreaController::class, 'show'])->name('fieldArea.show');
+
+        // Imagery
+        Route::get('/imagery', [ImageryDataController::class, 'index'])->name('imagery.index');
+        Route::get('/imagery/upload', [ImageryDataController::class, 'create'])->name('imagery.upload');
+        Route::delete('/imagery/{imagery}', [ImageryDataController::class, 'destroy'])->name('imagery.destroy');
+        Route::post('/imagery/{imagery}/retry-processing', [ImageryDataController::class, 'retryProcessing'])->name('imagery.retry');
+        Route::get('/imagery/{imagery}/download-source', [ImageryDataController::class, 'downloadSource'])->name('imagery.download.source');
+        Route::get('/imagery/{imagery}/download-result', [ImageryDataController::class, 'downloadResult'])->name('imagery.download.result');
+
+        // Credit Purchase
+        Route::get('/purchase-credits', [UserCreditsController::class, 'purchase'])->name('purchase-credits');
     });
 
 
@@ -60,9 +69,18 @@ Route::prefix('dashboard')->name('admin.')->group(function () {
 });
 
 Route::middleware(['auth'])->group(function () {
-    Route::post('/map-order', [PaymentController::class, 'mapOrder'])->name('mapOrder');
-    Route::get('/checkout', [PaymentController::class, 'checkoutOrder'])->name('checkoutOrder');
-    Route::post('/checkout', [PaymentController::class, 'checkout'])->name('checkout.payment');
+    Route::post('/imagery-upload-chunk', [ImageryDataController::class, 'uploadChunk'])->name('upload.chunk');
+    Route::post('/imagery-merge-chunks', [ImageryDataController::class, 'mergeChunks'])->name('upload.merge');
+    Route::get('/imagery-check-progress', [ImageryDataController::class, 'checkProgress'])->name('upload.progress');
+    Route::get('/imagery/list', [ImageryDataController::class, 'listUserImagery'])->name('imagery.list');
+
+    Route::post('/imagery-order', [ImageryDataController::class, 'imageryOrder'])->name('imageryOrder');
+    Route::get('/imagery-checkout', [ImageryDataController::class, 'imageryCheckout'])->name('imageryCheckout');
+    Route::post('/imagery-checkout', [ImageryDataController::class, 'processCheckoutImagery'])->name('processImageryCheckout');
+
+    Route::post('/checkout/purchase-credits', [UserCreditsController::class, 'orderCredit'])->name('orderCredit');
+    Route::get('/checkout', [UserCreditsController::class, 'checkoutOrder'])->name('checkoutOrder');
+    Route::post('/checkout', [PaymentController::class, 'checkoutCredits'])->name('checkoutCredit.payment');
 });
 
 Route::get('/admin', function () {
@@ -106,6 +124,8 @@ Route::get('/privacy-policy', function () {
 Route::get('/terms-of-service', function () {
     return view('pages.front.terms-of-service');
 })->name('terms-of-service');
+
+Route::get('/purchase-credits', [UserCreditsController::class, 'purchasePublic'])->name('purchase-credits.public');
 
 Route::get('/app/imagery', [MapController::class, 'index'])->name('appMap');
 

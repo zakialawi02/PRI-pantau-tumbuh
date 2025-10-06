@@ -8,20 +8,19 @@ use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
-use App\Models\Payment;
 
-class PaymentConfirmation extends Mailable
+class OrderImageryConfirmation extends Mailable
 {
     use Queueable, SerializesModels;
 
-    public Payment $payment;
+    public $bodyMail;
 
     /**
      * Create a new message instance.
      */
-    public function __construct(Payment $payment)
+    public function __construct($bodyMail)
     {
-        $this->payment = $payment;
+        $this->bodyMail = $bodyMail;
     }
 
     /**
@@ -29,18 +28,8 @@ class PaymentConfirmation extends Mailable
      */
     public function envelope(): Envelope
     {
-        // Add payment method to subject for better clarity
-        $paymentMethod = '';
-        if ($this->payment->payment_method === 'bank_transfer') {
-            $paymentMethod = 'Bank Transfer';
-        } elseif ($this->payment->payment_method === 'paypal') {
-            $paymentMethod = 'PayPal';
-        } else {
-            $paymentMethod = ucfirst(str_replace('_', ' ', $this->payment->payment_method));
-        }
-
         return new Envelope(
-            subject: 'Payment Confirmation - #' . $this->payment->invoice_number ?? substr($this->payment->id, 0, 16) . ' (' . $paymentMethod . ')',
+            subject: 'Order Imagery Confirmation',
         );
     }
 
@@ -50,10 +39,10 @@ class PaymentConfirmation extends Mailable
     public function content(): Content
     {
         return new Content(
-            view: 'emails.payment-confirmation',
+            view: 'emails.order-imagery-confirmation',
             with: [
-                'payment' => $this->payment,
-            ],
+                'bodyMail' => $this->bodyMail,
+            ]
         );
     }
 

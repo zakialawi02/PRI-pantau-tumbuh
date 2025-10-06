@@ -3,7 +3,6 @@
 namespace App\Models;
 
 use App\Models\User;
-use App\Models\Subscription;
 use App\Services\InvoiceNumberGenerator;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -19,13 +18,16 @@ class Payment extends Model
     protected $keyType = 'string';
 
     protected $fillable = [
-        'subscription_id',
+        'user_id',
+        'invoice_number',
         'name',
         'email',
         'phone',
         'amount',
+        'credit_points',
         'currency',
         'status',
+        'due_date',
         'bank_name',
         'account_number',
         'account_name',
@@ -35,8 +37,8 @@ class Payment extends Model
         'payment_method',
         'transaction_ref',
         'paid_at',
-        'due_date',
-        'invoice_number', // Add this line
+
+
     ];
 
     protected $casts = [
@@ -44,6 +46,7 @@ class Payment extends Model
         'paid_at' => 'datetime',
         'verified_at' => 'datetime',
         'amount' => 'decimal:2',
+        'credit_points' => 'decimal:2',
     ];
 
     /**
@@ -77,9 +80,9 @@ class Payment extends Model
         return $status;
     }
 
-    public function subscription()
+    public function user()
     {
-        return $this->belongsTo(Subscription::class);
+        return $this->belongsTo(User::class);
     }
 
     public function verifier()

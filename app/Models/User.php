@@ -60,6 +60,22 @@ class User extends Authenticatable implements MustVerifyEmail
         ];
     }
 
+    /**
+     * Boot the model.
+     */
+    protected static function boot()
+    {
+        parent::boot();
+
+        // Create user credit record when a new user is created
+        static::created(function ($user) {
+            $user->credits()->create([
+                'credits' => 0,
+            ]);
+        });
+    }
+
+
     public static function getRoleOptions()
     {
         // Check the type of database being used
@@ -88,13 +104,28 @@ class User extends Authenticatable implements MustVerifyEmail
         return $this->hasMany(FieldArea::class);
     }
 
-    public function subscriptions()
+    public function imageries()
     {
-        return $this->hasMany(Subscription::class);
+        return $this->hasMany(ImageryData::class);
+    }
+
+    public function payments()
+    {
+        return $this->hasMany(Payment::class);
     }
 
     public function paymentsVerified()
     {
         return $this->hasMany(Payment::class, 'verified_by'); // admin yang verifikasi
+    }
+
+    public function credits()
+    {
+        return $this->hasOne(UserCredit::class);
+    }
+
+    public function getCurrentCreditsAttribute()
+    {
+        return $this->credits ? $this->credits->credits : 0;
     }
 }

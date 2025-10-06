@@ -4,11 +4,11 @@
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>Payment Confirmation</title>
+        <title>Order Confirmation</title>
         <style>
             body {
                 font-family: Arial, sans-serif;
-                line-height: 1.6;
+                line-height: 1.2;
                 color: #333;
                 background-color: #f4f4f4;
                 margin: 0;
@@ -140,15 +140,16 @@
     <body>
         <div class="container">
             <div class="header">
-                <h1>Payment Successful!</h1>
-                <p>Thank you for your payment!</p>
+                <h1>Order Confirmation - Payment Pending</h1>
+                <p>Complete your payment to activate your order!</p>
+                <span>{{ Config::get('app.name', 'PantauTumbuh.id') }}</span>
             </div>
 
             <div class="content">
                 <h2>Hello {{ $payment->name }},</h2>
 
                 <p>
-                    We're pleased to confirm that your payment has been successfully processed. Your order is now active and you can access your imagery and data.
+                    Thank you for your order. Please complete your payment to activate your credit points.
                 </p>
 
                 <div class="order-details">
@@ -159,11 +160,7 @@
                         </tr>
                         <tr class="order-row">
                             <td class="label">Order Date:</td>
-                            <td class="value">{{ $payment->created_at->format('F j, Y H:i') }}</td>
-                        </tr>
-                        <tr class="order-row">
-                            <td class="label">Payment Date:</td>
-                            <td class="value">{{ $payment->paid_at->format('F j, Y H:i') }}</td>
+                            <td class="value">{{ $payment->created_at->isoFormat('LL, HH:mm') }}</td>
                         </tr>
                         <tr class="order-row">
                             <td class="label">Payment Method:</td>
@@ -180,9 +177,15 @@
                         <tr class="order-row">
                             <td class="label">Status:</td>
                             <td class="value">
-                                <span class="status-badge status-paid">Paid</span>
+                                <span class="status-badge status-{{ $payment->status }}">{{ ucfirst(str_replace('_', ' ', $payment->status)) }}</span>
                             </td>
                         </tr>
+                        @if ($payment->due_date)
+                            <tr class="order-row">
+                                <td class="label">Payment Due:</td>
+                                <td class="value">{{ $payment->due_date->isoFormat('LL, HH:mm') }}</td>
+                            </tr>
+                        @endif
                     </table>
                 </div>
 
@@ -191,18 +194,14 @@
                     <table class="summary-table">
                         <tr class="order-row">
                             <td>
-                                <span>Plan: {{ $payment->subscription->plan->name }}</span>
+                                <span>Credit Points Purchase: {{ $payment->credit_points }} Credits</span>
                                 <br>
-                                <span style="color: #858585; font-size: 14px;">Field: {{ $payment->subscription->fieldArea->name }}</span>
+                                <span style="color: #858585; font-size: 14px;">Payment for credit points</span>
                             </td>
-                            <td class="text-right">{{ Number::format($payment->subscription->fieldArea->area_ha, locale: app()->getLocale()) }} ha</td>
+                            <td class="text-right">{{ $payment->credit_points }} credits</td>
                         </tr>
                         <tr class="order-row">
-                            <td>Rate per Hectare</td>
-                            <td class="text-right">{{ Number::currency($payment->subscription->price_per_hectare, $payment->currency, app()->getLocale()) }}</td>
-                        </tr>
-                        <tr class="order-row">
-                            <td><strong>Total Paid</strong></td>
+                            <td><strong>Total</strong></td>
                             <td class="text-right"><strong class="order-total">{{ Number::currency($payment->amount, $payment->currency, app()->getLocale()) }}</strong></td>
                         </tr>
                     </table>
@@ -213,7 +212,8 @@
                 </p>
 
                 <p>
-                    Thank you for choosing our service. If you have any questions about your order, please don't hesitate to contact our support team.
+                    If you have any questions about your order, please don't
+                    hesitate to contact our support team.
                 </p>
             </div>
 

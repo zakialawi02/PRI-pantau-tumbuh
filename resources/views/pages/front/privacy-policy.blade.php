@@ -105,7 +105,7 @@
                     <h2 class="text-foreground mt-8 text-xl font-semibold">Contact Us</h2>
                     <p class="text-foreground/80 mt-4">
                         If you have questions or comments about this policy, you may email us at
-                        <a class="text-primary hover:underline" href="mailto:info@pantautumbuh.id">info@pantautumbuh.id</a>
+                        <a class="text-primary hover:underline" href="mailto:{{ config('app-constants.info_email') }}">{{ config('app-constants.info_email') }}</a>
                         or by post to:
                     </p>
                     <p class="text-foreground/80 mt-4">

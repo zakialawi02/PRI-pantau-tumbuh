@@ -87,14 +87,6 @@
                                     <p class="text-base-content text-sm" id="modal-invoice-number">-</p>
                                 </div>
                                 <div>
-                                    <label class="text-foreground block text-sm font-medium">Name of Field</label>
-                                    <p class="text-base-content text-sm" id="modal-field-name">-</p>
-                                </div>
-                                <div>
-                                    <label class="text-foreground block text-sm font-medium">Field Area</label>
-                                    <p class="text-base-content text-sm" id="modal-field-area">-</p>
-                                </div>
-                                <div>
                                     <label class="text-foreground block text-sm font-medium">Customer Name</label>
                                     <p class="text-base-content text-sm" id="modal-customer-name">-</p>
                                 </div>
@@ -463,9 +455,6 @@
                     $('#modal-amount').text(formatCurrency(paymentData?.amount, paymentData?.currency));
                     $('#modal-payment-method').text(paymentData?.payment_method.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()));
                     $('#modal-order-date').text(formatCustomDate(paymentData?.created_at));
-
-                    $('#modal-field-area').text((formatNumber(paymentData?.field_area?.area_ha) || '-') + ' ha');
-                    $('#modal-field-name').text(paymentData?.field_area?.name || '-');
                     $('#modal-due-date').text(paymentData?.due_date ? formatCustomDate(paymentData?.due_date) : '-');
 
                     let statusText = '';

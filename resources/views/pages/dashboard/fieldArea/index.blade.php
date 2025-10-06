@@ -34,9 +34,6 @@
                                 Area (ha)
                             </th>
                             <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider" scope="col">
-                                Status
-                            </th>
-                            <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider" scope="col">
                                 Created At
                             </th>
                             <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider" scope="col">
@@ -52,8 +49,7 @@
                                     <td>{{ $fieldArea->user->name }}</td>
                                 @endif
                                 <td>{{ $fieldArea->name }}</td>
-                                <td>{{ Number::format($fieldArea->area_ha ?? 0, locale: app()->getLocale()) }} ha</td>
-                                <td>{{ $fieldArea->subscriptions->status }}</td>
+                                <td>{{ Number::format($fieldArea->area_ha ?? 0, 3, locale: app()->getLocale()) }} ha</td>
                                 <td>{{ $fieldArea->created_at->isoFormat('LL, HH:mm') }}</td>
                                 <td>
                                     <x-button-primary class="bg-secondary/80 hover:bg-secondary/60 btn-view-area text-neutral inline-flex items-center rounded-full px-2 py-1 text-xs font-medium" data-id="{{ $fieldArea->id }}" type="button" title="View Details" size="small">
@@ -115,10 +111,6 @@
                                     <div>
                                         <dt class="text-foreground/60 text-sm font-medium">Area Size</dt>
                                         <dd class="text-foreground text-sm" id="modal-area-size"></dd>
-                                    </div>
-                                    <div>
-                                        <dt class="text-foreground/60 text-sm font-medium">Status</dt>
-                                        <dd class="text-foreground text-sm" id="modal-status-area"></dd>
                                     </div>
                                 </dl>
                             </div>
@@ -320,18 +312,10 @@
                         success: function(response) {
                             if (response.success) {
                                 let data = response.data;
-                                console.log(data);
 
                                 // Populate field information
                                 $('#modal-field-name').text(data.name || '-');
                                 $('#modal-area-size').text((data.area_ha ? formatNumber(data.area_ha) : '-') + ' ha');
-
-                                const status = data?.subscriptions?.status || '-';
-                                const statusConfig = STATUS_CONFIG_BADGE_COLOR?.[data?.subscriptions?.status] || STATUS_CONFIG_BADGE_COLOR?.default || {
-                                    class: "bg-gray-100 text-gray-800",
-                                    text: status
-                                };
-                                $('#modal-status-area').html(`<span class="inline-flex rounded-full px-2 py-1 text-xs font-semibold ${statusConfig.class}">${statusConfig.text}</span>`);
 
                                 // Format dates
                                 let createdAt = data.created_at ? formatCustomDate(data.created_at) : '-';

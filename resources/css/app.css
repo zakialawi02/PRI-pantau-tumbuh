@@ -277,7 +277,7 @@ button.btn {
     @apply bg-neutral;
 }
 .table tbody tr:nth-child(even) {
-    @apply bg-muted/70;
+    @apply bg-primary/20;
 }
 
 .dt-container > div:first-child {

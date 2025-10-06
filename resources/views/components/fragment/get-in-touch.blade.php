@@ -59,8 +59,8 @@
                             <div>
                                 <h4 class="text-foreground mb-2 text-lg font-semibold">Email Address</h4>
                                 <p class="text-foreground/70 leading-relaxed">
-                                    <a class="hover:text-primary transition-colors duration-300" href="mailto:info@pantautumbuh.id">
-                                        info@pantautumbuh.id
+                                    <a class="hover:text-primary transition-colors duration-300" href="mailto:{{ config('app-constants.support_email') }}">
+                                        {{ config('app-constants.support_email') }}
                                     </a>
                                 </p>
                             </div>
@@ -122,11 +122,11 @@
                 <h3 class="text-foreground mb-4 text-xl font-semibold">Ready to Transform Your Agriculture?</h3>
                 <p class="text-foreground/70 mb-6">Let's discuss how satellite-based monitoring can benefit your agricultural operations.</p>
                 <div class="flex flex-col items-center justify-center gap-4 sm:flex-row">
-                    <a class="border-primary/30 text-primary hover:bg-primary/10 hover:border-primary inline-flex items-center rounded-xl border px-8 py-3 font-semibold transition-all duration-300" href="mailto:info@pantautumbuh.id">
+                    <a class="border-primary/30 text-primary hover:bg-primary/10 hover:border-primary inline-flex items-center rounded-xl border px-8 py-3 font-semibold transition-all duration-300" href="mailto:{{ config('app-constants.info_email') }}">
                         <i class="ri-mail-line mr-2"></i>
                         Send Email
                     </a>
-                    <a class="text-foreground/70 hover:text-primary font-medium transition-colors duration-300" href="tel:+6231594730">
+                    <a class="text-foreground/70 hover:text-primary font-medium transition-colors duration-300" href="tel:{{ config('app-constants.support_phone') }}">
                         Or call us directly →
                     </a>
                 </div>

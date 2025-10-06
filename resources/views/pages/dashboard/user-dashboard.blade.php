@@ -2,195 +2,150 @@
 @section('meta_description', 'User dashboard with your subscriptions, payments, and field areas.')
 
 <x-app-layout>
-    <section class="p-1 md:px-4">
+    <section class="space-y-4 p-1 md:px-4">
         <div class="py-2">
             <h1 class="text-2xl font-semibold">User Dashboard</h1>
             <p class="text-foreground/70">Welcome back, {{ Auth::user()->name }}!</p>
         </div>
 
-        <!-- Stats Cards -->
-        <div class="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <x-card>
-                <div class="flex items-center">
-                    <div class="mr-4 rounded-full bg-blue-100 p-3">
-                        <i class="ri-map-pin-line text-xl text-blue-600"></i>
-                    </div>
-                    <div>
-                        <p class="text-foreground/70 text-sm">Field Areas</p>
-                        <p class="text-2xl font-bold">{{ $userFieldAreas ?? 0 }}</p>
-                    </div>
+        <!-- Credit Points Card -->
+        <x-card>
+            <div class="flex items-center justify-between space-y-2">
+                <div>
+                    <h3 class="text-foreground text-lg font-medium">Your Credit Points</h3>
+                    <p class="text-primary mt-1 text-2xl font-bold">
+                        {{ Number::format(Auth::user()->current_credits, 2, locale: app()->getLocale()) }} Credit Points
+                    </p>
                 </div>
-            </x-card>
-
-            <x-card>
-                <div class="flex items-center">
-                    <div class="mr-4 rounded-full bg-green-100 p-3">
-                        <i class="ri-file-list-line text-xl text-green-600"></i>
-                    </div>
-                    <div>
-                        <p class="text-foreground/70 text-sm">Subscriptions</p>
-                        <p class="text-2xl font-bold">{{ $userSubscriptions ?? 0 }}</p>
-                    </div>
+                <div>
+                    <x-button-primary href="{{ route('admin.purchase-credits') }}" size="small">
+                        <i class="ri-add-line mr-1"></i> Buy More Credits
+                    </x-button-primary>
                 </div>
-            </x-card>
-
-            <x-card>
-                <div class="flex items-center">
-                    <div class="mr-4 rounded-full bg-yellow-100 p-3">
-                        <i class="ri-bank-line text-xl text-yellow-600"></i>
-                    </div>
-                    <div>
-                        <p class="text-foreground/70 text-sm">Payments</p>
-                        <p class="text-2xl font-bold">{{ $userPayments ?? 0 }}</p>
-                    </div>
-                </div>
-            </x-card>
-
-            <x-card>
-                <div class="flex items-center">
-                    <div class="mr-4 rounded-full bg-purple-100 p-3">
-                        <i class="ri-calendar-line text-xl text-purple-600"></i>
-                    </div>
-                    <div>
-                        <p class="text-foreground/70 text-sm">Active Subs</p>
-                        <p class="text-2xl font-bold">
-                            {{ $subscriptions->where('status', 'active')->count() }}
-                        </p>
-                    </div>
-                </div>
-            </x-card>
-        </div>
-
-        <!-- Main Content Grid -->
-        <div class="grid grid-cols-1 gap-4 lg:grid-cols-3">
-            <!-- Subscriptions Section -->
-            <div class="lg:col-span-2">
-                <x-card>
-                    <div class="mb-4 flex items-center justify-between">
-                        <h2 class="text-xl font-semibold">Recent Subscriptions</h2>
-                        <a class="text-primary text-sm hover:underline" href="{{ route('admin.subscription.index') }}">
-                            View All
-                        </a>
-                    </div>
-
-                    @forelse ($subscriptions as $subscription)
-                        @if ($loop->first)
-                            <div class="overflow-x-auto">
-                                <table class="divide-foreground/20 min-w-full divide-y">
-                                    <thead>
-                                        <tr>
-                                            <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Plan</th>
-                                            <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Field Area</th>
-                                            <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Price</th>
-                                            <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Status</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody class="divide-foreground/10 divide-y">
-                        @endif
-                        <tr>
-                            <td class="whitespace-nowrap px-4 py-3">
-                                <div class="text-sm font-medium">{{ $subscription->plan->name ?? 'N/A' }}</div>
-                            </td>
-                            <td class="whitespace-nowrap px-4 py-3">
-                                <div class="text-sm">{{ $subscription->fieldArea->name ?? 'N/A' }}</div>
-                                <div class="text-foreground/70 text-xs">{{ Number::format($subscription->fieldArea->area_ha ?? 0, locale: app()->getLocale()) }} ha</div>
-                            </td>
-                            <td class="whitespace-nowrap px-4 py-3 text-sm">
-                                {{ Number::currency($subscription->payments[0]->amount ?? 0, $subscription->payments[0]->currency ?? 'USD', app()->getLocale()) }}
-                            </td>
-                            <td class="whitespace-nowrap px-4 py-3">
-                                <span class="@if ($subscription->status == 'active') bg-green-100 text-green-800
-                                                @elseif($subscription->status == 'expired') bg-red-100 text-red-800
-                                                @else bg-yellow-100 text-yellow-800 @endif inline-flex rounded-full px-2 text-xs font-semibold leading-5">
-                                    {{ ucfirst($subscription->status) }}
-                                </span>
-                            </td>
-                        </tr>
-                        @if ($loop->last)
-                            </tbody>
-                            </table>
             </div>
-            @endif
-        @empty
-            <div class="py-8 text-center">
-                <i class="ri-file-list-line text-foreground/30 mb-3 text-4xl"></i>
-                <p class="text-foreground/70">No subscriptions found</p>
+            <div>
+                <p class="text-foreground/60 text-sm">
+                    Credit points can be used to access premium features like satellite imagery processing.
+                </p>
             </div>
-            @endforelse
-            </x-card>
-        </div>
+        </x-card>
 
-        <!-- Payments Section -->
-        <div class="">
-            <x-card>
-                <div class="mb-4 flex items-center justify-between">
-                    <h2 class="text-xl font-semibold">Recent Payments</h2>
-                    <a class="text-primary text-sm hover:underline" href="{{ route('admin.payment.index') }}">
-                        View All
-                    </a>
-                </div>
-
-                @forelse ($payments as $payment)
-                    <div class="border-foreground/10 rounded-lg border p-3">
-                        <div class="flex items-start justify-between">
-                            <div>
-                                <h3 class="text-sm font-medium">{{ $payment->name }}</h3>
-                                <p class="text-foreground/70 text-xs">
-                                    {{ $payment->subscription->plan->name ?? 'Subscription' }}
-                                </p>
-                            </div>
-                            <span class="@if ($payment->status == 'paid') bg-green-100 text-green-800
-                                    @elseif($payment->status == 'pending') bg-yellow-100 text-yellow-800
-                                    @elseif($payment->status == 'expired') bg-red-100 text-red-800
-                                    @else bg-gray-100 text-gray-800 @endif rounded-full px-2 py-1 text-xs">
-                                {{ ucfirst($payment->status) }}
-                            </span>
-                        </div>
-                        <div class="mt-2 flex items-center justify-between">
-                            <div>
-                                <div class="text-foreground/70 text-xs">
-                                    {{ Number::format($payment->subscription->fieldArea->area_ha ?? 0, locale: app()->getLocale()) }} ha
+        <!-- Recent Activity Section -->
+        <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <!-- Recent Field Areas -->
+            <x-card class="space-y-4">
+                <h3 class="text-lg font-semibold">Recent Field Areas</h3>
+                @if (isset($data['recentFieldAreas']) && $data['recentFieldAreas']->count() > 0)
+                    <div class="space-y-3">
+                        @foreach ($data['recentFieldAreas'] as $fieldArea)
+                            <div class="flex items-center justify-between border-b pb-3 last:border-0 last:pb-0">
+                                <div>
+                                    <h4 class="font-medium">{{ $fieldArea->name }}</h4>
+                                    <p class="text-foreground/60 text-sm">{{ Number::format($fieldArea->area_ha, 3, locale: app()->getLocale()) }} ha</p>
                                 </div>
-                                <div class="text-sm font-medium">
-                                    {{ Number::currency($payment->amount, $payment->currency, app()->getLocale()) }}
+                                <a class="text-primary text-sm hover:underline" href="{{ route('admin.field-area.index') }}">
+                                    View Details
+                                </a>
+                            </div>
+                        @endforeach
+                    </div>
+                @else
+                    <p class="text-foreground/50">No field areas added yet.</p>
+                @endif
+                <div>
+                    <x-button-secondary href="{{ route('admin.field-area.index') }}" size="small">
+                        <i class="ri-add-line mr-1"></i> Manage Field Areas
+                    </x-button-secondary>
+                </div>
+            </x-card>
+
+            <!-- Recent Payments -->
+            <x-card class="space-y-4">
+                <h3 class="text-lg font-semibold">Recent Payments</h3>
+                @if (isset($data['recentPayments']) && $data['recentPayments']->count() > 0)
+                    <div class="space-y-3">
+                        @foreach ($data['recentPayments'] as $payment)
+                            <div class="flex items-center justify-between border-b pb-3 last:border-0 last:pb-0">
+                                <div>
+                                    <h4 class="font-medium">#{{ $payment->invoice_number }}</h4>
+                                    <p class="text-foreground/60 text-sm">
+                                        {{ $payment->paid_at ? $payment->paid_at->isoFormat('MMM D, YYYY') : 'N/A' }}
+                                    </p>
+                                </div>
+                                <div class="text-right">
+                                    <p class="font-medium">{{ Number::format($payment->amount, 2, locale: app()->getLocale()) }} {{ $payment->currency }}</p>
+                                    <span class="bg-success/10 inline-flex rounded-full px-2 py-1 text-xs font-semibold text-green-800">
+                                        Paid
+                                    </span>
                                 </div>
                             </div>
-                            <span class="text-foreground/70 text-xs">
-                                {{ $payment->created_at->isoFormat('D MMM YYYY') }}
-                            </span>
-                        </div>
+                        @endforeach
                     </div>
-                @empty
-                    <div class="py-8 text-center">
-                        <i class="ri-bank-line text-foreground/30 mb-3 text-4xl"></i>
-                        <p class="text-foreground/70">No payments found</p>
-                    </div>
-                @endforelse
+                @else
+                    <p class="text-foreground/50">No payments made yet.</p>
+                @endif
+                <div>
+                    <x-button-secondary href="{{ route('admin.payment.index') }}" size="small">
+                        <i class="ri-history-line mr-1"></i> View All Payments
+                    </x-button-secondary>
+                </div>
             </x-card>
-        </div>
         </div>
 
         <!-- Quick Actions -->
-        <div class="mt-6">
+        <h2 class="text-xl font-semibold">Quick Actions</h2>
+        <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
             <x-card>
-                <h2 class="mb-4 text-xl font-semibold">Quick Actions</h2>
-                <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-4">
-                    <a class="border-foreground/20 hover:bg-foreground/5 rounded-lg border p-4 text-center transition-colors" href="{{ route('admin.subscription.index') }}">
-                        <i class="ri-file-list-line mb-2 block text-2xl"></i>
-                        <span class="text-sm">My Subscriptions</span>
-                    </a>
-                    <a class="border-foreground/20 hover:bg-foreground/5 rounded-lg border p-4 text-center transition-colors" href="{{ route('admin.payment.index') }}">
-                        <i class="ri-bank-line mb-2 block text-2xl"></i>
-                        <span class="text-sm">My Payments</span>
-                    </a>
-                    <a class="border-foreground/20 hover:bg-foreground/5 rounded-lg border p-4 text-center transition-colors" href="{{ route('appMap') }}">
-                        <i class="ri-map-line mb-2 block text-2xl"></i>
-                        <span class="text-sm">Access Map</span>
-                    </a>
-                    <a class="border-foreground/20 hover:bg-foreground/5 rounded-lg border p-4 text-center transition-colors" href="{{ route('admin.field-area.index') }}">
-                        <i class="ri-map-pin-line mb-2 block text-2xl"></i>
-                        <span class="text-sm">My Field Areas</span>
-                    </a>
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <div class="bg-primary/10 rounded-full p-3">
+                            <i class="ri-map-2-line text-primary text-xl"></i>
+                        </div>
+                    </div>
+                    <div class="ml-4">
+                        <h3 class="text-foreground text-lg font-medium">Dashboard App</h3>
+                        <p class="text-foreground/60 text-sm">Access interactive imagery dashboard</p>
+                        <a class="text-primary hover:text-primary/80 mt-2 inline-flex items-center text-sm font-medium" href="{{ route('appMap') }}">
+                            Go to App
+                            <i class="ri-arrow-right-line ml-1"></i>
+                        </a>
+                    </div>
+                </div>
+            </x-card>
+
+            <x-card>
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <div class="bg-success/10 rounded-full p-3">
+                            <i class="ri-image-line text-success text-xl"></i>
+                        </div>
+                    </div>
+                    <div class="ml-4">
+                        <h3 class="text-foreground text-lg font-medium">My Imagery</h3>
+                        <p class="text-foreground/60 text-sm">View your processed imagery</p>
+                        <a class="text-success hover:text-success/80 mt-2 inline-flex items-center text-sm font-medium" href="{{ route('admin.imagery.index') }}">
+                            View Imagery
+                            <i class="ri-arrow-right-line ml-1"></i>
+                        </a>
+                    </div>
+                </div>
+            </x-card>
+
+            <x-card>
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <div class="bg-accent/10 rounded-full p-3">
+                            <i class="ri-file-list-2-line text-accent text-xl"></i>
+                        </div>
+                    </div>
+                    <div class="ml-4">
+                        <h3 class="text-foreground text-lg font-medium">My Payments</h3>
+                        <p class="text-foreground/60 text-sm">View your payment history</p>
+                        <a class="text-accent hover:text-accent/80 mt-2 inline-flex items-center text-sm font-medium" href="{{ route('admin.payment.index') }}">
+                            View Payments
+                            <i class="ri-arrow-right-line ml-1"></i>
+                        </a>
+                    </div>
                 </div>
             </x-card>
         </div>

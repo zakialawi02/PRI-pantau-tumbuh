@@ -29,6 +29,12 @@
                                 <span class="text-foreground/60 text-xs capitalize">Interactive imagery dashboard and analysis tools.</span>
                             </a>
                         </li>
+                        <li>
+                            <a class="hover:bg-primary/50 text-foreground block rounded-md p-1 text-left text-sm font-semibold transition-colors duration-200" href="{{ route('purchase-credits.public') }}">
+                                <div class="font-semibold">Buy Credits</div>
+                                <span class="text-foreground/60 text-xs capitalize">Purchase credits for premium features.</span>
+                            </a>
+                        </li>
                     </ul>
                 </div>
                 <!-- Remote Sensing Services -->
@@ -49,7 +55,7 @@
                         <li>
                             <a class="hover:bg-primary/50 text-foreground block rounded-md p-1 text-left text-sm font-semibold transition-colors duration-200" href="{{ route('pri-estimation-map-ai') }}">
                                 <div class="font-semibold">PRI Estimation Map with AI</div>
-                                <span class="text-foreground/60 text-xs capitalize">Premium access with subscription.</span>
+                                <span class="text-foreground/60 text-xs capitalize">Premium access with subscription/credit.</span>
                             </a>
                         </li>
                     </ul>

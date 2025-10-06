@@ -148,7 +148,7 @@
                         If you have any questions about these Terms, please contact us at:
                     </p>
                     <p class="text-foreground/80 mt-4">
-                        <a class="text-primary hover:underline" href="mailto:info@pantautumbuh.id">info@pantautumbuh.id</a>
+                        <a class="text-primary hover:underline" href="mailto:{{ config('app-constants.info_email') }}">{{ config('app-constants.info_email') }}</a>
                     </p>
                     <p class="text-foreground/80 mt-4">
                         Departemen Teknik Geomatika<br>

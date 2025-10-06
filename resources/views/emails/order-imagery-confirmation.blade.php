@@ -4,7 +4,7 @@
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>Order Confirmation</title>
+        <title>Order Imagery Confirmation</title>
         <style>
             body {
                 font-family: Arial, sans-serif;
@@ -89,12 +89,7 @@
                 font-weight: bold;
             }
 
-            .status-pending {
-                background-color: #fff3cd;
-                color: #856404;
-            }
-
-            .status-paid {
+            .status-success {
                 background-color: #d4edda;
                 color: #155724;
             }
@@ -140,84 +135,66 @@
     <body>
         <div class="container">
             <div class="header">
-                <h1>Order Confirmation - Payment Pending</h1>
-                <p>Complete your payment to activate your order!</p>
+                <h1>Order Imagery Confirmation</h1>
+                <p>Your imagery order has been successfully placed!</p>
                 <span>{{ Config::get('app.name', 'PantauTumbuh.id') }}</span>
             </div>
 
             <div class="content">
-                <h2>Hello {{ $payment->name }},</h2>
+                <h2>Hello {{ $bodyMail['name'] }},</h2>
 
                 <p>
-                    Thank you for your order. Please complete your payment to activate your subscription and access all features.
+                    Thank you for your order. Your imagery request has been successfully processed and is now being prepared.
                 </p>
 
                 <div class="order-details">
                     <table class="email-table">
                         <tr class="order-row">
-                            <td class="label">Order Number:</td>
-                            <td class="value">#{{ $payment->invoice_number ?? substr($payment->id, 0, 16) }}</td>
+                            <td class="label">Data Id:</td>
+                            <td class="value">{{ $bodyMail['order_id'] }}</td>
                         </tr>
                         <tr class="order-row">
                             <td class="label">Order Date:</td>
-                            <td class="value">{{ $payment->created_at->format('F j, Y H:i') }}</td>
-                        </tr>
-                        <tr class="order-row">
-                            <td class="label">Payment Method:</td>
-                            <td class="value">
-                                @if ($payment->payment_method === 'bank_transfer')
-                                    Bank Transfer
-                                @elseif($payment->payment_method === 'paypal')
-                                    PayPal
-                                @else
-                                    {{ ucfirst(str_replace('_', ' ', $payment->payment_method)) }}
-                                @endif
-                            </td>
+                            <td class="value">{{ now()->isoFormat('LL, HH:mm') }}</td>
                         </tr>
                         <tr class="order-row">
                             <td class="label">Status:</td>
                             <td class="value">
-                                <span class="status-badge status-{{ $payment->status }}">{{ ucfirst(str_replace('_', ' ', $payment->status)) }}</span>
+                                <span class="status-badge status-success">Processing</span>
                             </td>
                         </tr>
-                        @if ($payment->due_date)
-                            <tr class="order-row">
-                                <td class="label">Payment Due:</td>
-                                <td class="value">{{ $payment->due_date->format('F j, Y H:i') }}</td>
-                            </tr>
-                        @endif
                     </table>
                 </div>
 
-                <h3>Order Summary</h3>
+                <h3>Order Details</h3>
                 <div class="order-details">
                     <table class="summary-table">
                         <tr class="order-row">
                             <td>
-                                <span>Plan: {{ $payment->subscription->plan->name }}</span>
+                                <span>Feature Name: {{ $bodyMail['name_feature'] }}</span>
                                 <br>
-                                <span style="color: #858585; font-size: 14px;">Field: {{ $payment->subscription->fieldArea->name }}</span>
+                                <span style="color: #858585; font-size: 14px;">Imagery Request</span>
                             </td>
-                            <td class="text-right">{{ Number::format($payment->subscription->fieldArea->area_ha, locale: app()->getLocale()) }} ha</td>
                         </tr>
                         <tr class="order-row">
-                            <td>Rate per Hectare</td>
-                            <td class="text-right">{{ Number::currency($payment->subscription->price_per_hectare, $payment->currency, app()->getLocale()) }}</td>
+                            <td>
+                                <span>Area Size: {{ number_format($bodyMail['area_hectares'], 2) }} hectares</span>
+                            </td>
                         </tr>
                         <tr class="order-row">
-                            <td><strong>Total</strong></td>
-                            <td class="text-right"><strong class="order-total">{{ Number::currency($payment->amount, $payment->currency, app()->getLocale()) }}</strong></td>
+                            <td>
+                                <span>Credits Used: {{ $bodyMail['credit_cost'] }} credits</span>
+                            </td>
                         </tr>
                     </table>
                 </div>
 
-                <p class="text-center">
-                    <a class="button" href="{{ route('admin.payment.show', $payment->id) }}">View Order Details</a>
+                <p>
+                    Our system is now processing your imagery request. You will receive another notification once the imagery is ready for download.
                 </p>
 
                 <p>
-                    If you have any questions about your order, please don't
-                    hesitate to contact our support team.
+                    If you have any questions about your order, please don't hesitate to contact our support team.
                 </p>
             </div>
 

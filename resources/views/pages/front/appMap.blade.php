@@ -6,127 +6,21 @@
 @section('og_title', 'PantauTumbuh.id - WebGIS Stres Tanaman Berbasis PRI')
 @section('og_description', 'PantauTumbuh.id memanfaatkan citra satelit dan model deep learning untuk menghitung nilai Photochemical Reflectance Index (PRI), memberikan informasi spasial tentang tingkat stres tanaman secara akurat bagi petani, peneliti, dan pengambil keputusan.')
 
-
-<x-app-front-map-layout class="flex h-screen flex-col overflow-hidden md:flex-row">
-    <!-- Sidebar -->
-    <aside class="border-border bg-background group fixed inset-y-0 left-0 z-50 hidden h-screen w-64 -translate-x-full border-r px-1.5 py-3 transition-all duration-150 md:relative md:flex md:w-12 md:translate-x-0 md:flex-col md:justify-between hover:md:w-48" id="sidebar">
-        <!-- Sidebar Nav Menu -->
-        <div class="mt-10 flex w-full flex-col space-y-6">
-            <button class="hover:text-accent nav-map-active flex items-center space-x-2 p-1 transition-colors" data-drawer-target="drawer-sidebar-left-panel1" data-drawer-show="drawer-sidebar-left-panel1" data-drawer-backdrop="false" type="button" aria-controls="drawer-sidebar-left-panel1">
-                <span class="text-xl">📡</span>
-                <span class="hidden whitespace-nowrap text-sm font-medium group-hover:inline-block">My Data</span>
-            </button>
-            <button class="hover:text-accent flex items-center space-x-2 p-1 transition-colors" data-drawer-target="drawer-sidebar-left-panel2" data-drawer-show="drawer-sidebar-left-panel2" data-drawer-backdrop="false" type="button" aria-controls="drawer-sidebar-left-panel2">
-                <span class="text-xl">📊</span>
-                <span class="hidden whitespace-nowrap text-sm font-medium group-hover:inline-block">Analytics</span>
-            </button>
-            <button class="hover:text-accent flex items-center space-x-2 p-1 transition-colors">
-                <span class="text-xl">🌱</span>
-                <span class="hidden whitespace-nowrap text-sm font-medium group-hover:inline-block">Growth</span>
-            </button>
-            <button class="hover:text-accent flex items-center space-x-2 p-1 transition-colors">
-                <span class="text-xl">📜</span>
-                <span class="hidden whitespace-nowrap text-sm font-medium group-hover:inline-block">Reports</span>
-            </button>
-        </div>
-
-        <!-- Profile -->
-        <div class="mb-0 mt-0 md:mb-4 md:mt-auto">
+<x-app-front-map-layout class="flex h-screen w-screen flex-col overflow-hidden">
+    <!-- HEADER -->
+    <header class="bg-background border-foreground/5 flex h-12 items-center justify-between border-b-2 px-4">
+        <h1 class="text-primary text-sm font-bold">🌱 PantauTumbuh Dashboard</h1>
+        <div class="flex items-center space-x-3">
+            <!-- Credit Display for Authenticated Users -->
             @auth
-                <div class="relative">
-                    <button class="bg-foreground mx-3 flex rounded-full text-sm transition-all duration-200 hover:ring-2 focus:ring-4 focus:ring-gray-300 md:mr-0" id="user-menu-button" data-dropdown-toggle="user-dropdown" type="button" aria-expanded="false" aria-haspopup="true">
-                        <span class="text-background hidden p-0.5 group-hover:inline-block">Profile</span>
-                        <span class="sr-only">Open user menu</span>
-                        <img class="h-6 w-6 rounded-full object-cover" src="{{ Auth::user()->profile_photo_path ?? asset('assets/img/image-placeholder.webp') }}" alt="{{ Auth::user()->name }}'s profile photo" loading="lazy">
-                    </button>
-
-                    <!-- Authenticated User Dropdown -->
-                    <div class="bg-background text-foreground divide-foreground/50 border-border w-50 absolute right-0 z-50 mt-2 hidden list-none divide-y rounded-lg border shadow-lg" id="user-dropdown">
-                        <div class="px-4 py-3">
-                            <span class="block text-sm font-medium">{{ Str::limit(Auth::user()->name, 25) }}</span>
-                            <span class="text-foreground/50 block truncate text-sm">{{ Str::limit(Auth::user()->email, 25) }}</span>
-                        </div>
-
-                        <ul class="py-2" role="menu" aria-labelledby="user-menu-button">
-                            <li role="none">
-                                <a class="hover:bg-muted flex items-center px-4 py-2 text-sm transition-colors" href="{{ route('admin.dashboard') }}" role="menuitem">
-                                    <i class="ri-dashboard-line mr-2"></i>
-                                    Dashboard
-                                </a>
-                            </li>
-                            <li role="none">
-                                <a class="hover:bg-muted flex items-center px-4 py-2 text-sm transition-colors" href="{{ route('admin.profile.edit') }}" role="menuitem">
-                                    <i class="ri-user-line mr-2"></i>
-                                    Profile
-                                </a>
-                            </li>
-                            <li role="none">
-                                <a class="hover:bg-muted flex items-center px-4 py-2 text-sm transition-colors" href="#" role="menuitem">
-                                    <i class="ri-settings-line mr-2"></i>
-                                    Settings
-                                </a>
-                            </li>
-                        </ul>
-
-                        <div class="py-2">
-                            <form role="none" method="POST" action="{{ route('logout') }}">
-                                @csrf
-                                <button class="hover:bg-muted flex w-full items-center px-4 py-2 text-left text-sm transition-colors" type="submit" role="menuitem">
-                                    <i class="ri-logout-line mr-2"></i>
-                                    Sign out
-                                </button>
-                            </form>
-                        </div>
-                    </div>
-                </div>
-            @else
-                <div class="relative">
-                    <button class="bg-foreground mx-3 flex rounded-full text-sm transition-all duration-200 hover:ring-2 focus:ring-4 focus:ring-gray-300 md:mr-0" id="guest-menu-button" data-dropdown-toggle="guest-dropdown" type="button" aria-expanded="false" aria-haspopup="true">
-                        <span class="sr-only">Open user menu</span>
-                        <img class="h-6 w-6 rounded-full object-cover" src="{{ asset('assets/img/image-placeholder.webp') }}" alt="Guest user photo" loading="lazy">
-                    </button>
-
-                    <!-- Guest User Dropdown -->
-                    <div class="bg-background text-foreground divide-foreground/50 border-border w-50 absolute right-0 z-50 mt-2 hidden list-none divide-y rounded-lg border shadow-lg" id="guest-dropdown">
-                        <ul class="py-2" role="menu" aria-labelledby="guest-menu-button">
-                            <li role="none">
-                                <a class="hover:bg-muted flex items-center px-4 py-2 text-sm transition-colors" href="{{ route('login') }}" role="menuitem">
-                                    <i class="ri-login-box-line mr-2"></i>
-                                    Login
-                                </a>
-                            </li>
-                            <li role="none">
-                                <a class="hover:bg-muted flex items-center px-4 py-2 text-sm transition-colors" href="{{ route('register') }}" role="menuitem">
-                                    <i class="ri-user-add-line mr-2"></i>
-                                    Register
-                                </a>
-                            </li>
-                            <li role="none">
-                                <a class="hover:bg-muted flex items-center px-4 py-2 text-sm transition-colors" href="#" role="menuitem">
-                                    <i class="ri-settings-line mr-2"></i>
-                                    Settings
-                                </a>
-                            </li>
-                        </ul>
-                    </div>
+                <div class="bg-primary/10 text-primary flex items-center space-x-1 rounded-full px-3 py-1 text-xs font-medium">
+                    <i class="ri-coins-line mr-2"></i>
+                    <span>{{ Number::format(Auth::user()->current_credits, 2, locale: app()->getLocale()) }} Credit Points</span>
                 </div>
             @endauth
-        </div>
-    </aside>
-
-    <!-- Main Content -->
-    <div class="flex h-full flex-1 flex-col">
-        <!-- Header -->
-        <div class="bg-background flex items-center justify-between px-3 py-2 md:px-6">
-            <a class="text-lg font-bold md:text-xl" href="{{ route('home') }}">
-                <x-application-logo class="h-7 w-auto dark:invert" alt="Application Logo" />
-            </a>
-            <div class="flex items-center space-x-2 rounded-md">
-                <x-text-input class="p-1" size="small" placeholder="Search..." />
-            </div>
 
             <!-- Nav Menu -->
-            <div class="text-foreground bg-background z-51 fixed inset-0 hidden flex-col items-center justify-center space-y-6 whitespace-nowrap text-center uppercase opacity-0 transition-all duration-500 ease-in-out" id="navbar">
+            <div class="text-foreground bg-background z-51 fixed inset-0 hidden w-full flex-col items-center justify-center space-y-6 whitespace-nowrap text-center uppercase opacity-0 transition-all duration-500 ease-in-out" id="navbar">
 
                 <!-- Nav Menu -->
                 <x-nav-menu :mobile="false" />
@@ -137,239 +31,470 @@
                 <i class="ri-close-line hidden transition-all duration-300" id="close-icon"></i>
             </button>
         </div>
+    </header>
 
-        <!-- Horizontal Sidebar Nav -->
-        <div class="top-13 fixed left-0 z-50 mx-auto w-full whitespace-nowrap px-4 py-2 md:hidden">
-            <!-- Arrow Left -->
+
+    <!-- MAIN LAYOUT -->
+    <div class="flex flex-1 overflow-hidden">
+        <!-- DESKTOP SIDEBAR -->
+        <aside class="bg-background hidden shadow-lg md:flex md:w-20 md:flex-col md:items-center md:py-4">
+            <nav class="flex flex-1 flex-col items-center space-y-6">
+                <button class="sidebar-btn hover:text-primary flex flex-col items-center text-xs" onclick="showPanel('data-panel', this)">
+                    <span class="text-xl">🛰️</span>
+                    <span>My Data</span>
+                </button>
+                <button class="sidebar-btn hover:text-primary flex flex-col items-center text-xs" onclick="showPanel('uploads-panel', this)">
+                    <span class="text-xl">⬆️</span>
+                    <span>Uploads</span>
+                </button>
+                <button class="sidebar-btn hover:text-primary flex flex-col items-center text-xs" onclick="showPanel('seasons-panel', this)">
+                    <span class="text-xl">📅</span>
+                    <span>Seasons</span>
+                </button>
+                <button class="sidebar-btn hover:text-primary flex flex-col items-center text-xs" onclick="showPanel('settings-panel', this)">
+                    <span class="text-xl">⚙️</span>
+                    <span>Settings</span>
+                </button>
+            </nav>
+            <div class="text-foreground/70 mt-auto text-xs">© 2025</div>
+        </aside>
+
+        <!-- MOBILE SIDEBAR HORIZONTAL -->
+        <div class="fixed left-0 top-11 z-40 mx-auto w-full whitespace-nowrap bg-transparent px-4 py-2 md:hidden">
             <button class="bg-neutral border-foreground/70 hover:bg-muted absolute left-0 top-1/2 z-10 mx-0.5 -translate-y-1/2 rounded-full border px-1 py-0.5" id="scroll-left">
                 <i class="ri-arrow-left-s-line text-lg"></i>
             </button>
-            <!-- Scrollable Container -->
+
             <div class="flex space-x-2 overflow-x-hidden scroll-smooth" id="scroll-container">
-                <button class="bg-neutral nav-map-active inline-flex items-center space-x-2 rounded-full border border-gray-300 px-4 py-1 text-sm font-medium" data-drawer-target="drawer-sidebar-left-panel1" data-drawer-show="drawer-sidebar-left-panel1" data-drawer-backdrop="false" type="button" aria-controls="drawer-sidebar-left-panel1">
-                    <span class="text-xl">📡</span>
+                <button class="sidebar-btn bg-neutral inline-flex items-center space-x-2 rounded-full border border-gray-300 px-3 py-1 text-sm font-medium" onclick="showPanel('data-panel', this)">
+                    <span class="text-xl">🛰️</span>
                     <span>My Data</span>
                 </button>
-                <button class="bg-neutral inline-flex items-center space-x-2 rounded-full border border-gray-300 px-3 py-1 text-sm font-medium" data-drawer-target="drawer-sidebar-left-panel2" data-drawer-show="drawer-sidebar-left-panel2" data-drawer-backdrop="false" type="button" aria-controls="drawer-sidebar-left-panel2">
-                    <span class="text-xl">📊</span>
-                    <span>Analytics</span>
+                <button class="sidebar-btn bg-neutral inline-flex items-center space-x-2 rounded-full border border-gray-300 px-3 py-1 text-sm font-medium" onclick="showPanel('uploads-panel', this)">
+                    <span class="text-xl">⬆️</span>
+                    <span>Uploads</span>
                 </button>
-                <button class="bg-neutral inline-flex items-center space-x-2 rounded-full border border-gray-300 px-3 py-1 text-sm font-medium">
-                    <span class="text-xl">🌱</span>
-                    <span>Growth</span>
+                <button class="sidebar-btn bg-neutral inline-flex items-center space-x-2 rounded-full border border-gray-300 px-3 py-1 text-sm font-medium" onclick="showPanel('seasons-panel', this)">
+                    <span class="text-xl">📅</span>
+                    <span>Seasons</span>
                 </button>
-                <button class="bg-neutral inline-flex items-center space-x-2 rounded-full border border-gray-300 px-3 py-1 text-sm font-medium">
-                    <span class="text-xl">📜</span>
-                    <span>Reports</span>
+                <button class="sidebar-btn bg-neutral inline-flex items-center space-x-2 rounded-full border border-gray-300 px-3 py-1 text-sm font-medium" onclick="showPanel('settings-panel', this)">
+                    <span class="text-xl">⚙️</span>
+                    <span>Settings</span>
                 </button>
             </div>
-            <!-- Arrow Right -->
+
             <button class="bg-neutral border-foreground/70 hover:bg-muted absolute right-0 top-1/2 z-10 mx-0.5 -translate-y-1/2 rounded-full border px-1 py-0.5" id="scroll-right">
                 <i class="ri-arrow-right-s-line text-lg"></i>
             </button>
         </div>
 
-        <div class="flex h-full flex-1 flex-row">
-            <!-- * Left Panel (Push Layout)*  -->
-            <!-- Left Panel1 - Responsive Flowbite Drawer -->
-            <div class="bg-background shadow-r-lg responsive-drawer fixed bottom-0 left-0 right-0 z-50 h-[50vh] max-h-[50vh] w-full overflow-hidden transition-all duration-300 ease-in-out md:relative md:inset-auto md:z-auto md:block md:h-full md:max-h-full md:w-80" id="drawer-sidebar-left-panel1" data-drawer-state="open" data-drawer-placement="left" data-drawer-edge="true" aria-labelledby="drawer-sidebar-left-panel1-label" tabindex="-1">
-                <div class="w-81 flex h-full min-w-full flex-col p-2 md:min-w-8" id="drawer-sidebar-left-panel1-label">
-                    <!-- Header drawer -->
-                    <div class="mb-2 flex items-center justify-between px-3">
-                        <h2 class="text-lg font-semibold">My Data</h2>
-                        <button class="hover:text-primary/80 text-foreground/50" data-drawer-hide="drawer-sidebar-left-panel1" type="button">✕</button>
-                    </div>
-                    <!-- Drawer content -->
-                    <div class="flex h-full flex-col">
-                        <div class="flex-1 space-y-2 overflow-y-auto p-2">
-                            @auth
-                                @forelse ($activeFieldAreas as $fieldArea)
-                                    <div>
-                                        <label class="border-foreground/10 has-checked:border-muted/80 has-checked:bg-muted/60 has-checked:ring-1 has-checked:ring-muted/80 bg-neutral/80 shadow-xs {{ $fieldArea->subscriptions->status !== 'active' ? 'opacity-50 cursor-not-allowed' : 'hover:bg-muted/50 cursor-pointer' }} flex items-center gap-3 rounded-xl border p-3 text-base font-medium transition-colors" for="fieldArea-{{ $fieldArea->id }}">
-                                            <input class="text-primary focus:ring-primary h-3 w-3 rounded border-gray-300" name="fieldArea" type="checkbox" {{ $fieldArea->subscriptions->status !== 'active' ? 'disabled' : "id=fieldArea-{$fieldArea->id} value=fieldArea-{$fieldArea->id}" }} />
-                                            <div class="flex w-full items-start justify-between">
-                                                <div>
-                                                    <h4 class="text-base font-semibold">{{ ucwords($fieldArea->name) ?? 'Unnamed Field' }}</h4>
-                                                    <p class="text-foreground/70 text-sm">
-                                                        {{ number_format($fieldArea->area_ha, 2) }} ha
-                                                    </p>
-                                                </div>
 
-                                                <div class="flex flex-col items-end">
-                                                    <span class="text-background @if ($fieldArea->subscriptions->status == 'active') bg-success/70
-                                                        @elseif(in_array($fieldArea->subscriptions->status, ['suspended', 'cancelled', 'expired']))
-                                                            bg-destructive/70
-                                                        @else
-                                                            bg-muted/70 @endif mb-1 inline-flex rounded-full px-2 py-1 text-xs font-medium">
-                                                        {{ str_replace('_', ' ', $fieldArea->subscriptions->status) }}
-                                                    </span>
-                                                    <button class="text-foreground/50 hover:text-foreground hover:bg-secondary bg-secondary/60 flex items-center gap-1 rounded-xl p-1 text-sm" title="Zoom to field">
-                                                        <i class="ri-zoom-in-line"></i>
-                                                        <span class="sr-only">Zoom</span>
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        </label>
+        <!-- PANEL WRAPPER -->
+        <div class="bg-background border-foreground/20 fixed bottom-0 left-0 z-50 max-h-[56%] w-full translate-y-full overflow-y-auto rounded-t-xl opacity-0 transition-all duration-500 ease-in-out md:relative md:max-h-full md:w-0 md:translate-y-0 md:overflow-hidden md:rounded-none md:border-l-2 md:opacity-100" id="panel-wrapper">
+
+            <!-- ========== MY DATA PANEL ========== -->
+            <section class="flex hidden h-full flex-col shadow-xl" id="data-panel">
+                <div class="bg-background border-foreground/10 sticky top-0 z-20 flex items-center justify-between border-b p-2">
+                    <h2 class="text-lg font-bold">📡 My Data Imagery</h2>
+                    <button class="hover:bg-foreground/20 bg-foreground/10 rounded px-2 py-1 text-sm" onclick="closePanels()">✖</button>
+                </div>
+
+                <!-- content -->
+                <div class="panel-content flex-1 space-y-3 overflow-y-auto p-3">
+                    <div class="space-y-2">
+                        <div class="space-y-2">
+                            @auth
+                                <div class="space-y-2" id="myDataContainer">
+                                    <p class="text-foreground/60 text-sm">Loading your imagery list...</p>
+                                </div>
+                            @else
+                                <div class="flex flex-col items-center justify-center py-3 text-center">
+                                    <div class="mb-3">
+                                        <div class="bg-muted mx-auto flex h-20 w-20 items-center justify-center rounded-full">
+                                            <i class="ri-database-2-line text-foreground/80 text-3xl"></i>
+                                        </div>
                                     </div>
-                                @empty
-                                    <div class="flex flex-col items-center justify-center py-8 text-center">
-                                        <div class="mb-6">
-                                            <div class="bg-muted mx-auto flex h-20 w-20 items-center justify-center rounded-full">
-                                                <i class="ri-database-2-line text-foreground/80 text-3xl"></i>
+                                    <h3 class="text-foreground/80 mb-2 text-lg font-semibold">No Data Available</h3>
+                                    <p class="text-foreground/60 mb-4 px-4 text-sm">
+                                        You don't have any satellite imagery data yet. Upload or purchase satellite imagery to start monitoring your crops and analyzing plant stress using PRI.
+                                    </p>
+                                    <x-button-primary type="button" href="{{ route('login') }}" size="small">
+                                        <i class="ri-login-box-line"></i>
+                                        <span>Login to Access Your Data</span>
+                                    </x-button-primary>
+                                </div>
+                            @endauth
+                        </div>
+
+                        <!-- Hidden template card -->
+                        <template id="imageryCardTemplate">
+                            <div class="imagery-card border-foreground/20 bg-background/40 flex items-center justify-between rounded-xl border p-3 shadow-sm transition-all duration-200 hover:shadow-md">
+                                <div class="flex items-start space-x-3">
+                                    <div class="bg-primary/10 text-primary imagery-format flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg font-semibold uppercase">
+                                        JPG
+                                    </div>
+                                    <div>
+                                        <p class="text-foreground imagery-name font-medium">Sample Imagery</p>
+                                        <p class="imagery-meta text-foreground/60 text-sm">
+                                            10 MB • 2025-10-05 • <span class="imagery-status text-success font-semibold">done</span>
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <button class="view-btn hover:bg-foreground/10 rounded-lg p-2 transition">
+                                    <i class="ri-eye-line"></i>
+                                </button>
+                            </div>
+                        </template>
+                    </div>
+
+                </div>
+
+                <!-- sticky bottom panel -->
+                <div class="bg-background border-foreground/10 sticky bottom-0 border-t p-3">
+                    <div class="mb-3 flex items-center justify-between">
+                        <div class="text-foreground/70 text-sm">
+                            @auth
+                                {{ $imagery->count() ?? 0 }} imagery(s) active
+                            @else
+                                <span>Login to access your imagery data</span>
+                            @endauth
+                        </div>
+                        <div class="text-foreground/50 text-xs">
+                            Last updated: null
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ========== Upload PANEL ========== -->
+            <section class="flex hidden h-full flex-col shadow-xl" id="uploads-panel">
+                <div class="bg-background border-foreground/10 sticky top-0 z-20 flex items-center justify-between border-b p-2">
+                    <h2 class="text-lg font-bold">⬆️ Imagery Collection</h2>
+                    <button class="hover:bg-foreground/20 bg-foreground/10 rounded px-2 py-1 text-sm" onclick="closePanels()">✖</button>
+                </div>
+
+                <!-- content -->
+                <div class="panel-content flex-1 space-y-3 overflow-y-auto p-3">
+                    <div class="space-y-2">
+                        @auth
+                            <!-- Tab Navigation -->
+                            <div class="flex">
+                                <div class="bg-foreground/10 hover:bg-foreground/20 flex rounded-lg p-1 transition">
+                                    <nav class="flex gap-x-1" role="tablist" aria-label="Tabs" aria-orientation="horizontal">
+                                        <button class="hs-tab-active:bg-neutral hs-tab-active:text-foreground/80 text-foreground/50 hover:text-foreground/80 focus:outline-hidden focus:text-foreground/80 hover:hover:text-primary inline-flex items-center gap-x-2 rounded-lg bg-transparent px-2 py-1 text-sm font-medium disabled:pointer-events-none disabled:opacity-50" id="buy-tab" data-hs-tab="#buy-panel" type="button" role="tab" aria-selected="false" aria-controls="buy-panel">
+                                            Buy Imagery
+                                        </button>
+                                        <button class="hs-tab-active:bg-neutral hs-tab-active:text-foreground/80 text-foreground/50 hover:text-foreground/80 focus:outline-hidden focus:text-foreground/80 hover:hover:text-primary active inline-flex items-center gap-x-2 rounded-lg bg-transparent px-2 py-1 text-sm font-medium disabled:pointer-events-none disabled:opacity-50" id="upload-tab" data-hs-tab="#upload-panel" type="button" role="tab" aria-selected="true" aria-controls="upload-panel">
+                                            Upload Imagery
+                                        </button>
+                                    </nav>
+                                </div>
+                            </div>
+
+                            <!-- Upload Tab Content -->
+                            <div class="tab-content" id="upload-panel" role="tabpanel" aria-labelledby="upload-tab">
+                                <div class="bg-primary/10 space-y-2 rounded-lg p-2">
+                                    <h4 class="text-foreground flex items-center text-lg font-semibold">
+                                        <i class="ri-upload-cloud-line text-primary mr-2"></i>
+                                        Upload Your Own Imagery
+                                    </h4>
+                                    <p class="text-foreground/80 text-sm">
+                                        Have your own satellite imagery? Upload it directly to our platform for advanced PRI analysis and crop health monitoring.
+                                    </p>
+
+                                    <div class="bg-primary/20 space-y-2 rounded-lg p-2">
+                                        <h5 class="text-foreground font-medium">Supported Formats</h5>
+                                        <ul class="text-foreground/70 grid grid-cols-2 gap-2 text-sm">
+                                            <li class="flex items-center">
+                                                <i class="ri-check-line text-success mr-2 text-xs"></i>
+                                                <span>GeoTIFF (.tif, .tiff)</span>
+                                            </li>
+                                            <li class="flex items-center">
+                                                <i class="ri-check-line text-success mr-2 text-xs"></i>
+                                                <span>Enhanced Compressed Wavelet (.ecw)</span>
+                                            </li>
+                                            <li class="flex items-center">
+                                                <i class="ri-check-line text-success mr-2 text-xs"></i>
+                                                <span>ZIP Archives (.zip)</span>
+                                            </li>
+                                        </ul>
+                                    </div>
+
+                                    <div class="bg-primary/20 space-y-2 rounded-lg p-2">
+                                        <h5 class="text-foreground font-medium">Compatible Sources</h5>
+                                        <ul class="text-foreground/70 space-y-1 text-sm">
+                                            <li class="flex items-start">
+                                                <i class="ri-check-line text-success mr-2 mt-0.5 text-xs"></i>
+                                                <span>Sentinel-2, Landsat, and commercial satellites</span>
+                                            </li>
+                                            <li class="flex items-start">
+                                                <i class="ri-check-line text-success mr-2 mt-0.5 text-xs"></i>
+                                                <span>Get detailed plant stress analysis with our AI-powered engine</span>
+                                            </li>
+                                        </ul>
+                                    </div>
+
+                                    <div class="space-y-3">
+                                        <h5 class="text-lg font-semibold">Upload Your File</h5>
+
+                                        <!-- input form -->
+                                        <form class="space-y-2">
+                                            <x-input-label class="text-sm font-medium" for="source-type">Source Type</x-input-label>
+                                            <x-select-input class="px-2! py-1!" id="sourceType" name="source-type" required>
+                                                <option value="sentinel-2">Sentinel-2</option>
+                                                <option value="landsat">Landsat</option>
+                                                <option value="quicksat">Quicksat</option>
+                                            </x-select-input>
+                                            <x-input-error class="mt-2" :messages="$errors->get('source-type')" />
+
+                                            <x-input-label class="text-sm font-medium" for="imagery-upload">Upload your imagery file</x-input-label>
+                                            <input class="border-foreground/30 bg-neutral file:bg-foreground/10 focus:border-primary focus:ring-primary block w-full rounded-lg border text-sm shadow-sm file:me-4 file:border-0 file:px-4 file:py-2 focus:z-10 disabled:pointer-events-none disabled:opacity-50" id="fileInput" name="imagery-upload" type="file" accept=".tif,.tiff,.ecw,.zip">
+                                            <x-input-error class="mt-2" :messages="$errors->get('imagery-upload')" />
+                                        </form>
+
+                                        <!-- info file -->
+                                        <div class="text-foreground-70 mt-2 hidden text-sm" id="fileInfo"></div>
+
+                                        <!-- progress bar -->
+                                        <div class="bg-foreground/20 mt-2 h-4 w-full rounded">
+                                            <div class="bg-primary h-4 rounded" id="progressBar" style="width: 0%;"></div>
+                                        </div>
+                                        <p class="text-foreground/100 mt-1 text-sm" id="progressText">Belum ada upload.</p>
+
+                                        <!-- tombol kontrol -->
+                                        <div class="flex flex-wrap gap-2">
+                                            <x-button-primary id="startBtn" type="button" size="small">🚀 Start Upload</x-button-primary>
+                                            <x-button-danger id="pauseBtn" type="button" size="small">⏸️ Pause</x-button-danger>
+                                            <x-button-secondary id="resumeBtn" type="button" size="small">▶️ Resume</x-button-secondary>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Buy Tab Content -->
+                            <div class="tab-content hidden" class="hidden" id="buy-panel" role="tabpanel" aria-labelledby="buy-tab">
+                                <div class="bg-primary/10 space-y-2 rounded-lg p-2">
+                                    <h4 class="text-foreground flex items-center text-lg font-semibold">
+                                        <i class="ri-shopping-bag-line text-primary mr-2"></i>
+                                        Buy from Our Collection
+                                    </h4>
+                                    <p class="text-foreground/80 text-sm">
+                                        Don't have satellite data? Purchase high-resolution imagery directly from our platform, captured by leading satellite constellations.
+                                    </p>
+
+                                    <div class="bg-primary/20 rounded-lg p-2">
+                                        <h5 class="text-foreground mb-2 font-medium">What You Get</h5>
+                                        <ul class="text-foreground/70 space-y-1 text-sm">
+                                            <li class="flex items-start">
+                                                <i class="ri-check-line text-success mr-2 mt-0.5 text-xs"></i>
+                                                <span>Access to daily updated satellite imagery</span>
+                                            </li>
+                                            <li class="flex items-start">
+                                                <i class="ri-check-line text-success mr-2 mt-0.5 text-xs"></i>
+                                                <span>Global coverage</span>
+                                            </li>
+                                            <li class="flex items-start">
+                                                <i class="ri-check-line text-success mr-2 mt-0.5 text-xs"></i>
+                                                <span>Automatic PRI analysis and health reports included</span>
+                                            </li>
+                                        </ul>
+                                    </div>
+
+                                    <div class="bg-primary/20 rounded-lg p-2">
+                                        <h5 class="text-foreground mb-2 font-medium">Satellite Sources</h5>
+                                        <div class="grid grid-cols-2 gap-2 text-sm">
+                                            <div class="flex items-center">
+                                                <i class="ri-satellite-line text-success mr-2"></i>
+                                                <span>Sentinel-2</span>
+                                            </div>
+                                            <div class="flex items-center">
+                                                <i class="ri-satellite-line text-success mr-2"></i>
+                                                <span>Landsat 8/9</span>
+                                            </div>
+                                            <div class="flex items-center">
+                                                <i class="ri-satellite-line text-success mr-2"></i>
+                                                <span>Quicksat</span>
                                             </div>
                                         </div>
-                                        <h3 class="text-foreground/70 mb-2 text-lg font-semibold">No Data Available</h3>
-                                        <p class="text-foreground/50 mb-6 px-4 text-sm">
-                                            You don't have any satellite imagery data yet. Purchase satellite imagery to start monitoring your crops and analyzing plant stress using PRI.
-                                        </p>
+                                    </div>
+                                    <div class="">
                                         <x-button-primary id="buySatelliteBtn" type="button" size="small">
                                             <i class="ri-shopping-cart-line"></i>
                                             <span>Buy Satellite Imagery</span>
                                         </x-button-primary>
                                     </div>
-                                @endforelse
-                            @else
-                                <div class="flex flex-col items-center justify-center py-8 text-center">
-                                    <div class="mb-6">
-                                        <div class="bg-muted mx-auto flex h-20 w-20 items-center justify-center rounded-full">
-                                            <i class="ri-database-2-line text-foreground/80 text-3xl"></i>
-                                        </div>
-                                    </div>
-                                    <h3 class="text-foreground/70 mb-2 text-lg font-semibold">No Data Available</h3>
-                                    <p class="text-foreground/50 mb-6 px-4 text-sm">
-                                        You don't have any satellite imagery data yet. Purchase satellite imagery to start monitoring your crops and analyzing plant stress using PRI.
-                                    </p>
-                                    <x-button-primary type="button" onclick="window.location.href='{{ route('login') }}'" size="small">
-                                        <i class="ri-login-box-line"></i>
-                                        <span>Login to View your or Buy Imagery</span>
-                                    </x-button-primary>
-                                </div>
-                            @endauth
-                        </div>
-
-                        <!-- Sticky Drawer Footer -->
-                        <div class="bg-background border-foreground/10 sticky bottom-0 mt-auto border-t p-3">
-                            <div class="mb-3 flex items-center justify-between">
-                                <div class="text-foreground/70 text-sm">
-                                    @auth
-                                        {{ $activeFieldAreas->where('subscriptions.status', 'active')->count() ?? 0 }} field(s) active
-                                    @else
-                                        <span>Login to access your fields</span>
-                                    @endauth
-                                </div>
-                                <div class="text-foreground/50 text-xs">
-                                    Last updated: null
                                 </div>
                             </div>
-                            @auth
-                                @if (!isset($activeFieldAreas) || $activeFieldAreas->count() > 0)
-                                    <x-button-primary id="buySatelliteBtn" type="button" size="small">
-                                        <i class="ri-shopping-cart-line"></i>
-                                        <span>Buy Satellite Imagery</span>
-                                    </x-button-primary>
-                                @endif
-                            @endauth
-                        </div>
+                        @else
+                            <div class="flex flex-col items-center justify-center py-3 text-center">
+                                <div class="mb-3">
+                                    <div class="bg-muted mx-auto flex h-20 w-20 items-center justify-center rounded-full">
+                                        <i class="ri-file-warning-line text-foreground/80 text-3xl"></i>
+                                    </div>
+                                </div>
+                                <h3 class="text-foreground/80 mb-2 text-lg font-semibold">No Access</h3>
+                                <p class="text-foreground/60 mb-4 px-4 text-sm">
+                                    You don't have access to satellite imagery data. Upload or purchase satellite imagery to start monitoring your crops and analyzing plant stress using PRI.
+                                </p>
+                                <x-button-primary type="button" href="{{ route('login') }}" size="small">
+                                    <i class="ri-login-box-line"></i>
+                                    <span>Login to Access Your Data</span>
+                                </x-button-primary>
+                            </div>
+                        @endauth
                     </div>
+                </div>
+            </section>
+
+            <!-- ========== SEASONS PANEL ========== -->
+            <section class="flex hidden h-full flex-col shadow-xl" id="seasons-panel">
+                <div class="bg-background border-foreground/10 sticky top-0 z-20 flex items-center justify-between border-b p-2">
+                    <h2 class="text-lg font-bold">📅 Seasons</h2>
+                    <button class="hover:bg-foreground/20 bg-foreground/10 rounded px-2 py-1 text-sm" onclick="closePanels()">✖</button>
+                </div>
+
+                <div class="panel-content flex-1 space-y-3 overflow-y-auto p-3">
+                    <p>Timeline musim tanam dummy — scrollable content panjang.</p>
+                    <p>Lorem ipsum dolor sit amet consectetur, adipisicing elit. Eum voluptates vel omnis nesciunt fuga! Ad sint dolor libero...</p>
+                </div>
+
+                <div class="bg-background border-foreground/10 sticky bottom-0 border-t p-3">
+                    <p class="text-foreground/70 text-sm">Footer Panel - Seasons</p>
+                </div>
+            </section>
+
+            <!-- ========== SETTINGS PANEL ========== -->
+            <section class="flex hidden h-full flex-col shadow-xl" id="settings-panel">
+                <div class="bg-background border-foreground/10 sticky top-0 z-20 flex items-center justify-between border-b p-2">
+                    <h2 class="text-lg font-bold">⚙️ Settings</h2>
+                    <button class="hover:bg-foreground/20 bg-foreground/10 rounded px-2 py-1 text-sm" onclick="closePanels()">✖</button>
+                </div>
+
+                <div class="panel-content flex-1 space-y-3 overflow-y-auto p-3">
+                    <p>Konfigurasi user dan preferensi dummy.</p>
+                    <p>Lorem ipsum dolor sit amet consectetur adipisicing elit. Hic itaque atque molestiae magnam iure facere voluptatum, recusandae...</p>
+                </div>
+
+                <div class="bg-background border-foreground/10 sticky bottom-0 border-t p-3">
+                    <p class="text-foreground/70 text-sm">Footer Panel - Settings</p>
+                </div>
+            </section>
+        </div>
+
+        <!-- MAP CONTAINER -->
+        <div class="bg-background relative flex-1 transition-all duration-300 ease-in-out" id="map-container">
+            <div class="h-full w-full" id="map"></div>
+
+            <!-- Search Bar -->
+            <div class="absolute left-2 right-2 top-12 flex w-1/2 items-center justify-between md:top-2 md:w-1/3">
+                <div class="relative w-full">
+                    <x-text-input class="w-full p-1 pr-8" id="search-location" type="text" size="small" placeholder="Search Location, Address, or Cordinate" />
+                    <!-- Clear button -->
+                    <button class="text-foreground/100 hover:text-foreground/80 absolute right-2 top-1/2 hidden -translate-y-1/2 transform" id="clear-search" type="button">
+                        <i class="ri-close-line text-lg"></i>
+                    </button>
+                </div>
+                <!-- Search Results Recommendation Container -->
+                <div class="border-foreground/30 absolute left-0 top-full z-50 mt-1 hidden max-h-[300px] w-full overflow-y-auto rounded-lg border bg-white shadow-lg" id="search-results-recommendation">
+                    <!-- Results will be dynamically inserted here -->
                 </div>
             </div>
 
-            <!-- Left Panel2 - Responsive Flowbite Drawer -->
-            <div class="bg-background shadow-r-lg responsive-drawer fixed bottom-0 left-0 right-0 z-50 h-0 max-h-[50vh] w-full overflow-hidden transition-all duration-300 ease-in-out md:relative md:inset-auto md:z-auto md:block md:h-full md:max-h-full md:w-0" id="drawer-sidebar-left-panel2" data-drawer-state="closed" data-drawer-placement="left" data-drawer-edge="true" aria-labelledby="drawer-sidebar-left-panel2-label" tabindex="-1">
-                <div class="flex h-full min-w-full flex-col p-2 md:min-w-80" id="drawer-sidebar-left-panel2-label">
-                    <div class="mb-2 flex items-center justify-between px-3">
-                        <h2 class="text-lg font-semibold">Analytics</h2>
-                        <button class="hover:text-primary/80 text-foreground/50" data-drawer-hide="drawer-sidebar-left-panel2" type="button">
-                            ✕
-                        </button>
-                    </div>
-                    <!-- Drawer content -->
-                    <div class="flex-1 space-y-3 overflow-y-auto">
-                        <div class="bg-muted rounded-lg p-3">📈 Crop Yield Analysis</div>
-                        <div class="bg-muted rounded-lg p-3">🌡️ Climate Trends</div>
-                        <div class="bg-muted rounded-lg p-3">💧 Water Usage</div>
-                        <div class="bg-muted rounded-lg p-3">🌍 Regional Comparison</div>
-                    </div>
-                </div>
+            <!-- Right Buttons -->
+            <div class="absolute right-2 top-1/2 flex -translate-y-1/2 flex-col space-y-1 text-base md:text-lg">
+                <button class="bg-neutral hover:bg-muted rounded px-2 py-1 text-xl font-bold transition-colors" title="Zoom In" onclick="zoomIn()">
+                    +
+                    <span class="sr-only">Zoom In</span>
+                </button>
+                <button class="bg-neutral hover:bg-muted rounded px-2 py-1 text-xl font-bold transition-colors" title="Zoom Out" onclick="zoomOut()">
+                    –
+                    <span class="sr-only">Zoom Out</span>
+                </button>
+                <button class="bg-neutral hover:bg-muted rotate-180 rounded px-2 py-1 text-xl font-bold transition-colors" id="minimapToggleBtn" title="Toggle Minimap" onclick="toggleMinimap(this)">
+                    <i class="ri-arrow-left-double-line"></i>
+                    <span class="sr-only">Toggle Minimap</span>
+                </button>
             </div>
 
-
-            <!-- Map / Content Area -->
-            <div class="bg-background relative h-full min-h-0 flex-1 rounded-md rounded-t transition-all duration-300 ease-in-out">
-                <div class="map" id="map"></div>
-
-                <!-- Right Buttons -->
-                <div class="absolute right-2 top-1/2 flex -translate-y-1/2 flex-col space-y-1 text-base md:text-lg">
-                    <button class="bg-neutral hover:bg-muted rounded px-2 py-1 text-xl font-bold transition-colors" title="Zoom In" onclick="zoomIn()">
-                        +
-                        <span class="sr-only">Zoom In</span>
-                    </button>
-                    <button class="bg-neutral hover:bg-muted rounded px-2 py-1 text-xl font-bold transition-colors" title="Zoom Out" onclick="zoomOut()">
-                        –
-                        <span class="sr-only">Zoom Out</span>
-                    </button>
-                    <button class="bg-neutral hover:bg-muted rotate-180 rounded px-2 py-1 text-xl font-bold transition-colors" id="minimapToggleBtn" title="Toggle Minimap" onclick="toggleMinimap(this)">
-                        <i class="ri-arrow-left-double-line"></i>
-                        <span class="sr-only">Toggle Minimap</span>
-                    </button>
-                </div>
-
-                <!-- * Bottom Buttons * -->
+            <!-- * Bottom Buttons * -->
+            <div class="absolute bottom-8 left-0 z-40 flex items-end space-x-2 text-xs md:left-2 md:text-base">
                 <!-- Basemap Buttons -->
-                <div class="absolute bottom-8 left-0 z-40 flex items-end space-x-2 text-xs md:left-2 md:text-base">
-                    <div class="basemap-switcher font-medium">
-                        <div class="trigger-basemap font-bold" onclick="toggleOptions()">
-                            <img id="active-basemap" src="{{ asset('assets/img/icon/here_satelliteday.png') }}" alt="Active Basemap" />
-                            <span class="block">Basemap</span>
+                <div class="basemap-switcher font-medium">
+                    <div class="trigger-basemap font-bold" onclick="toggleOptions()">
+                        <img id="active-basemap" src="{{ asset('assets/img/icon/here_satelliteday.png') }}" alt="Active Basemap" />
+                        <span class="block">Basemap</span>
+                    </div>
+                    <div class="basemap-options">
+                        <label class="basemap-option">
+                            <input name="basemap" type="radio" value="bing" checked onclick="setBasemap('bing', this)" />
+                            <img src="{{ asset('assets/img/icon/here_satelliteday.png') }}" alt="Satellite" />
+                            <span>Satellite</span>
+                        </label>
+                        <label class="basemap-option">
+                            <input name="basemap" type="radio" value="mapbox" onclick="setBasemap('mapbox', this)" />
+                            <img src="{{ asset('assets/img/icon/here_normalday.png') }}" alt="Mapbox" />
+                            <span>Street Mapbox</span>
+                        </label>
+                        <label class="basemap-option">
+                            <input name="basemap" type="radio" value="osm" onclick="setBasemap('osm', this)" />
+                            <img src="{{ asset('assets/img/icon/openstreetmap_mapnik.png') }}" alt="OpenStreet" />
+                            <span>OpenStreet Map</span>
+                        </label>
+                        <label class="basemap-option">
+                            <input name="basemap" type="radio" value="esriTerrain" onclick="setBasemap('esriTerrain', this)" />
+                            <img src="{{ asset('assets/img/icon/esri_worldterrain.png') }}" alt="Esri Terrain" />
+                            <span>Esri Terrain</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Info panel -->
+            <div class="shadow-soft bottom-22 pointer-events-none absolute left-0 z-40 mx-auto hidden max-w-xl rounded-lg bg-white/90 p-2 ring-1 ring-black/5 backdrop-blur supports-[backdrop-filter]:bg-white/60 sm:right-auto sm:w-[380px] md:left-20" id="panel">
+                <div class="pointer-events-auto">
+                    <div class="flex items-start justify-between gap-2">
+                        <div>
+                            <h2 class="text-base font-semibold" id="panelTitle">Info Panel Title</h2>
+                            <p>Lorem ipsum dolor sit amet consectetur, adipisicing elit. Aspernatur, labore facilis! Fuga, ab molestiae?</p>
                         </div>
-                        <div class="basemap-options">
-                            <label class="basemap-option">
-                                <input name="basemap" type="radio" value="bing" checked onclick="setBasemap('bing', this)" />
-                                <img src="{{ asset('assets/img/icon/here_satelliteday.png') }}" alt="Satellite" />
-                                <span>Satellite</span>
-                            </label>
-                            <label class="basemap-option">
-                                <input name="basemap" type="radio" value="mapbox" onclick="setBasemap('mapbox', this)" />
-                                <img src="{{ asset('assets/img/icon/here_normalday.png') }}" alt="Mapbox" />
-                                <span>Street Mapbox</span>
-                            </label>
-                            <label class="basemap-option">
-                                <input name="basemap" type="radio" value="osm" onclick="setBasemap('osm', this)" />
-                                <img src="{{ asset('assets/img/icon/openstreetmap_mapnik.png') }}" alt="OpenStreet" />
-                                <span>OpenStreet Map</span>
-                            </label>
-                            <label class="basemap-option">
-                                <input name="basemap" type="radio" value="esriTerrain" onclick="setBasemap('esriTerrain', this)" />
-                                <img src="{{ asset('assets/img/icon/esri_worldterrain.png') }}" alt="Esri Terrain" />
-                                <span>Esri Terrain</span>
-                            </label>
+                        <button class="border-foreground/30 hover:bg-foreground/10 rounded-lg border bg-white px-2 py-1 text-xs" id="btnClear">Clear</button>
+                    </div>
+                    <div class="border-foreground/30 mt-3 hidden rounded-xl border bg-white p-3 text-sm" id="routeInfo">
+                        <div class="font-medium">Rute</div>
+                        <div class="text-foreground/80 mt-1 space-y-1">
+                            <div id="routeSummary">Belum ada rute.</div>
+                            <div class="nice-scrollbar max-h-40 overflow-auto" id="routeSteps"></div>
                         </div>
                     </div>
                 </div>
+            </div>
 
-                <!-- Info map controls -->
-                <div class="absolute bottom-11 left-0 flex items-end space-x-2 text-xs md:left-2 md:text-base">
-                    <div class="relative hidden md:block" id="mousePosition"></div>
-                    <div class="relative -mb-2" id="scaleline"></div>
+            <!-- Info map controls -->
+            <div class="absolute bottom-11 left-0 flex items-end space-x-2 text-xs md:left-2 md:text-base">
+                <div class="relative hidden md:block" id="mousePosition"></div>
+                <div class="relative -mb-2" id="scaleline"></div>
+            </div>
+
+            <!-- Bottom Date Selector -->
+            <div class="absolute bottom-1 left-2 flex flex-wrap space-x-1 text-xs md:text-sm">
+                <div class="bg-muted flex space-x-1 rounded-md p-1">
+                    <button class="bg-neutral rounded px-1 py-0.5">1M</button>
+                    <button class="bg-neutral rounded px-1 py-0.5">3M</button>
+                    <button class="bg-neutral rounded px-1 py-0.5">6M</button>
+                    <button class="bg-neutral rounded px-1 py-0.5">1Y</button>
                 </div>
 
-                <!-- Bottom Date Selector -->
-                <div class="absolute bottom-1 left-2 flex flex-wrap space-x-1 text-xs md:text-sm">
-                    <div class="bg-muted flex space-x-1 rounded-md p-1">
-                        <button class="bg-neutral rounded px-1 py-0.5">1M</button>
-                        <button class="bg-neutral rounded px-1 py-0.5">3M</button>
-                        <button class="bg-neutral rounded px-1 py-0.5">6M</button>
-                        <button class="bg-neutral rounded px-1 py-0.5">1Y</button>
-                    </div>
-
-                    <button class="bg-neutral rounded px-1 py-0.5">May 2025</button>
-                    <button class="bg-neutral rounded px-1 py-0.5">Jun 2025</button>
-                    <button class="bg-neutral rounded px-1 py-0.5">Jul 2025</button>
-                    <button class="bg-primary rounded px-1 py-0.5">Aug 2025</button>
-                </div>
+                <button class="bg-neutral rounded px-1 py-0.5">May 2025</button>
+                <button class="bg-neutral rounded px-1 py-0.5">Jun 2025</button>
+                <button class="bg-neutral rounded px-1 py-0.5">Jul 2025</button>
+                <button class="bg-primary rounded px-1 py-0.5">Aug 2025</button>
             </div>
         </div>
 
+
+        <!-- Right/Overlay Panel -->
         <div class="bg-background absolute bottom-0 left-0 z-50 hidden max-h-[60%] w-full max-w-full overflow-hidden rounded-t-xl shadow-xl transition-all duration-300 ease-in-out md:bottom-auto md:left-auto md:right-2 md:top-1/2 md:max-w-[30rem] md:-translate-y-1/2 md:transform md:rounded-xl" id="buyingPanel">
             <div class="flex h-full w-full min-w-full flex-col p-2" id="drawer-sidebar-left-panel1-label">
                 <!-- Header drawer -->
@@ -384,7 +509,7 @@
                         <div class="flex flex-col items-center justify-center py-2 text-center">
                             <div class="mb-2">
                                 <h3 class="text-foreground/70 mb-3 text-lg font-semibold">Purchase Satellite Imagery</h3>
-                                <p class="mb-3 text-xs text-gray-600">Draw a polygon on the map to define your area of interest for satellite imagery analysis.</p>
+                                <p class="text-foreground-70 mb-3 text-xs">Draw a polygon on the map to define your area of interest for satellite imagery analysis.</p>
                                 <x-button-primary id="drawPolygonBtn" type="button" size="small">
                                     <i class="ri-pencil-line"></i>
                                     <span>Draw Polygon</span>
@@ -393,7 +518,7 @@
 
                             <!-- GeoJSON Output -->
                             <div class="w-full">
-                                <div class="border-muted mt-3 max-h-11 w-full overflow-auto rounded border bg-gray-50 p-2 text-xs" id="drawerGeojson">
+                                <div class="border-muted bg-foreground/10 mt-3 max-h-11 w-full overflow-auto rounded border p-2 text-xs" id="drawerGeojson">
                                     <span class="text-foreground/50">Polygon coordinates will appear here...</span>
                                 </div>
                             </div>
@@ -402,88 +527,82 @@
                         <hr class="border-gray-300">
 
                         <!-- Feature Properties Form -->
-                        <div class="hidden w-full" id="featureProperties">
-                            <form class="space-y-4" id="featurePropertiesForm" action="{{ route('mapOrder') }}" method="POST">
-                                @csrf
-                                @method('POST')
+                        <form class="space-y-4" id="featurePropertiesForm" action="{{ route('imageryOrder') }}" method="POST">
+                            @csrf
+                            @method('POST')
 
-                                <input id="geometryInput" name="geometry" type="hidden">
-                                <input id="areaInput" name="area_hectares" type="hidden">
+                            <input id="geometryInput" name="geometry" type="hidden">
+                            <input id="areaInput" name="area_hectares" type="hidden">
 
-                                <!-- Feature Name -->
+                            <!-- Feature Name -->
+                            <div class="space-y-2">
+                                <x-input-label class="text-sm font-medium" for="name_feature">Field Name</x-input-label>
+                                <x-text-input class="w-full" id="name_feature" name="name_feature" size="small" placeholder="Enter field/region name" required />
+                            </div>
+
+                            <!-- Area Information -->
+                            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
                                 <div class="space-y-2">
-                                    <x-input-label class="text-sm font-medium" for="name_feature">Field Name</x-input-label>
-                                    <x-text-input class="w-full" id="name_feature" name="name_feature" size="small" placeholder="Enter field/region name" required />
-                                </div>
-
-                                <!-- Area Information -->
-                                <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                                    <div class="space-y-2">
-                                        <x-input-label class="text-sm font-medium" for="luas">Area</x-input-label>
-                                        <div class="border-muted rounded border bg-gray-50 p-2 text-sm" id="measurementOutput">
-                                            <div class="text-foreground/50 flex items-center">
-                                                <i class="ri-crop-line mr-2"></i>
-                                                <span>Calculate area...</span>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div class="space-y-2">
-                                        <x-input-label class="text-sm font-medium" for="harga_satuan">Price per Hectare</x-input-label>
-                                        <div class="border-muted rounded border p-2 text-sm">
-                                            <select class="border-border focus:border-primary focus:ring-primary w-full rounded border px-2 py-1 text-sm focus:outline-none focus:ring-1" id="plan_id" name="plan_id">
-                                                @forelse($plans->where('isShow', true)->sortBy('price_per_hectare') as $plan)
-                                                    <option data-price="{{ $plan->price_per_hectare }}" data-currency="{{ $plan->currency }}" value="{{ $plan->id }}" {{ $loop->first ? 'selected' : '' }}>
-                                                        {{ $plan->name }} - {{ Number::currency($plan->price_per_hectare, $plan->currency, app()->getLocale()) }} / ha
-                                                    </option>
-                                                @empty
-                                                    <option value="" selected disabled>No plans available</option>
-                                                @endforelse
-                                            </select>
+                                    <x-input-label class="text-sm font-medium" for="luas">Area</x-input-label>
+                                    <div class="border-muted bg-foreground/10 rounded border p-2 text-sm" id="measurementOutput">
+                                        <div class="text-foreground/50 flex items-center">
+                                            <i class="ri-crop-line mr-2"></i>
+                                            <span>Calculate area...</span>
                                         </div>
                                     </div>
                                 </div>
 
-                                <!-- Total Price -->
+                                <!-- Credit Points Information -->
                                 <div class="space-y-2">
-                                    <x-input-label class="text-sm font-medium" for="harga">Total Price</x-input-label>
-                                    <div class="border-muted bg-muted/60 rounded border p-2 text-sm" id="priceOutput">
-                                        <span class="font-semibold text-blue-600" id="total_price">Total will be calculated...</span>
+                                    <x-input-label class="text-sm font-medium" for="credit_info">Credit Points</x-input-label>
+                                    <div class="border-muted rounded border p-2 text-sm">
+                                        <div class="text-foreground/50 flex items-center">
+                                            <i class="ri-coins-line mr-2"></i>
+                                            <span>{{ Number::format(config('app-constants.imagery_credit_cost_per_hectare'), locale: app()->getLocale()) }} Credit Points per hectare</span>
+                                        </div>
                                     </div>
                                 </div>
+                            </div>
 
-                                <!-- Action Buttons -->
-                                <div class="flex flex-col gap-2 pt-2 sm:flex-row">
-                                    <x-button-primary class="flex-1" id="saveFeatureProperties" type="submit" role="button" size="small">
-                                        <i class="ri-arrow-right-line mr-1"></i>
-                                        Continue to Checkout
-                                    </x-button-primary>
-                                    <x-button-secondary class="flex-1" id="cancelFeatureProperties" type="reset" role="button" size="small">
-                                        <i class="ri-close-line mr-1"></i>
-                                        Cancel
-                                    </x-button-secondary>
+                            <!-- Total Price -->
+                            <div class="space-y-2">
+                                <x-input-label class="text-sm font-medium" for="harga">Total Credit Points Needed</x-input-label>
+                                <div class="border-muted bg-muted/60 rounded border p-2 text-sm" id="priceOutput">
+                                    <span class="text-primary font-semibold" id="total_price">Total will be calculated...</span>
                                 </div>
-                            </form>
-                        </div>
+                            </div>
+
+                            <!-- Action Buttons -->
+                            <div class="flex flex-col gap-2 pt-2 sm:flex-row">
+                                <x-button-primary class="flex-1" id="saveFeatureProperties" type="submit" role="button" size="small">
+                                    <i class="ri-arrow-right-line mr-1"></i>
+                                    Continue to Checkout
+                                </x-button-primary>
+                                <x-button-secondary class="flex-1" id="cancelFeatureProperties" type="reset" role="button" size="small">
+                                    <i class="ri-close-line mr-1"></i>
+                                    Cancel
+                                </x-button-secondary>
+                            </div>
+                        </form>
 
                         <!-- Additional Information -->
-                        <div class="bg-muted/60 rounded-lg p-3">
-                            <h4 class="mb-2 text-sm font-medium text-blue-800">What you'll get:</h4>
-                            <ul class="space-y-1 text-xs text-blue-700">
+                        <div class="bg-primary/60 rounded-lg p-3">
+                            <h4 class="text-primary-foreground mb-2 text-sm font-medium">What you'll get:</h4>
+                            <ul class="text-primary-foreground/80 space-y-1 text-xs">
                                 <li class="flex items-center">
-                                    <i class="ri-check-line mr-1 text-green-500"></i>
+                                    <i class="ri-check-line text-success mr-1"></i>
                                     High-resolution satellite imagery
                                 </li>
                                 <li class="flex items-center">
-                                    <i class="ri-check-line mr-1 text-green-500"></i>
+                                    <i class="ri-check-line text-success mr-1"></i>
                                     PRI stress analysis
                                 </li>
                                 <li class="flex items-center">
-                                    <i class="ri-check-line mr-1 text-green-500"></i>
+                                    <i class="ri-check-line text-success mr-1"></i>
                                     Detailed crop health reports
                                 </li>
                                 <li class="flex items-center">
-                                    <i class="ri-check-line mr-1 text-green-500"></i>
+                                    <i class="ri-check-line text-success mr-1"></i>
                                     Historical data comparison
                                 </li>
                             </ul>
@@ -492,14 +611,346 @@
                 </div>
             </div>
         </div>
-
-        <!-- Backdrop -->
-        <div class="min-h-2/12 fixed inset-0 z-30 hidden bg-black/40" id="drawer-backdrop"></div>
     </div>
 
     @push('javascript')
         <script>
-            // sidebar nav menu
+            const sourceInput = document.getElementById('sourceType');
+            const fileInput = document.getElementById('fileInput');
+            const fileInfo = document.getElementById('fileInfo');
+            const progressBar = document.getElementById('progressBar');
+            const progressText = document.getElementById('progressText');
+            const startBtn = document.getElementById('startBtn');
+            const pauseBtn = document.getElementById('pauseBtn');
+            const resumeBtn = document.getElementById('resumeBtn');
+            const myDataContainer = document.getElementById('myDataContainer');
+
+            // === STATE ===
+            let paused = false;
+            let uploading = false;
+            let file = null;
+            let uploadId = null;
+            let currentChunk = 0;
+            let totalChunks = 0;
+            const chunkSize = 5 * 1024 * 1024; // 5 MB per chunk
+            let startTime = null;
+            let uploadedBytes = 0;
+
+            // === INIT ===
+            setButtonState("idle");
+            loadMyData();
+
+            // === FILE SELECT ===
+            fileInput.addEventListener("change", (e) => {
+                file = e.target.files[0];
+                if (!file) return;
+
+                const sizeMB = (file.size / 1024 / 1024).toFixed(2);
+                const shortName = shortenFilename(file.name, 40);
+
+                fileInfo.classList.remove("hidden");
+                fileInfo.innerHTML = `
+                <strong>Name:</strong> ${shortName}<br>
+                <strong>Size:</strong> ${sizeMB} MB
+            `;
+
+                progressText.textContent = "✅ File ready to upload. Click 'Start Upload' to begin.";
+                progressBar.style.width = "0%";
+                MyZkToast.info("File ready to upload, click Start to begin.");
+                setButtonState("ready");
+            });
+
+            // === START UPLOAD ===
+            startBtn.addEventListener("click", () => {
+                if (!file) {
+                    MyZkToast.warning("Please select a file first!");
+                    return;
+                }
+
+                uploadId = Math.random().toString(36).substring(2, 12);
+                totalChunks = Math.ceil(file.size / chunkSize);
+                currentChunk = 0;
+                uploadedBytes = 0;
+                paused = false;
+                uploading = true;
+                startTime = performance.now();
+
+                MyZkToast.info("🚀 Upload started...");
+                progressText.textContent = `🚀 Uploading ${file.name}...`;
+                setButtonState("uploading");
+                uploadNextChunk();
+            });
+
+            // === PAUSE ===
+            pauseBtn.addEventListener("click", () => {
+                if (!uploading) return;
+                paused = true;
+                uploading = false;
+                progressText.textContent = "⏸️ Upload paused.";
+                MyZkToast.warning("Upload paused.");
+                setButtonState("paused");
+            });
+
+            // === RESUME ===
+            resumeBtn.addEventListener("click", () => {
+                if (!file) return;
+                paused = false;
+                uploading = true;
+                progressText.textContent = "▶️ Upload resumed...";
+                MyZkToast.info("Upload resumed...");
+                setButtonState("uploading");
+                uploadNextChunk();
+            });
+
+            // === UPLOAD CHUNK FUNCTION ===
+            async function uploadNextChunk(retryCount = 0) {
+                if (paused || !file) return;
+
+                if (currentChunk >= totalChunks) {
+                    progressText.textContent = "🧩 Merging file on server...";
+                    return mergeChunks();
+                }
+
+                const start = currentChunk * chunkSize;
+                const end = Math.min(file.size, start + chunkSize);
+                const chunk = file.slice(start, end);
+                const chunkSizeBytes = end - start;
+
+                const formData = new FormData();
+                formData.append("upload_id", uploadId);
+                formData.append("chunk_index", currentChunk);
+                formData.append("chunk", chunk);
+
+                try {
+                    const res = await fetch('{{ route('upload.chunk') }}', {
+                        method: "POST",
+                        headers: {
+                            "X-CSRF-TOKEN": "{{ csrf_token() }}"
+                        },
+                        body: formData,
+                    });
+
+                    const data = await res.json();
+                    if (!res.ok || !data.success) {
+                        throw new Error(data.message || `Chunk ${currentChunk} failed.`);
+                    }
+
+                    currentChunk++;
+                    uploadedBytes += chunkSizeBytes;
+
+                    const now = performance.now();
+                    const elapsedSec = (now - startTime) / 1000;
+                    const speedMBps = (uploadedBytes / 1024 / 1024 / elapsedSec).toFixed(2);
+                    const remainingBytes = file.size - uploadedBytes;
+                    const estRemainingSec = remainingBytes / (speedMBps * 1024 * 1024);
+                    const etaText = estRemainingSec > 0 ? formatTimeETA(estRemainingSec) : "-";
+
+                    const progress = Math.round((currentChunk / totalChunks) * 100);
+                    progressBar.style.width = `${progress}%`;
+                    progressText.textContent = `Uploading... ${progress}% | 🚀 ${speedMBps} MB/s | ⏳ ETA: ${etaText}`;
+
+                    if (progress === 100) {
+                        MyZkToast.info("Merging file on server...");
+                    }
+
+                    if (!paused) uploadNextChunk();
+
+                } catch (err) {
+                    if (retryCount < 3) {
+                        setTimeout(() => uploadNextChunk(retryCount + 1), 2000 * (retryCount + 1));
+                    } else {
+                        progressText.textContent = `❌ Chunk ${currentChunk} failed after 3 retries. Upload paused.`;
+                        MyZkToast.error(`Chunk ${currentChunk} failed after 3 retries.`);
+                        paused = true;
+                        uploading = false;
+                        setButtonState("paused");
+                    }
+                }
+            }
+
+            // === MERGE CHUNKS FUNCTION ===
+            async function mergeChunks() {
+                setButtonState("merging");
+
+                const sourceType = sourceInput.value;
+                const formData = new FormData();
+                formData.append("upload_id", uploadId);
+                formData.append("filename", file.name);
+                formData.append("total_chunks", totalChunks);
+                formData.append("source_type", sourceType); // Add source type to form data
+
+                try {
+                    const res = await fetch('{{ route('upload.merge') }}', {
+                        method: "POST",
+                        headers: {
+                            "X-CSRF-TOKEN": "{{ csrf_token() }}"
+                        },
+                        body: formData,
+                    });
+
+                    const result = await res.json();
+
+                    if (res.ok && result.success) {
+                        progressBar.style.width = "100%";
+                        progressText.textContent = `✅ Upload complete! ${result.message || "Upload completed. Processing started in background."}`;
+                        MyZkToast.success(result.message || "Upload completed successfully!");
+                        setButtonState("done");
+                        await loadMyData();
+                        autoReset();
+                    } else {
+                        throw new Error(result.message || "Failed to merge file on server.");
+                    }
+
+                } catch (err) {
+                    progressText.textContent = `❌ Error: ${err.message}`;
+                    MyZkToast.error(err.message || "Server error during merge.");
+                    setButtonState("error");
+                    autoReset();
+                }
+            }
+
+            // === AUTO RESET ===
+            function autoReset() {
+                setTimeout(() => {
+                    file = null;
+                    fileInput.value = "";
+                    fileInfo.classList.add("hidden");
+                    progressBar.style.width = "0%";
+                    progressText.textContent = "Ready for next upload.";
+                    setButtonState("idle");
+                }, 4000);
+            }
+
+            // === LOAD MY DATA ===
+            async function loadMyData() {
+                myDataContainer.innerHTML = `
+                <div class="flex justify-center py-4">
+                    <p class="text-sm text-foreground/60 animate-pulse">Loading your imagery list...</p>
+                </div>
+            `;
+
+                try {
+                    const res = await fetch('{{ route('imagery.list') }}');
+                    const result = await res.json();
+
+                    if (!res.ok || !result.success) throw new Error(result.message || "Failed to fetch imagery data.");
+                    const data = result.data;
+
+                    myDataContainer.innerHTML = ''; // clear existing
+
+                    if (data.length === 0) {
+                        myDataContainer.innerHTML = `<p class="text-sm text-gray-400 text-center py-4">No imagery uploaded yet.</p>`;
+                        return;
+                    }
+
+                    const cardListDataImagery = document.getElementById('imageryCardTemplate');
+
+                    data.forEach(item => {
+                        const clone = cardListDataImagery.content.cloneNode(true);
+                        const card = clone.querySelector('.imagery-card');
+
+                        // populate data
+                        card.querySelector('.imagery-format').textContent = item.format.slice(0, 3).toUpperCase();
+                        card.querySelector('.imagery-name').textContent = shortenFilename(item.original_name, 25);
+                        const meta = `${(item.size / 1024 / 1024).toFixed(2)} MB • ${new Date(item.uploaded_at).toLocaleDateString()} • `;
+                        const statusEl = card.querySelector('.imagery-status');
+                        statusEl.textContent = item.processing_status;
+                        statusEl.classList.toggle('text-success', item.processing_status === 'done');
+                        statusEl.classList.toggle('text-warning', item.processing_status !== 'done');
+                        card.querySelector('.imagery-meta').innerHTML = `${meta}<span class="${statusEl.className}">${statusEl.textContent}</span>`;
+
+                        // handle view button
+                        const viewBtn = card.querySelector('.view-btn');
+                        viewBtn.addEventListener('click', () => viewImagery(item));
+
+                        // append to container
+                        myDataContainer.appendChild(clone);
+                    });
+
+                } catch (err) {
+                    myDataContainer.innerHTML = `
+                        <div class="text-sm text-red-500 bg-red-50 border border-red-200 rounded p-3">
+                            ❌ ${err.message}
+                        </div>
+                    `;
+                }
+            }
+
+            // === TAB FUNCTIONALITY ===
+            function initTabFunctionality() {
+                const tabButtons = document.querySelectorAll('.tab-btn');
+                const tabContents = document.querySelectorAll('.tab-content');
+
+                tabButtons.forEach(button => {
+                    button.addEventListener('click', () => {
+                        // Remove active class from all buttons and contents
+                        tabButtons.forEach(btn => btn.classList.remove('active'));
+                        tabContents.forEach(content => content.classList.remove('active'));
+
+                        // Add active class to clicked button
+                        button.classList.add('active');
+
+                        // Show corresponding content
+                        const tabId = button.getAttribute('data-tab');
+                        const content = document.getElementById(tabId);
+                        if (content) {
+                            content.classList.add('active');
+                        }
+                    });
+                });
+            }
+
+            // Initialize tab functionality when DOM is loaded
+            document.addEventListener('DOMContentLoaded', initTabFunctionality);
+
+            // === HELPER FUNCTIONS ===
+            function setButtonState(state) {
+                switch (state) {
+                    case "idle":
+                        startBtn.disabled = true;
+                        pauseBtn.disabled = true;
+                        resumeBtn.disabled = true;
+                        break;
+                    case "ready": // file sudah dipilih
+                        startBtn.disabled = false;
+                        pauseBtn.disabled = true;
+                        resumeBtn.disabled = true;
+                        break;
+                    case "uploading":
+                        startBtn.disabled = true;
+                        pauseBtn.disabled = false;
+                        resumeBtn.disabled = true;
+                        break;
+                    case "paused":
+                        startBtn.disabled = true;
+                        pauseBtn.disabled = true;
+                        resumeBtn.disabled = false;
+                        break;
+                    case "merging":
+                        startBtn.disabled = true;
+                        pauseBtn.disabled = true;
+                        resumeBtn.disabled = true;
+                        break;
+                    case "done":
+                        startBtn.disabled = true;
+                        pauseBtn.disabled = true;
+                        resumeBtn.disabled = true;
+                        break;
+                    case "error":
+                        startBtn.disabled = false;
+                        pauseBtn.disabled = true;
+                        resumeBtn.disabled = true;
+                        break;
+                }
+            }
+        </script>
+    @endpush
+
+    @push('javascript')
+        <script>
+            const panelWrapper = document.getElementById("panel-wrapper");
+            const panels = document.querySelectorAll("#panel-wrapper section");
+            const sidebarButtons = document.querySelectorAll(".sidebar-btn");
             const scrollContainer = document.getElementById('scroll-container');
             const scrollLeftBtn = document.getElementById('scroll-left');
             const scrollRightBtn = document.getElementById('scroll-right');
@@ -550,153 +1001,142 @@
                 scrollContainer.scrollLeft = scrollLeft - walk;
             });
 
-            // drawer
-            document.querySelectorAll("[data-drawer-target]").forEach(btn => {
-                btn.addEventListener("click", function() {
-                    const targetId = btn.getAttribute("data-drawer-target");
-                    const drawer = document.getElementById(targetId);
-                    const state = drawer.getAttribute("data-drawer-state");
-                    const isMobile = window.innerWidth < 768;
-
-                    // Reset semua tombol active terlebih dahulu
-                    document.querySelectorAll("[data-drawer-target]").forEach(b => {
-                        b.classList.remove("nav-map-active");
-                    });
-
-                    // Tutup semua drawer lain dulu
-                    document.querySelectorAll("[id^='drawer-sidebar-']").forEach(d => {
-                        if (isMobile) {
-                            d.classList.remove("h-[50vh]");
-                            d.classList.add("h-0");
-                        } else {
-                            d.classList.remove("w-80");
-                            d.classList.add("w-0");
-                        }
-                        d.setAttribute("data-drawer-state", "closed");
-                    });
-
-                    // Toggle target drawer
-                    if (state === "closed") {
-                        if (isMobile) {
-                            drawer.classList.remove("h-0");
-                            drawer.classList.add("h-[50vh]");
-                        } else {
-                            drawer.classList.remove("w-0");
-                            drawer.classList.add("w-80");
-                        }
-                        drawer.setAttribute("data-drawer-state", "open");
-
-                        // Tambahkan active ke tombol yang sedang dipakai
-                        btn.classList.add("nav-map-active");
-                    }
-                });
-            });
-
-            // tombol close di dalam drawer
-            document.querySelectorAll("[data-drawer-hide]").forEach(btn => {
-                btn.addEventListener("click", function() {
-                    const targetId = btn.getAttribute("data-drawer-hide");
-                    const drawer = document.getElementById(targetId);
-                    const isMobile = window.innerWidth < 768;
-
-                    // Close drawer
-                    if (isMobile) {
-                        drawer.classList.add("h-0");
-                        drawer.classList.remove("h-[50vh]");
-                    } else {
-                        drawer.classList.remove("w-80");
-                        drawer.classList.add("w-0");
-                    }
-                    drawer.setAttribute("data-drawer-state", "closed");
-
-                    // Reset semua tombol nav active
-                    document.querySelectorAll("[data-drawer-target]").forEach(b => {
-                        if (b.getAttribute("data-drawer-target") === targetId) {
-                            b.classList.remove("nav-map-active");
-                        }
-                    });
-                });
-            });
-
-            // Handle window resize for responsive behavior
-            window.addEventListener('resize', function() {
+            function showPanel(id, btn = null) {
                 const isMobile = window.innerWidth < 768;
 
-                document.querySelectorAll("[id^='drawer-sidebar-']").forEach(drawer => {
-                    const isOpen = drawer.getAttribute("data-drawer-state") === "open";
+                panels.forEach(p => p.classList.add("hidden"));
+                const targetPanel = document.getElementById(id);
+                targetPanel.classList.remove("hidden");
 
-                    if (isMobile) {
-                        // Switch to mobile mode
-                        drawer.classList.remove("w-80", "w-0");
-                        if (isOpen) {
-                            drawer.classList.remove("h-0");
-                            drawer.classList.add("h-[50vh]");
-                        } else {
-                            drawer.classList.add("h-0");
-                            drawer.classList.remove("h-[50vh]");
-                        }
-                    } else {
-                        // Switch to desktop mode
-                        drawer.classList.remove("h-0", "h-[50vh]");
-                        if (isOpen) {
-                            drawer.classList.remove("w-0");
-                            drawer.classList.add("w-80");
-                        } else {
-                            drawer.classList.remove("w-80");
-                            drawer.classList.add("w-0");
-                        }
-                    }
-                });
-
-                // Maintain active state synchronization after resize
-                const openDrawer = document.querySelector("[id^='drawer-sidebar-'][data-drawer-state='open']");
-                if (openDrawer) {
-                    const drawerId = openDrawer.id;
-                    document.querySelectorAll("[data-drawer-target]").forEach(btn => {
-                        if (btn.getAttribute("data-drawer-target") === drawerId) {
-                            btn.classList.add("nav-map-active");
-                        } else {
-                            btn.classList.remove("nav-map-active");
-                        }
-                    });
+                sidebarButtons.forEach(b => b.classList.remove("active"));
+                if (btn) btn.classList.add("active");
+                else {
+                    const matchedBtn = Array.from(sidebarButtons).find(b => b.getAttribute("onclick")?.includes(id));
+                    if (matchedBtn) matchedBtn.classList.add("active");
                 }
+
+                if (isMobile) {
+                    // reset posisi
+                    panelWrapper.classList.remove("translate-y-full");
+                    panelWrapper.classList.add("translate-y-0");
+
+                    // animasi slide-up
+                    panelWrapper.classList.remove("slide-down");
+                    panelWrapper.classList.add("slide-up");
+                } else {
+                    panelWrapper.classList.remove("w-0", "md:w-0");
+                    panelWrapper.classList.add("w-80", "md:w-80");
+                }
+
+                panelWrapper.dataset.activePanel = id;
+            }
+
+            function closePanels() {
+                const isMobile = window.innerWidth < 768;
+
+                panels.forEach(p => p.classList.add("hidden"));
+                sidebarButtons.forEach(b => b.classList.remove("active"));
+                delete panelWrapper.dataset.activePanel;
+
+                if (isMobile) {
+                    // animasi slide-down
+                    panelWrapper.classList.remove("slide-up");
+                    panelWrapper.classList.add("slide-down");
+
+                    // setelah animasi selesai (500ms), sembunyikan sepenuhnya
+                    setTimeout(() => {
+                        panelWrapper.classList.remove("translate-y-0");
+                        panelWrapper.classList.add("translate-y-full");
+                    }, 480);
+                } else {
+                    panelWrapper.classList.remove("w-80", "md:w-80");
+                    panelWrapper.classList.add("w-0", "md:w-0");
+                }
+            }
+
+
+            // === DEFAULT STATE saat halaman load ===
+            window.addEventListener("DOMContentLoaded", () => {
+                const defaultPanel = 'data-panel';
+                const isMobile = window.innerWidth < 768;
+
+                const defaultBtn = isMobile ?
+                    document.querySelector(`#scroll-container .sidebar-btn[onclick*='${defaultPanel}']`) :
+                    document.querySelector(`aside .sidebar-btn[onclick*='${defaultPanel}']`);
+
+                showPanel(defaultPanel, defaultBtn);
             });
 
+            // === RESPONSIVE HANDLER: SYNC STATE SAAT RESIZE ===
+            window.addEventListener("resize", () => {
+                const isMobile = window.innerWidth < 768;
+                const activePanel = panelWrapper.dataset.activePanel;
+
+                // Jika tidak ada panel aktif (semua ditutup), keluar saja
+                if (!activePanel) {
+                    // Pastikan panel wrapper tertutup di semua mode
+                    panelWrapper.classList.add("translate-y-full");
+                    panelWrapper.classList.remove("translate-y-0", "w-80", "md:w-80");
+                    return;
+                }
+
+                // Hapus semua class transisi yang bisa bentrok
+                panelWrapper.classList.remove("slide-up", "slide-down");
+
+                if (isMobile) {
+                    // mobile mode: gunakan slide-up style
+                    panelWrapper.classList.remove("w-0", "md:w-0", "w-80", "md:w-80");
+                    panelWrapper.classList.remove("translate-y-full");
+                    panelWrapper.classList.add("translate-y-0", "opacity-100");
+                } else {
+                    // desktop mode: gunakan lebar tetap (sidebar style)
+                    panelWrapper.classList.remove("translate-y-full", "translate-y-0");
+                    panelWrapper.classList.add("w-80", "md:w-80", "opacity-100");
+                }
+
+                // perbarui tombol active sesuai mode baru
+                const activeBtn = isMobile ?
+                    document.querySelector(`#scroll-container .sidebar-btn[onclick*='${activePanel}']`) :
+                    document.querySelector(`aside .sidebar-btn[onclick*='${activePanel}']`);
+
+                sidebarButtons.forEach(b => b.classList.remove("active"));
+                if (activeBtn) activeBtn.classList.add("active");
+            });
+
+
+
+
             // Buy Satellite Button Event
-            document.getElementById('buySatelliteBtn').addEventListener('click', function() {
+            document.getElementById('buySatelliteBtn')?.addEventListener('click', function() {
                 const buyingPanel = document.getElementById('buyingPanel');
                 buyingPanel.classList.remove('hidden');
             });
-            document.getElementById('buyingPanelCloseBtn').addEventListener('click', function() {
+            document.getElementById('buyingPanelCloseBtn')?.addEventListener('click', function() {
                 const buyingPanel = document.getElementById('buyingPanel');
                 buyingPanel.classList.add('hidden');
             });
 
             // Price calculation functions
             function calculateTotalPrice() {
-                const planSelect = document.getElementById('plan_id');
-                const selectedOption = planSelect.options[planSelect.selectedIndex];
-                const pricePerHectare = parseFloat(selectedOption.dataset.price) || 0;
-                const currencyCode = selectedOption.dataset.currency || 'USD'; // Get currency code from data attribute
-
                 // Get area from global variable (set when polygon is drawn)
                 const areaInSquareMeters = window.geojsonArea || 0;
                 const areaInHectares = areaInSquareMeters / 10000; // Convert m² to hectares
 
-                const totalPrice = areaInHectares * pricePerHectare;
+                // Calculate credit points needed (using global constant rate)
+                const creditPointsNeeded = areaInHectares * {{ config('app-constants.imagery_credit_cost_per_hectare') }};
 
                 // Update the display
                 const totalPriceElement = document.getElementById('total_price');
                 const priceContainer = totalPriceElement.parentElement;
 
-                if (areaInHectares > 0 && pricePerHectare > 0) {
+                if (areaInHectares > 0) {
                     totalPriceElement.innerHTML = `
                         <div class="flex justify-between items-center">
-                            <span class="text-lg font-bold text-green-700">${formatCurrency(totalPrice, currencyCode)}</span>
-                            <i class="ri-money-dollar-circle-line text-green-600 text-xl"></i>
+                            <span class="text-lg font-bold text-green-700">${formatNumber(creditPointsNeeded.toFixed(2))} Credit Points</span>
+                            <i class="ri-coins-line font-base text-success text-xl"></i>
                         </div>
-                        <div class="text-xs text-gray-600 mt-1">
-                            ${formatNumber(areaInHectares)} hectares × ${formatCurrency(pricePerHectare, currencyCode)}/hectare
+                        <div class="text-xs text-foreground-70 mt-1">
+                            ${formatNumber(areaInHectares)} hectares × {{ Number::format(config('app-constants.imagery_credit_cost_per_hectare'), locale: app()->getLocale()) }} credit points/hectare
                         </div>
                     `;
                     priceContainer.classList.remove('bg-muted/60', 'border-muted');
@@ -707,20 +1147,11 @@
                     setTimeout(() => {
                         priceContainer.style.transform = 'scale(1)';
                     }, 200);
-                } else if (areaInHectares > 0 && pricePerHectare === 0) {
-                    totalPriceElement.innerHTML = `
-                        <div class="flex items-center text-amber-600">
-                            <i class="ri-alert-line mr-2"></i>
-                            Please select a plan to calculate price
-                        </div>
-                    `;
-                    priceContainer.classList.remove('bg-green-50', 'border-green-300', 'shadow-sm');
-                    priceContainer.classList.add('bg-amber-50', 'border-amber-300');
                 } else {
                     totalPriceElement.innerHTML = `
                         <div class="flex items-center text-foreground/50">
                             <i class="ri-information-line mr-2"></i>
-                            Draw an area to calculate price
+                            Draw an area to calculate credit points
                         </div>
                     `;
                     priceContainer.classList.remove('bg-green-50', 'border-green-300', 'shadow-sm', 'bg-amber-50', 'border-amber-300');
@@ -731,22 +1162,8 @@
                 priceContainer.style.transition = 'all 0.3s ease-in-out';
             }
 
-            // Event listener for plan change
-            document.getElementById('plan_id').addEventListener('change', function() {
-                calculateTotalPrice();
-            });
-
             // Make calculateTotalPrice available globally for map.js
             window.calculateTotalPrice = calculateTotalPrice;
         </script>
-
-        @auth
-            @if (isset($activeFieldAreas) && $activeFieldAreas->count() > 0)
-                <script>
-                    // Pass field areas data to JavaScript
-                    window.activeFieldAreas = @json($activeFieldAreas);
-                </script>
-            @endif
-        @endauth
     @endpush
 </x-app-front-map-layout>

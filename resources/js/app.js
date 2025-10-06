@@ -152,13 +152,13 @@ window.formatCurrency = formatCurrency;
  *
  * @example
  * formatNumber(1234567.89) // Returns "1,234,567.890" for locale "us-US" with default 3 fraction digits
- * formatNumber(1234567.89, "id-ID", 2) // Returns "1.234.567,89" for locale "id-ID" with 2 fraction digits
+ * formatNumber(1234567.89, 2, "id-ID") // Returns "1.234.567,89" for locale "id-ID" with 2 fraction digits
  */
 function formatNumber(
     amount,
-    locale = document.documentElement.lang || "us-US",
+    fractionDigits = 3,
+    locale = document.documentElement.lang || "us-US"
     // locale = navigator.language || "us-US"
-    fractionDigits = 3
 ) {
     try {
         // Convert to number if it's a string
@@ -219,3 +219,52 @@ function coordinateFormatIndo(coordinate, format = "dd") {
     }
 }
 window.coordinateFormatIndo = coordinateFormatIndo;
+
+/**
+ * Shortens a filename by truncating the middle portion and replacing it with ellipsis
+ * if the filename exceeds the specified maximum length.
+ *
+ * @param {string} name - The filename to be shortened
+ * @param {number} [maxLength=40] - The maximum allowed length of the filename
+ * @returns {string} The shortened filename with ellipsis in the middle if it exceeded maxLength,
+ *                   otherwise returns the original filename
+ *
+ * @example
+ * shortenFilename("very_long_filename_with_many_characters.txt", 20)
+ * // Returns "very_lo...characters.txt"
+ *
+ * shortenFilename("short.txt", 20)
+ * // Returns "short.txt"
+ */
+function shortenFilename(name, maxLength = 40) {
+    if (name.length <= maxLength) return name;
+    const start = name.slice(0, Math.floor(maxLength / 2) - 3);
+    const end = name.slice(-Math.floor(maxLength / 2));
+    return `${start}...${end}`;
+}
+window.shortenFilename = shortenFilename;
+
+/**
+ * Formats a given time duration in seconds into a human-readable ETA string.
+ *
+ * @param {number} seconds - The time duration in seconds to format
+ * @returns {string} A formatted time string in the format:
+ *                   - "X s" for less than 60 seconds
+ *                   - "Xm Ys" for less than 60 minutes
+ *                   - "Xh Ym" for 60 minutes or more (h = hours, m = minutes)
+ *
+ * @example
+ * formatTimeETA(30)    // Returns "30 s"
+ * formatTimeETA(150)   // Returns "2m 30s"
+ * formatTimeETA(3661)  // Returns "1h 1m"
+ */
+function formatTimeETA(seconds) {
+    if (seconds < 60) return `${Math.round(seconds)} s`;
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    if (mins < 60) return `${mins}m ${secs}s`;
+    const hrs = Math.floor(mins / 60);
+    const remMins = mins % 60;
+    return `${hrs}h ${remMins}m`;
+}
+window.formatTimeETA = formatTimeETA;

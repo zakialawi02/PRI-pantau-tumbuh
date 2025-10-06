@@ -1,5 +1,5 @@
 @section('title', 'Plans Management')
-@section('meta_description', 'Manage subscription plans and pricing')
+@section('meta_description', 'Manage subscription/credit plans and pricing')
 
 <x-app-layout>
     <section class="p-1 md:p-4">
@@ -18,8 +18,8 @@
                         <tr>
                             <th scope="col">No.</th>
                             <th scope="col">Plan Name</th>
-                            <th scope="col">Price per Hectare</th>
-                            <th scope="col">Total Subscriptions</th>
+                            <th scope="col">Credit Points</th>
+                            <th scope="col">Price</th>
                             <th scope="col">Status</th>
                             <th scope="col">Created</th>
                             <th scope="col">Action</th>
@@ -40,7 +40,7 @@
             <div class="shadow-2xs border-foreground/20 bg-background pointer-events-auto flex w-full flex-col rounded-xl border">
                 <div class="border-foreground/20 flex items-center justify-between border-b px-4 py-3">
                     <h3 class="modal-title text-foreground font-semibold">
-                        Add User
+                        Add Plan
                     </h3>
                     <button class="focus:outline-hidden hover:bg-foreground/20 focus:bg-foreground/20 bg-foreground/15 text-foreground/80 inline-flex size-8 items-center justify-center gap-x-2 rounded-full border border-transparent disabled:pointer-events-none disabled:opacity-50" data-hs-overlay="#plan-modal" type="button" aria-label="Close">
                         <span class="sr-only">Close</span>
@@ -71,26 +71,38 @@
                             </div>
 
                             <div class="flex w-full flex-col items-center justify-between gap-2 md:flex-row">
-                                <!-- Price per Hectare -->
+                                <!-- Credit Points -->
                                 <div class="w-full md:w-1/2">
-                                    <x-input-label for="price_per_hectare" :value="__('Price per Hectare')" />
-                                    <x-text-input class="px-1! py-1.5! block w-full" id="price_per_hectare" name="price_per_hectare" type="number" step="0.01" min="0" :value="old('price_per_hectare')" required placeholder="1.00" />
+                                    <x-input-label for="credit_points" :value="__('Credit Points')" />
+                                    <x-text-input class="px-1! py-1.5! block w-full" id="credit_points" name="credit_points" type="number" min="1" :value="old('credit_points')" required placeholder="100" />
                                 </div>
 
-                                <!-- Currency -->
+                                <!-- Price -->
                                 <div class="w-full md:w-1/2">
-                                    <x-input-label for="currency" :value="__('Currency')" />
-                                    <select class="focus:ring-primary focus:border-primary border-ring bg-input/50 text-foreground block w-full rounded-lg border p-2" id="currency" name="currency">
-                                        <option value="USD">USD - US Dollar</option>
-                                        <option value="IDR">IDR - Indonesian Rupiah</option>
-                                    </select>
+                                    <x-input-label for="price" :value="__('Price')" />
+                                    <x-text-input class="px-1! py-1.5! block w-full" id="price" name="price" type="number" step="0.01" min="0" :value="old('price')" required placeholder="1.00" />
                                 </div>
                             </div>
 
-                            <!-- Is Show -->
-                            <div class="flex items-start align-baseline">
-                                <input class="border-foreground/20 checked:border-primary focus:ring-primary text-primary mt-0.5 shrink-0 rounded-sm disabled:pointer-events-none disabled:opacity-50" id="isShow" name="isShow" type="checkbox" value="1">
-                                <x-input-label class="mb-0 ml-2" for="isShow" :value="__('Show this plan publicly')" />
+                            <!-- Currency -->
+                            <div>
+                                <x-input-label for="currency" :value="__('Currency')" />
+                                <select class="focus:ring-primary focus:border-primary border-ring bg-input/50 text-foreground block w-full rounded-lg border p-2" id="currency" name="currency">
+                                    <option value="USD">USD - US Dollar</option>
+                                    <option value="IDR">IDR - Indonesian Rupiah</option>
+                                </select>
+                            </div>
+
+
+                            <div class="flex items-start gap-2 align-baseline">
+                                <div class="flex">
+                                    <input class="border-foreground/20 checked:border-primary focus:ring-primary text-primary mt-0.5 shrink-0 cursor-pointer rounded-sm disabled:pointer-events-none disabled:opacity-50" id="isShow" name="isShow" type="checkbox" value="1">
+                                    <x-input-label class="mb-0 ml-2" for="isShow" :value="__('Show this plan publicly')" />
+                                </div>
+                                <div class="flex">
+                                    <input class="border-foreground/20 checked:border-primary focus:ring-primary text-primary mt-0.5 shrink-0 cursor-pointer rounded-sm disabled:pointer-events-none disabled:opacity-50" id="isFeatured" name="isFeatured" type="checkbox" value="1">
+                                    <x-input-label class="mb-0 ml-2" for="isFeatured" :value="__('Make featured this plan')" />
+                                </div>
                             </div>
                         </div>
                     </form>
@@ -156,17 +168,12 @@
                             name: 'name'
                         },
                         {
-                            data: 'price_per_hectare',
-                            name: 'price_per_hectare',
-                            render: function(data, type, full, meta) {
-                                return formatCurrency(data, full.currency);
-                            }
+                            data: 'credit_points',
+                            name: 'credit_points'
                         },
                         {
-                            data: 'subscriptions_count',
-                            name: 'subscriptions_count',
-                            orderable: true,
-                            searchable: false
+                            data: 'price',
+                            name: 'price'
                         },
                         {
                             data: 'isShow',
@@ -175,7 +182,8 @@
                             searchable: false,
                             render: function(data, type, full, meta) {
                                 if (data) {
-                                    return '<span class="bg-success/80 text-white px-2 py-1 rounded-full text-xs font-medium">Visible</span>';
+                                    return '<span class="bg-success/80 text-white px-2 py-1 rounded-full text-xs font-medium">Visible</span>' +
+                                        (full.isFeatured ? ' <span class="bg-success/80 text-white px-2 py-1 rounded-full text-xs font-medium">Featured</span>' : '');
                                 } else {
                                     return '<span class="bg-error/80 text-white px-2 py-1 rounded-full text-xs font-medium">Hidden</span>';
                                 }
@@ -236,6 +244,7 @@
                     $('#_method').val('POST');
                     $('#planForm').trigger("reset");
                     $('#isShow').prop('checked', false);
+                    $('#isFeatured').prop('checked', false);
                     $('#planForm').attr('action', '{{ route('admin.plans.store') }}');
                     $('#saveBtn').text('Create');
                     $("#error-messages").html("");
@@ -342,9 +351,11 @@
                             $('#saveBtn').text('Update');
                             $('#_method').val('PUT');
                             $('#name').val(data.name);
-                            $('#price_per_hectare').val(data.price_per_hectare);
+                            $('#credit_points').val(data.credit_points);
+                            $('#price').val(data.price);
                             $('#currency').val(data.currency);
                             $('#isShow').prop('checked', data.isShow);
+                            $('#isFeatured').prop('checked', data.isFeatured);
                         })
                         .fail(function(jqXHR, textStatus, errorThrown) {
                             console.error("Error fetching plan data:", textStatus, errorThrown);
