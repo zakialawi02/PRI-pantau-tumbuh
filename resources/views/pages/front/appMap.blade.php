@@ -1134,14 +1134,22 @@
                 return Math.min(Math.max(value, min), max);
             };
 
-            const sentinelPreviewController = (() => {
-                if (typeof window === 'undefined' || typeof window.map === 'undefined' || typeof ol === 'undefined') {
+            let sentinelPreviewController = null;
+
+            const createSentinelPreviewController = () => {
+                if (sentinelPreviewController) {
+                    return sentinelPreviewController;
+                }
+
+                if (typeof window === 'undefined' || typeof ol === 'undefined') {
                     return null;
                 }
 
                 const mapInstance = window.map;
                 const mapProjection = mapInstance?.getView?.()?.getProjection?.();
-                if (!mapProjection) return null;
+                if (!mapInstance || !mapProjection) {
+                    return null;
+                }
 
                 const dataProjection = 'EPSG:4326';
                 const geoJsonParser = new ol.format.GeoJSON();
@@ -1201,35 +1209,74 @@
                 };
 
                 const updateButtons = () => {
-                    if (!sentinelPreviewHideBtn || !sentinelPreviewShowBtn) return;
-                    if (!state.hasImage) {
-                        sentinelPreviewHideBtn.classList.add('hidden');
-                        sentinelPreviewShowBtn.classList.add('hidden');
-                        return;
+                    const hasSelection = Boolean(state.current);
+                    const canToggleImage = hasSelection && state.hasImage;
+
+                    if (sentinelPreviewHideBtn) {
+                        sentinelPreviewHideBtn.disabled = !canToggleImage || state.imageHidden;
+                        sentinelPreviewHideBtn.textContent = state.imageHidden ? 'Preview hidden' : 'Hide preview';
                     }
-                    sentinelPreviewHideBtn.classList.toggle('hidden', state.imageHidden);
-                    sentinelPreviewShowBtn.classList.toggle('hidden', !state.imageHidden);
+
+                    if (sentinelPreviewShowBtn) {
+                        sentinelPreviewShowBtn.disabled = !canToggleImage || !state.imageHidden;
+                        sentinelPreviewShowBtn.textContent = state.imageHidden ? 'Unhide Preview' : 'Preview Visible';
+                    }
+
+                    if (sentinelPreviewClearBtn) {
+                        sentinelPreviewClearBtn.disabled = !hasSelection;
+                    }
+                };
+
+                const clearPreviewLayer = () => {
+                    previewLayer.setSource(null);
+                    previewLayer.setVisible(false);
                 };
 
                 const focusExtent = (extent) => {
-                    if (!extent || extent.some(value => !Number.isFinite(value))) return;
-                    mapInstance.getView().fit(extent, {
-                        duration: 600,
-                        padding: [80, 80, 80, 80],
-                        maxZoom: 14,
-                        nearest: true
-                    });
+                    if (!extent) return;
+                    try {
+                        const view = mapInstance.getView();
+                        if (view && typeof view.fit === 'function') {
+                            view.fit(extent, { padding: [50, 50, 50, 50], duration: 500, maxZoom: 14 });
+                        }
+                    } catch (error) {
+                        console.error('Failed to fit map to extent', error);
+                    }
                 };
 
-                const buildFootprintFeature = (geometry, bbox) => {
+                const applyPreviewSource = (url, extent) => {
+                    if (!url || !extent) return;
                     try {
+                        const imageExtent = ol.proj.transformExtent(extent, mapProjection, mapProjection);
+                        previewLayer.setSource(new ol.source.ImageStatic({
+                            url,
+                            imageExtent,
+                            projection: mapProjection
+                        }));
+                        previewLayer.setVisible(!state.imageHidden);
+                    } catch (error) {
+                        console.error('Unable to create Sentinel preview source', error);
+                        clearPreviewLayer();
+                    }
+                };
+
+                const resolveFootprintFeature = (data) => {
+                    if (!data) return null;
+                    const { footprint, geometry, bbox } = data;
+                    try {
+                        if (footprint) {
+                            return geoJsonParser.readFeature(footprint, {
+                                featureProjection: mapProjection,
+                                dataProjection
+                            });
+                        }
                         if (geometry) {
                             return geoJsonParser.readFeature({
                                 type: 'Feature',
                                 geometry
                             }, {
-                                dataProjection,
-                                featureProjection: mapProjection
+                                featureProjection: mapProjection,
+                                dataProjection
                             });
                         }
                         if (Array.isArray(bbox) && bbox.length === 4) {
@@ -1239,43 +1286,23 @@
                             });
                         }
                     } catch (error) {
-                        console.warn('Failed to parse Sentinel footprint', error);
+                        console.error('Unable to construct Sentinel footprint', error);
                     }
                     return null;
                 };
 
-                const clearPreviewLayer = () => {
-                    previewLayer.setSource(null);
-                    previewLayer.setVisible(false);
-                };
-
-                const applyPreviewSource = (url, extent) => {
-                    if (!url || !extent) {
-                        clearPreviewLayer();
-                        return;
-                    }
-
-                    previewLayer.setSource(new ol.source.ImageStatic({
-                        url,
-                        imageExtent: extent,
-                        projection: mapProjection,
-                        crossOrigin: 'anonymous'
-                    }));
-                    previewLayer.setVisible(!state.imageHidden);
-                };
-
-                updateButtons();
-
-                return {
+                const controller = {
                     showPreview(data) {
                         if (!data) return;
-
                         const title = data.title || data.productId || 'Sentinel-2 Preview';
-                        const acquiredText = data.acquisitionDate
-                            ? `Acquired: ${formatReadableDate(data.acquisitionDate)}`
-                            : 'Acquisition date unavailable.';
+                        const acquiredText = data.acquiredText
+                            ?? (data.acquisitionDate
+                                ? `Acquired: ${formatReadableDate(data.acquisitionDate)}`
+                                : 'Acquisition date unavailable.');
                         const detailParts = [];
-                        if (data.tileText) detailParts.push(data.tileText);
+                        if (data.detailText) detailParts.push(data.detailText);
+                        const tileText = data.tileText || data.tileId;
+                        if (tileText) detailParts.push(tileText);
                         if (typeof data.cloudCover === 'number' && !Number.isNaN(data.cloudCover)) {
                             detailParts.push(`Cloud cover: ${formatCloudCover(Number(data.cloudCover))}`);
                         }
@@ -1288,13 +1315,18 @@
                             acquired: acquiredText,
                             details: detailText,
                             status: data.quicklookUrl
-                                ? 'Loading preview image...'
+                                ? 'Loading preview...'
                                 : 'Preview image not available. Showing coverage.'
                         });
 
-                        const footprint = buildFootprintFeature(data.geometry, data.bbox);
                         bboxSource.clear();
+                        clearPreviewLayer();
+                        state.current = null;
+                        state.hasImage = false;
+                        state.imageHidden = false;
+                        updateButtons();
 
+                        const footprint = resolveFootprintFeature(data);
                         let extent = null;
                         if (footprint) {
                             bboxSource.addFeature(footprint);
@@ -1387,41 +1419,59 @@
                         setPanelVisible(false);
                     }
                 };
-            })();
+
+                sentinelPreviewHideBtn?.classList.remove('hidden');
+                sentinelPreviewShowBtn?.classList.remove('hidden');
+                updateButtons();
+
+                sentinelPreviewController = controller;
+                return controller;
+            };
+
+            if (typeof window !== 'undefined') {
+                if (window.map) {
+                    createSentinelPreviewController();
+                } else {
+                    window.addEventListener('map:ready', () => {
+                        createSentinelPreviewController();
+                    }, { once: true });
+                }
+            }
 
             const triggerSentinelPreview = (payload) => {
                 if (!payload) return;
-                if (!sentinelPreviewController) {
-                    console.warn('Sentinel preview controller is unavailable.');
+                const controller = createSentinelPreviewController();
+                if (!controller) {
+                    console.warn('Sentinel preview controller is unavailable. Map is not ready yet.');
                     return;
                 }
-                sentinelPreviewController.showPreview(payload);
+                controller.showPreview(payload);
             };
 
             if (sentinelPreviewHideBtn) {
                 sentinelPreviewHideBtn.addEventListener('click', (event) => {
                     event.preventDefault();
-                    sentinelPreviewController?.hideImage();
+                    createSentinelPreviewController()?.hideImage();
                 });
             }
 
             if (sentinelPreviewShowBtn) {
                 sentinelPreviewShowBtn.addEventListener('click', (event) => {
                     event.preventDefault();
-                    sentinelPreviewController?.showImage();
+                    createSentinelPreviewController()?.showImage();
                 });
             }
 
             if (sentinelPreviewClearBtn) {
                 sentinelPreviewClearBtn.addEventListener('click', (event) => {
                     event.preventDefault();
-                    sentinelPreviewController?.clear();
+                    createSentinelPreviewController()?.clear();
                 });
             }
 
             window.showSentinelPreviewOnMap = triggerSentinelPreview;
 
-            if (!sentinelPreviewController) {
+            if (!createSentinelPreviewController()) {
                 sentinelPreviewHideBtn?.classList.add('hidden');
                 sentinelPreviewShowBtn?.classList.add('hidden');
             }

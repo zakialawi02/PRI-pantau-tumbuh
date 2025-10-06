@@ -1159,6 +1159,15 @@ document.addEventListener("DOMContentLoaded", function () {
 
 // Export functions to global scope for access from HTML
 window.map = map;
+try {
+    window.dispatchEvent(
+        new CustomEvent("map:ready", {
+            detail: { map },
+        })
+    );
+} catch (error) {
+    console.warn("Unable to dispatch map:ready event", error);
+}
 window.zoomIn = zoomIn;
 window.zoomOut = zoomOut;
 window.toggleMinimap = toggleMinimap;
