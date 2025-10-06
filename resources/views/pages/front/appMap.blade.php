@@ -180,38 +180,40 @@
             <section class="flex hidden h-full flex-col shadow-xl" id="sentinel-panel">
                 <div class="bg-background border-foreground/10 sticky top-0 z-20 flex items-center justify-between border-b p-2">
                     <h2 class="text-lg font-bold">🛰️ Sentinel-2 Collections</h2>
-                    <div class="flex items-center space-x-2">
-                        <button class="hover:bg-primary/20 text-primary border-primary/40 rounded border px-2 py-1 text-xs font-medium" id="sentinelRefreshButton" type="button">
-                            <i class="ri-refresh-line mr-1"></i>Refresh
-                        </button>
-                        <button class="hover:bg-foreground/20 bg-foreground/10 rounded px-2 py-1 text-sm" onclick="closePanels()">✖</button>
-                    </div>
+                    <button class="hover:bg-foreground/20 bg-foreground/10 rounded px-2 py-1 text-sm" onclick="closePanels()">✖</button>
                 </div>
 
-                <div class="panel-content flex-1 space-y-4 overflow-y-auto p-3">
-                    <form class="bg-background/60 border-foreground/10 rounded-lg border p-3 shadow-sm" id="sentinelFilterForm">
-                        <div class="mb-2 flex items-center justify-between">
+                <div class="panel-content flex-1 space-y-3 overflow-y-auto p-2">
+                    <form class="bg-background/60 border-foreground/10 rounded-lg border p-2.5 shadow-sm" id="sentinelFilterForm">
+                        <div class="mb-1.5 flex items-center justify-between">
                             <h3 class="text-foreground text-sm font-semibold">Filter Collections</h3>
                             <button class="text-foreground/60 hover:text-primary text-xs font-medium transition" id="sentinelFilterResetButton" type="button">
                                 Reset
                             </button>
                         </div>
-                        <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                            <label class="text-foreground/80 flex flex-col space-y-1 text-xs font-medium" for="sentinelCloudFilter">
+                        <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                            <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="sentinelCloudFilter">
                                 <span>Max Cloud Cover (%)</span>
-                                <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring" id="sentinelCloudFilter" name="cloud-cover" type="number" value="40" max="100" min="0" placeholder="e.g. 30" step="1" />
+                                <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-3 py-1.5 text-sm focus:outline-none focus:ring" id="sentinelCloudFilter" name="cloud-cover" type="number" value="40" max="100" min="0" placeholder="e.g. 30" step="1" />
                             </label>
-                            <label class="text-foreground/80 flex flex-col space-y-1 text-xs font-medium" for="sentinelLatFilter">
+                            <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="sentinelLatFilter">
                                 <span>Latitude</span>
-                                <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring" id="sentinelLatFilter" name="latitude" type="number" value="-1.24536" max="90" min="-90" placeholder="e.g. -6.2" step="0.000001" />
+                                <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-3 py-1.5 text-sm focus:outline-none focus:ring" id="sentinelLatFilter" name="latitude" type="number" value="-1.24536" max="90" min="-90" placeholder="e.g. -6.2" step="0.000001" />
                             </label>
-                            <label class="text-foreground/80 flex flex-col space-y-1 text-xs font-medium" for="sentinelLonFilter">
+                            <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="sentinelLonFilter">
                                 <span>Longitude</span>
-                                <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring" id="sentinelLonFilter" name="longitude" type="number" value="114.54535" max="180" min="-180" placeholder="e.g. 106.8" step="0.000001" />
+                                <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-3 py-1.5 text-sm focus:outline-none focus:ring" id="sentinelLonFilter" name="longitude" type="number" value="114.54535" max="180" min="-180" placeholder="e.g. 106.8" step="0.000001" />
+                            </label>
+                            <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="sentinelProductLevel">
+                                <span>Product Level</span>
+                                <select class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-3 py-1.5 text-sm focus:outline-none focus:ring" id="sentinelProductLevel" name="product-level">
+                                    <option value="S2MSI2A" selected>Level-2A (Surface Reflectance)</option>
+                                    <option value="S2MSI1C">Level-1C (Top-of-Atmosphere)</option>
+                                </select>
                             </label>
                         </div>
-                        <p class="text-foreground/60 mt-2 text-[11px]">Provide both latitude and longitude to focus on a specific location, or clear both fields to search globally.</p>
-                        <div class="mt-3 flex flex-wrap gap-2">
+                        <p class="text-foreground/60 mt-1.5 text-[11px]">Provide both latitude and longitude to focus on a specific location, or clear both fields to search globally.</p>
+                        <div class="mt-2 flex flex-wrap gap-1.5">
                             <button class="bg-primary hover:bg-primary/90 text-background inline-flex items-center justify-center rounded-lg px-3 py-1.5 text-xs font-semibold transition" type="submit">
                                 Apply Filters
                             </button>
@@ -220,7 +222,7 @@
                     <div class="text-foreground/70 text-sm" id="sentinelCollectionStatus">
                         Loading latest Sentinel-2 acquisitions...
                     </div>
-                    <div class="space-y-3" id="sentinelCollectionList"></div>
+                    <div class="space-y-2.5" id="sentinelCollectionList"></div>
                 </div>
 
                 <div class="bg-background border-foreground/10 sticky bottom-0 border-t p-3">
@@ -1053,18 +1055,19 @@
             const sentinelList = document.getElementById('sentinelCollectionList');
             const sentinelTemplate = document.getElementById('sentinelCollectionTemplate');
             const sentinelLastUpdated = document.getElementById('sentinelLastUpdated');
-            const sentinelRefreshButton = document.getElementById('sentinelRefreshButton');
             const sentinelFilterForm = document.getElementById('sentinelFilterForm');
             const sentinelFilterResetButton = document.getElementById('sentinelFilterResetButton');
             const sentinelCloudInput = document.getElementById('sentinelCloudFilter');
             const sentinelLatInput = document.getElementById('sentinelLatFilter');
             const sentinelLonInput = document.getElementById('sentinelLonFilter');
+            const sentinelLevelInput = document.getElementById('sentinelProductLevel');
 
             const sentinelCatalogEndpoint = 'https://catalogue.dataspace.copernicus.eu/resto/api/collections/Sentinel2/search.json';
             let sentinelLoadedOnce = false;
             const defaultCloudCoverMax = 40;
             const defaultLatitude = -1.24536;
             const defaultLongitude = 114.54535;
+            const defaultProductType = 'S2MSI2A';
 
             const scrollAmount = 150; // pixels per click
 
@@ -1252,10 +1255,13 @@
                     startDate: formatISODate(startDate),
                     completionDate: formatISODate(endDateAdjusted),
                     maxRecords: '20',
-                    productType: 'S2MSI2A',
                     sortParam: 'startDate',
                     sortOrder: 'descending'
                 });
+
+                const productTypeRaw = sentinelLevelInput?.value?.trim();
+                const productType = ['S2MSI2A', 'S2MSI1C'].includes(productTypeRaw) ? productTypeRaw : defaultProductType;
+                params.set('productType', productType);
 
                 const cloudRaw = sentinelCloudInput?.value?.trim();
                 const cloudNumber = cloudRaw === '' || cloudRaw === undefined ? null : Number(cloudRaw);
@@ -1337,10 +1343,6 @@
                 }
             }
 
-            if (sentinelRefreshButton) {
-                sentinelRefreshButton.addEventListener('click', () => loadSentinelCollections(true));
-            }
-
             if (sentinelCloudInput && sentinelCloudInput.value === '') {
                 sentinelCloudInput.value = defaultCloudCoverMax;
             }
@@ -1351,6 +1353,10 @@
 
             if (sentinelLonInput && sentinelLonInput.value === '') {
                 sentinelLonInput.value = defaultLongitude;
+            }
+
+            if (sentinelLevelInput && sentinelLevelInput.value === '') {
+                sentinelLevelInput.value = defaultProductType;
             }
 
             const normalizeInputValue = (input, min, max) => {
@@ -1386,6 +1392,7 @@
                     if (sentinelCloudInput) sentinelCloudInput.value = defaultCloudCoverMax;
                     if (sentinelLatInput) sentinelLatInput.value = defaultLatitude;
                     if (sentinelLonInput) sentinelLonInput.value = defaultLongitude;
+                    if (sentinelLevelInput) sentinelLevelInput.value = defaultProductType;
                     loadSentinelCollections(true);
                 });
             }
