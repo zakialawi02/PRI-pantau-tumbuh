@@ -217,7 +217,7 @@
                                 <i class="ri-image-line"></i>
                                 <span>Preview</span>
                             </a>
-                            <a class="hover:bg-foreground/10 text-foreground inline-flex items-center space-x-1 rounded-lg border border-foreground/20 px-2 py-1 text-xs" data-sentinel-open target="_blank" rel="noopener">
+                            <a class="hover:bg-foreground/10 text-foreground border-foreground/20 inline-flex items-center space-x-1 rounded-lg border px-2 py-1 text-xs" data-sentinel-open target="_blank" rel="noopener">
                                 <i class="ri-external-link-line"></i>
                                 <span>Open</span>
                             </a>
@@ -1080,9 +1080,9 @@
                 const previewLink = clone.querySelector('[data-sentinel-preview]');
                 const openLink = clone.querySelector('[data-sentinel-open]');
 
-                const shortenText = typeof window?.shortenFilename === 'function'
-                    ? (value, max = 40) => window.shortenFilename(String(value), max)
-                    : (value) => String(value ?? '');
+                const shortenText = typeof window?.shortenFilename === 'function' ?
+                    (value, max = 40) => window.shortenFilename(String(value), max) :
+                    (value) => String(value ?? '');
 
                 const productId = props.productIdentifier || props.title || feature?.id || 'Sentinel-2 Product';
                 const acquisitionDate = props.completionDate || props.startDate || props.endPosition || props.beginPosition || props.startTimeFromAscendingNode;
@@ -1090,7 +1090,7 @@
                 const tileText = mgrsIdentifier ? `Tile ${mgrsIdentifier}` : null;
                 const cloudCover = props.cloudCover ?? props['cloudcoverpercentage'] ?? props['cloudCoverageAssessment'];
 
-                const titleText = props.title || productId;
+                const titleText = shortenFilename(props.title) || shortenFilename(productId);
                 const productText = productId;
 
                 if (titleEl) {
