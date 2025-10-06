@@ -29,6 +29,7 @@ class ImageryData extends Model
     ];
 
     protected $casts = [
+        'size' => 'decimal:2',
         'uploaded_at' => 'datetime',
         'processed_at' => 'datetime'
     ];

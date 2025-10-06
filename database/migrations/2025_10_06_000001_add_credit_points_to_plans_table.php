@@ -12,7 +12,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('plans', function (Blueprint $table) {
-            $table->unsignedInteger('credit_points')->default(0)->after('name');
+            $table->decimal('credit_points', 10, 2)->default(0)->after('name');
             $table->renameColumn('price_per_hectare', 'price');
         });
     }

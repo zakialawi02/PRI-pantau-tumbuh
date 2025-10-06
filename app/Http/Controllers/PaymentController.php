@@ -11,8 +11,8 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Mail;
 use Yajra\DataTables\Facades\DataTables;
-use App\Mail\OrderConfirmation;
-use App\Mail\PaymentConfirmation;
+use App\Mail\OrderCreditConfirmation;
+use App\Mail\PaymentCreditConfirmation;
 use App\Services\PaymentGatewayFactory;
 use Exception;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -139,7 +139,7 @@ class PaymentController extends Controller
                 'success' => false,
                 'message' => 'Payment not found'
             ], 404);
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             Log::error("An error occurred while retrieving payment data. Error: " . $e->getMessage());
             return response()->json([
                 'success' => false,
@@ -280,7 +280,7 @@ class PaymentController extends Controller
 
             // Send order confirmation email
             try {
-                Mail::to($user->email)->send(new OrderConfirmation($payment));
+                Mail::to($user->email)->send(new OrderCreditConfirmation($payment));
             } catch (Exception $e) {
                 Log::warning("Failed to send order confirmation email: " . $e->getMessage());
                 // Continue with the process even if email fails
@@ -443,7 +443,7 @@ class PaymentController extends Controller
 
                     // Send payment confirmation email for successful payments
                     try {
-                        Mail::to($payment->email)->send(new PaymentConfirmation($payment));
+                        Mail::to($payment->email)->send(new PaymentCreditConfirmation($payment));
                     } catch (Exception $e) {
                         Log::error("Failed to send payment confirmation email: " . $e->getMessage());
                         // Continue with the process even if email fails
@@ -480,7 +480,7 @@ class PaymentController extends Controller
 
                     // Send payment confirmation email for successful payments
                     try {
-                        Mail::to($payment->email)->send(new PaymentConfirmation($payment));
+                        Mail::to($payment->email)->send(new PaymentCreditConfirmation($payment));
                     } catch (Exception $e) {
                         Log::error("Failed to send payment confirmation email: " . $e->getMessage());
                         // Continue with the process even if email fails

@@ -74,6 +74,10 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/imagery-check-progress', [ImageryDataController::class, 'checkProgress'])->name('upload.progress');
     Route::get('/imagery/list', [ImageryDataController::class, 'listUserImagery'])->name('imagery.list');
 
+    Route::post('/imagery-order', [ImageryDataController::class, 'imageryOrder'])->name('imageryOrder');
+    Route::get('/imagery-checkout', [ImageryDataController::class, 'imageryCheckout'])->name('imageryCheckout');
+    Route::post('/imagery-checkout', [ImageryDataController::class, 'processCheckoutImagery'])->name('processImageryCheckout');
+
     Route::post('/checkout/purchase-credits', [UserCreditsController::class, 'orderCredit'])->name('orderCredit');
     Route::get('/checkout', [UserCreditsController::class, 'checkoutOrder'])->name('checkoutOrder');
     Route::post('/checkout', [PaymentController::class, 'checkoutCredits'])->name('checkoutCredit.payment');
@@ -120,6 +124,8 @@ Route::get('/privacy-policy', function () {
 Route::get('/terms-of-service', function () {
     return view('pages.front.terms-of-service');
 })->name('terms-of-service');
+
+Route::get('/purchase-credits', [UserCreditsController::class, 'purchasePublic'])->name('purchase-credits.public');
 
 Route::get('/app/imagery', [MapController::class, 'index'])->name('appMap');
 

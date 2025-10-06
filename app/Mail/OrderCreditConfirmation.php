@@ -10,7 +10,7 @@ use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
 use App\Models\Payment;
 
-class OrderConfirmation extends Mailable
+class OrderCreditConfirmation extends Mailable
 {
     use Queueable, SerializesModels;
 
@@ -50,7 +50,7 @@ class OrderConfirmation extends Mailable
     public function content(): Content
     {
         return new Content(
-            view: 'emails.order-confirmation',
+            view: 'emails.order-credit-confirmation',
             with: [
                 'payment' => $this->payment,
             ],

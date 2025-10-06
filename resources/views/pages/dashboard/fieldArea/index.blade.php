@@ -49,7 +49,7 @@
                                     <td>{{ $fieldArea->user->name }}</td>
                                 @endif
                                 <td>{{ $fieldArea->name }}</td>
-                                <td>{{ Number::format($fieldArea->area_ha ?? 0, locale: app()->getLocale()) }} ha</td>
+                                <td>{{ Number::format($fieldArea->area_ha ?? 0, 3, locale: app()->getLocale()) }} ha</td>
                                 <td>{{ $fieldArea->created_at->isoFormat('LL, HH:mm') }}</td>
                                 <td>
                                     <x-button-primary class="bg-secondary/80 hover:bg-secondary/60 btn-view-area text-neutral inline-flex items-center rounded-full px-2 py-1 text-xs font-medium" data-id="{{ $fieldArea->id }}" type="button" title="View Details" size="small">

@@ -42,7 +42,7 @@
                     </p>
                     <p class="text-sm opacity-80">
                         <i class="ri-mail-line mr-2"></i>
-                        info@pantautumbuh.id
+                        {{ config('app-constants.support_email') }}
                     </p>
                     <p class="text-sm opacity-80">
                         <i class="ri-phone-line mr-2"></i>

@@ -46,6 +46,7 @@ class Payment extends Model
         'paid_at' => 'datetime',
         'verified_at' => 'datetime',
         'amount' => 'decimal:2',
+        'credit_points' => 'decimal:2',
     ];
 
     /**

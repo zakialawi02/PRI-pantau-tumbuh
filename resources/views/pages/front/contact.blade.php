@@ -60,7 +60,7 @@
                             </svg>
                         </div>
                         <h4 class="text-foreground mt-4 text-lg font-medium">Email</h4>
-                        <p class="text-foreground/80 mt-2 text-sm">info@pantautumbuh.id</p>
+                        <p class="text-foreground/80 mt-2 text-sm">{{ config('app-constants.support_email') }}</p>
                     </div>
 
                     <div class="text-center">

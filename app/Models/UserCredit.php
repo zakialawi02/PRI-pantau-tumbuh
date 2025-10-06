@@ -16,7 +16,7 @@ class UserCredit extends Model
     ];
 
     protected $casts = [
-        'credits' => 'integer',
+        'credits' => 'decimal:2',
     ];
 
     public function user()

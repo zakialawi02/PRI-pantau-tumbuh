@@ -95,14 +95,14 @@
                                 <!-- Nama -->
                                 <div>
                                     <x-input-label for="name">Full Name</x-input-label>
-                                    <x-text-input id="name" name="name" value="{{ old('name', Auth::user()->name) }}" size="normal" required />
+                                    <x-text-input id="name" name="name" value="{{ old('name', Auth::user()->name) }}" size="normal" readonly required />
                                     <x-input-error class="mt-2" :messages="$errors->get('name')" />
                                 </div>
 
                                 <!-- Email -->
                                 <div>
                                     <x-input-label for="email">Email Address</x-input-label>
-                                    <x-text-input id="email" name="email" value="{{ old('email', Auth::user()->email) }}" size="normal" required />
+                                    <x-text-input id="email" name="email" value="{{ old('email', Auth::user()->email) }}" size="normal" readonly required />
                                     <x-input-error class="mt-2" :messages="$errors->get('email')" />
                                 </div>
 

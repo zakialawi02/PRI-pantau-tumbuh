@@ -18,7 +18,7 @@ return new class extends Migration
             $table->string('source_type');
             $table->string('original_name');
             $table->string('stored_name');
-            $table->unsignedBigInteger('size')->default(0);
+            $table->decimal('size', 20, 2)->default(0);
             $table->string('format', 10);
             $table->string('path');          // lokasi penyimpanan file asli (public/citra/...)
 

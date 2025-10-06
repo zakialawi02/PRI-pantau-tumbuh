@@ -1,4 +1,4 @@
-<div class="fixed end-4 top-8 z-40 flex flex-col space-y-2" id="zk-toast-container"></div>
+<div class="z-100 fixed end-4 top-8 flex flex-col space-y-2" id="zk-toast-container"></div>
 
 @push('javascript')
     <script>

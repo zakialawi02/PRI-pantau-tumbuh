@@ -73,6 +73,20 @@ class UserCreditsController extends Controller
     }
 
     /**
+     * Display the credit purchase page for public/guest users.
+     */
+    public function purchasePublic()
+    {
+        // Get all plans that are shown to users and have credit points
+        $plans = Plan::where('isShow', true)
+            ->where('credit_points', '>', 0)
+            ->orderBy('credit_points', 'asc')
+            ->get();
+
+        return view('pages.front.order.purchase-credits', compact('plans'));
+    }
+
+    /**
      * Display the credit purchase page for users.
      */
     public function purchase()

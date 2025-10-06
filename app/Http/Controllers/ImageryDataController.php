@@ -2,13 +2,18 @@
 
 namespace App\Http\Controllers;
 
+use Exception;
+use App\Models\FieldArea;
+use App\Models\ImageryData;
 use Illuminate\Support\Str;
 use Illuminate\Http\Request;
-use App\Models\ImageryData;
 use App\Jobs\ProcessImageryJob;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Cache;
+use App\Mail\OrderImageryConfirmation;
 use Illuminate\Support\Facades\Storage;
 use Yajra\DataTables\Facades\DataTables;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -93,6 +98,135 @@ class ImageryDataController extends Controller
         ];
 
         return view('pages.dashboard.imagery.add', compact('data'));
+    }
+
+    public function imageryOrder(Request $request)
+    {
+        $request->validate([
+            'geometry' => 'required',
+            'name_feature' => 'required|string|max:255',
+            'area_hectares' => 'required|numeric|min:0.01',
+        ]);
+
+        $timestamp = time();
+
+        // Calculate credit cost: using global constant credits per hectare
+        $creditCost = round(($request->area_hectares / 10000) * config('app-constants.imagery_credit_cost_per_hectare'), 2);
+
+        $data = [
+            'timestamp' => $timestamp,
+            'order_id' => $request->id,
+            'name_feature' => $request->name_feature,
+            'geometry' => $request->geometry,
+            'area_hectares' => round(($request->area_hectares / 10000), 4),
+            'credit_cost' => $creditCost,
+            'area_hectares_actual' => $request->area_hectares,
+        ];
+
+        $keyCache = 'Checkout_' . $timestamp . '_' . Str::random(10) . '';
+        Cache::put($keyCache, $data, now()->addHours(2));
+
+        return redirect()->to('/imagery-checkout?id=' . $keyCache);  // method checkout
+    }
+
+    public function imageryCheckout(Request $request)
+    {
+        $id = $request->id;
+
+        if ($id) {
+            $cacheData = Cache::get($id);
+            if ($cacheData) {
+                $data = $cacheData;
+            } else {
+
+                return redirect()->route('appMap')->with('error', 'Application data not found or has expired.');
+            }
+        } else {
+            return redirect()->route('appMap')->with('error', 'Application data not found');
+        }
+
+        $data['title'] = 'Checkout';
+
+        return view('pages.front.order.checkoutImagery', compact('data'));
+    }
+
+    /**
+     * Handle imagery checkout using credit points
+     */
+    public function processCheckoutImagery(Request $request)
+    {
+        $request->validate([
+            'order_id' => 'required|string',
+            'name_feature' => 'required|string|max:255',
+            'geometry' => 'required',
+            'area_hectares' => 'required|numeric|min:0.01',
+            'name' => 'required|string|max:255',
+            'email' => 'required|email|max:255',
+            'phone' => ['required', 'string', 'max:20', 'regex:/^[\+]?[0-9\s\-\(\)]{7,20}$/'],
+        ]);
+
+        $cacheData = Cache::get($request->order_id);
+        if (!$cacheData) {
+            return redirect()->route('appMap')->with('error', 'Checkout failed, data not found or expired.');
+        }
+
+        $user = Auth::user();
+
+        // Check if user has enough credit points
+        $userCredit = $user->credits;
+        $currentCredits = $userCredit ? $userCredit->credits : 0;
+
+        if ($currentCredits < $cacheData['credit_cost']) {
+            return redirect()->back()->with('error', 'Insufficient credit points. You need ' . $cacheData['credit_cost'] . ' credits but you only have ' . $currentCredits . ' credits.');
+        }
+
+        try {
+            // Deduct credit points from user
+            $userCredit->credits -= $cacheData['credit_cost'];
+            $userCredit->save();
+
+            // Create field area data record
+            $fieldArea = FieldArea::create([
+                'user_id' => $user->id,
+                'name' => $cacheData['name_feature'],
+                'geom' => $cacheData['geometry'],
+                'area_ha' => $cacheData['area_hectares'],
+            ]);
+
+            // Clear cache
+            Cache::forget($request->order_id);
+
+            // Dispatch job get imagery data
+            // GetImageryDataJob::dispatch($fieldArea);
+
+            try {
+                $bodyMail = [
+                    'name' => $user->name,
+                    'email' => $user->email,
+                    'phone' => $user->phone,
+                    'order_id' => $fieldArea->id,
+                    'name_feature' => $cacheData['name_feature'],
+                    'geometry' => $cacheData['geometry'],
+                    'area_hectares' => $cacheData['area_hectares'],
+                    'credit_cost' => $cacheData['credit_cost'],
+                ];
+                Mail::to($user->email)->send(new OrderImageryConfirmation($bodyMail));
+            } catch (Exception $e) {
+                Log::error("Failed to send imagery confirmation email: " . $e->getMessage());
+                // Continue with the process even if email fails
+            }
+
+            return redirect()->route('appMap')->with('success', 'Your imagery order has been successfully placed using ' . $cacheData['credit_cost'] . ' credit points.');
+        } catch (\Exception $e) {
+            // Restore user credits if something went wrong
+            if (isset($userCredit)) {
+                $userCredit->credits += $cacheData['credit_cost'];
+                $userCredit->save();
+            }
+
+            Log::error("Imagery checkout error: " . $e->getMessage());
+            return redirect()->back()->with('error', 'An error occurred during checkout. Please try again.');
+        }
     }
 
     public function listUserImagery()

@@ -30,7 +30,7 @@
                             </a>
                         </li>
                         <li>
-                            <a class="hover:bg-primary/50 text-foreground block rounded-md p-1 text-left text-sm font-semibold transition-colors duration-200" href="{{ route('admin.purchase-credits') }}">
+                            <a class="hover:bg-primary/50 text-foreground block rounded-md p-1 text-left text-sm font-semibold transition-colors duration-200" href="{{ route('purchase-credits.public') }}">
                                 <div class="font-semibold">Buy Credits</div>
                                 <span class="text-foreground/60 text-xs capitalize">Purchase credits for premium features.</span>
                             </a>

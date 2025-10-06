@@ -11,6 +11,14 @@
     <header class="bg-background border-foreground/5 flex h-12 items-center justify-between border-b-2 px-4">
         <h1 class="text-primary text-sm font-bold">🌱 PantauTumbuh Dashboard</h1>
         <div class="flex items-center space-x-3">
+            <!-- Credit Display for Authenticated Users -->
+            @auth
+                <div class="bg-primary/10 text-primary flex items-center space-x-1 rounded-full px-3 py-1 text-xs font-medium">
+                    <i class="ri-coin-line"></i>
+                    <span>{{ Number::format(Auth::user()->current_credits, 2, locale: app()->getLocale()) }} Credit Points</span>
+                </div>
+            @endauth
+
             <!-- Nav Menu -->
             <div class="text-foreground bg-background z-51 fixed inset-0 hidden w-full flex-col items-center justify-center space-y-6 whitespace-nowrap text-center uppercase opacity-0 transition-all duration-500 ease-in-out" id="navbar">
 
@@ -266,7 +274,7 @@
                             </div>
 
                             <!-- Buy Tab Content -->
-                            <div class="tab-content" class="hidden" id="buy-panel" role="tabpanel" aria-labelledby="buy-tab">
+                            <div class="tab-content hidden" class="hidden" id="buy-panel" role="tabpanel" aria-labelledby="buy-tab">
                                 <div class="bg-primary/10 space-y-2 rounded-lg p-2">
                                     <h4 class="text-foreground flex items-center text-lg font-semibold">
                                         <i class="ri-shopping-bag-line text-primary mr-2"></i>
@@ -290,10 +298,6 @@
                                             <li class="flex items-start">
                                                 <i class="ri-check-line text-success mr-2 mt-0.5 text-xs"></i>
                                                 <span>Automatic PRI analysis and health reports included</span>
-                                            </li>
-                                            <li class="flex items-start">
-                                                <i class="ri-check-line text-success mr-2 mt-0.5 text-xs"></i>
-                                                <span>Historical data comparison</span>
                                             </li>
                                         </ul>
                                     </div>
@@ -523,7 +527,7 @@
                         <hr class="border-gray-300">
 
                         <!-- Feature Properties Form -->
-                        <form class="space-y-4" id="featurePropertiesForm" action="{{ route('mapOrder') }}" method="POST">
+                        <form class="space-y-4" id="featurePropertiesForm" action="{{ route('imageryOrder') }}" method="POST">
                             @csrf
                             @method('POST')
 
@@ -554,7 +558,7 @@
                                     <div class="border-muted rounded border p-2 text-sm">
                                         <div class="text-foreground/50 flex items-center">
                                             <i class="ri-coins-line mr-2"></i>
-                                            <span>0.3 Credit Points per hectare</span>
+                                            <span>{{ Number::format(config('app-constants.imagery_credit_cost_per_hectare'), locale: app()->getLocale()) }} Credit Points per hectare</span>
                                         </div>
                                     </div>
                                 </div>
@@ -1118,8 +1122,8 @@
                 const areaInSquareMeters = window.geojsonArea || 0;
                 const areaInHectares = areaInSquareMeters / 10000; // Convert m² to hectares
 
-                // Calculate credit points needed (fixed rate of 0.3 credit points per hectare)
-                const creditPointsNeeded = areaInHectares * 0.3;
+                // Calculate credit points needed (using global constant rate)
+                const creditPointsNeeded = areaInHectares * {{ config('app-constants.imagery_credit_cost_per_hectare') }};
 
                 // Update the display
                 const totalPriceElement = document.getElementById('total_price');
@@ -1128,11 +1132,11 @@
                 if (areaInHectares > 0) {
                     totalPriceElement.innerHTML = `
                         <div class="flex justify-between items-center">
-                            <span class="text-lg font-bold text-green-700">${creditPointsNeeded.toFixed(2)} Credit Points</span>
+                            <span class="text-lg font-bold text-green-700">${formatNumber(creditPointsNeeded.toFixed(2))} Credit Points</span>
                             <i class="ri-money-dollar-circle-line text-success text-xl"></i>
                         </div>
                         <div class="text-xs text-foreground-70 mt-1">
-                            ${formatNumber(areaInHectares)} hectares × 0.3 credit points/hectare
+                            ${formatNumber(areaInHectares)} hectares × {{ Number::format(config('app-constants.imagery_credit_cost_per_hectare'), locale: app()->getLocale()) }} credit points/hectare
                         </div>
                     `;
                     priceContainer.classList.remove('bg-muted/60', 'border-muted');

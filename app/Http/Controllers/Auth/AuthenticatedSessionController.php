@@ -65,6 +65,15 @@ class AuthenticatedSessionController extends Controller
 
         $request->session()->regenerateToken();
 
+        // Redirect to the previous page instead of home
+        $previousUrl = url()->previous();
+
+        // Ensure we don't redirect back to login or logout pages
+        if ($previousUrl && strpos($previousUrl, '/login') === false && strpos($previousUrl, '/logout') === false) {
+            return redirect($previousUrl);
+        }
+
+        // Fallback to home if previous URL is invalid
         return redirect('/');
     }
 }
