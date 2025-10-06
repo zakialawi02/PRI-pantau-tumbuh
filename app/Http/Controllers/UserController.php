@@ -139,17 +139,30 @@ class UserController extends Controller
      */
     public function destroy(User $user)
     {
-        // Check if the user is admin or superadmin
-        if (in_array($user->username, ['admin', 'superadmin'])) {
+        try {
+            // Check if the user is admin or superadmin
+            if (in_array($user->username, ['admin', 'superadmin'])) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Admin or Superadmin username cannot be deleted.',
+                    'errors' => ['403' => ['Forbidden: Admin or Superadmin username cannot be deleted.']],
+                ], 403);
+            }
+
+            // Attempt to delete the user
+            $user->delete();
+
+            return response()->json([
+                'status' => true,
+                'message' => 'User deleted successfully'
+            ], 200);
+        } catch (\Exception $e) {
+            // Handle any unexpected errors
             return response()->json([
                 'success' => false,
-                'message' => 'Admin or Superadmin username cannot be deleted.',
-                'errors' => 'Forbidden: Admin or Superadmin username cannot be deleted.',
-            ], 403);
+                'message' => 'An error occurred while deleting the user.',
+                'errors' => ['500' => ['Internal Server Error: ' . $e->getMessage()]],
+            ], 500);
         }
-
-        $user->delete();
-
-        return response()->json(['message' => 'User deleted successfully']);
     }
 }

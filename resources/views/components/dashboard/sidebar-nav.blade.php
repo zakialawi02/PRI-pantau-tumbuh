@@ -24,7 +24,7 @@
             <p>{{ __('Manage') }}</p>
         </div>
 
-        <x-dashboard.nav-item href="admin.field-area.index" icon="ri-map-pin-line" text="{{ $isAdmin ? __('Field Area') : __('My Field Area') }}" />
+        <x-dashboard.nav-item href="admin.imagery.index" icon="ri-map-line" text="{{ $isAdmin ? __('Imagery') : __('My Imagery') }}" />
 
 
         <x-dashboard.nav-item href="admin.payment.index" icon="ri-currency-line" text="{{ __('Payment') }}" />

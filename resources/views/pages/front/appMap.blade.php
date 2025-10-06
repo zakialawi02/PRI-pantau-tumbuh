@@ -6,7 +6,6 @@
 @section('og_title', 'PantauTumbuh.id - WebGIS Stres Tanaman Berbasis PRI')
 @section('og_description', 'PantauTumbuh.id memanfaatkan citra satelit dan model deep learning untuk menghitung nilai Photochemical Reflectance Index (PRI), memberikan informasi spasial tentang tingkat stres tanaman secara akurat bagi petani, peneliti, dan pengambil keputusan.')
 
-
 <x-app-front-map-layout class="flex h-screen w-screen flex-col overflow-hidden">
     <!-- HEADER -->
     <header class="bg-background border-foreground/5 flex h-12 items-center justify-between border-b-2 px-4">
@@ -33,16 +32,12 @@
         <aside class="bg-background hidden shadow-lg md:flex md:w-20 md:flex-col md:items-center md:py-4">
             <nav class="flex flex-1 flex-col items-center space-y-6">
                 <button class="sidebar-btn hover:text-primary flex flex-col items-center text-xs" onclick="showPanel('data-panel', this)">
-                    <span class="text-xl">📡</span>
+                    <span class="text-xl">🛰️</span>
                     <span>My Data</span>
                 </button>
-                <button class="sidebar-btn hover:text-primary flex flex-col items-center text-xs" onclick="showPanel('satellite-panel', this)">
-                    <span class="text-xl">🛰️</span>
-                    <span>Satellite</span>
-                </button>
-                <button class="sidebar-btn hover:text-primary flex flex-col items-center text-xs" onclick="showPanel('fields-panel', this)">
-                    <span class="text-xl">🌾</span>
-                    <span>Fields</span>
+                <button class="sidebar-btn hover:text-primary flex flex-col items-center text-xs" onclick="showPanel('uploads-panel', this)">
+                    <span class="text-xl">⬆️</span>
+                    <span>Uploads</span>
                 </button>
                 <button class="sidebar-btn hover:text-primary flex flex-col items-center text-xs" onclick="showPanel('seasons-panel', this)">
                     <span class="text-xl">📅</span>
@@ -64,16 +59,12 @@
 
             <div class="flex space-x-2 overflow-x-hidden scroll-smooth" id="scroll-container">
                 <button class="sidebar-btn bg-neutral inline-flex items-center space-x-2 rounded-full border border-gray-300 px-3 py-1 text-sm font-medium" onclick="showPanel('data-panel', this)">
-                    <span class="text-xl">📡</span>
+                    <span class="text-xl">🛰️</span>
                     <span>My Data</span>
                 </button>
-                <button class="sidebar-btn bg-neutral inline-flex items-center space-x-2 rounded-full border border-gray-300 px-3 py-1 text-sm font-medium" onclick="showPanel('satellite-panel', this)">
-                    <span class="text-xl">🛰️</span>
-                    <span>Satellite</span>
-                </button>
-                <button class="sidebar-btn bg-neutral inline-flex items-center space-x-2 rounded-full border border-gray-300 px-3 py-1 text-sm font-medium" onclick="showPanel('fields-panel', this)">
-                    <span class="text-xl">🌾</span>
-                    <span>Fields</span>
+                <button class="sidebar-btn bg-neutral inline-flex items-center space-x-2 rounded-full border border-gray-300 px-3 py-1 text-sm font-medium" onclick="showPanel('uploads-panel', this)">
+                    <span class="text-xl">⬆️</span>
+                    <span>Uploads</span>
                 </button>
                 <button class="sidebar-btn bg-neutral inline-flex items-center space-x-2 rounded-full border border-gray-300 px-3 py-1 text-sm font-medium" onclick="showPanel('seasons-panel', this)">
                     <span class="text-xl">📅</span>
@@ -92,80 +83,64 @@
 
 
         <!-- PANEL WRAPPER -->
-        <div class="bg-background border-foreground/20 fixed bottom-0 left-0 z-50 max-h-[50%] w-full translate-y-full overflow-y-auto rounded-t-xl opacity-0 transition-all duration-500 ease-in-out md:relative md:max-h-full md:w-0 md:translate-y-0 md:overflow-hidden md:rounded-none md:border-l-2 md:opacity-100" id="panel-wrapper">
+        <div class="bg-background border-foreground/20 fixed bottom-0 left-0 z-50 max-h-[56%] w-full translate-y-full overflow-y-auto rounded-t-xl opacity-0 transition-all duration-500 ease-in-out md:relative md:max-h-full md:w-0 md:translate-y-0 md:overflow-hidden md:rounded-none md:border-l-2 md:opacity-100" id="panel-wrapper">
 
             <!-- ========== MY DATA PANEL ========== -->
             <section class="flex hidden h-full flex-col shadow-xl" id="data-panel">
                 <div class="bg-background border-foreground/10 sticky top-0 z-20 flex items-center justify-between border-b p-2">
-                    <h2 class="text-lg font-bold">📡 My Data</h2>
+                    <h2 class="text-lg font-bold">📡 My Data Imagery</h2>
                     <button class="hover:bg-foreground/20 bg-foreground/10 rounded px-2 py-1 text-sm" onclick="closePanels()">✖</button>
                 </div>
 
                 <!-- content -->
                 <div class="panel-content flex-1 space-y-3 overflow-y-auto p-3">
-                    @auth
-                        @forelse ($activeFieldAreas as $fieldArea)
-                            {{-- <div>
-                                <label class="border-foreground/10 has-checked:border-muted/80 has-checked:bg-muted/60 has-checked:ring-1 has-checked:ring-muted/80 bg-neutral/80 shadow-xs {{ $fieldArea->subscriptions->status !== 'active' ? 'opacity-50 cursor-not-allowed' : 'hover:bg-muted/50 cursor-pointer' }} flex items-center gap-3 rounded-xl border p-3 text-base font-medium transition-colors" for="fieldArea-{{ $fieldArea->id }}">
-                                    <input class="text-primary focus:ring-primary h-3 w-3 rounded border-gray-300" name="fieldArea" type="checkbox" {{ $fieldArea->subscriptions->status !== 'active' ? 'disabled' : "id=fieldArea-{$fieldArea->id} value=fieldArea-{$fieldArea->id}" }} />
-                                    <div class="flex w-full items-start justify-between">
-                                        <div>
-                                            <h4 class="text-base font-semibold">{{ ucwords($fieldArea->name) ?? 'Unnamed Field' }}</h4>
-                                            <p class="text-foreground/70 text-sm">
-                                                {{ number_format($fieldArea->area_ha, 2) }} ha
-                                            </p>
-                                        </div>
-
-                                        <div class="flex flex-col items-end">
-                                            <span class="text-background @if ($fieldArea->subscriptions->status == 'active') bg-success/70
-                                                        @elseif(in_array($fieldArea->subscriptions->status, ['suspended', 'cancelled', 'expired']))
-                                                            bg-destructive/70
-                                                        @else
-                                                            bg-muted/70 @endif mb-1 inline-flex rounded-full px-2 py-1 text-xs font-medium">
-                                                {{ str_replace('_', ' ', $fieldArea->subscriptions->status) }}
-                                            </span>
-                                            <button class="text-foreground/50 hover:text-foreground hover:bg-secondary bg-secondary/60 flex items-center gap-1 rounded-xl p-1 text-sm" title="Zoom to field">
-                                                <i class="ri-zoom-in-line"></i>
-                                                <span class="sr-only">Zoom</span>
-                                            </button>
+                    <div class="space-y-2">
+                        <div class="space-y-2">
+                            @auth
+                                <div class="space-y-2" id="myDataContainer">
+                                    <p class="text-foreground/60 text-sm">Loading your imagery list...</p>
+                                </div>
+                            @else
+                                <div class="flex flex-col items-center justify-center py-3 text-center">
+                                    <div class="mb-3">
+                                        <div class="bg-muted mx-auto flex h-20 w-20 items-center justify-center rounded-full">
+                                            <i class="ri-database-2-line text-foreground/80 text-3xl"></i>
                                         </div>
                                     </div>
-                                </label>
-                            </div> --}}
-                        @empty
-                            <div class="flex flex-col items-center justify-center py-2 text-center">
-                                <div class="mb-2">
-                                    <div class="bg-muted mx-auto flex h-20 w-20 items-center justify-center rounded-full">
-                                        <i class="ri-database-2-line text-foreground/80 text-3xl"></i>
-                                    </div>
+                                    <h3 class="text-foreground/80 mb-2 text-lg font-semibold">No Data Available</h3>
+                                    <p class="text-foreground/60 mb-4 px-4 text-sm">
+                                        You don't have any satellite imagery data yet. Upload or purchase satellite imagery to start monitoring your crops and analyzing plant stress using PRI.
+                                    </p>
+                                    <x-button-primary type="button" href="{{ route('login') }}" size="small">
+                                        <i class="ri-login-box-line"></i>
+                                        <span>Login to Access Your Data</span>
+                                    </x-button-primary>
                                 </div>
-                                <h3 class="text-foreground/80 mb-2 text-lg font-semibold">No Data Available</h3>
-                                <p class="text-foreground/70 mb-4 px-4 text-sm">
-                                    You don't have any satellite imagery data yet. Purchase satellite imagery to start monitoring your crops and analyzing plant stress using PRI.
-                                </p>
-                                <x-button-primary id="buySatelliteBtn" type="button" size="small">
-                                    <i class="ri-shopping-cart-line"></i>
-                                    <span>Buy Satellite Imagery</span>
-                                </x-button-primary>
-                            </div>
-                        @endforelse
-                    @else
-                        <div class="flex flex-col items-center justify-center py-3 text-center">
-                            <div class="mb-3">
-                                <div class="bg-muted mx-auto flex h-20 w-20 items-center justify-center rounded-full">
-                                    <i class="ri-database-2-line text-foreground/80 text-3xl"></i>
-                                </div>
-                            </div>
-                            <h3 class="text-foreground/70 mb-2 text-lg font-semibold">No Data Available</h3>
-                            <p class="text-foreground/50 mb-4 px-4 text-sm">
-                                You don't have any satellite imagery data yet. Purchase satellite imagery to start monitoring your crops and analyzing plant stress using PRI.
-                            </p>
-                            <x-button-primary type="button" onclick="window.location.href='{{ route('login') }}'" size="small">
-                                <i class="ri-login-box-line"></i>
-                                <span>Login to View your or Buy Imagery</span>
-                            </x-button-primary>
+                            @endauth
                         </div>
-                    @endauth
+
+                        <!-- Hidden template card -->
+                        <template id="imageryCardTemplate">
+                            <div class="imagery-card border-foreground/20 bg-background/40 flex items-center justify-between rounded-xl border p-3 shadow-sm transition-all duration-200 hover:shadow-md">
+                                <div class="flex items-start space-x-3">
+                                    <div class="bg-primary/10 text-primary imagery-format flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg font-semibold uppercase">
+                                        JPG
+                                    </div>
+                                    <div>
+                                        <p class="text-foreground imagery-name font-medium">Sample Imagery</p>
+                                        <p class="imagery-meta text-foreground/60 text-sm">
+                                            10 MB • 2025-10-05 • <span class="imagery-status text-success font-semibold">done</span>
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <button class="view-btn hover:bg-foreground/10 rounded-lg p-2 transition">
+                                    <i class="ri-eye-line"></i>
+                                </button>
+                            </div>
+                        </template>
+                    </div>
+
                 </div>
 
                 <!-- sticky bottom panel -->
@@ -173,57 +148,199 @@
                     <div class="mb-3 flex items-center justify-between">
                         <div class="text-foreground/70 text-sm">
                             @auth
-                                {{ $activeFieldAreas->where('subscriptions.status', 'active')->count() ?? 0 }} field(s) active
+                                {{ $imagery->count() ?? 0 }} imagery(s) active
                             @else
-                                <span>Login to access your fields</span>
+                                <span>Login to access your imagery data</span>
                             @endauth
                         </div>
                         <div class="text-foreground/50 text-xs">
                             Last updated: null
                         </div>
                     </div>
-                    @auth
-                        @if (!isset($activeFieldAreas) || $activeFieldAreas->count() > 0)
-                            <x-button-primary id="buySatelliteBtn" type="button" size="small">
-                                <i class="ri-shopping-cart-line"></i>
-                                <span>Buy Satellite Imagery</span>
-                            </x-button-primary>
-                        @endif
-                    @endauth
                 </div>
             </section>
 
-            <!-- ========== SATELLITE PANEL ========== -->
-            <section class="flex hidden h-full flex-col shadow-xl" id="satellite-panel">
+            <!-- ========== Upload PANEL ========== -->
+            <section class="flex hidden h-full flex-col shadow-xl" id="uploads-panel">
                 <div class="bg-background border-foreground/10 sticky top-0 z-20 flex items-center justify-between border-b p-2">
-                    <h2 class="text-lg font-bold">🛰️ Satellite Imagery</h2>
+                    <h2 class="text-lg font-bold">⬆️ Imagery Collection</h2>
                     <button class="hover:bg-foreground/20 bg-foreground/10 rounded px-2 py-1 text-sm" onclick="closePanels()">✖</button>
                 </div>
 
+                <!-- content -->
                 <div class="panel-content flex-1 space-y-3 overflow-y-auto p-3">
-                    <p>Isi panel Satellite Imagery.</p>
-                    <p>Lorem ipsum dolor sit amet consectetur adipisicing elit. Quos, earum repellendus error saepe vitae deserunt doloribus officiis...</p>
-                </div>
+                    <div class="space-y-2">
+                        @auth
+                            <!-- Tab Navigation -->
+                            <div class="flex">
+                                <div class="bg-foreground/10 hover:bg-foreground/20 flex rounded-lg p-1 transition">
+                                    <nav class="flex gap-x-1" role="tablist" aria-label="Tabs" aria-orientation="horizontal">
+                                        <button class="hs-tab-active:bg-neutral hs-tab-active:text-foreground/80 text-foreground/50 hover:text-foreground/80 focus:outline-hidden focus:text-foreground/80 hover:hover:text-primary active inline-flex items-center gap-x-2 rounded-lg bg-transparent px-2 py-1 text-sm font-medium disabled:pointer-events-none disabled:opacity-50" id="upload-tab" data-hs-tab="#upload-panel" type="button" role="tab" aria-selected="true" aria-controls="upload-panel">
+                                            Buy Imagery
+                                        </button>
+                                        <button class="hs-tab-active:bg-neutral hs-tab-active:text-foreground/80 text-foreground/50 hover:text-foreground/80 focus:outline-hidden focus:text-foreground/80 hover:hover:text-primary inline-flex items-center gap-x-2 rounded-lg bg-transparent px-2 py-1 text-sm font-medium disabled:pointer-events-none disabled:opacity-50" id="buy-tab" data-hs-tab="#buy-panel" type="button" role="tab" aria-selected="false" aria-controls="buy-panel">
+                                            Upload Imagery
+                                        </button>
+                                    </nav>
+                                </div>
+                            </div>
 
-                <div class="bg-background border-foreground/10 sticky bottom-0 border-t p-3">
-                    <p class="text-foreground/70 text-sm">Footer Panel - Satellite</p>
-                </div>
-            </section>
+                            <!-- Upload Tab Content -->
+                            <div class="tab-content" id="upload-panel" role="tabpanel" aria-labelledby="upload-tab">
+                                <div class="bg-primary/10 space-y-2 rounded-lg p-2">
+                                    <h4 class="text-foreground flex items-center text-lg font-semibold">
+                                        <i class="ri-upload-cloud-line text-primary mr-2"></i>
+                                        Upload Your Own Imagery
+                                    </h4>
+                                    <p class="text-foreground/80 text-sm">
+                                        Have your own satellite imagery? Upload it directly to our platform for advanced PRI analysis and crop health monitoring.
+                                    </p>
 
-            <!-- ========== FIELDS PANEL ========== -->
-            <section class="flex hidden h-full flex-col shadow-xl" id="fields-panel">
-                <div class="bg-background border-foreground/10 sticky top-0 z-20 flex items-center justify-between border-b p-2">
-                    <h2 class="text-lg font-bold">🌾 Fields</h2>
-                    <button class="hover:bg-foreground/20 bg-foreground/10 rounded px-2 py-1 text-sm" onclick="closePanels()">✖</button>
-                </div>
+                                    <div class="bg-primary/20 space-y-2 rounded-lg p-2">
+                                        <h5 class="text-foreground font-medium">Supported Formats</h5>
+                                        <ul class="text-foreground/70 grid grid-cols-2 gap-2 text-sm">
+                                            <li class="flex items-center">
+                                                <i class="ri-check-line text-success mr-2 text-xs"></i>
+                                                <span>GeoTIFF (.tif, .tiff)</span>
+                                            </li>
+                                            <li class="flex items-center">
+                                                <i class="ri-check-line text-success mr-2 text-xs"></i>
+                                                <span>Enhanced Compressed Wavelet (.ecw)</span>
+                                            </li>
+                                            <li class="flex items-center">
+                                                <i class="ri-check-line text-success mr-2 text-xs"></i>
+                                                <span>ZIP Archives (.zip)</span>
+                                            </li>
+                                        </ul>
+                                    </div>
 
-                <div class="panel-content flex-1 space-y-3 overflow-y-auto p-3">
-                    <p>Kelola data lahan dan batas poligon dummy.</p>
-                    <p>Lorem ipsum dolor sit amet consectetur adipisicing elit. Atque aliquid doloremque, libero magni, voluptates soluta officiis tempore...</p>
-                </div>
+                                    <div class="bg-primary/20 space-y-2 rounded-lg p-2">
+                                        <h5 class="text-foreground font-medium">Compatible Sources</h5>
+                                        <ul class="text-foreground/70 space-y-1 text-sm">
+                                            <li class="flex items-start">
+                                                <i class="ri-check-line text-success mr-2 mt-0.5 text-xs"></i>
+                                                <span>Sentinel-2, Landsat, and commercial satellites</span>
+                                            </li>
+                                            <li class="flex items-start">
+                                                <i class="ri-check-line text-success mr-2 mt-0.5 text-xs"></i>
+                                                <span>Get detailed plant stress analysis with our AI-powered engine</span>
+                                            </li>
+                                        </ul>
+                                    </div>
 
-                <div class="bg-background border-foreground/10 sticky bottom-0 border-t p-3">
-                    <p class="text-foreground/70 text-sm">Footer Panel - Fields</p>
+                                    <div class="space-y-3">
+                                        <h5 class="text-lg font-semibold">Upload Your File</h5>
+
+                                        <!-- input form -->
+                                        <form class="space-y-2">
+                                            <x-input-label class="text-sm font-medium" for="source-type">Source Type</x-input-label>
+                                            <x-select-input class="px-2! py-1!" id="sourceType" name="source-type" required>
+                                                <option value="sentinel-2">Sentinel-2</option>
+                                                <option value="landsat">Landsat</option>
+                                                <option value="quicksat">Quicksat</option>
+                                            </x-select-input>
+                                            <x-input-error class="mt-2" :messages="$errors->get('source-type')" />
+
+                                            <x-input-label class="text-sm font-medium" for="imagery-upload">Upload your imagery file</x-input-label>
+                                            <input class="border-foreground/30 bg-neutral file:bg-foreground/10 focus:border-primary focus:ring-primary block w-full rounded-lg border text-sm shadow-sm file:me-4 file:border-0 file:px-4 file:py-2 focus:z-10 disabled:pointer-events-none disabled:opacity-50" id="fileInput" name="imagery-upload" type="file" accept=".tif,.tiff,.ecw,.zip">
+                                            <x-input-error class="mt-2" :messages="$errors->get('imagery-upload')" />
+                                        </form>
+
+                                        <!-- info file -->
+                                        <div class="text-foreground-70 mt-2 hidden text-sm" id="fileInfo"></div>
+
+                                        <!-- progress bar -->
+                                        <div class="bg-foreground/20 mt-2 h-4 w-full rounded">
+                                            <div class="bg-primary h-4 rounded" id="progressBar" style="width: 0%;"></div>
+                                        </div>
+                                        <p class="text-foreground/100 mt-1 text-sm" id="progressText">Belum ada upload.</p>
+
+                                        <!-- tombol kontrol -->
+                                        <div class="flex flex-wrap gap-2">
+                                            <x-button-primary id="startBtn" type="button" size="small">🚀 Start Upload</x-button-primary>
+                                            <x-button-danger id="pauseBtn" type="button" size="small">⏸️ Pause</x-button-danger>
+                                            <x-button-secondary id="resumeBtn" type="button" size="small">▶️ Resume</x-button-secondary>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Buy Tab Content -->
+                            <div class="tab-content hidden" class="hidden" id="buy-panel" role="tabpanel" aria-labelledby="buy-tab">
+                                <div class="bg-primary/10 space-y-2 rounded-lg p-2">
+                                    <h4 class="text-foreground flex items-center text-lg font-semibold">
+                                        <i class="ri-shopping-bag-line text-primary mr-2"></i>
+                                        Buy from Our Collection
+                                    </h4>
+                                    <p class="text-foreground/80 text-sm">
+                                        Don't have satellite data? Purchase high-resolution imagery directly from our platform, captured by leading satellite constellations.
+                                    </p>
+
+                                    <div class="bg-primary/20 rounded-lg p-2">
+                                        <h5 class="text-foreground mb-2 font-medium">What You Get</h5>
+                                        <ul class="text-foreground/70 space-y-1 text-sm">
+                                            <li class="flex items-start">
+                                                <i class="ri-check-line text-success mr-2 mt-0.5 text-xs"></i>
+                                                <span>Access to daily updated satellite imagery</span>
+                                            </li>
+                                            <li class="flex items-start">
+                                                <i class="ri-check-line text-success mr-2 mt-0.5 text-xs"></i>
+                                                <span>Global coverage</span>
+                                            </li>
+                                            <li class="flex items-start">
+                                                <i class="ri-check-line text-success mr-2 mt-0.5 text-xs"></i>
+                                                <span>Automatic PRI analysis and health reports included</span>
+                                            </li>
+                                            <li class="flex items-start">
+                                                <i class="ri-check-line text-success mr-2 mt-0.5 text-xs"></i>
+                                                <span>Historical data comparison</span>
+                                            </li>
+                                        </ul>
+                                    </div>
+
+                                    <div class="bg-primary/20 rounded-lg p-2">
+                                        <h5 class="text-foreground mb-2 font-medium">Satellite Sources</h5>
+                                        <div class="grid grid-cols-2 gap-2 text-sm">
+                                            <div class="flex items-center">
+                                                <i class="ri-satellite-line text-success mr-2"></i>
+                                                <span>Sentinel-2</span>
+                                            </div>
+                                            <div class="flex items-center">
+                                                <i class="ri-satellite-line text-success mr-2"></i>
+                                                <span>Landsat 8/9</span>
+                                            </div>
+                                            <div class="flex items-center">
+                                                <i class="ri-satellite-line text-success mr-2"></i>
+                                                <span>Quicksat</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="">
+                                        <x-button-primary id="buySatelliteBtn" type="button" size="small">
+                                            <i class="ri-shopping-cart-line"></i>
+                                            <span>Buy Satellite Imagery</span>
+                                        </x-button-primary>
+                                    </div>
+                                </div>
+                            </div>
+                        @else
+                            <div class="flex flex-col items-center justify-center py-3 text-center">
+                                <div class="mb-3">
+                                    <div class="bg-muted mx-auto flex h-20 w-20 items-center justify-center rounded-full">
+                                        <i class="ri-file-warning-line text-foreground/80 text-3xl"></i>
+                                    </div>
+                                </div>
+                                <h3 class="text-foreground/80 mb-2 text-lg font-semibold">No Access</h3>
+                                <p class="text-foreground/60 mb-4 px-4 text-sm">
+                                    You don't have access to satellite imagery data. Upload or purchase satellite imagery to start monitoring your crops and analyzing plant stress using PRI.
+                                </p>
+                                <x-button-primary type="button" href="{{ route('login') }}" size="small">
+                                    <i class="ri-login-box-line"></i>
+                                    <span>Login to Access Your Data</span>
+                                </x-button-primary>
+                            </div>
+                        @endauth
+                    </div>
                 </div>
             </section>
 
@@ -271,12 +388,12 @@
                 <div class="relative w-full">
                     <x-text-input class="w-full p-1 pr-8" id="search-location" type="text" size="small" placeholder="Search Location, Address, or Cordinate" />
                     <!-- Clear button -->
-                    <button class="absolute right-2 top-1/2 hidden -translate-y-1/2 transform text-gray-500 hover:text-gray-700" id="clear-search" type="button">
+                    <button class="text-foreground/100 hover:text-foreground/80 absolute right-2 top-1/2 hidden -translate-y-1/2 transform" id="clear-search" type="button">
                         <i class="ri-close-line text-lg"></i>
                     </button>
                 </div>
                 <!-- Search Results Recommendation Container -->
-                <div class="absolute left-0 top-full z-50 mt-1 hidden max-h-[300px] w-full overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg" id="search-results-recommendation">
+                <div class="border-foreground/30 absolute left-0 top-full z-50 mt-1 hidden max-h-[300px] w-full overflow-y-auto rounded-lg border bg-white shadow-lg" id="search-results-recommendation">
                     <!-- Results will be dynamically inserted here -->
                 </div>
             </div>
@@ -338,11 +455,11 @@
                             <h2 class="text-base font-semibold" id="panelTitle">Info Panel Title</h2>
                             <p>Lorem ipsum dolor sit amet consectetur, adipisicing elit. Aspernatur, labore facilis! Fuga, ab molestiae?</p>
                         </div>
-                        <button class="rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs hover:bg-gray-50" id="btnClear">Clear</button>
+                        <button class="border-foreground/30 hover:bg-foreground/10 rounded-lg border bg-white px-2 py-1 text-xs" id="btnClear">Clear</button>
                     </div>
-                    <div class="mt-3 hidden rounded-xl border border-gray-200 bg-white p-3 text-sm" id="routeInfo">
+                    <div class="border-foreground/30 mt-3 hidden rounded-xl border bg-white p-3 text-sm" id="routeInfo">
                         <div class="font-medium">Rute</div>
-                        <div class="mt-1 space-y-1 text-gray-700">
+                        <div class="text-foreground/80 mt-1 space-y-1">
                             <div id="routeSummary">Belum ada rute.</div>
                             <div class="nice-scrollbar max-h-40 overflow-auto" id="routeSteps"></div>
                         </div>
@@ -388,7 +505,7 @@
                         <div class="flex flex-col items-center justify-center py-2 text-center">
                             <div class="mb-2">
                                 <h3 class="text-foreground/70 mb-3 text-lg font-semibold">Purchase Satellite Imagery</h3>
-                                <p class="mb-3 text-xs text-gray-600">Draw a polygon on the map to define your area of interest for satellite imagery analysis.</p>
+                                <p class="text-foreground-70 mb-3 text-xs">Draw a polygon on the map to define your area of interest for satellite imagery analysis.</p>
                                 <x-button-primary id="drawPolygonBtn" type="button" size="small">
                                     <i class="ri-pencil-line"></i>
                                     <span>Draw Polygon</span>
@@ -397,7 +514,7 @@
 
                             <!-- GeoJSON Output -->
                             <div class="w-full">
-                                <div class="border-muted mt-3 max-h-11 w-full overflow-auto rounded border bg-gray-50 p-2 text-xs" id="drawerGeojson">
+                                <div class="border-muted bg-foreground/10 mt-3 max-h-11 w-full overflow-auto rounded border p-2 text-xs" id="drawerGeojson">
                                     <span class="text-foreground/50">Polygon coordinates will appear here...</span>
                                 </div>
                             </div>
@@ -424,7 +541,7 @@
                                 <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
                                     <div class="space-y-2">
                                         <x-input-label class="text-sm font-medium" for="luas">Area</x-input-label>
-                                        <div class="border-muted rounded border bg-gray-50 p-2 text-sm" id="measurementOutput">
+                                        <div class="border-muted bg-foreground/10 rounded border p-2 text-sm" id="measurementOutput">
                                             <div class="text-foreground/50 flex items-center">
                                                 <i class="ri-crop-line mr-2"></i>
                                                 <span>Calculate area...</span>
@@ -452,7 +569,7 @@
                                 <div class="space-y-2">
                                     <x-input-label class="text-sm font-medium" for="harga">Total Price</x-input-label>
                                     <div class="border-muted bg-muted/60 rounded border p-2 text-sm" id="priceOutput">
-                                        <span class="font-semibold text-blue-600" id="total_price">Total will be calculated...</span>
+                                        <span class="text-primary font-semibold" id="total_price">Total will be calculated...</span>
                                     </div>
                                 </div>
 
@@ -471,23 +588,23 @@
                         </div>
 
                         <!-- Additional Information -->
-                        <div class="bg-muted/60 rounded-lg p-3">
-                            <h4 class="mb-2 text-sm font-medium text-blue-800">What you'll get:</h4>
-                            <ul class="space-y-1 text-xs text-blue-700">
+                        <div class="bg-primary/60 rounded-lg p-3">
+                            <h4 class="text-primary-foreground mb-2 text-sm font-medium">What you'll get:</h4>
+                            <ul class="text-primary-foreground/80 space-y-1 text-xs">
                                 <li class="flex items-center">
-                                    <i class="ri-check-line mr-1 text-green-500"></i>
+                                    <i class="ri-check-line text-success mr-1"></i>
                                     High-resolution satellite imagery
                                 </li>
                                 <li class="flex items-center">
-                                    <i class="ri-check-line mr-1 text-green-500"></i>
+                                    <i class="ri-check-line text-success mr-1"></i>
                                     PRI stress analysis
                                 </li>
                                 <li class="flex items-center">
-                                    <i class="ri-check-line mr-1 text-green-500"></i>
+                                    <i class="ri-check-line text-success mr-1"></i>
                                     Detailed crop health reports
                                 </li>
                                 <li class="flex items-center">
-                                    <i class="ri-check-line mr-1 text-green-500"></i>
+                                    <i class="ri-check-line text-success mr-1"></i>
                                     Historical data comparison
                                 </li>
                             </ul>
@@ -497,6 +614,339 @@
             </div>
         </div>
     </div>
+
+    @push('javascript')
+        <script>
+            const sourceInput = document.getElementById('sourceType');
+            const fileInput = document.getElementById('fileInput');
+            const fileInfo = document.getElementById('fileInfo');
+            const progressBar = document.getElementById('progressBar');
+            const progressText = document.getElementById('progressText');
+            const startBtn = document.getElementById('startBtn');
+            const pauseBtn = document.getElementById('pauseBtn');
+            const resumeBtn = document.getElementById('resumeBtn');
+            const myDataContainer = document.getElementById('myDataContainer');
+
+            // === STATE ===
+            let paused = false;
+            let uploading = false;
+            let file = null;
+            let uploadId = null;
+            let currentChunk = 0;
+            let totalChunks = 0;
+            const chunkSize = 5 * 1024 * 1024; // 5 MB per chunk
+            let startTime = null;
+            let uploadedBytes = 0;
+
+            // === INIT ===
+            setButtonState("idle");
+            loadMyData();
+
+            // === FILE SELECT ===
+            fileInput.addEventListener("change", (e) => {
+                file = e.target.files[0];
+                if (!file) return;
+
+                const sizeMB = (file.size / 1024 / 1024).toFixed(2);
+                const shortName = shortenFilename(file.name, 40);
+
+                fileInfo.classList.remove("hidden");
+                fileInfo.innerHTML = `
+                <strong>Name:</strong> ${shortName}<br>
+                <strong>Size:</strong> ${sizeMB} MB
+            `;
+
+                progressText.textContent = "✅ File ready to upload. Click 'Start Upload' to begin.";
+                progressBar.style.width = "0%";
+                MyZkToast.info("File ready to upload, click Start to begin.");
+                setButtonState("ready");
+            });
+
+            // === START UPLOAD ===
+            startBtn.addEventListener("click", () => {
+                if (!file) {
+                    MyZkToast.warning("Please select a file first!");
+                    return;
+                }
+
+                uploadId = Math.random().toString(36).substring(2, 12);
+                totalChunks = Math.ceil(file.size / chunkSize);
+                currentChunk = 0;
+                uploadedBytes = 0;
+                paused = false;
+                uploading = true;
+                startTime = performance.now();
+
+                MyZkToast.info("🚀 Upload started...");
+                progressText.textContent = `🚀 Uploading ${file.name}...`;
+                setButtonState("uploading");
+                uploadNextChunk();
+            });
+
+            // === PAUSE ===
+            pauseBtn.addEventListener("click", () => {
+                if (!uploading) return;
+                paused = true;
+                uploading = false;
+                progressText.textContent = "⏸️ Upload paused.";
+                MyZkToast.warning("Upload paused.");
+                setButtonState("paused");
+            });
+
+            // === RESUME ===
+            resumeBtn.addEventListener("click", () => {
+                if (!file) return;
+                paused = false;
+                uploading = true;
+                progressText.textContent = "▶️ Upload resumed...";
+                MyZkToast.info("Upload resumed...");
+                setButtonState("uploading");
+                uploadNextChunk();
+            });
+
+            // === UPLOAD CHUNK FUNCTION ===
+            async function uploadNextChunk(retryCount = 0) {
+                if (paused || !file) return;
+
+                if (currentChunk >= totalChunks) {
+                    progressText.textContent = "🧩 Merging file on server...";
+                    return mergeChunks();
+                }
+
+                const start = currentChunk * chunkSize;
+                const end = Math.min(file.size, start + chunkSize);
+                const chunk = file.slice(start, end);
+                const chunkSizeBytes = end - start;
+
+                const formData = new FormData();
+                formData.append("upload_id", uploadId);
+                formData.append("chunk_index", currentChunk);
+                formData.append("chunk", chunk);
+
+                try {
+                    const res = await fetch('{{ route('upload.chunk') }}', {
+                        method: "POST",
+                        headers: {
+                            "X-CSRF-TOKEN": "{{ csrf_token() }}"
+                        },
+                        body: formData,
+                    });
+
+                    const data = await res.json();
+                    if (!res.ok || !data.success) {
+                        throw new Error(data.message || `Chunk ${currentChunk} failed.`);
+                    }
+
+                    currentChunk++;
+                    uploadedBytes += chunkSizeBytes;
+
+                    const now = performance.now();
+                    const elapsedSec = (now - startTime) / 1000;
+                    const speedMBps = (uploadedBytes / 1024 / 1024 / elapsedSec).toFixed(2);
+                    const remainingBytes = file.size - uploadedBytes;
+                    const estRemainingSec = remainingBytes / (speedMBps * 1024 * 1024);
+                    const etaText = estRemainingSec > 0 ? formatTimeETA(estRemainingSec) : "-";
+
+                    const progress = Math.round((currentChunk / totalChunks) * 100);
+                    progressBar.style.width = `${progress}%`;
+                    progressText.textContent = `Uploading... ${progress}% | 🚀 ${speedMBps} MB/s | ⏳ ETA: ${etaText}`;
+
+                    if (progress === 100) {
+                        MyZkToast.info("Merging file on server...");
+                    }
+
+                    if (!paused) uploadNextChunk();
+
+                } catch (err) {
+                    if (retryCount < 3) {
+                        setTimeout(() => uploadNextChunk(retryCount + 1), 2000 * (retryCount + 1));
+                    } else {
+                        progressText.textContent = `❌ Chunk ${currentChunk} failed after 3 retries. Upload paused.`;
+                        MyZkToast.error(`Chunk ${currentChunk} failed after 3 retries.`);
+                        paused = true;
+                        uploading = false;
+                        setButtonState("paused");
+                    }
+                }
+            }
+
+            // === MERGE CHUNKS FUNCTION ===
+            async function mergeChunks() {
+                setButtonState("merging");
+
+                const sourceType = sourceInput.value;
+                const formData = new FormData();
+                formData.append("upload_id", uploadId);
+                formData.append("filename", file.name);
+                formData.append("total_chunks", totalChunks);
+                formData.append("source_type", sourceType); // Add source type to form data
+
+                try {
+                    const res = await fetch('{{ route('upload.merge') }}', {
+                        method: "POST",
+                        headers: {
+                            "X-CSRF-TOKEN": "{{ csrf_token() }}"
+                        },
+                        body: formData,
+                    });
+
+                    const result = await res.json();
+
+                    if (res.ok && result.success) {
+                        progressBar.style.width = "100%";
+                        progressText.textContent = `✅ Upload complete! ${result.message || "Upload completed. Processing started in background."}`;
+                        MyZkToast.success(result.message || "Upload completed successfully!");
+                        setButtonState("done");
+                        await loadMyData();
+                        autoReset();
+                    } else {
+                        throw new Error(result.message || "Failed to merge file on server.");
+                    }
+
+                } catch (err) {
+                    progressText.textContent = `❌ Error: ${err.message}`;
+                    MyZkToast.error(err.message || "Server error during merge.");
+                    setButtonState("error");
+                    autoReset();
+                }
+            }
+
+            // === AUTO RESET ===
+            function autoReset() {
+                setTimeout(() => {
+                    file = null;
+                    fileInput.value = "";
+                    fileInfo.classList.add("hidden");
+                    progressBar.style.width = "0%";
+                    progressText.textContent = "Ready for next upload.";
+                    setButtonState("idle");
+                }, 4000);
+            }
+
+            // === LOAD MY DATA ===
+            async function loadMyData() {
+                myDataContainer.innerHTML = `
+                <div class="flex justify-center py-4">
+                    <p class="text-sm text-foreground/60 animate-pulse">Loading your imagery list...</p>
+                </div>
+            `;
+
+                try {
+                    const res = await fetch('{{ route('imagery.list') }}');
+                    const result = await res.json();
+
+                    if (!res.ok || !result.success) throw new Error(result.message || "Failed to fetch imagery data.");
+                    const data = result.data;
+
+                    myDataContainer.innerHTML = ''; // clear existing
+
+                    if (data.length === 0) {
+                        myDataContainer.innerHTML = `<p class="text-sm text-gray-400 text-center py-4">No imagery uploaded yet.</p>`;
+                        return;
+                    }
+
+                    const cardListDataImagery = document.getElementById('imageryCardTemplate');
+
+                    data.forEach(item => {
+                        const clone = cardListDataImagery.content.cloneNode(true);
+                        const card = clone.querySelector('.imagery-card');
+
+                        // populate data
+                        card.querySelector('.imagery-format').textContent = item.format.slice(0, 3).toUpperCase();
+                        card.querySelector('.imagery-name').textContent = shortenFilename(item.original_name, 25);
+                        const meta = `${(item.size / 1024 / 1024).toFixed(2)} MB • ${new Date(item.uploaded_at).toLocaleDateString()} • `;
+                        const statusEl = card.querySelector('.imagery-status');
+                        statusEl.textContent = item.processing_status;
+                        statusEl.classList.toggle('text-success', item.processing_status === 'done');
+                        statusEl.classList.toggle('text-warning', item.processing_status !== 'done');
+                        card.querySelector('.imagery-meta').innerHTML = `${meta}<span class="${statusEl.className}">${statusEl.textContent}</span>`;
+
+                        // handle view button
+                        const viewBtn = card.querySelector('.view-btn');
+                        viewBtn.addEventListener('click', () => viewImagery(item));
+
+                        // append to container
+                        myDataContainer.appendChild(clone);
+                    });
+
+                } catch (err) {
+                    myDataContainer.innerHTML = `
+                        <div class="text-sm text-red-500 bg-red-50 border border-red-200 rounded p-3">
+                            ❌ ${err.message}
+                        </div>
+                    `;
+                }
+            }
+
+            // === TAB FUNCTIONALITY ===
+            function initTabFunctionality() {
+                const tabButtons = document.querySelectorAll('.tab-btn');
+                const tabContents = document.querySelectorAll('.tab-content');
+
+                tabButtons.forEach(button => {
+                    button.addEventListener('click', () => {
+                        // Remove active class from all buttons and contents
+                        tabButtons.forEach(btn => btn.classList.remove('active'));
+                        tabContents.forEach(content => content.classList.remove('active'));
+
+                        // Add active class to clicked button
+                        button.classList.add('active');
+
+                        // Show corresponding content
+                        const tabId = button.getAttribute('data-tab');
+                        const content = document.getElementById(tabId);
+                        if (content) {
+                            content.classList.add('active');
+                        }
+                    });
+                });
+            }
+
+            // Initialize tab functionality when DOM is loaded
+            document.addEventListener('DOMContentLoaded', initTabFunctionality);
+
+            // === HELPER FUNCTIONS ===
+            function setButtonState(state) {
+                switch (state) {
+                    case "idle":
+                        startBtn.disabled = true;
+                        pauseBtn.disabled = true;
+                        resumeBtn.disabled = true;
+                        break;
+                    case "ready": // file sudah dipilih
+                        startBtn.disabled = false;
+                        pauseBtn.disabled = true;
+                        resumeBtn.disabled = true;
+                        break;
+                    case "uploading":
+                        startBtn.disabled = true;
+                        pauseBtn.disabled = false;
+                        resumeBtn.disabled = true;
+                        break;
+                    case "paused":
+                        startBtn.disabled = true;
+                        pauseBtn.disabled = true;
+                        resumeBtn.disabled = false;
+                        break;
+                    case "merging":
+                        startBtn.disabled = true;
+                        pauseBtn.disabled = true;
+                        resumeBtn.disabled = true;
+                        break;
+                    case "done":
+                        startBtn.disabled = true;
+                        pauseBtn.disabled = true;
+                        resumeBtn.disabled = true;
+                        break;
+                    case "error":
+                        startBtn.disabled = false;
+                        pauseBtn.disabled = true;
+                        resumeBtn.disabled = true;
+                        break;
+                }
+            }
+        </script>
+    @endpush
 
     @push('javascript')
         <script>
@@ -689,9 +1139,9 @@
                     totalPriceElement.innerHTML = `
                         <div class="flex justify-between items-center">
                             <span class="text-lg font-bold text-green-700">${formatCurrency(totalPrice, currencyCode)}</span>
-                            <i class="ri-money-dollar-circle-line text-green-600 text-xl"></i>
+                            <i class="ri-money-dollar-circle-line text-success text-xl"></i>
                         </div>
-                        <div class="text-xs text-gray-600 mt-1">
+                        <div class="text-xs text-foreground-70 mt-1">
                             ${formatNumber(areaInHectares)} hectares × ${formatCurrency(pricePerHectare, currencyCode)}/hectare
                         </div>
                     `;

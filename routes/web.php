@@ -11,6 +11,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\Socialite\ProviderCallbackController;
 use App\Http\Controllers\Socialite\ProviderRedirectController;
 use App\Http\Controllers\FieldAreaController;
+use App\Http\Controllers\ImageryDataController;
 
 Route::get('/auth/{provider}/redirect', ProviderRedirectController::class)->name('auth.redirect');
 Route::get('/auth/{provider}/callback', ProviderCallbackController::class)->name('auth.callback');
@@ -37,9 +38,13 @@ Route::prefix('dashboard')->name('admin.')->group(function () {
         Route::post('/payment/{payment}/upload-proof', [PaymentController::class, 'uploadProof'])->name('payment.uploadProof');
         Route::get('/payment/callback/{gateway}', [PaymentController::class, 'handleGatewayCallback'])->name('payment.callback');
 
-        // field areas
-        Route::get('/field-area', [FieldAreaController::class, 'index'])->name('field-area.index');
-        Route::get('/field-area/{fieldArea}', [FieldAreaController::class, 'show'])->name('fieldArea.show');
+        // Imagery
+        Route::get('/imagery', [ImageryDataController::class, 'index'])->name('imagery.index');
+        Route::get('/imagery/upload', [ImageryDataController::class, 'create'])->name('imagery.upload');
+        Route::delete('/imagery/{imagery}', [ImageryDataController::class, 'destroy'])->name('imagery.destroy');
+        Route::post('/imagery/{imagery}/retry-processing', [ImageryDataController::class, 'retryProcessing'])->name('imagery.retry');
+        Route::get('/imagery/{imagery}/download-source', [ImageryDataController::class, 'downloadSource'])->name('imagery.download.source');
+        Route::get('/imagery/{imagery}/download-result', [ImageryDataController::class, 'downloadResult'])->name('imagery.download.result');
     });
 
 
@@ -53,6 +58,11 @@ Route::prefix('dashboard')->name('admin.')->group(function () {
 });
 
 Route::middleware(['auth'])->group(function () {
+    Route::post('/imagery-upload-chunk', [ImageryDataController::class, 'uploadChunk'])->name('upload.chunk');
+    Route::post('/imagery-merge-chunks', [ImageryDataController::class, 'mergeChunks'])->name('upload.merge');
+    Route::get('/imagery-check-progress', [ImageryDataController::class, 'checkProgress'])->name('upload.progress');
+    Route::get('/imagery/list', [ImageryDataController::class, 'listUserImagery'])->name('imagery.list');
+
     Route::post('/map-order', [PaymentController::class, 'mapOrder'])->name('mapOrder');
     Route::get('/checkout', [PaymentController::class, 'checkoutOrder'])->name('checkoutOrder');
     Route::post('/checkout', [PaymentController::class, 'checkout'])->name('checkout.payment');

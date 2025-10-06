@@ -336,7 +336,6 @@
                 $('body').on('click', '.delete-user', function(e) {
                     e.preventDefault();
                     const userId = $(this).data('id');
-                    const url = `{{ route('admin.users.destroy', ':userId') }}`.replace(':userId', userId);
 
                     ZkPopAlert.show({
                         message: "Are you sure you want to delete this user?",
