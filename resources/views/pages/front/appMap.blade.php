@@ -199,18 +199,18 @@
                         <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
                             <label class="flex flex-col space-y-1 text-xs font-medium text-foreground/80" for="sentinelCloudFilter">
                                 <span>Max Cloud Cover (%)</span>
-                                <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring" id="sentinelCloudFilter" max="100" min="0" name="cloud-cover" placeholder="e.g. 30" step="1" type="number" />
+                                <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring" id="sentinelCloudFilter" max="100" min="0" name="cloud-cover" placeholder="e.g. 30" step="1" type="number" value="40" />
                             </label>
                             <label class="flex flex-col space-y-1 text-xs font-medium text-foreground/80" for="sentinelLatFilter">
                                 <span>Latitude</span>
-                                <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring" id="sentinelLatFilter" max="90" min="-90" name="latitude" placeholder="e.g. -6.2" step="0.000001" type="number" />
+                                <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring" id="sentinelLatFilter" max="90" min="-90" name="latitude" placeholder="e.g. -6.2" step="0.000001" type="number" value="-1.24536" />
                             </label>
                             <label class="flex flex-col space-y-1 text-xs font-medium text-foreground/80" for="sentinelLonFilter">
                                 <span>Longitude</span>
-                                <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring" id="sentinelLonFilter" max="180" min="-180" name="longitude" placeholder="e.g. 106.8" step="0.000001" type="number" />
+                                <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring" id="sentinelLonFilter" max="180" min="-180" name="longitude" placeholder="e.g. 106.8" step="0.000001" type="number" value="114.54535" />
                             </label>
                         </div>
-                        <p class="text-foreground/60 mt-2 text-[11px]">Leave latitude and longitude empty to search globally. Provide both values to focus on a specific location.</p>
+                        <p class="text-foreground/60 mt-2 text-[11px]">Provide both latitude and longitude to focus on a specific location, or clear both fields to search globally.</p>
                         <div class="mt-3 flex flex-wrap gap-2">
                             <button class="bg-primary hover:bg-primary/90 text-background inline-flex items-center justify-center rounded-lg px-3 py-1.5 text-xs font-semibold transition" type="submit">
                                 Apply Filters
@@ -1063,6 +1063,8 @@
             const sentinelCatalogEndpoint = 'https://catalogue.dataspace.copernicus.eu/resto/api/collections/Sentinel2/search.json';
             let sentinelLoadedOnce = false;
             const defaultCloudCoverMax = 40;
+            const defaultLatitude = -1.24536;
+            const defaultLongitude = 114.54535;
 
             const scrollAmount = 150; // pixels per click
 
@@ -1256,7 +1258,7 @@
                 if (cloudNumber !== null && !Number.isNaN(cloudNumber)) {
                     const normalized = clampNumber(cloudNumber, 0, 100);
                     if (normalized !== null) {
-                        params.set('cloudCover', `0-${Math.round(normalized)}`);
+                        params.set('cloudCover', `[0,${Math.round(normalized)}]`);
                     }
                 }
 
@@ -1339,6 +1341,14 @@
                 sentinelCloudInput.value = defaultCloudCoverMax;
             }
 
+            if (sentinelLatInput && sentinelLatInput.value === '') {
+                sentinelLatInput.value = defaultLatitude;
+            }
+
+            if (sentinelLonInput && sentinelLonInput.value === '') {
+                sentinelLonInput.value = defaultLongitude;
+            }
+
             const normalizeInputValue = (input, min, max) => {
                 if (!input) return;
                 if (input.value === '') {
@@ -1370,8 +1380,8 @@
             if (sentinelFilterResetButton) {
                 sentinelFilterResetButton.addEventListener('click', () => {
                     if (sentinelCloudInput) sentinelCloudInput.value = defaultCloudCoverMax;
-                    if (sentinelLatInput) sentinelLatInput.value = '';
-                    if (sentinelLonInput) sentinelLonInput.value = '';
+                    if (sentinelLatInput) sentinelLatInput.value = defaultLatitude;
+                    if (sentinelLonInput) sentinelLonInput.value = defaultLongitude;
                     loadSentinelCollections(true);
                 });
             }
