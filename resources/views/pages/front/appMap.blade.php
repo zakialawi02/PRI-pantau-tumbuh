@@ -1123,7 +1123,11 @@
                     detailEl.textContent = detailParts.length ? detailParts.join(' • ') : 'No additional metadata available';
                 }
 
-                const quicklookUrl = props.quicklook || assets?.thumbnail?.href || assets?.overview?.href || links.find(link => link.rel === 'preview')?.href;
+                const quicklookUrl = props.thumbnail
+                    || props.quicklook
+                    || assets?.thumbnail?.href
+                    || assets?.overview?.href
+                    || links.find(link => link.rel === 'preview')?.href;
                 const openUrl = props.services?.download?.url || links.find(link => link.rel === 'self')?.href || (typeof feature?.id === 'string' && feature.id.startsWith('http') ? feature.id : null);
 
                 if (thumbnailImg) {
