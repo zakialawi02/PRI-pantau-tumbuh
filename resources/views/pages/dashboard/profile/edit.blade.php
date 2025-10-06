@@ -33,6 +33,24 @@
             ),
         ])>
             <div class="max-w-xl">
+                <!-- Credit Balance Section -->
+                <div class="mb-6 rounded-lg bg-blue-50 p-4">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h3 class="text-lg font-medium text-gray-900">Your Credit Balance</h3>
+                            <p class="mt-1 text-2xl font-bold text-blue-600">
+                                {{ Auth::user()->current_credits }} Credit Points
+                            </p>
+                        </div>
+                        <x-button-primary href="{{ route('admin.purchase-credits') }}">
+                            <i class="ri-add-line mr-1"></i> Buy Credits
+                        </x-button-primary>
+                    </div>
+                    <p class="mt-2 text-sm text-gray-600">
+                        Credit points can be used to access premium features like satellite imagery processing.
+                    </p>
+                </div>
+
                 @include('pages.dashboard.profile.partials.update-profile-information-form')
             </div>
         </x-card>

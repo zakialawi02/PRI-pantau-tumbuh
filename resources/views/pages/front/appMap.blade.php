@@ -175,10 +175,10 @@
                             <div class="flex">
                                 <div class="bg-foreground/10 hover:bg-foreground/20 flex rounded-lg p-1 transition">
                                     <nav class="flex gap-x-1" role="tablist" aria-label="Tabs" aria-orientation="horizontal">
-                                        <button class="hs-tab-active:bg-neutral hs-tab-active:text-foreground/80 text-foreground/50 hover:text-foreground/80 focus:outline-hidden focus:text-foreground/80 hover:hover:text-primary active inline-flex items-center gap-x-2 rounded-lg bg-transparent px-2 py-1 text-sm font-medium disabled:pointer-events-none disabled:opacity-50" id="upload-tab" data-hs-tab="#upload-panel" type="button" role="tab" aria-selected="true" aria-controls="upload-panel">
+                                        <button class="hs-tab-active:bg-neutral hs-tab-active:text-foreground/80 text-foreground/50 hover:text-foreground/80 focus:outline-hidden focus:text-foreground/80 hover:hover:text-primary inline-flex items-center gap-x-2 rounded-lg bg-transparent px-2 py-1 text-sm font-medium disabled:pointer-events-none disabled:opacity-50" id="buy-tab" data-hs-tab="#buy-panel" type="button" role="tab" aria-selected="false" aria-controls="buy-panel">
                                             Buy Imagery
                                         </button>
-                                        <button class="hs-tab-active:bg-neutral hs-tab-active:text-foreground/80 text-foreground/50 hover:text-foreground/80 focus:outline-hidden focus:text-foreground/80 hover:hover:text-primary inline-flex items-center gap-x-2 rounded-lg bg-transparent px-2 py-1 text-sm font-medium disabled:pointer-events-none disabled:opacity-50" id="buy-tab" data-hs-tab="#buy-panel" type="button" role="tab" aria-selected="false" aria-controls="buy-panel">
+                                        <button class="hs-tab-active:bg-neutral hs-tab-active:text-foreground/80 text-foreground/50 hover:text-foreground/80 focus:outline-hidden focus:text-foreground/80 hover:hover:text-primary active inline-flex items-center gap-x-2 rounded-lg bg-transparent px-2 py-1 text-sm font-medium disabled:pointer-events-none disabled:opacity-50" id="upload-tab" data-hs-tab="#upload-panel" type="button" role="tab" aria-selected="true" aria-controls="upload-panel">
                                             Upload Imagery
                                         </button>
                                     </nav>
@@ -266,7 +266,7 @@
                             </div>
 
                             <!-- Buy Tab Content -->
-                            <div class="tab-content hidden" class="hidden" id="buy-panel" role="tabpanel" aria-labelledby="buy-tab">
+                            <div class="tab-content" class="hidden" id="buy-panel" role="tabpanel" aria-labelledby="buy-tab">
                                 <div class="bg-primary/10 space-y-2 rounded-lg p-2">
                                     <h4 class="text-foreground flex items-center text-lg font-semibold">
                                         <i class="ri-shopping-bag-line text-primary mr-2"></i>
@@ -523,69 +523,63 @@
                         <hr class="border-gray-300">
 
                         <!-- Feature Properties Form -->
-                        <div class="hidden w-full" id="featureProperties">
-                            <form class="space-y-4" id="featurePropertiesForm" action="{{ route('mapOrder') }}" method="POST">
-                                @csrf
-                                @method('POST')
+                        <form class="space-y-4" id="featurePropertiesForm" action="{{ route('mapOrder') }}" method="POST">
+                            @csrf
+                            @method('POST')
 
-                                <input id="geometryInput" name="geometry" type="hidden">
-                                <input id="areaInput" name="area_hectares" type="hidden">
+                            <input id="geometryInput" name="geometry" type="hidden">
+                            <input id="areaInput" name="area_hectares" type="hidden">
 
-                                <!-- Feature Name -->
+                            <!-- Feature Name -->
+                            <div class="space-y-2">
+                                <x-input-label class="text-sm font-medium" for="name_feature">Field Name</x-input-label>
+                                <x-text-input class="w-full" id="name_feature" name="name_feature" size="small" placeholder="Enter field/region name" required />
+                            </div>
+
+                            <!-- Area Information -->
+                            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
                                 <div class="space-y-2">
-                                    <x-input-label class="text-sm font-medium" for="name_feature">Field Name</x-input-label>
-                                    <x-text-input class="w-full" id="name_feature" name="name_feature" size="small" placeholder="Enter field/region name" required />
-                                </div>
-
-                                <!-- Area Information -->
-                                <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                                    <div class="space-y-2">
-                                        <x-input-label class="text-sm font-medium" for="luas">Area</x-input-label>
-                                        <div class="border-muted bg-foreground/10 rounded border p-2 text-sm" id="measurementOutput">
-                                            <div class="text-foreground/50 flex items-center">
-                                                <i class="ri-crop-line mr-2"></i>
-                                                <span>Calculate area...</span>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div class="space-y-2">
-                                        <x-input-label class="text-sm font-medium" for="harga_satuan">Price per Hectare</x-input-label>
-                                        <div class="border-muted rounded border p-2 text-sm">
-                                            <select class="border-border focus:border-primary focus:ring-primary w-full rounded border px-2 py-1 text-sm focus:outline-none focus:ring-1" id="plan_id" name="plan_id">
-                                                @forelse($plans->where('isShow', true)->sortBy('price_per_hectare') as $plan)
-                                                    <option data-price="{{ $plan->price_per_hectare }}" data-currency="{{ $plan->currency }}" value="{{ $plan->id }}" {{ $loop->first ? 'selected' : '' }}>
-                                                        {{ $plan->name }} - {{ Number::currency($plan->price_per_hectare, $plan->currency, app()->getLocale()) }} / ha
-                                                    </option>
-                                                @empty
-                                                    <option value="" selected disabled>No plans available</option>
-                                                @endforelse
-                                            </select>
+                                    <x-input-label class="text-sm font-medium" for="luas">Area</x-input-label>
+                                    <div class="border-muted bg-foreground/10 rounded border p-2 text-sm" id="measurementOutput">
+                                        <div class="text-foreground/50 flex items-center">
+                                            <i class="ri-crop-line mr-2"></i>
+                                            <span>Calculate area...</span>
                                         </div>
                                     </div>
                                 </div>
 
-                                <!-- Total Price -->
+                                <!-- Credit Points Information -->
                                 <div class="space-y-2">
-                                    <x-input-label class="text-sm font-medium" for="harga">Total Price</x-input-label>
-                                    <div class="border-muted bg-muted/60 rounded border p-2 text-sm" id="priceOutput">
-                                        <span class="text-primary font-semibold" id="total_price">Total will be calculated...</span>
+                                    <x-input-label class="text-sm font-medium" for="credit_info">Credit Points</x-input-label>
+                                    <div class="border-muted rounded border p-2 text-sm">
+                                        <div class="text-foreground/50 flex items-center">
+                                            <i class="ri-coins-line mr-2"></i>
+                                            <span>0.3 Credit Points per hectare</span>
+                                        </div>
                                     </div>
                                 </div>
+                            </div>
 
-                                <!-- Action Buttons -->
-                                <div class="flex flex-col gap-2 pt-2 sm:flex-row">
-                                    <x-button-primary class="flex-1" id="saveFeatureProperties" type="submit" role="button" size="small">
-                                        <i class="ri-arrow-right-line mr-1"></i>
-                                        Continue to Checkout
-                                    </x-button-primary>
-                                    <x-button-secondary class="flex-1" id="cancelFeatureProperties" type="reset" role="button" size="small">
-                                        <i class="ri-close-line mr-1"></i>
-                                        Cancel
-                                    </x-button-secondary>
+                            <!-- Total Price -->
+                            <div class="space-y-2">
+                                <x-input-label class="text-sm font-medium" for="harga">Total Credit Points Needed</x-input-label>
+                                <div class="border-muted bg-muted/60 rounded border p-2 text-sm" id="priceOutput">
+                                    <span class="text-primary font-semibold" id="total_price">Total will be calculated...</span>
                                 </div>
-                            </form>
-                        </div>
+                            </div>
+
+                            <!-- Action Buttons -->
+                            <div class="flex flex-col gap-2 pt-2 sm:flex-row">
+                                <x-button-primary class="flex-1" id="saveFeatureProperties" type="submit" role="button" size="small">
+                                    <i class="ri-arrow-right-line mr-1"></i>
+                                    Continue to Checkout
+                                </x-button-primary>
+                                <x-button-secondary class="flex-1" id="cancelFeatureProperties" type="reset" role="button" size="small">
+                                    <i class="ri-close-line mr-1"></i>
+                                    Cancel
+                                </x-button-secondary>
+                            </div>
+                        </form>
 
                         <!-- Additional Information -->
                         <div class="bg-primary/60 rounded-lg p-3">
@@ -1120,29 +1114,25 @@
 
             // Price calculation functions
             function calculateTotalPrice() {
-                const planSelect = document.getElementById('plan_id');
-                const selectedOption = planSelect.options[planSelect.selectedIndex];
-                const pricePerHectare = parseFloat(selectedOption.dataset.price) || 0;
-                const currencyCode = selectedOption.dataset.currency || 'USD'; // Get currency code from data attribute
-
                 // Get area from global variable (set when polygon is drawn)
                 const areaInSquareMeters = window.geojsonArea || 0;
                 const areaInHectares = areaInSquareMeters / 10000; // Convert m² to hectares
 
-                const totalPrice = areaInHectares * pricePerHectare;
+                // Calculate credit points needed (fixed rate of 0.3 credit points per hectare)
+                const creditPointsNeeded = areaInHectares * 0.3;
 
                 // Update the display
                 const totalPriceElement = document.getElementById('total_price');
                 const priceContainer = totalPriceElement.parentElement;
 
-                if (areaInHectares > 0 && pricePerHectare > 0) {
+                if (areaInHectares > 0) {
                     totalPriceElement.innerHTML = `
                         <div class="flex justify-between items-center">
-                            <span class="text-lg font-bold text-green-700">${formatCurrency(totalPrice, currencyCode)}</span>
+                            <span class="text-lg font-bold text-green-700">${creditPointsNeeded.toFixed(2)} Credit Points</span>
                             <i class="ri-money-dollar-circle-line text-success text-xl"></i>
                         </div>
                         <div class="text-xs text-foreground-70 mt-1">
-                            ${formatNumber(areaInHectares)} hectares × ${formatCurrency(pricePerHectare, currencyCode)}/hectare
+                            ${formatNumber(areaInHectares)} hectares × 0.3 credit points/hectare
                         </div>
                     `;
                     priceContainer.classList.remove('bg-muted/60', 'border-muted');
@@ -1153,20 +1143,11 @@
                     setTimeout(() => {
                         priceContainer.style.transform = 'scale(1)';
                     }, 200);
-                } else if (areaInHectares > 0 && pricePerHectare === 0) {
-                    totalPriceElement.innerHTML = `
-                        <div class="flex items-center text-amber-600">
-                            <i class="ri-alert-line mr-2"></i>
-                            Please select a plan to calculate price
-                        </div>
-                    `;
-                    priceContainer.classList.remove('bg-green-50', 'border-green-300', 'shadow-sm');
-                    priceContainer.classList.add('bg-amber-50', 'border-amber-300');
                 } else {
                     totalPriceElement.innerHTML = `
                         <div class="flex items-center text-foreground/50">
                             <i class="ri-information-line mr-2"></i>
-                            Draw an area to calculate price
+                            Draw an area to calculate credit points
                         </div>
                     `;
                     priceContainer.classList.remove('bg-green-50', 'border-green-300', 'shadow-sm', 'bg-amber-50', 'border-amber-300');
@@ -1177,22 +1158,8 @@
                 priceContainer.style.transition = 'all 0.3s ease-in-out';
             }
 
-            // Event listener for plan change
-            document.getElementById('plan_id').addEventListener('change', function() {
-                calculateTotalPrice();
-            });
-
             // Make calculateTotalPrice available globally for map.js
             window.calculateTotalPrice = calculateTotalPrice;
         </script>
-
-        @auth
-            @if (isset($activeFieldAreas) && $activeFieldAreas->count() > 0)
-                <script>
-                    // Pass field areas data to JavaScript
-                    window.activeFieldAreas = @json($activeFieldAreas);
-                </script>
-            @endif
-        @endauth
     @endpush
 </x-app-front-map-layout>

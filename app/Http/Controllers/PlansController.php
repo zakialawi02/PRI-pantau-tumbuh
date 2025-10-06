@@ -32,7 +32,13 @@ class PlansController extends Controller
                                 <button type="button" class="delete-plan inline-flex items-center px-2 py-1 bg-error border border-transparent rounded-md font-semibold text-xs text-primary-foreground uppercase tracking-widest hover:bg-error/80 focus:bg-error/80 active:bg-secondary/70 focus:outline-none focus:ring-2 focus:ring-secondary focus:ring-offset-2" data-id="' . $plan->id . '"> <i class="ri-delete-bin-line"></i></button>
                             </div>';
                 })
-                ->rawColumns(['action'])
+                ->editColumn('price', function ($plan) {
+                    return $plan->price . ' ' . $plan->currency;
+                })
+                ->editColumn('credit_points', function ($plan) {
+                    return $plan->credit_points . ' credits';
+                })
+                ->rawColumns(['action', 'price', 'credit_points'])
                 ->make(true);
         }
 
@@ -46,9 +52,11 @@ class PlansController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255|unique:plans,name',
-            'price_per_hectare' => 'required|numeric|min:0.01',
+            'credit_points' => 'required|integer|min:1',
+            'price' => 'required|numeric|min:0.01',
             'currency' => 'required|string|max:10',
-            'isShow' => 'boolean'
+            'isShow' => 'boolean',
+            'isFeatured' => 'boolean'
         ]);
 
         if ($validator->fails()) {
@@ -60,9 +68,11 @@ class PlansController extends Controller
 
         $plan = Plan::create([
             'name' => Str::title($request->name),
-            'price_per_hectare' => $request->price_per_hectare,
+            'credit_points' => $request->credit_points,
+            'price' => $request->price,
             'currency' => Str::upper($request->currency),
             'isShow' => $request->boolean('isShow'),
+            'isFeatured' => $request->boolean('isFeatured'),
         ]);
 
         return response()->json([
@@ -87,9 +97,11 @@ class PlansController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255|unique:plans,name,' . $plan->id,
-            'price_per_hectare' => 'required|numeric|min:0.01',
+            'credit_points' => 'required|integer|min:1',
+            'price' => 'required|numeric|min:0.01',
             'currency' => 'required|string|max:10',
-            'isShow' => 'boolean'
+            'isShow' => 'boolean',
+            'isFeatured' => 'boolean'
         ]);
 
         if ($validator->fails()) {
@@ -101,9 +113,11 @@ class PlansController extends Controller
 
         $plan->update([
             'name' => Str::title($request->name),
-            'price_per_hectare' => $request->price_per_hectare,
+            'credit_points' => $request->credit_points,
+            'price' => $request->price,
             'currency' => Str::upper($request->currency),
             'isShow' => $request->boolean('isShow'),
+            'isFeatured' => $request->boolean('isFeatured'),
         ]);
 
         return response()->json([

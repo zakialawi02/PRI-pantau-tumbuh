@@ -19,12 +19,15 @@ class Payment extends Model
 
     protected $fillable = [
         'user_id',
+        'invoice_number',
         'name',
         'email',
         'phone',
         'amount',
+        'credit_points',
         'currency',
         'status',
+        'due_date',
         'bank_name',
         'account_number',
         'account_name',
@@ -34,8 +37,8 @@ class Payment extends Model
         'payment_method',
         'transaction_ref',
         'paid_at',
-        'due_date',
-        'invoice_number',
+
+
     ];
 
     protected $casts = [

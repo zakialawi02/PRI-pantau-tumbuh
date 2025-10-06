@@ -17,13 +17,17 @@ class Plan extends Model
 
     protected $fillable = [
         'name',
-        'price_per_hectare',
+        'credit_points',
+        'price',
         'currency',
         'isShow',
+        'isFeatured'
     ];
 
     protected $casts = [
-        'price_per_hectare' => 'decimal:2',
+        'price' => 'decimal:2',
+        'credit_points' => 'integer',
         'isShow' => 'boolean',
+        'isFeatured' => 'boolean'
     ];
 }

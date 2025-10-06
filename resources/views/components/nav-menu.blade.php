@@ -29,6 +29,12 @@
                                 <span class="text-foreground/60 text-xs capitalize">Interactive imagery dashboard and analysis tools.</span>
                             </a>
                         </li>
+                        <li>
+                            <a class="hover:bg-primary/50 text-foreground block rounded-md p-1 text-left text-sm font-semibold transition-colors duration-200" href="{{ route('admin.purchase-credits') }}">
+                                <div class="font-semibold">Buy Credits</div>
+                                <span class="text-foreground/60 text-xs capitalize">Purchase credits for premium features.</span>
+                            </a>
+                        </li>
                     </ul>
                 </div>
                 <!-- Remote Sensing Services -->

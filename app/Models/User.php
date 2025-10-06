@@ -88,6 +88,11 @@ class User extends Authenticatable implements MustVerifyEmail
         return $this->hasMany(FieldArea::class);
     }
 
+    public function imageries()
+    {
+        return $this->hasMany(ImageryData::class);
+    }
+
     public function payments()
     {
         return $this->hasMany(Payment::class);
@@ -96,5 +101,10 @@ class User extends Authenticatable implements MustVerifyEmail
     public function paymentsVerified()
     {
         return $this->hasMany(Payment::class, 'verified_by'); // admin yang verifikasi
+    }
+
+    public function credits()
+    {
+        return $this->hasOne(UserCredit::class);
     }
 }

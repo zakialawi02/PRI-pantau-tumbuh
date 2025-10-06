@@ -4,8 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Plan;
 use App\Models\Payment;
-use App\Models\FieldArea;
-use Illuminate\Support\Str;
+use App\Models\UserCredit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
@@ -150,7 +149,6 @@ class PaymentController extends Controller
         }
     }
 
-
     public function updateStatus(Request $request, $id)
     {
         // Additional authorization check
@@ -167,7 +165,6 @@ class PaymentController extends Controller
         ]);
 
         $payment = Payment::findOrFail($id);
-        $oldStatus = $payment->status;
 
         $payment->update([
             'status' => $request->status,
@@ -175,6 +172,11 @@ class PaymentController extends Controller
             'verified_by' => $request->status === 'paid' ? Auth::id() : null,
             'paid_at' => $request->status === 'paid' ? now() : $payment->paid_at,
         ]);
+
+        // If payment status is changed to paid, add credits to user
+        if ($payment->status === 'paid' && $payment->credit_points > 0) {
+            $this->addCreditsToUser($payment->user_id, $payment->credit_points);
+        }
 
         return response()->json([
             'success' => true,
@@ -239,102 +241,39 @@ class PaymentController extends Controller
         }
     }
 
-    public function mapOrder(Request $request)
-    {
-        $request->validate([
-            'geometry' => 'required',
-            'name_feature' => 'required|string|max:255',
-            'area_hectares' => 'required|numeric|min:0.01',
-            'plan_id' => 'required|exists:plans,id',
-        ]);
-        $plan = Plan::findOrFail($request->plan_id);
-
-        $timestamp = time();
-        // Hitung harga total
-        $pricePerHectare = $plan->price_per_hectare;
-        $totalPrice      = number_format(($request->area_hectares / 10000) * $pricePerHectare, 2, '.', '');
-        $data = [
-            'timestamp' => $timestamp,
-            'order_id' => $request->id,
-            'name_feature' => $request->name_feature,
-            'geometry' => $request->geometry,
-            'area_hectares' => round(($request->area_hectares / 10000), 4),
-            'plan' => $plan,
-            'price_currency' => $plan->currency,
-            'price_per_hectare' => $pricePerHectare,
-            'total_price' => $totalPrice,
-        ];
-
-        $keyCache = 'Checkout_' . $timestamp . '_' . Str::random(10) . '';
-        Cache::put($keyCache, $data, now()->addHours(2));
-
-        return redirect()->to('/checkout?id=' . $keyCache);  // method checkout
-    }
-
-    public function checkoutOrder(Request $request)
-    {
-        $id = $request->id;
-
-        if ($id) {
-            $cacheData = Cache::get($id);
-            if ($cacheData) {
-                $data = $cacheData;
-            } else {
-
-                return redirect()->to('/app/imagery')->with('error', 'Application data not found or has expired.');
-            }
-        } else {
-            return redirect()->to('/app/imagery')->with('error', 'Application data not found');
-        }
-
-        $data['title'] = 'Checkout';
-
-        return view('pages.front.order.checkout', compact('data'));
-    }
-
-    public function checkout(Request $request)
+    public function checkoutCredits(Request $request)
     {
         $request->validate([
             'order_id' => 'required|string',
             'name' => 'required|string|max:255',
             'email' => 'required|email',
-            'phone' => 'nullable|string|max:20',
-            'payment_method' => 'nullable|string',
+            'phone' => 'required|string|max:20',
+            'payment_method' => 'required|string|in:bank_transfer,paypal,stripe,manual',
         ]);
 
         $cacheData = Cache::get($request->order_id);
         if (!$cacheData) {
-            return redirect()->to('/app/imagery')->with('error', 'Checkout failed, data not found or expired.');
+            return redirect()->route('admin.purchase-credits')->with('error', 'Checkout failed, data not found or expired.');
         }
 
+        $plan = Plan::findOrFail($request->plan_id);
         $user = Auth::user();
 
         try {
-            $field = FieldArea::create([
-                'user_id'   => $user->id,
-                'name'      => $cacheData['name_feature'],
-                'area_ha'   => $cacheData['area_hectares'],
-                'geom'      => $cacheData['geometry'], // harus disesuaikan dengan tipe geometry (WKT/GeoJSON)
-            ]);
-
-            $plan = $cacheData['plan'];
-
-
-
-            // Buat Payment
+            // Create a payment record for credit purchase
             $payment = Payment::create([
                 'user_id'         => $user->id,
-                'name'            => $user->name,
-                'email'           => $user->email,
+                'name'            => $request->name,
+                'email'           => $request->email,
                 'phone'           => $request->phone,
-                'amount'          => $cacheData['total_price'],
+                'amount'          => $plan->price,
                 'currency'        => $plan->currency,
                 'status'          => 'pending',
-                'due_date'        => Carbon::now()->addDays(2), // 2 hari kedepan'
+                'due_date'        => Carbon::now()->addDays(2), // 2 days from now
                 'payment_method'  => $request->payment_method ?? 'manual',
-                'bank_name'      => ($request->payment_method === 'bank_transfer') ? ($request->bank_name ?? 'bank transfer') : null,
-                'account_name'    => $request->account_name,
-                'account_number'  => $request->account_number,
+                'account_name'    => $request->account_name ?? null,
+                'account_number'  => $request->account_number ?? null,
+                'credit_points'   => $plan->credit_points, // Store the credit points for this payment
             ]);
 
             Cache::forget($request->order_id);
@@ -343,7 +282,7 @@ class PaymentController extends Controller
             try {
                 Mail::to($user->email)->send(new OrderConfirmation($payment));
             } catch (Exception $e) {
-                Log::error("Failed to send order confirmation email: " . $e->getMessage());
+                Log::warning("Failed to send order confirmation email: " . $e->getMessage());
                 // Continue with the process even if email fails
             }
 
@@ -356,16 +295,16 @@ class PaymentController extends Controller
                     $gateway = PaymentGatewayFactory::make($gatewayName);
 
                     $paymentData = [
-                        'amount' => $cacheData['total_price'],
+                        'amount' => $plan->price,
                         'currency' => $plan->currency,
-                        'description' => 'Payment for ' . $plan->name . ' plan',
+                        'description' => 'Credit Purchase: ' . $plan->name . ' for ' . $plan->credit_points . ' Credits',
                         'return_url' => route('admin.payment.callback', ['gateway' => $gatewayName]) . '?paymentId=' . $payment->id,
                         'cancel_url' => route('admin.payment.show', $payment->id),
                         'payment_id' => $payment->id // Pass payment ID for callback
                     ];
 
                     $result = $gateway->charge($paymentData);
-                    // dd($result);
+
                     if ($result['status'] === 'success') {
                         // Update payment with transaction details
                         $payment->update([
@@ -373,32 +312,36 @@ class PaymentController extends Controller
                             'status' => 'pending' // Still pending until confirmed
                         ]);
 
-                        // Redirect to PayPal
+                        // Redirect to payment gateway
                         if (isset($result['approval_url'])) {
                             return redirect()->away($result['approval_url']);
                         }
 
                         // Fallback if no approval URL
                         return redirect()->route('admin.payment.show', $payment->id)
-                            ->with('success', 'Payment processed successfully. Please complete the payment on PayPal.');
+                            ->with('success', 'Order processed successfully. Please complete the payment.');
                     } else {
-                        // Log error
-                        Log::error("PayPal payment processing error: " . ($result['message'] ?? 'Unknown error'));
+                        // Log error with more details
+                        $errorMessage = "Payment processing failed for gateway: {$gatewayName}. ";
+                        $errorMessage .= "Payment ID: {$payment->id}. ";
+                        $errorMessage .= "Error: " . ($result['message'] ?? 'Unknown error');
+                        Log::error($errorMessage);
 
                         return redirect()->route('admin.payment.show', $payment->id)
-                            ->with('error', 'Failed to process PayPal payment. Please try again.');
+                            ->with('error', 'Failed to process payment. Please try again or contact support if the problem persists.');
                     }
                 } catch (Exception $e) {
-                    Log::error("Payment processing error: " . $e->getMessage());
+                    Log::error("Payment processing exception for gateway: {$gatewayName}. Payment ID: {$payment->id}. Error: " . $e->getMessage());
                     // Continue with manual payment process
                 }
             }
 
             return redirect()->route('admin.payment.show', $payment->id)
-                ->with('success', 'Your order has been successfully placed. Please make payment.');
+                ->with('success', 'Your credit purchase order has been successfully placed. Please make payment according to the instructions.');
         } catch (Exception $e) {
-            Log::error("Checkout error: " . $e->getMessage());
-            return redirect()->to('/app/imagery')->with('error', 'An error occurred during checkout. Please try again.');
+            Log::error("Credit purchase error: " . $e->getMessage() . " Trace: " . $e->getTraceAsString());
+            return redirect()->route('admin.purchase-credits')
+                ->with('error', 'An error occurred during credit purchase. Please try again or contact support if the problem persists.');
         }
     }
 
@@ -428,7 +371,7 @@ class PaymentController extends Controller
             $paymentData = [
                 'amount' => (float) $payment->amount,
                 'currency' => $payment->currency,
-                'description' => 'Payment for service',
+                'description' => 'Payment for Credit Purchase: ' . $payment->credit_points . ' Credits',
                 'return_url' => route('admin.payment.callback', ['gateway' => 'paypal']) . '?paymentId=' . $payment->id,
                 'cancel_url' => route('admin.payment.show', $payment->id),
                 'payment_id' => $payment->id // Pass payment ID for callback
@@ -493,6 +436,11 @@ class PaymentController extends Controller
                         'updated_at' => now(),
                     ]);
 
+                    // If this payment was for credit purchase, add credits to user
+                    if ($payment->credit_points > 0) {
+                        $this->addCreditsToUser($payment->user_id, $payment->credit_points);
+                    }
+
                     // Send payment confirmation email for successful payments
                     try {
                         Mail::to($payment->email)->send(new PaymentConfirmation($payment));
@@ -525,6 +473,11 @@ class PaymentController extends Controller
                         'updated_at' => now(),
                     ]);
 
+                    // If this payment was for credit purchase, add credits to user
+                    if ($payment->credit_points > 0) {
+                        $this->addCreditsToUser($payment->user_id, $payment->credit_points);
+                    }
+
                     // Send payment confirmation email for successful payments
                     try {
                         Mail::to($payment->email)->send(new PaymentConfirmation($payment));
@@ -549,5 +502,13 @@ class PaymentController extends Controller
             Log::error("Payment callback error: " . $e->getMessage());
             return redirect()->route('admin.payment.index')->with('error', 'Payment processing error.');
         }
+    }
+
+    // Method to add credits to user
+    private function addCreditsToUser($userId, $credits)
+    {
+        $userCredit = UserCredit::where('user_id', $userId)->first();
+        $userCredit->credits += $credits;
+        $userCredit->save();
     }
 }

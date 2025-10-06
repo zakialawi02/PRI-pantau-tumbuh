@@ -12,6 +12,7 @@
         <x-dashboard.nav-item href="/" icon="ri-home-4-line" text="{{ __('Home') }}" />
         <x-dashboard.nav-item href="admin.dashboard" icon="ri-dashboard-line" text="{{ __('Dashboard') }}" />
         <x-dashboard.nav-item href="appMap" icon="ri-side-bar-line" text="{{ __('Apps Map') }}" />
+        <x-dashboard.nav-item href="admin.purchase-credits" icon="ri-copyleft-line" text="{{ __('Purchase Credits') }}" />
 
         @if ($isAdmin)
             <x-dashboard.nav-accordion id="plans-accordion" icon="ri-currency-line" text="{{ __('Plans') }}">
@@ -24,6 +25,10 @@
             <p>{{ __('Manage') }}</p>
         </div>
 
+        @if ($isSuperadmin)
+            <x-dashboard.nav-item href="admin.field-area.index" icon="ri-map-pin-line" text="{{ __('Field Area') }}" />
+        @endif
+
         <x-dashboard.nav-item href="admin.imagery.index" icon="ri-map-line" text="{{ $isAdmin ? __('Imagery') : __('My Imagery') }}" />
 
 
@@ -32,6 +37,7 @@
 
         <!-- Superadmin Only Section -->
         @if ($isSuperadmin)
+            <x-dashboard.nav-item href="admin.user-credits.index" icon="ri-copyleft-line" text="{{ __('User Credits') }}" />
             <x-dashboard.nav-item href="admin.users.index" icon="ri-user-line" text="{{ __('User') }}" />
             <x-dashboard.nav-item href="docs" icon="ri-file-list-3-line" text="{{ __('Route Docs') }}" target="_blank" />
 
