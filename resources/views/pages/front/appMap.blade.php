@@ -197,17 +197,17 @@
                             </button>
                         </div>
                         <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                            <label class="flex flex-col space-y-1 text-xs font-medium text-foreground/80" for="sentinelCloudFilter">
+                            <label class="text-foreground/80 flex flex-col space-y-1 text-xs font-medium" for="sentinelCloudFilter">
                                 <span>Max Cloud Cover (%)</span>
-                                <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring" id="sentinelCloudFilter" max="100" min="0" name="cloud-cover" placeholder="e.g. 30" step="1" type="number" value="40" />
+                                <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring" id="sentinelCloudFilter" name="cloud-cover" type="number" value="40" max="100" min="0" placeholder="e.g. 30" step="1" />
                             </label>
-                            <label class="flex flex-col space-y-1 text-xs font-medium text-foreground/80" for="sentinelLatFilter">
+                            <label class="text-foreground/80 flex flex-col space-y-1 text-xs font-medium" for="sentinelLatFilter">
                                 <span>Latitude</span>
-                                <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring" id="sentinelLatFilter" max="90" min="-90" name="latitude" placeholder="e.g. -6.2" step="0.000001" type="number" value="-1.24536" />
+                                <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring" id="sentinelLatFilter" name="latitude" type="number" value="-1.24536" max="90" min="-90" placeholder="e.g. -6.2" step="0.000001" />
                             </label>
-                            <label class="flex flex-col space-y-1 text-xs font-medium text-foreground/80" for="sentinelLonFilter">
+                            <label class="text-foreground/80 flex flex-col space-y-1 text-xs font-medium" for="sentinelLonFilter">
                                 <span>Longitude</span>
-                                <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring" id="sentinelLonFilter" max="180" min="-180" name="longitude" placeholder="e.g. 106.8" step="0.000001" type="number" value="114.54535" />
+                                <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring" id="sentinelLonFilter" name="longitude" type="number" value="114.54535" max="180" min="-180" placeholder="e.g. 106.8" step="0.000001" />
                             </label>
                         </div>
                         <p class="text-foreground/60 mt-2 text-[11px]">Provide both latitude and longitude to focus on a specific location, or clear both fields to search globally.</p>
@@ -236,17 +236,17 @@
                     <div class="sentinel-card border-foreground/20 bg-background/60 flex flex-col rounded-xl border p-3 shadow-sm transition-all duration-200 hover:shadow-md">
                         <div class="flex items-start space-x-3">
                             <div class="border-foreground/10 bg-muted text-foreground/50 flex h-16 w-16 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border" data-sentinel-thumb>
-                                <img alt="Sentinel-2 preview" class="hidden h-full w-full object-cover" data-sentinel-thumbnail />
+                                <img class="hidden h-full w-full object-cover" data-sentinel-thumbnail alt="Sentinel-2 preview" />
                                 <div class="flex flex-col items-center text-[10px] font-medium" data-sentinel-placeholder>
                                     <i class="ri-landscape-line text-lg"></i>
                                     <span>Preview</span>
                                 </div>
                             </div>
                             <div class="flex min-w-0 flex-1 flex-col space-y-1">
-                                <p class="text-foreground text-sm font-semibold truncate" data-sentinel-title>Sentinel-2 Tile</p>
-                                <p class="text-foreground/70 text-xs break-all" data-sentinel-product>Product ID</p>
-                                <p class="text-foreground/80 text-xs truncate" data-sentinel-datetime>Acquired:</p>
-                                <p class="text-foreground/60 text-xs break-words" data-sentinel-details>Tile • Cloud cover</p>
+                                <p class="text-foreground break-all text-sm font-semibold" data-sentinel-title>Sentinel-2 Tile</p>
+                                <p class="text-foreground/70 break-all text-xs" data-sentinel-product>Product ID</p>
+                                <p class="text-foreground/80 truncate text-xs" data-sentinel-datetime>Acquired:</p>
+                                <p class="text-foreground/60 break-words text-xs" data-sentinel-details>Tile • Cloud cover</p>
                             </div>
                         </div>
                         <div class="mt-3 flex flex-wrap gap-2" data-sentinel-actions>
@@ -254,7 +254,7 @@
                                 <i class="ri-image-line"></i>
                                 <span>Preview</span>
                             </a>
-                            <a class="hover:bg-foreground/10 text-foreground inline-flex items-center space-x-1 rounded-lg border border-foreground/20 px-2 py-1 text-xs" data-sentinel-open target="_blank" rel="noopener">
+                            <a class="hover:bg-foreground/10 text-foreground border-foreground/20 inline-flex items-center space-x-1 rounded-lg border px-2 py-1 text-xs" data-sentinel-open target="_blank" rel="noopener">
                                 <i class="ri-external-link-line"></i>
                                 <span>Open</span>
                             </a>
@@ -1132,9 +1132,9 @@
                 const thumbnailImg = clone.querySelector('[data-sentinel-thumbnail]');
                 const thumbnailPlaceholder = clone.querySelector('[data-sentinel-placeholder]');
 
-                const shortenText = typeof window?.shortenFilename === 'function'
-                    ? (value, max = 40) => window.shortenFilename(String(value), max)
-                    : (value) => String(value ?? '');
+                const shortenText = typeof window?.shortenFilename === 'function' ?
+                    (value, max = 40) => window.shortenFilename(String(value), max) :
+                    (value) => String(value ?? '');
 
                 const productId = props.productIdentifier || props.title || feature?.id || 'Sentinel-2 Product';
                 const acquisitionDate = props.completionDate || props.startDate || props.endPosition || props.beginPosition || props.startTimeFromAscendingNode;
@@ -1164,11 +1164,11 @@
                     detailEl.textContent = detailParts.length ? detailParts.join(' • ') : 'No additional metadata available';
                 }
 
-                const quicklookUrl = props.thumbnail
-                    || props.quicklook
-                    || assets?.thumbnail?.href
-                    || assets?.overview?.href
-                    || links.find(link => link.rel === 'preview')?.href;
+                const quicklookUrl = props.thumbnail ||
+                    props.quicklook ||
+                    assets?.thumbnail?.href ||
+                    assets?.overview?.href ||
+                    links.find(link => link.rel === 'preview')?.href;
                 const openUrl = props.services?.download?.url || links.find(link => link.rel === 'self')?.href || (typeof feature?.id === 'string' && feature.id.startsWith('http') ? feature.id : null);
 
                 if (thumbnailImg) {
@@ -1193,8 +1193,12 @@
                             thumbnailPlaceholder.classList.remove('hidden');
                         }
 
-                        thumbnailImg.addEventListener('error', handleThumbnailError, { once: true });
-                        thumbnailImg.addEventListener('load', handleThumbnailLoad, { once: true });
+                        thumbnailImg.addEventListener('error', handleThumbnailError, {
+                            once: true
+                        });
+                        thumbnailImg.addEventListener('load', handleThumbnailLoad, {
+                            once: true
+                        });
                         thumbnailImg.src = quicklookUrl;
                         thumbnailImg.alt = `Quicklook preview for ${productText}`;
                     } else {
