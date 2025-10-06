@@ -252,14 +252,10 @@
                             </div>
                         </div>
                         <div class="mt-3 flex flex-wrap gap-2" data-sentinel-actions>
-                            <a class="hover:bg-primary/10 text-primary border-primary/40 inline-flex items-center space-x-1 rounded-lg border px-2 py-1 text-xs font-medium" data-sentinel-preview target="_blank" rel="noopener">
+                            <button class="hover:bg-primary/10 text-primary border-primary/40 inline-flex items-center space-x-1 rounded-lg border px-2 py-1 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50" data-sentinel-preview type="button">
                                 <i class="ri-image-line"></i>
-                                <span>Preview</span>
-                            </a>
-                            <a class="hover:bg-foreground/10 text-foreground border-foreground/20 inline-flex items-center space-x-1 rounded-lg border px-2 py-1 text-xs" data-sentinel-open target="_blank" rel="noopener">
-                                <i class="ri-external-link-line"></i>
-                                <span>Open</span>
-                            </a>
+                                <span>Preview on Map</span>
+                            </button>
                         </div>
                     </div>
                 </template>
@@ -496,6 +492,35 @@
                 <!-- Search Results Recommendation Container -->
                 <div class="border-foreground/30 absolute left-0 top-full z-50 mt-1 hidden max-h-[300px] w-full overflow-y-auto rounded-lg border bg-white shadow-lg" id="search-results-recommendation">
                     <!-- Results will be dynamically inserted here -->
+                </div>
+            </div>
+
+            <!-- Sentinel Preview Panel -->
+            <div class="absolute left-2 right-2 top-[6.5rem] z-40 flex justify-end sm:left-auto sm:right-2 sm:w-80">
+                <div class="pointer-events-auto hidden w-full max-w-md rounded-xl border border-foreground/15 bg-background/95 p-3 text-xs shadow-lg backdrop-blur supports-[backdrop-filter]:bg-background/70" id="sentinelPreviewPanel">
+                    <div class="flex items-start justify-between gap-2">
+                        <div class="space-y-1">
+                            <p class="text-[10px] font-semibold uppercase tracking-wide text-primary">Sentinel-2 Preview</p>
+                            <p class="text-foreground text-sm font-semibold leading-tight" data-sentinel-preview-title>–</p>
+                            <p class="text-foreground/70 text-xs leading-tight" data-sentinel-preview-acquired>Select a collection to preview on the map.</p>
+                            <p class="text-foreground/60 text-xs leading-tight hidden" data-sentinel-preview-details></p>
+                        </div>
+                        <button class="text-foreground/50 transition hover:text-foreground" id="sentinelPreviewClearBtn" type="button">
+                            <i class="ri-close-line text-base"></i>
+                            <span class="sr-only">Clear Sentinel preview</span>
+                        </button>
+                    </div>
+                    <p class="text-foreground/70 mt-2 text-xs" data-sentinel-preview-status>Awaiting preview selection.</p>
+                    <div class="mt-2 flex flex-wrap gap-1.5" id="sentinelPreviewActions">
+                        <button class="bg-primary text-background hover:bg-primary/90 inline-flex items-center space-x-1 rounded-lg px-2 py-1 text-xs font-semibold transition" id="sentinelPreviewHideBtn" type="button">
+                            <i class="ri-eye-off-line text-sm"></i>
+                            <span>Hide Preview</span>
+                        </button>
+                        <button class="bg-primary text-background hover:bg-primary/90 hidden inline-flex items-center space-x-1 rounded-lg px-2 py-1 text-xs font-semibold transition" id="sentinelPreviewShowBtn" type="button">
+                            <i class="ri-eye-line text-sm"></i>
+                            <span>Unhide Preview</span>
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -1061,6 +1086,14 @@
             const sentinelLatInput = document.getElementById('sentinelLatFilter');
             const sentinelLonInput = document.getElementById('sentinelLonFilter');
             const sentinelLevelInput = document.getElementById('sentinelProductLevel');
+            const sentinelPreviewPanel = document.getElementById('sentinelPreviewPanel');
+            const sentinelPreviewTitle = sentinelPreviewPanel?.querySelector('[data-sentinel-preview-title]');
+            const sentinelPreviewAcquired = sentinelPreviewPanel?.querySelector('[data-sentinel-preview-acquired]');
+            const sentinelPreviewDetails = sentinelPreviewPanel?.querySelector('[data-sentinel-preview-details]');
+            const sentinelPreviewStatus = sentinelPreviewPanel?.querySelector('[data-sentinel-preview-status]');
+            const sentinelPreviewHideBtn = document.getElementById('sentinelPreviewHideBtn');
+            const sentinelPreviewShowBtn = document.getElementById('sentinelPreviewShowBtn');
+            const sentinelPreviewClearBtn = document.getElementById('sentinelPreviewClearBtn');
 
             const sentinelCatalogEndpoint = 'https://catalogue.dataspace.copernicus.eu/resto/api/collections/Sentinel2/search.json';
             let sentinelLoadedOnce = false;
@@ -1101,6 +1134,298 @@
                 return Math.min(Math.max(value, min), max);
             };
 
+            const sentinelPreviewController = (() => {
+                if (typeof window === 'undefined' || typeof window.map === 'undefined' || typeof ol === 'undefined') {
+                    return null;
+                }
+
+                const mapInstance = window.map;
+                const mapProjection = mapInstance?.getView?.()?.getProjection?.();
+                if (!mapProjection) return null;
+
+                const dataProjection = 'EPSG:4326';
+                const geoJsonParser = new ol.format.GeoJSON();
+
+                const bboxSource = new ol.source.Vector();
+                const bboxLayer = new ol.layer.Vector({
+                    source: bboxSource,
+                    style: new ol.style.Style({
+                        stroke: new ol.style.Stroke({
+                            color: 'rgba(59,130,246,0.9)',
+                            width: 2,
+                            lineDash: [6, 6]
+                        }),
+                        fill: new ol.style.Fill({
+                            color: 'rgba(59,130,246,0.15)'
+                        })
+                    }),
+                    visible: false,
+                    zIndex: 1200
+                });
+
+                const previewLayer = new ol.layer.Image({
+                    visible: false,
+                    opacity: 0.8,
+                    zIndex: 1150
+                });
+
+                mapInstance.addLayer(previewLayer);
+                mapInstance.addLayer(bboxLayer);
+
+                const state = {
+                    current: null,
+                    hasImage: false,
+                    imageHidden: false
+                };
+
+                const setPanelContent = ({ title, acquired, details, status }) => {
+                    if (title !== undefined && sentinelPreviewTitle) {
+                        sentinelPreviewTitle.textContent = title;
+                    }
+                    if (acquired !== undefined && sentinelPreviewAcquired) {
+                        sentinelPreviewAcquired.textContent = acquired;
+                    }
+                    if (details !== undefined && sentinelPreviewDetails) {
+                        sentinelPreviewDetails.textContent = details;
+                        sentinelPreviewDetails.classList.toggle('hidden', !details);
+                    }
+                    if (status !== undefined && sentinelPreviewStatus) {
+                        sentinelPreviewStatus.textContent = status;
+                    }
+                };
+
+                const setPanelVisible = (visible) => {
+                    if (sentinelPreviewPanel) {
+                        sentinelPreviewPanel.classList.toggle('hidden', !visible);
+                    }
+                };
+
+                const updateButtons = () => {
+                    if (!sentinelPreviewHideBtn || !sentinelPreviewShowBtn) return;
+                    if (!state.hasImage) {
+                        sentinelPreviewHideBtn.classList.add('hidden');
+                        sentinelPreviewShowBtn.classList.add('hidden');
+                        return;
+                    }
+                    sentinelPreviewHideBtn.classList.toggle('hidden', state.imageHidden);
+                    sentinelPreviewShowBtn.classList.toggle('hidden', !state.imageHidden);
+                };
+
+                const focusExtent = (extent) => {
+                    if (!extent || extent.some(value => !Number.isFinite(value))) return;
+                    mapInstance.getView().fit(extent, {
+                        duration: 600,
+                        padding: [80, 80, 80, 80],
+                        maxZoom: 14,
+                        nearest: true
+                    });
+                };
+
+                const buildFootprintFeature = (geometry, bbox) => {
+                    try {
+                        if (geometry) {
+                            return geoJsonParser.readFeature({
+                                type: 'Feature',
+                                geometry
+                            }, {
+                                dataProjection,
+                                featureProjection: mapProjection
+                            });
+                        }
+                        if (Array.isArray(bbox) && bbox.length === 4) {
+                            const transformed = ol.proj.transformExtent(bbox, dataProjection, mapProjection);
+                            return new ol.Feature({
+                                geometry: ol.geom.Polygon.fromExtent(transformed)
+                            });
+                        }
+                    } catch (error) {
+                        console.warn('Failed to parse Sentinel footprint', error);
+                    }
+                    return null;
+                };
+
+                const clearPreviewLayer = () => {
+                    previewLayer.setSource(null);
+                    previewLayer.setVisible(false);
+                };
+
+                const applyPreviewSource = (url, extent) => {
+                    if (!url || !extent) {
+                        clearPreviewLayer();
+                        return;
+                    }
+
+                    previewLayer.setSource(new ol.source.ImageStatic({
+                        url,
+                        imageExtent: extent,
+                        projection: mapProjection,
+                        crossOrigin: 'anonymous'
+                    }));
+                    previewLayer.setVisible(!state.imageHidden);
+                };
+
+                updateButtons();
+
+                return {
+                    showPreview(data) {
+                        if (!data) return;
+
+                        const title = data.title || data.productId || 'Sentinel-2 Preview';
+                        const acquiredText = data.acquisitionDate
+                            ? `Acquired: ${formatReadableDate(data.acquisitionDate)}`
+                            : 'Acquisition date unavailable.';
+                        const detailParts = [];
+                        if (data.tileText) detailParts.push(data.tileText);
+                        if (typeof data.cloudCover === 'number' && !Number.isNaN(data.cloudCover)) {
+                            detailParts.push(`Cloud cover: ${formatCloudCover(Number(data.cloudCover))}`);
+                        }
+                        if (data.collection) detailParts.push(`Collection: ${data.collection}`);
+                        const detailText = detailParts.join(' • ');
+
+                        setPanelVisible(true);
+                        setPanelContent({
+                            title,
+                            acquired: acquiredText,
+                            details: detailText,
+                            status: data.quicklookUrl
+                                ? 'Loading preview image...'
+                                : 'Preview image not available. Showing coverage.'
+                        });
+
+                        const footprint = buildFootprintFeature(data.geometry, data.bbox);
+                        bboxSource.clear();
+
+                        let extent = null;
+                        if (footprint) {
+                            bboxSource.addFeature(footprint);
+                            bboxLayer.setVisible(true);
+                            extent = footprint.getGeometry()?.getExtent() ?? null;
+                            focusExtent(extent);
+                        } else {
+                            bboxLayer.setVisible(false);
+                        }
+
+                        state.current = {
+                            ...data,
+                            extent,
+                            baseTitle: title,
+                            baseAcquired: acquiredText,
+                            baseDetails: detailText
+                        };
+
+                        state.hasImage = Boolean(data.quicklookUrl && extent);
+                        state.imageHidden = false;
+                        updateButtons();
+
+                        if (!extent) {
+                            setPanelContent({
+                                status: 'Coverage area unavailable for this product.'
+                            });
+                        }
+
+                        if (!state.hasImage) {
+                            clearPreviewLayer();
+                            if (extent) {
+                                setPanelContent({
+                                    status: data.quicklookUrl
+                                        ? 'Unable to position preview image. Showing coverage only.'
+                                        : 'Preview image not available. Showing coverage.'
+                                });
+                            }
+                            return;
+                        }
+
+                        const loader = new Image();
+                        loader.crossOrigin = 'anonymous';
+                        loader.onload = () => {
+                            if (!state.current) return;
+                            applyPreviewSource(data.quicklookUrl, extent);
+                            updateButtons();
+                            setPanelContent({
+                                status: state.imageHidden
+                                    ? 'Preview image loaded. Use "Unhide Preview" to display it.'
+                                    : 'Preview image displayed on the map.'
+                            });
+                        };
+                        loader.onerror = () => {
+                            clearPreviewLayer();
+                            state.hasImage = false;
+                            state.imageHidden = false;
+                            updateButtons();
+                            setPanelContent({
+                                status: 'Unable to load preview image. Showing coverage only.'
+                            });
+                        };
+                        loader.src = data.quicklookUrl;
+                    },
+                    hideImage() {
+                        if (!state.current || !state.hasImage) return;
+                        state.imageHidden = true;
+                        previewLayer.setVisible(false);
+                        updateButtons();
+                        setPanelContent({
+                            status: 'Preview hidden. Bounding box remains visible.'
+                        });
+                    },
+                    showImage() {
+                        if (!state.current || !state.hasImage) return;
+                        state.imageHidden = false;
+                        previewLayer.setVisible(true);
+                        updateButtons();
+                        setPanelContent({
+                            status: 'Preview image visible.'
+                        });
+                    },
+                    clear() {
+                        state.current = null;
+                        state.hasImage = false;
+                        state.imageHidden = false;
+                        bboxSource.clear();
+                        bboxLayer.setVisible(false);
+                        clearPreviewLayer();
+                        updateButtons();
+                        setPanelVisible(false);
+                    }
+                };
+            })();
+
+            const triggerSentinelPreview = (payload) => {
+                if (!payload) return;
+                if (!sentinelPreviewController) {
+                    console.warn('Sentinel preview controller is unavailable.');
+                    return;
+                }
+                sentinelPreviewController.showPreview(payload);
+            };
+
+            if (sentinelPreviewHideBtn) {
+                sentinelPreviewHideBtn.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    sentinelPreviewController?.hideImage();
+                });
+            }
+
+            if (sentinelPreviewShowBtn) {
+                sentinelPreviewShowBtn.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    sentinelPreviewController?.showImage();
+                });
+            }
+
+            if (sentinelPreviewClearBtn) {
+                sentinelPreviewClearBtn.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    sentinelPreviewController?.clear();
+                });
+            }
+
+            window.showSentinelPreviewOnMap = triggerSentinelPreview;
+
+            if (!sentinelPreviewController) {
+                sentinelPreviewHideBtn?.classList.add('hidden');
+                sentinelPreviewShowBtn?.classList.add('hidden');
+            }
+
             async function fetchSentinelCatalog(url) {
                 const attemptFetch = async (targetUrl) => {
                     const response = await fetch(targetUrl);
@@ -1130,8 +1455,7 @@
                 const productEl = clone.querySelector('[data-sentinel-product]');
                 const datetimeEl = clone.querySelector('[data-sentinel-datetime]');
                 const detailEl = clone.querySelector('[data-sentinel-details]');
-                const previewLink = clone.querySelector('[data-sentinel-preview]');
-                const openLink = clone.querySelector('[data-sentinel-open]');
+                const previewButton = clone.querySelector('[data-sentinel-preview]');
                 const thumbnailImg = clone.querySelector('[data-sentinel-thumbnail]');
                 const thumbnailPlaceholder = clone.querySelector('[data-sentinel-placeholder]');
 
@@ -1172,7 +1496,6 @@
                     assets?.thumbnail?.href ||
                     assets?.overview?.href ||
                     links.find(link => link.rel === 'preview')?.href;
-                const openUrl = props.services?.download?.url || links.find(link => link.rel === 'self')?.href || (typeof feature?.id === 'string' && feature.id.startsWith('http') ? feature.id : null);
 
                 if (thumbnailImg) {
                     if (quicklookUrl) {
@@ -1213,20 +1536,30 @@
                     }
                 }
 
-                if (previewLink) {
-                    if (quicklookUrl) {
-                        previewLink.href = quicklookUrl;
-                        previewLink.classList.remove('hidden');
-                    } else {
-                        previewLink.classList.add('hidden');
-                    }
-                }
+                const bboxArray = Array.isArray(feature?.bbox) ? feature.bbox :
+                    (Array.isArray(props?.bbox) ? props.bbox : null);
+                const hasCoverage = Boolean(feature?.geometry) || (Array.isArray(bboxArray) && bboxArray.length === 4);
 
-                if (openLink) {
-                    if (openUrl) {
-                        openLink.href = openUrl;
+                if (previewButton) {
+                    if (hasCoverage || quicklookUrl) {
+                        previewButton.disabled = false;
+                        previewButton.title = 'Display preview on the map';
+                        previewButton.addEventListener('click', () => {
+                            window.showSentinelPreviewOnMap?.({
+                                title: titleText,
+                                productId,
+                                quicklookUrl,
+                                geometry: feature?.geometry,
+                                bbox: bboxArray,
+                                acquisitionDate,
+                                tileText,
+                                cloudCover,
+                                collection: props.collection || feature?.collection || null
+                            });
+                        });
                     } else {
-                        openLink.href = `https://dataspace.copernicus.eu/browser/?product=${encodeURIComponent(productId)}`;
+                        previewButton.disabled = true;
+                        previewButton.title = 'Preview not available for this product';
                     }
                 }
 
