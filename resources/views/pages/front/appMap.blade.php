@@ -242,11 +242,11 @@
                                     <span>Preview</span>
                                 </div>
                             </div>
-                            <div class="flex flex-1 flex-col space-y-1">
-                                <p class="text-foreground text-sm font-semibold" data-sentinel-title>Sentinel-2 Tile</p>
-                                <p class="text-foreground/70 text-xs" data-sentinel-product>Product ID</p>
-                                <p class="text-foreground/80 text-xs" data-sentinel-datetime>Acquired:</p>
-                                <p class="text-foreground/60 text-xs" data-sentinel-details>Tile • Cloud cover</p>
+                            <div class="flex min-w-0 flex-1 flex-col space-y-1">
+                                <p class="text-foreground text-sm font-semibold truncate" data-sentinel-title>Sentinel-2 Tile</p>
+                                <p class="text-foreground/70 text-xs break-all" data-sentinel-product>Product ID</p>
+                                <p class="text-foreground/80 text-xs truncate" data-sentinel-datetime>Acquired:</p>
+                                <p class="text-foreground/60 text-xs break-words" data-sentinel-details>Tile • Cloud cover</p>
                             </div>
                         </div>
                         <div class="mt-3 flex flex-wrap gap-2" data-sentinel-actions>
