@@ -188,7 +188,35 @@
                     </div>
                 </div>
 
-                <div class="panel-content flex-1 space-y-3 overflow-y-auto p-3">
+                <div class="panel-content flex-1 space-y-4 overflow-y-auto p-3">
+                    <form class="bg-background/60 border-foreground/10 rounded-lg border p-3 shadow-sm" id="sentinelFilterForm">
+                        <div class="mb-2 flex items-center justify-between">
+                            <h3 class="text-foreground text-sm font-semibold">Filter Collections</h3>
+                            <button class="text-foreground/60 hover:text-primary text-xs font-medium transition" id="sentinelFilterResetButton" type="button">
+                                Reset
+                            </button>
+                        </div>
+                        <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                            <label class="flex flex-col space-y-1 text-xs font-medium text-foreground/80" for="sentinelCloudFilter">
+                                <span>Max Cloud Cover (%)</span>
+                                <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring" id="sentinelCloudFilter" max="100" min="0" name="cloud-cover" placeholder="e.g. 30" step="1" type="number" />
+                            </label>
+                            <label class="flex flex-col space-y-1 text-xs font-medium text-foreground/80" for="sentinelLatFilter">
+                                <span>Latitude</span>
+                                <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring" id="sentinelLatFilter" max="90" min="-90" name="latitude" placeholder="e.g. -6.2" step="0.000001" type="number" />
+                            </label>
+                            <label class="flex flex-col space-y-1 text-xs font-medium text-foreground/80" for="sentinelLonFilter">
+                                <span>Longitude</span>
+                                <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring" id="sentinelLonFilter" max="180" min="-180" name="longitude" placeholder="e.g. 106.8" step="0.000001" type="number" />
+                            </label>
+                        </div>
+                        <p class="text-foreground/60 mt-2 text-[11px]">Leave latitude and longitude empty to search globally. Provide both values to focus on a specific location.</p>
+                        <div class="mt-3 flex flex-wrap gap-2">
+                            <button class="bg-primary hover:bg-primary/90 text-background inline-flex items-center justify-center rounded-lg px-3 py-1.5 text-xs font-semibold transition" type="submit">
+                                Apply Filters
+                            </button>
+                        </div>
+                    </form>
                     <div class="text-foreground/70 text-sm" id="sentinelCollectionStatus">
                         Loading latest Sentinel-2 acquisitions...
                     </div>
@@ -1026,9 +1054,15 @@
             const sentinelTemplate = document.getElementById('sentinelCollectionTemplate');
             const sentinelLastUpdated = document.getElementById('sentinelLastUpdated');
             const sentinelRefreshButton = document.getElementById('sentinelRefreshButton');
+            const sentinelFilterForm = document.getElementById('sentinelFilterForm');
+            const sentinelFilterResetButton = document.getElementById('sentinelFilterResetButton');
+            const sentinelCloudInput = document.getElementById('sentinelCloudFilter');
+            const sentinelLatInput = document.getElementById('sentinelLatFilter');
+            const sentinelLonInput = document.getElementById('sentinelLonFilter');
 
             const sentinelCatalogEndpoint = 'https://catalogue.dataspace.copernicus.eu/resto/api/collections/Sentinel2/search.json';
             let sentinelLoadedOnce = false;
+            const defaultCloudCoverMax = 40;
 
             const scrollAmount = 150; // pixels per click
 
@@ -1055,6 +1089,11 @@
                     return `${value.toFixed(1)}%`;
                 }
                 return 'N/A';
+            };
+
+            const clampNumber = (value, min, max) => {
+                if (typeof value !== 'number' || Number.isNaN(value)) return null;
+                return Math.min(Math.max(value, min), max);
             };
 
             async function fetchSentinelCatalog(url) {
@@ -1212,6 +1251,44 @@
                     sortOrder: 'descending'
                 });
 
+                const cloudRaw = sentinelCloudInput?.value?.trim();
+                const cloudNumber = cloudRaw === '' || cloudRaw === undefined ? null : Number(cloudRaw);
+                if (cloudNumber !== null && !Number.isNaN(cloudNumber)) {
+                    const normalized = clampNumber(cloudNumber, 0, 100);
+                    if (normalized !== null) {
+                        params.set('cloudCover', `0-${Math.round(normalized)}`);
+                    }
+                }
+
+                const latRaw = sentinelLatInput?.value?.trim();
+                const lonRaw = sentinelLonInput?.value?.trim();
+                const hasLat = latRaw !== undefined && latRaw !== '';
+                const hasLon = lonRaw !== undefined && lonRaw !== '';
+
+                if ((hasLat && !hasLon) || (!hasLat && hasLon)) {
+                    sentinelStatus.classList.remove('hidden');
+                    sentinelStatus.textContent = 'Please provide both latitude and longitude to filter by location.';
+                    sentinelList.innerHTML = '';
+                    return;
+                }
+
+                if (hasLat && hasLon) {
+                    const latNumber = Number(latRaw);
+                    const lonNumber = Number(lonRaw);
+                    const normalizedLat = clampNumber(latNumber, -90, 90);
+                    const normalizedLon = clampNumber(lonNumber, -180, 180);
+
+                    if (normalizedLat === null || normalizedLon === null) {
+                        sentinelStatus.classList.remove('hidden');
+                        sentinelStatus.textContent = 'Latitude must be between -90 and 90 and longitude between -180 and 180.';
+                        sentinelList.innerHTML = '';
+                        return;
+                    }
+
+                    params.set('lat', normalizedLat.toFixed(6));
+                    params.set('lon', normalizedLon.toFixed(6));
+                }
+
                 const requestUrl = `${sentinelCatalogEndpoint}?${params.toString()}`;
 
                 try {
@@ -1256,6 +1333,47 @@
 
             if (sentinelRefreshButton) {
                 sentinelRefreshButton.addEventListener('click', () => loadSentinelCollections(true));
+            }
+
+            if (sentinelCloudInput && sentinelCloudInput.value === '') {
+                sentinelCloudInput.value = defaultCloudCoverMax;
+            }
+
+            const normalizeInputValue = (input, min, max) => {
+                if (!input) return;
+                if (input.value === '') {
+                    input.value = '';
+                    return;
+                }
+                const parsed = Number(input.value);
+                if (Number.isNaN(parsed)) {
+                    input.value = '';
+                    return;
+                }
+                const normalized = clampNumber(parsed, min, max);
+                if (normalized !== null) {
+                    input.value = normalized.toString();
+                }
+            };
+
+            sentinelCloudInput?.addEventListener('blur', () => normalizeInputValue(sentinelCloudInput, 0, 100));
+            sentinelLatInput?.addEventListener('blur', () => normalizeInputValue(sentinelLatInput, -90, 90));
+            sentinelLonInput?.addEventListener('blur', () => normalizeInputValue(sentinelLonInput, -180, 180));
+
+            if (sentinelFilterForm) {
+                sentinelFilterForm.addEventListener('submit', (event) => {
+                    event.preventDefault();
+                    loadSentinelCollections(true);
+                });
+            }
+
+            if (sentinelFilterResetButton) {
+                sentinelFilterResetButton.addEventListener('click', () => {
+                    if (sentinelCloudInput) sentinelCloudInput.value = defaultCloudCoverMax;
+                    if (sentinelLatInput) sentinelLatInput.value = '';
+                    if (sentinelLonInput) sentinelLonInput.value = '';
+                    loadSentinelCollections(true);
+                });
             }
 
             scrollLeftBtn.addEventListener('click', () => {
