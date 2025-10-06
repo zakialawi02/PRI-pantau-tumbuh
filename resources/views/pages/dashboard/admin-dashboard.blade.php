@@ -1,4 +1,4 @@
-@section('title', $title ?? 'Admin Dashboard' . ' | ' . config('app.name'))
+@section('title', $data['title'] ?? 'Admin Dashboard' . ' | ' . config('app.name'))
 @section('meta_description', 'Admin dashboard with system statistics and management overview.')
 
 <x-app-layout>
