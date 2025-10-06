@@ -47,6 +47,10 @@
                     <span class="text-xl">⬆️</span>
                     <span>Uploads</span>
                 </button>
+                <button class="sidebar-btn hover:text-primary flex flex-col items-center text-xs" onclick="showPanel('sentinel-panel', this)">
+                    <span class="text-xl">🛰️</span>
+                    <span>Sentinel-2</span>
+                </button>
                 <button class="sidebar-btn hover:text-primary flex flex-col items-center text-xs" onclick="showPanel('seasons-panel', this)">
                     <span class="text-xl">📅</span>
                     <span>Seasons</span>
@@ -73,6 +77,10 @@
                 <button class="sidebar-btn bg-neutral inline-flex items-center space-x-2 rounded-full border border-gray-300 px-3 py-1 text-sm font-medium" onclick="showPanel('uploads-panel', this)">
                     <span class="text-xl">⬆️</span>
                     <span>Uploads</span>
+                </button>
+                <button class="sidebar-btn bg-neutral inline-flex items-center space-x-2 rounded-full border border-gray-300 px-3 py-1 text-sm font-medium" onclick="showPanel('sentinel-panel', this)">
+                    <span class="text-xl">🛰️</span>
+                    <span>Sentinel-2</span>
                 </button>
                 <button class="sidebar-btn bg-neutral inline-flex items-center space-x-2 rounded-full border border-gray-300 px-3 py-1 text-sm font-medium" onclick="showPanel('seasons-panel', this)">
                     <span class="text-xl">📅</span>
@@ -166,6 +174,93 @@
                         </div>
                     </div>
                 </div>
+            </section>
+
+            <!-- ========== SENTINEL COLLECTION PANEL ========== -->
+            <section class="flex hidden h-full flex-col shadow-xl" id="sentinel-panel">
+                <div class="bg-background border-foreground/10 sticky top-0 z-20 flex items-center justify-between border-b p-2">
+                    <h2 class="text-lg font-bold">🛰️ Sentinel-2 Collections</h2>
+                    <div class="flex items-center space-x-2">
+                        <button class="hover:bg-primary/20 text-primary border-primary/40 rounded border px-2 py-1 text-xs font-medium" id="sentinelRefreshButton" type="button">
+                            <i class="ri-refresh-line mr-1"></i>Refresh
+                        </button>
+                        <button class="hover:bg-foreground/20 bg-foreground/10 rounded px-2 py-1 text-sm" onclick="closePanels()">✖</button>
+                    </div>
+                </div>
+
+                <div class="panel-content flex-1 space-y-4 overflow-y-auto p-3">
+                    <form class="bg-background/60 border-foreground/10 rounded-lg border p-3 shadow-sm" id="sentinelFilterForm">
+                        <div class="mb-2 flex items-center justify-between">
+                            <h3 class="text-foreground text-sm font-semibold">Filter Collections</h3>
+                            <button class="text-foreground/60 hover:text-primary text-xs font-medium transition" id="sentinelFilterResetButton" type="button">
+                                Reset
+                            </button>
+                        </div>
+                        <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                            <label class="text-foreground/80 flex flex-col space-y-1 text-xs font-medium" for="sentinelCloudFilter">
+                                <span>Max Cloud Cover (%)</span>
+                                <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring" id="sentinelCloudFilter" name="cloud-cover" type="number" value="40" max="100" min="0" placeholder="e.g. 30" step="1" />
+                            </label>
+                            <label class="text-foreground/80 flex flex-col space-y-1 text-xs font-medium" for="sentinelLatFilter">
+                                <span>Latitude</span>
+                                <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring" id="sentinelLatFilter" name="latitude" type="number" value="-1.24536" max="90" min="-90" placeholder="e.g. -6.2" step="0.000001" />
+                            </label>
+                            <label class="text-foreground/80 flex flex-col space-y-1 text-xs font-medium" for="sentinelLonFilter">
+                                <span>Longitude</span>
+                                <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring" id="sentinelLonFilter" name="longitude" type="number" value="114.54535" max="180" min="-180" placeholder="e.g. 106.8" step="0.000001" />
+                            </label>
+                        </div>
+                        <p class="text-foreground/60 mt-2 text-[11px]">Provide both latitude and longitude to focus on a specific location, or clear both fields to search globally.</p>
+                        <div class="mt-3 flex flex-wrap gap-2">
+                            <button class="bg-primary hover:bg-primary/90 text-background inline-flex items-center justify-center rounded-lg px-3 py-1.5 text-xs font-semibold transition" type="submit">
+                                Apply Filters
+                            </button>
+                        </div>
+                    </form>
+                    <div class="text-foreground/70 text-sm" id="sentinelCollectionStatus">
+                        Loading latest Sentinel-2 acquisitions...
+                    </div>
+                    <div class="space-y-3" id="sentinelCollectionList"></div>
+                </div>
+
+                <div class="bg-background border-foreground/10 sticky bottom-0 border-t p-3">
+                    <div class="text-foreground/70 text-xs">
+                        Data source: Copernicus Sentinel-2 (via public catalogue)
+                    </div>
+                    <div class="text-foreground/50 text-xs">
+                        Last updated: <span id="sentinelLastUpdated">–</span>
+                    </div>
+                </div>
+
+                <template id="sentinelCollectionTemplate">
+                    <div class="sentinel-card border-foreground/20 bg-background/60 flex flex-col rounded-xl border p-3 shadow-sm transition-all duration-200 hover:shadow-md">
+                        <div class="flex items-start space-x-3">
+                            <div class="border-foreground/10 bg-muted text-foreground/50 flex h-16 w-16 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border" data-sentinel-thumb>
+                                <img class="hidden h-full w-full object-cover" data-sentinel-thumbnail alt="Sentinel-2 preview" />
+                                <div class="flex flex-col items-center text-[10px] font-medium" data-sentinel-placeholder>
+                                    <i class="ri-landscape-line text-lg"></i>
+                                    <span>Preview</span>
+                                </div>
+                            </div>
+                            <div class="flex min-w-0 flex-1 flex-col space-y-1">
+                                <p class="text-foreground break-all text-sm font-semibold" data-sentinel-title>Sentinel-2 Tile</p>
+                                <p class="text-foreground/70 break-all text-xs" data-sentinel-product>Product ID</p>
+                                <p class="text-foreground/80 truncate text-xs" data-sentinel-datetime>Acquired:</p>
+                                <p class="text-foreground/60 break-words text-xs" data-sentinel-details>Tile • Cloud cover</p>
+                            </div>
+                        </div>
+                        <div class="mt-3 flex flex-wrap gap-2" data-sentinel-actions>
+                            <a class="hover:bg-primary/10 text-primary border-primary/40 inline-flex items-center space-x-1 rounded-lg border px-2 py-1 text-xs font-medium" data-sentinel-preview target="_blank" rel="noopener">
+                                <i class="ri-image-line"></i>
+                                <span>Preview</span>
+                            </a>
+                            <a class="hover:bg-foreground/10 text-foreground border-foreground/20 inline-flex items-center space-x-1 rounded-lg border px-2 py-1 text-xs" data-sentinel-open target="_blank" rel="noopener">
+                                <i class="ri-external-link-line"></i>
+                                <span>Open</span>
+                            </a>
+                        </div>
+                    </div>
+                </template>
             </section>
 
             <!-- ========== Upload PANEL ========== -->
@@ -954,8 +1049,346 @@
             const scrollContainer = document.getElementById('scroll-container');
             const scrollLeftBtn = document.getElementById('scroll-left');
             const scrollRightBtn = document.getElementById('scroll-right');
+            const sentinelStatus = document.getElementById('sentinelCollectionStatus');
+            const sentinelList = document.getElementById('sentinelCollectionList');
+            const sentinelTemplate = document.getElementById('sentinelCollectionTemplate');
+            const sentinelLastUpdated = document.getElementById('sentinelLastUpdated');
+            const sentinelRefreshButton = document.getElementById('sentinelRefreshButton');
+            const sentinelFilterForm = document.getElementById('sentinelFilterForm');
+            const sentinelFilterResetButton = document.getElementById('sentinelFilterResetButton');
+            const sentinelCloudInput = document.getElementById('sentinelCloudFilter');
+            const sentinelLatInput = document.getElementById('sentinelLatFilter');
+            const sentinelLonInput = document.getElementById('sentinelLonFilter');
+
+            const sentinelCatalogEndpoint = 'https://catalogue.dataspace.copernicus.eu/resto/api/collections/Sentinel2/search.json';
+            let sentinelLoadedOnce = false;
+            const defaultCloudCoverMax = 40;
+            const defaultLatitude = -1.24536;
+            const defaultLongitude = 114.54535;
 
             const scrollAmount = 150; // pixels per click
+
+            const formatISODate = (date) => {
+                if (!(date instanceof Date)) return '';
+                const copy = new Date(date.getTime());
+                copy.setMinutes(copy.getMinutes() - copy.getTimezoneOffset());
+                return copy.toISOString().split('T')[0];
+            };
+
+            const formatReadableDate = (value) => {
+                if (!value) return 'Unknown date';
+                const parsed = new Date(value);
+                if (Number.isNaN(parsed.getTime())) return value;
+                return parsed.toLocaleString('id-ID', {
+                    dateStyle: 'medium',
+                    timeStyle: 'short',
+                    timeZone: 'UTC'
+                }) + ' UTC';
+            };
+
+            const formatCloudCover = (value) => {
+                if (typeof value === 'number' && !Number.isNaN(value)) {
+                    return `${value.toFixed(1)}%`;
+                }
+                return 'N/A';
+            };
+
+            const clampNumber = (value, min, max) => {
+                if (typeof value !== 'number' || Number.isNaN(value)) return null;
+                return Math.min(Math.max(value, min), max);
+            };
+
+            async function fetchSentinelCatalog(url) {
+                const attemptFetch = async (targetUrl) => {
+                    const response = await fetch(targetUrl);
+                    if (!response.ok) {
+                        throw new Error(`Status ${response.status}`);
+                    }
+                    return response.json();
+                };
+
+                try {
+                    return await attemptFetch(url);
+                } catch (err) {
+                    const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+                    return await attemptFetch(proxyUrl);
+                }
+            }
+
+            function createSentinelCard(feature) {
+                if (!sentinelTemplate) return null;
+
+                const clone = sentinelTemplate.content.cloneNode(true);
+                const props = feature?.properties ?? {};
+                const links = feature?.links ?? [];
+                const assets = feature?.assets ?? {};
+
+                const titleEl = clone.querySelector('[data-sentinel-title]');
+                const productEl = clone.querySelector('[data-sentinel-product]');
+                const datetimeEl = clone.querySelector('[data-sentinel-datetime]');
+                const detailEl = clone.querySelector('[data-sentinel-details]');
+                const previewLink = clone.querySelector('[data-sentinel-preview]');
+                const openLink = clone.querySelector('[data-sentinel-open]');
+                const thumbnailImg = clone.querySelector('[data-sentinel-thumbnail]');
+                const thumbnailPlaceholder = clone.querySelector('[data-sentinel-placeholder]');
+
+                const shortenText = typeof window?.shortenFilename === 'function' ?
+                    (value, max = 40) => window.shortenFilename(String(value), max) :
+                    (value) => String(value ?? '');
+
+                const productId = props.productIdentifier || props.title || feature?.id || 'Sentinel-2 Product';
+                const acquisitionDate = props.completionDate || props.startDate || props.endPosition || props.beginPosition || props.startTimeFromAscendingNode;
+                const mgrsIdentifier = props.mgrsId || props.tileId || props.MGRS;
+                const tileText = mgrsIdentifier ? `Tile ${mgrsIdentifier}` : null;
+                const cloudCover = props.cloudCover ?? props['cloudcoverpercentage'] ?? props['cloudCoverageAssessment'];
+
+                const titleText = props.title || productId;
+                const productText = productId;
+
+                if (titleEl) {
+                    titleEl.textContent = shortenText(titleText, 48);
+                    titleEl.setAttribute('title', titleText);
+                }
+
+                if (productEl) {
+                    productEl.textContent = shortenText(productText, 44);
+                    productEl.setAttribute('title', productText);
+                }
+                if (datetimeEl) datetimeEl.textContent = `Acquired: ${formatReadableDate(acquisitionDate)}`;
+
+                const detailParts = [];
+                if (tileText) detailParts.push(tileText);
+                if (cloudCover !== undefined) detailParts.push(`Cloud cover: ${formatCloudCover(Number(cloudCover))}`);
+                if (props.collection) detailParts.push(`Collection: ${props.collection}`);
+                if (detailEl) {
+                    detailEl.textContent = detailParts.length ? detailParts.join(' • ') : 'No additional metadata available';
+                }
+
+                const quicklookUrl = props.thumbnail ||
+                    props.quicklook ||
+                    assets?.thumbnail?.href ||
+                    assets?.overview?.href ||
+                    links.find(link => link.rel === 'preview')?.href;
+                const openUrl = props.services?.download?.url || links.find(link => link.rel === 'self')?.href || (typeof feature?.id === 'string' && feature.id.startsWith('http') ? feature.id : null);
+
+                if (thumbnailImg) {
+                    if (quicklookUrl) {
+                        const handleThumbnailError = () => {
+                            thumbnailImg.classList.add('hidden');
+                            thumbnailImg.removeAttribute('src');
+                            if (thumbnailPlaceholder) {
+                                thumbnailPlaceholder.classList.remove('hidden');
+                            }
+                        };
+
+                        const handleThumbnailLoad = () => {
+                            thumbnailImg.classList.remove('hidden');
+                            if (thumbnailPlaceholder) {
+                                thumbnailPlaceholder.classList.add('hidden');
+                            }
+                        };
+
+                        thumbnailImg.classList.add('hidden');
+                        if (thumbnailPlaceholder) {
+                            thumbnailPlaceholder.classList.remove('hidden');
+                        }
+
+                        thumbnailImg.addEventListener('error', handleThumbnailError, {
+                            once: true
+                        });
+                        thumbnailImg.addEventListener('load', handleThumbnailLoad, {
+                            once: true
+                        });
+                        thumbnailImg.src = quicklookUrl;
+                        thumbnailImg.alt = `Quicklook preview for ${productText}`;
+                    } else {
+                        thumbnailImg.classList.add('hidden');
+                        thumbnailImg.removeAttribute('src');
+                        if (thumbnailPlaceholder) {
+                            thumbnailPlaceholder.classList.remove('hidden');
+                        }
+                    }
+                }
+
+                if (previewLink) {
+                    if (quicklookUrl) {
+                        previewLink.href = quicklookUrl;
+                        previewLink.classList.remove('hidden');
+                    } else {
+                        previewLink.classList.add('hidden');
+                    }
+                }
+
+                if (openLink) {
+                    if (openUrl) {
+                        openLink.href = openUrl;
+                    } else {
+                        openLink.href = `https://dataspace.copernicus.eu/browser/?product=${encodeURIComponent(productId)}`;
+                    }
+                }
+
+                return clone;
+            }
+
+            async function loadSentinelCollections(forceRefresh = false) {
+                if (!sentinelStatus || !sentinelList) return;
+
+                if (forceRefresh && window.MyZkToast?.info) {
+                    window.MyZkToast.info('Refreshing Sentinel-2 catalogue...');
+                }
+
+                sentinelStatus.classList.remove('hidden');
+                sentinelStatus.textContent = 'Fetching latest Sentinel-2 collections...';
+                sentinelList.innerHTML = '';
+
+                const endDate = new Date();
+                const startDate = new Date(endDate);
+                startDate.setMonth(startDate.getMonth() - 1);
+                startDate.setHours(0, 0, 0, 0);
+                const endDateAdjusted = new Date(endDate);
+                endDateAdjusted.setHours(23, 59, 59, 999);
+
+                const params = new URLSearchParams({
+                    startDate: formatISODate(startDate),
+                    completionDate: formatISODate(endDateAdjusted),
+                    maxRecords: '20',
+                    productType: 'S2MSI2A',
+                    sortParam: 'startDate',
+                    sortOrder: 'descending'
+                });
+
+                const cloudRaw = sentinelCloudInput?.value?.trim();
+                const cloudNumber = cloudRaw === '' || cloudRaw === undefined ? null : Number(cloudRaw);
+                if (cloudNumber !== null && !Number.isNaN(cloudNumber)) {
+                    const normalized = clampNumber(cloudNumber, 0, 100);
+                    if (normalized !== null) {
+                        params.set('cloudCover', `[0,${Math.round(normalized)}]`);
+                    }
+                }
+
+                const latRaw = sentinelLatInput?.value?.trim();
+                const lonRaw = sentinelLonInput?.value?.trim();
+                const hasLat = latRaw !== undefined && latRaw !== '';
+                const hasLon = lonRaw !== undefined && lonRaw !== '';
+
+                if ((hasLat && !hasLon) || (!hasLat && hasLon)) {
+                    sentinelStatus.classList.remove('hidden');
+                    sentinelStatus.textContent = 'Please provide both latitude and longitude to filter by location.';
+                    sentinelList.innerHTML = '';
+                    return;
+                }
+
+                if (hasLat && hasLon) {
+                    const latNumber = Number(latRaw);
+                    const lonNumber = Number(lonRaw);
+                    const normalizedLat = clampNumber(latNumber, -90, 90);
+                    const normalizedLon = clampNumber(lonNumber, -180, 180);
+
+                    if (normalizedLat === null || normalizedLon === null) {
+                        sentinelStatus.classList.remove('hidden');
+                        sentinelStatus.textContent = 'Latitude must be between -90 and 90 and longitude between -180 and 180.';
+                        sentinelList.innerHTML = '';
+                        return;
+                    }
+
+                    params.set('lat', normalizedLat.toFixed(6));
+                    params.set('lon', normalizedLon.toFixed(6));
+                }
+
+                const requestUrl = `${sentinelCatalogEndpoint}?${params.toString()}`;
+
+                try {
+                    const response = await fetchSentinelCatalog(requestUrl);
+                    const features = Array.isArray(response?.features) ? response.features : [];
+
+                    if (!features.length) {
+                        sentinelStatus.textContent = 'No Sentinel-2 collections found in the last 30 days.';
+                    } else {
+                        sentinelStatus.classList.add('hidden');
+                        features.forEach(feature => {
+                            const card = createSentinelCard(feature);
+                            if (card) {
+                                sentinelList.appendChild(card);
+                            }
+                        });
+                    }
+
+                    sentinelLoadedOnce = true;
+
+                    if (sentinelLastUpdated) {
+                        sentinelLastUpdated.textContent = new Date().toLocaleString('id-ID');
+                    }
+
+                    if (features.length && forceRefresh && window.MyZkToast?.success) {
+                        window.MyZkToast.success('Sentinel-2 collections updated.');
+                    }
+                } catch (error) {
+                    const message = error?.message ? ` (${error.message})` : '';
+                    sentinelStatus.classList.remove('hidden');
+                    sentinelStatus.textContent = `Unable to fetch Sentinel-2 collections${message}. Please try again later.`;
+
+                    if (sentinelLastUpdated) {
+                        sentinelLastUpdated.textContent = new Date().toLocaleString('id-ID');
+                    }
+
+                    if (window.MyZkToast?.error) {
+                        window.MyZkToast.error('Failed to update Sentinel-2 collections.');
+                    }
+                }
+            }
+
+            if (sentinelRefreshButton) {
+                sentinelRefreshButton.addEventListener('click', () => loadSentinelCollections(true));
+            }
+
+            if (sentinelCloudInput && sentinelCloudInput.value === '') {
+                sentinelCloudInput.value = defaultCloudCoverMax;
+            }
+
+            if (sentinelLatInput && sentinelLatInput.value === '') {
+                sentinelLatInput.value = defaultLatitude;
+            }
+
+            if (sentinelLonInput && sentinelLonInput.value === '') {
+                sentinelLonInput.value = defaultLongitude;
+            }
+
+            const normalizeInputValue = (input, min, max) => {
+                if (!input) return;
+                if (input.value === '') {
+                    input.value = '';
+                    return;
+                }
+                const parsed = Number(input.value);
+                if (Number.isNaN(parsed)) {
+                    input.value = '';
+                    return;
+                }
+                const normalized = clampNumber(parsed, min, max);
+                if (normalized !== null) {
+                    input.value = normalized.toString();
+                }
+            };
+
+            sentinelCloudInput?.addEventListener('blur', () => normalizeInputValue(sentinelCloudInput, 0, 100));
+            sentinelLatInput?.addEventListener('blur', () => normalizeInputValue(sentinelLatInput, -90, 90));
+            sentinelLonInput?.addEventListener('blur', () => normalizeInputValue(sentinelLonInput, -180, 180));
+
+            if (sentinelFilterForm) {
+                sentinelFilterForm.addEventListener('submit', (event) => {
+                    event.preventDefault();
+                    loadSentinelCollections(true);
+                });
+            }
+
+            if (sentinelFilterResetButton) {
+                sentinelFilterResetButton.addEventListener('click', () => {
+                    if (sentinelCloudInput) sentinelCloudInput.value = defaultCloudCoverMax;
+                    if (sentinelLatInput) sentinelLatInput.value = defaultLatitude;
+                    if (sentinelLonInput) sentinelLonInput.value = defaultLongitude;
+                    loadSentinelCollections(true);
+                });
+            }
 
             scrollLeftBtn.addEventListener('click', () => {
                 scrollContainer.scrollBy({
@@ -1029,6 +1462,10 @@
                 }
 
                 panelWrapper.dataset.activePanel = id;
+
+                if (id === 'sentinel-panel' && !sentinelLoadedOnce) {
+                    loadSentinelCollections();
+                }
             }
 
             function closePanels() {
@@ -1065,6 +1502,10 @@
                     document.querySelector(`aside .sidebar-btn[onclick*='${defaultPanel}']`);
 
                 showPanel(defaultPanel, defaultBtn);
+
+                if (!sentinelLoadedOnce) {
+                    loadSentinelCollections();
+                }
             });
 
             // === RESPONSIVE HANDLER: SYNC STATE SAAT RESIZE ===
