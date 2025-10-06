@@ -1080,14 +1080,28 @@
                 const previewLink = clone.querySelector('[data-sentinel-preview]');
                 const openLink = clone.querySelector('[data-sentinel-open]');
 
+                const shortenText = typeof window?.shortenFilename === 'function'
+                    ? (value, max = 40) => window.shortenFilename(String(value), max)
+                    : (value) => String(value ?? '');
+
                 const productId = props.productIdentifier || props.title || feature?.id || 'Sentinel-2 Product';
                 const acquisitionDate = props.completionDate || props.startDate || props.endPosition || props.beginPosition || props.startTimeFromAscendingNode;
                 const mgrsIdentifier = props.mgrsId || props.tileId || props.MGRS;
                 const tileText = mgrsIdentifier ? `Tile ${mgrsIdentifier}` : null;
                 const cloudCover = props.cloudCover ?? props['cloudcoverpercentage'] ?? props['cloudCoverageAssessment'];
 
-                if (titleEl) titleEl.textContent = props.title || productId;
-                if (productEl) productEl.textContent = productId;
+                const titleText = props.title || productId;
+                const productText = productId;
+
+                if (titleEl) {
+                    titleEl.textContent = shortenText(titleText, 48);
+                    titleEl.setAttribute('title', titleText);
+                }
+
+                if (productEl) {
+                    productEl.textContent = shortenText(productText, 44);
+                    productEl.setAttribute('title', productText);
+                }
                 if (datetimeEl) datetimeEl.textContent = `Acquired: ${formatReadableDate(acquisitionDate)}`;
 
                 const detailParts = [];
