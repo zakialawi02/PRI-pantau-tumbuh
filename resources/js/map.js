@@ -169,13 +169,13 @@ const mousePositionControl = new MousePosition({
         const [lon, lat] = coordinate;
         const formattedLon = formatNumber(
             lon,
-            document.documentElement.lang,
-            6
+            6,
+            document.documentElement.lang
         );
         const formattedLat = formatNumber(
             lat,
-            document.documentElement.lang,
-            6
+            6,
+            document.documentElement.lang
         );
         return (
             "Long: " + formattedLon + " &nbsp&nbsp&nbsp  Lat: " + formattedLat
@@ -782,10 +782,10 @@ const formatArea = function (polygon) {
     let output;
     if (area > 10000) {
         output =
-            formatNumber(area / 10000, document.documentElement.lang, 2) +
+            formatNumber(area / 10000, 2, document.documentElement.lang) +
             " ha";
     } else {
-        output = formatNumber(area, document.documentElement.lang, 2) + " m²";
+        output = formatNumber(area, 2, document.documentElement.lang) + " m²";
     }
     return output;
 };

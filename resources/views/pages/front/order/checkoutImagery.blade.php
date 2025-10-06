@@ -251,8 +251,8 @@
                 target: document.getElementById("coordinateDisplay"),
                 coordinateFormat: function(coordinate) {
                     const [lon, lat] = coordinate;
-                    const formattedLon = formatNumber(lon, document.documentElement.lang, 6);
-                    const formattedLat = formatNumber(lat, document.documentElement.lang, 6);
+                    const formattedLon = formatNumber(lon, 6, document.documentElement.lang);
+                    const formattedLat = formatNumber(lat, 6, document.documentElement.lang);
                     return (
                         "Long: " + formattedLon + " &nbsp&nbsp&nbsp  Lat: " + formattedLat
                     );

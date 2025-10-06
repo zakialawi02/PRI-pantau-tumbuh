@@ -14,7 +14,7 @@
             <!-- Credit Display for Authenticated Users -->
             @auth
                 <div class="bg-primary/10 text-primary flex items-center space-x-1 rounded-full px-3 py-1 text-xs font-medium">
-                    <i class="ri-coin-line"></i>
+                    <i class="ri-coins-line mr-2"></i>
                     <span>{{ Number::format(Auth::user()->current_credits, 2, locale: app()->getLocale()) }} Credit Points</span>
                 </div>
             @endauth
@@ -1133,7 +1133,7 @@
                     totalPriceElement.innerHTML = `
                         <div class="flex justify-between items-center">
                             <span class="text-lg font-bold text-green-700">${formatNumber(creditPointsNeeded.toFixed(2))} Credit Points</span>
-                            <i class="ri-money-dollar-circle-line text-success text-xl"></i>
+                            <i class="ri-coins-line font-base text-success text-xl"></i>
                         </div>
                         <div class="text-xs text-foreground-70 mt-1">
                             ${formatNumber(areaInHectares)} hectares × {{ Number::format(config('app-constants.imagery_credit_cost_per_hectare'), locale: app()->getLocale()) }} credit points/hectare

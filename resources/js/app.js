@@ -152,13 +152,13 @@ window.formatCurrency = formatCurrency;
  *
  * @example
  * formatNumber(1234567.89) // Returns "1,234,567.890" for locale "us-US" with default 3 fraction digits
- * formatNumber(1234567.89, "id-ID", 2) // Returns "1.234.567,89" for locale "id-ID" with 2 fraction digits
+ * formatNumber(1234567.89, 2, "id-ID") // Returns "1.234.567,89" for locale "id-ID" with 2 fraction digits
  */
 function formatNumber(
     amount,
-    locale = document.documentElement.lang || "us-US",
+    fractionDigits = 3,
+    locale = document.documentElement.lang || "us-US"
     // locale = navigator.language || "us-US"
-    fractionDigits = 3
 ) {
     try {
         // Convert to number if it's a string
