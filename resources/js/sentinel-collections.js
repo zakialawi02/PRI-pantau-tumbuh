@@ -61,6 +61,10 @@ const createSentinelCard = (feature, template) => {
     const detailEl = clone.querySelector("[data-sentinel-details]");
     const previewLink = clone.querySelector("[data-sentinel-preview]");
     const openLink = clone.querySelector("[data-sentinel-open]");
+    const thumbnailImage = clone.querySelector("[data-sentinel-thumbnail-image]");
+    const thumbnailPlaceholder = clone.querySelector(
+        "[data-sentinel-thumbnail-placeholder]"
+    );
 
     const shortenText =
         typeof window?.shortenFilename === "function"
@@ -126,6 +130,23 @@ const createSentinelCard = (feature, template) => {
         (typeof feature?.id === "string" && feature.id.startsWith("http")
             ? feature.id
             : null);
+
+    if (thumbnailImage) {
+        if (quicklookUrl) {
+            thumbnailImage.src = quicklookUrl;
+            thumbnailImage.classList.remove("hidden");
+            thumbnailImage.alt = `Preview of ${productText}`;
+            if (thumbnailPlaceholder) {
+                thumbnailPlaceholder.classList.add("hidden");
+            }
+        } else {
+            thumbnailImage.removeAttribute("src");
+            thumbnailImage.classList.add("hidden");
+            if (thumbnailPlaceholder) {
+                thumbnailPlaceholder.classList.remove("hidden");
+            }
+        }
+    }
 
     if (previewLink) {
         if (quicklookUrl) {

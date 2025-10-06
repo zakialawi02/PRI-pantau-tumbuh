@@ -206,11 +206,17 @@
 
                 <template id="sentinelCollectionTemplate">
                     <div class="sentinel-card border-foreground/20 bg-background/60 flex flex-col rounded-xl border p-3 shadow-sm transition-all duration-200 hover:shadow-md">
-                        <div class="flex flex-col space-y-1">
-                            <p class="text-foreground text-sm font-semibold" data-sentinel-title>Sentinel-2 Tile</p>
-                            <p class="text-foreground/70 text-xs" data-sentinel-product>Product ID</p>
-                            <p class="text-foreground/80 text-xs" data-sentinel-datetime>Acquired:</p>
-                            <p class="text-foreground/60 text-xs" data-sentinel-details>Tile • Cloud cover</p>
+                        <div class="flex items-start gap-3">
+                            <div class="bg-foreground/5 sentinel-thumbnail relative flex h-20 w-20 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg" data-sentinel-thumbnail>
+                                <img class="hidden h-full w-full object-cover" data-sentinel-thumbnail-image alt="Sentinel-2 preview" />
+                                <i class="ri-image-line text-foreground/40 text-2xl" data-sentinel-thumbnail-placeholder></i>
+                            </div>
+                            <div class="flex flex-1 flex-col space-y-1">
+                                <p class="text-foreground text-sm font-semibold" data-sentinel-title>Sentinel-2 Tile</p>
+                                <p class="text-foreground/70 text-xs" data-sentinel-product>Product ID</p>
+                                <p class="text-foreground/80 text-xs" data-sentinel-datetime>Acquired:</p>
+                                <p class="text-foreground/60 text-xs" data-sentinel-details>Tile • Cloud cover</p>
+                            </div>
                         </div>
                         <div class="mt-3 flex flex-wrap gap-2" data-sentinel-actions>
                             <a class="hover:bg-primary/10 text-primary border-primary/40 inline-flex items-center space-x-1 rounded-lg border px-2 py-1 text-xs font-medium" data-sentinel-preview target="_blank" rel="noopener">
