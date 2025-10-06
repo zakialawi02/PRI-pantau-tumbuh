@@ -209,6 +209,13 @@
                                 <span>Longitude</span>
                                 <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring" id="sentinelLonFilter" name="longitude" type="number" value="114.54535" max="180" min="-180" placeholder="e.g. 106.8" step="0.000001" />
                             </label>
+                            <label class="text-foreground/80 flex flex-col space-y-1 text-xs font-medium" for="sentinelProductLevel">
+                                <span>Product Level</span>
+                                <select class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring" id="sentinelProductLevel" name="product-level">
+                                    <option value="S2MSI2A" selected>Level-2A (Surface Reflectance)</option>
+                                    <option value="S2MSI1C">Level-1C (Top-of-Atmosphere)</option>
+                                </select>
+                            </label>
                         </div>
                         <p class="text-foreground/60 mt-2 text-[11px]">Provide both latitude and longitude to focus on a specific location, or clear both fields to search globally.</p>
                         <div class="mt-3 flex flex-wrap gap-2">
@@ -1059,12 +1066,14 @@
             const sentinelCloudInput = document.getElementById('sentinelCloudFilter');
             const sentinelLatInput = document.getElementById('sentinelLatFilter');
             const sentinelLonInput = document.getElementById('sentinelLonFilter');
+            const sentinelLevelInput = document.getElementById('sentinelProductLevel');
 
             const sentinelCatalogEndpoint = 'https://catalogue.dataspace.copernicus.eu/resto/api/collections/Sentinel2/search.json';
             let sentinelLoadedOnce = false;
             const defaultCloudCoverMax = 40;
             const defaultLatitude = -1.24536;
             const defaultLongitude = 114.54535;
+            const defaultProductType = 'S2MSI2A';
 
             const scrollAmount = 150; // pixels per click
 
@@ -1252,10 +1261,13 @@
                     startDate: formatISODate(startDate),
                     completionDate: formatISODate(endDateAdjusted),
                     maxRecords: '20',
-                    productType: 'S2MSI2A',
                     sortParam: 'startDate',
                     sortOrder: 'descending'
                 });
+
+                const productTypeRaw = sentinelLevelInput?.value?.trim();
+                const productType = ['S2MSI2A', 'S2MSI1C'].includes(productTypeRaw) ? productTypeRaw : defaultProductType;
+                params.set('productType', productType);
 
                 const cloudRaw = sentinelCloudInput?.value?.trim();
                 const cloudNumber = cloudRaw === '' || cloudRaw === undefined ? null : Number(cloudRaw);
@@ -1353,6 +1365,10 @@
                 sentinelLonInput.value = defaultLongitude;
             }
 
+            if (sentinelLevelInput && sentinelLevelInput.value === '') {
+                sentinelLevelInput.value = defaultProductType;
+            }
+
             const normalizeInputValue = (input, min, max) => {
                 if (!input) return;
                 if (input.value === '') {
@@ -1386,6 +1402,7 @@
                     if (sentinelCloudInput) sentinelCloudInput.value = defaultCloudCoverMax;
                     if (sentinelLatInput) sentinelLatInput.value = defaultLatitude;
                     if (sentinelLonInput) sentinelLonInput.value = defaultLongitude;
+                    if (sentinelLevelInput) sentinelLevelInput.value = defaultProductType;
                     loadSentinelCollections(true);
                 });
             }
