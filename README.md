@@ -83,6 +83,29 @@ DB_PASSWORD=
 -   `DB_USERNAME` - Database username
 -   `DB_PASSWORD` - Database password
 
+### Copernicus Data Space access token
+
+Downloading full Sentinel-2 scenes from the Copernicus Data Space Ecosystem requires a short-lived OAuth access token. Follow the steps below to obtain one and enable downloads inside the Sentinel panel:
+
+1. Sign in at [dataspace.copernicus.eu](https://dataspace.copernicus.eu/).
+2. Open your account menu and navigate to **API & Credentials**.
+3. Create a service account (or reuse an existing one) to receive a **client ID** and **client secret**.
+4. Request an access token by calling the token endpoint:
+
+    ```bash
+    curl -X POST \
+         -d "grant_type=client_credentials" \
+         -d "client_id=YOUR_CLIENT_ID" \
+         -d "client_secret=YOUR_CLIENT_SECRET" \
+         https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token
+    ```
+
+    The response contains an `access_token` string that remains valid for roughly one hour.
+
+5. Open the Sentinel panel in the application, paste the `access_token` into the **Copernicus Access Token** field, and the app will attach it automatically to every download link.
+
+The token is stored only in your browser’s local storage. When it expires, repeat steps 4–5 to refresh your credentials.
+
 ### Database Configuration
 
 1. Create a new database for your project
