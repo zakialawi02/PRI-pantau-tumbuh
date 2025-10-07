@@ -252,6 +252,17 @@
                             </div>
                         </div>
                         <div class="mt-3 flex flex-wrap gap-2" data-sentinel-actions>
+                            <a
+                                class="bg-primary text-background hover:bg-primary/90 hidden inline-flex items-center space-x-1 rounded-lg px-2 py-1 text-xs font-semibold transition"
+                                data-sentinel-download
+                                href="#"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                aria-disabled="true"
+                            >
+                                <i class="ri-download-cloud-2-line"></i>
+                                <span>Download Scene</span>
+                            </a>
                             <button class="hover:bg-primary/10 text-primary border-primary/40 inline-flex items-center space-x-1 rounded-lg border px-2 py-1 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50" data-sentinel-preview type="button">
                                 <i class="ri-image-line"></i>
                                 <span>Preview on Map</span>
@@ -512,6 +523,17 @@
                     </div>
                     <p class="text-foreground/70 mt-2 text-xs" data-sentinel-preview-status>Awaiting preview selection.</p>
                     <div class="mt-2 flex flex-wrap gap-1.5" id="sentinelPreviewActions">
+                        <a
+                            class="bg-primary text-background hover:bg-primary/90 hidden inline-flex items-center space-x-1 rounded-lg px-2 py-1 text-xs font-semibold transition"
+                            id="sentinelPreviewDownloadBtn"
+                            href="#"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            aria-disabled="true"
+                        >
+                            <i class="ri-download-cloud-2-line text-sm"></i>
+                            <span>Download Scene</span>
+                        </a>
                         <button class="bg-primary text-background hover:bg-primary/90 inline-flex items-center space-x-1 rounded-lg px-2 py-1 text-xs font-semibold transition" id="sentinelPreviewHideBtn" type="button">
                             <i class="ri-eye-off-line text-sm"></i>
                             <span>Hide Preview</span>
@@ -1094,6 +1116,7 @@
             const sentinelPreviewHideBtn = document.getElementById('sentinelPreviewHideBtn');
             const sentinelPreviewShowBtn = document.getElementById('sentinelPreviewShowBtn');
             const sentinelPreviewClearBtn = document.getElementById('sentinelPreviewClearBtn');
+            const sentinelPreviewDownloadBtn = document.getElementById('sentinelPreviewDownloadBtn');
 
             const sentinelCatalogEndpoint = 'https://catalogue.dataspace.copernicus.eu/resto/api/collections/Sentinel2/search.json';
             let sentinelLoadedOnce = false;
@@ -1132,6 +1155,169 @@
             const clampNumber = (value, min, max) => {
                 if (typeof value !== 'number' || Number.isNaN(value)) return null;
                 return Math.min(Math.max(value, min), max);
+            };
+
+            const buildSentinelDownloadName = (primary, fallback) => {
+                const base = String(primary ?? fallback ?? 'sentinel-2-scene').trim();
+                const normalized = base.replace(/[\s]+/g, '_').replace(/[^A-Za-z0-9._-]+/g, '_');
+                return normalized || 'sentinel-2-scene';
+            };
+
+            const sentinelDownloadIgnoredKeywords = ['quicklook', 'thumbnail', 'thumb', 'overview', 'browse', 'preview', 'allorigins'];
+
+            const isValidSentinelDownloadUrl = (url) => {
+                if (typeof url !== 'string') return false;
+                const trimmed = url.trim();
+                if (!trimmed) return false;
+                if (!/^https?:\/\//i.test(trimmed)) return false;
+                const lowered = trimmed.toLowerCase();
+                return !sentinelDownloadIgnoredKeywords.some((keyword) => lowered.includes(keyword));
+            };
+
+            const extractServiceUrls = (service) => {
+                const results = [];
+                if (!service) return results;
+                if (typeof service === 'string') {
+                    results.push(service);
+                    return results;
+                }
+                if (Array.isArray(service)) {
+                    service.forEach((item) => {
+                        results.push(...extractServiceUrls(item));
+                    });
+                    return results;
+                }
+                if (typeof service === 'object') {
+                    ['url', 'href', 'https', 'http'].forEach((key) => {
+                        const value = service[key];
+                        if (typeof value === 'string') {
+                            results.push(value);
+                        }
+                    });
+                }
+                return results;
+            };
+
+            const resolveSentinelDownloadUrl = (feature) => {
+                if (!feature) return null;
+
+                const props = feature.properties ?? {};
+                const links = Array.isArray(feature.links) ? feature.links : [];
+                const assets = feature.assets ?? {};
+
+                const candidateScores = new Map();
+                const registerCandidate = (url, score = 0) => {
+                    if (!isValidSentinelDownloadUrl(url)) return;
+                    const existing = candidateScores.get(url);
+                    if (existing === undefined || score > existing) {
+                        candidateScores.set(url, score);
+                    }
+                };
+
+                const registerFromService = (service, score = 0) => {
+                    extractServiceUrls(service).forEach((url) => {
+                        registerCandidate(url, score);
+                    });
+                };
+
+                const linkScoreByRel = {
+                    enclosure: 100,
+                    download: 95,
+                    data: 90,
+                    alternate: 75,
+                    source: 70,
+                    self: 65
+                };
+
+                links.forEach((link) => {
+                    const href = typeof link?.href === 'string' ? link.href : null;
+                    if (!href) return;
+                    const rel = typeof link?.rel === 'string' ? link.rel.toLowerCase() : '';
+                    const type = typeof link?.type === 'string' ? link.type.toLowerCase() : '';
+                    let score = linkScoreByRel[rel] ?? 60;
+                    if (type.includes('zip') || type.includes('safe') || type.includes('application/octet-stream')) {
+                        score += 15;
+                    }
+                    registerCandidate(href, score);
+                });
+
+                ['downloadUrl', 'productDownloadUrl', 'productUrl', 'dataUrl', 'url', 'servicesDownloadUrl', 'resourceUrl'].forEach((key) => {
+                    const value = props[key];
+                    if (typeof value === 'string') {
+                        registerCandidate(value, 92);
+                    }
+                });
+
+                const services = props.services;
+                if (services && typeof services === 'object' && !Array.isArray(services)) {
+                    Object.entries(services).forEach(([key, serviceValue]) => {
+                        const lowerKey = String(key).toLowerCase();
+                        let score = 70;
+                        if (lowerKey.includes('download')) score = 95;
+                        else if (lowerKey.includes('data')) score = 88;
+                        else if (lowerKey.includes('s3') || lowerKey.includes('aws')) score = 82;
+                        registerFromService(serviceValue, score);
+                    });
+                } else {
+                    registerFromService(services, 80);
+                }
+
+                Object.entries(assets).forEach(([key, assetValue]) => {
+                    const lowerKey = String(key).toLowerCase();
+                    if (sentinelDownloadIgnoredKeywords.some((keyword) => lowerKey.includes(keyword))) {
+                        return;
+                    }
+                    const href = typeof assetValue === 'string'
+                        ? assetValue
+                        : (typeof assetValue?.href === 'string'
+                            ? assetValue.href
+                            : (typeof assetValue?.url === 'string' ? assetValue.url : null));
+                    if (!href) return;
+                    let score = 68;
+                    if (Array.isArray(assetValue?.roles)) {
+                        const roleScore = assetValue.roles.some((role) => ['data', 'download', 'product', 'analytic'].includes(String(role).toLowerCase()));
+                        if (roleScore) score += 20;
+                    }
+                    const type = typeof assetValue?.type === 'string' ? assetValue.type.toLowerCase() : '';
+                    if (type.includes('zip') || type.includes('safe') || type.includes('geotiff') || type.includes('jp2')) {
+                        score += 12;
+                    }
+                    if (/(data|product|tile|granule|image|scene)/.test(lowerKey)) {
+                        score += 6;
+                    }
+                    registerCandidate(href, score);
+                });
+
+                const propsAssets = props.assets;
+                if (propsAssets && typeof propsAssets === 'object' && !Array.isArray(propsAssets)) {
+                    Object.entries(propsAssets).forEach(([key, assetValue]) => {
+                        const lowerKey = String(key).toLowerCase();
+                        if (sentinelDownloadIgnoredKeywords.some((keyword) => lowerKey.includes(keyword))) {
+                            return;
+                        }
+                        if (typeof assetValue === 'string') {
+                            registerCandidate(assetValue, 66);
+                        } else if (assetValue && typeof assetValue === 'object') {
+                            if (typeof assetValue.href === 'string') {
+                                registerCandidate(assetValue.href, 66);
+                            }
+                            if (typeof assetValue.url === 'string') {
+                                registerCandidate(assetValue.url, 66);
+                            }
+                        }
+                    });
+                }
+
+                let bestUrl = null;
+                let bestScore = -Infinity;
+                candidateScores.forEach((score, url) => {
+                    if (score > bestScore) {
+                        bestScore = score;
+                        bestUrl = url;
+                    }
+                });
+
+                return bestUrl ?? null;
             };
 
             let sentinelPreviewController = null;
@@ -1225,6 +1411,28 @@
                     if (sentinelPreviewClearBtn) {
                         sentinelPreviewClearBtn.disabled = !hasSelection;
                     }
+
+                    if (sentinelPreviewDownloadBtn) {
+                        const downloadUrl = hasSelection ? state.current?.downloadUrl : null;
+                        if (downloadUrl) {
+                            const label = state.current?.productId || state.current?.baseTitle || 'Sentinel-2 scene';
+                            const downloadName = state.current?.downloadFilename
+                                || buildSentinelDownloadName(state.current?.productId, state.current?.baseTitle);
+
+                            sentinelPreviewDownloadBtn.classList.remove('hidden');
+                            sentinelPreviewDownloadBtn.setAttribute('href', downloadUrl);
+                            sentinelPreviewDownloadBtn.setAttribute('aria-disabled', 'false');
+                            sentinelPreviewDownloadBtn.setAttribute('title', `Download full scene for ${label}`);
+                            sentinelPreviewDownloadBtn.setAttribute('download', downloadName);
+                            sentinelPreviewDownloadBtn.tabIndex = 0;
+                        } else {
+                            sentinelPreviewDownloadBtn.classList.add('hidden');
+                            sentinelPreviewDownloadBtn.removeAttribute('href');
+                            sentinelPreviewDownloadBtn.removeAttribute('download');
+                            sentinelPreviewDownloadBtn.setAttribute('aria-disabled', 'true');
+                            sentinelPreviewDownloadBtn.tabIndex = -1;
+                        }
+                    }
                 };
 
                 const clearPreviewLayer = () => {
@@ -1309,6 +1517,9 @@
                         if (data.collection) detailParts.push(`Collection: ${data.collection}`);
                         const detailText = detailParts.join(' • ');
 
+                        const downloadFilename = data.downloadFilename
+                            ?? buildSentinelDownloadName(data.productId, title);
+
                         setPanelVisible(true);
                         setPanelContent({
                             title,
@@ -1342,7 +1553,9 @@
                             extent,
                             baseTitle: title,
                             baseAcquired: acquiredText,
-                            baseDetails: detailText
+                            baseDetails: detailText,
+                            downloadUrl: data.downloadUrl ?? null,
+                            downloadFilename
                         };
 
                         state.hasImage = Boolean(data.quicklookUrl && extent);
@@ -1506,6 +1719,7 @@
                 const datetimeEl = clone.querySelector('[data-sentinel-datetime]');
                 const detailEl = clone.querySelector('[data-sentinel-details]');
                 const previewButton = clone.querySelector('[data-sentinel-preview]');
+                const downloadButton = clone.querySelector('[data-sentinel-download]');
                 const thumbnailImg = clone.querySelector('[data-sentinel-thumbnail]');
                 const thumbnailPlaceholder = clone.querySelector('[data-sentinel-placeholder]');
 
@@ -1546,6 +1760,26 @@
                     assets?.thumbnail?.href ||
                     assets?.overview?.href ||
                     links.find(link => link.rel === 'preview')?.href;
+
+                const downloadUrl = resolveSentinelDownloadUrl(feature);
+                const downloadFilename = buildSentinelDownloadName(productId, titleText);
+
+                if (downloadButton) {
+                    if (downloadUrl) {
+                        downloadButton.classList.remove('hidden');
+                        downloadButton.setAttribute('href', downloadUrl);
+                        downloadButton.setAttribute('aria-disabled', 'false');
+                        downloadButton.setAttribute('title', `Download full scene for ${productText}`);
+                        downloadButton.setAttribute('download', downloadFilename);
+                        downloadButton.tabIndex = 0;
+                    } else {
+                        downloadButton.classList.add('hidden');
+                        downloadButton.setAttribute('href', '#');
+                        downloadButton.setAttribute('aria-disabled', 'true');
+                        downloadButton.removeAttribute('download');
+                        downloadButton.tabIndex = -1;
+                    }
+                }
 
                 if (thumbnailImg) {
                     if (quicklookUrl) {
@@ -1599,6 +1833,8 @@
                                 title: titleText,
                                 productId,
                                 quicklookUrl,
+                                downloadUrl,
+                                downloadFilename,
                                 geometry: feature?.geometry,
                                 bbox: bboxArray,
                                 acquisitionDate,
