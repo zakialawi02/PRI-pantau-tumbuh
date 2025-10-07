@@ -177,7 +177,7 @@
             </section>
 
             <!-- ========== SENTINEL COLLECTION PANEL ========== -->
-            <section class="flex hidden h-full flex-col shadow-xl" id="sentinel-panel" data-sentinel-token="{{ $copernicusAccessToken ?? '' }}" data-sentinel-credentials="{{ ($copernicusCredentialsConfigured ?? false) ? 'true' : 'false' }}">
+            <section class="flex hidden h-full flex-col shadow-xl" id="sentinel-panel" data-sentinel-token="{{ $copernicusAccessToken ?? '' }}" data-sentinel-credentials="{{ $copernicusCredentialsConfigured ?? false ? 'true' : 'false' }}">
                 <div class="bg-background border-foreground/10 sticky top-0 z-20 flex items-center justify-between border-b p-2">
                     <h2 class="text-lg font-bold">🛰️ Sentinel-2 Collections</h2>
                     <button class="hover:bg-foreground/20 bg-foreground/10 rounded px-2 py-1 text-sm" onclick="closePanels()">✖</button>
@@ -219,7 +219,7 @@
                             </button>
                         </div>
                     </form>
-                    <div class="mt-4 space-y-1.5 rounded-xl border border-foreground/10 bg-background/60 p-3 text-xs">
+                    <div class="border-foreground/10 bg-background/60 mt-4 space-y-1.5 rounded-xl border p-3 text-xs">
                         @if ($copernicusAccessToken)
                             <p class="text-foreground/70 text-[11px] leading-snug">
                                 Full-scene downloads use a Copernicus access token requested automatically from the configured client credentials. Tokens rotate roughly every hour; ensure the credentials remain active to keep downloads available.
@@ -270,14 +270,7 @@
                             </div>
                         </div>
                         <div class="mt-3 flex flex-wrap gap-2" data-sentinel-actions>
-                            <a
-                                class="bg-primary text-background hover:bg-primary/90 hidden inline-flex items-center space-x-1 rounded-lg px-2 py-1 text-xs font-semibold transition"
-                                data-sentinel-download
-                                href="#"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                aria-disabled="true"
-                            >
+                            <a class="bg-primary text-background hover:bg-primary/90 inline-flex hidden items-center space-x-1 rounded-lg px-2 py-1 text-xs font-semibold transition" data-sentinel-download href="#" aria-disabled="true" target="_blank" rel="noopener noreferrer">
                                 <i class="ri-download-cloud-2-line"></i>
                                 <span>Download Scene</span>
                             </a>
@@ -526,29 +519,22 @@
 
             <!-- Sentinel Preview Panel -->
             <div class="absolute left-2 right-2 top-[6.5rem] z-40 flex justify-end sm:left-auto sm:right-2 sm:w-80">
-                <div class="pointer-events-auto hidden w-full max-w-md rounded-xl border border-foreground/15 bg-background/95 p-3 text-xs shadow-lg backdrop-blur supports-[backdrop-filter]:bg-background/70" id="sentinelPreviewPanel">
+                <div class="border-foreground/15 bg-background/95 supports-[backdrop-filter]:bg-background/70 pointer-events-auto hidden w-full max-w-md rounded-xl border p-3 text-xs shadow-lg backdrop-blur" id="sentinelPreviewPanel">
                     <div class="flex items-start justify-between gap-2">
                         <div class="space-y-1">
-                            <p class="text-[10px] font-semibold uppercase tracking-wide text-primary">Sentinel-2 Preview</p>
+                            <p class="text-primary text-[10px] font-semibold uppercase tracking-wide">Sentinel-2 Preview</p>
                             <p class="text-foreground text-sm font-semibold leading-tight" data-sentinel-preview-title>–</p>
                             <p class="text-foreground/70 text-xs leading-tight" data-sentinel-preview-acquired>Select a collection to preview on the map.</p>
-                            <p class="text-foreground/60 text-xs leading-tight hidden" data-sentinel-preview-details></p>
+                            <p class="text-foreground/60 hidden text-xs leading-tight" data-sentinel-preview-details></p>
                         </div>
-                        <button class="text-foreground/50 transition hover:text-foreground" id="sentinelPreviewClearBtn" type="button">
+                        <button class="text-foreground/50 hover:text-foreground transition" id="sentinelPreviewClearBtn" type="button">
                             <i class="ri-close-line text-base"></i>
                             <span class="sr-only">Clear Sentinel preview</span>
                         </button>
                     </div>
                     <p class="text-foreground/70 mt-2 text-xs" data-sentinel-preview-status>Awaiting preview selection.</p>
                     <div class="mt-2 flex flex-wrap gap-1.5" id="sentinelPreviewActions">
-                        <a
-                            class="bg-primary text-background hover:bg-primary/90 hidden inline-flex items-center space-x-1 rounded-lg px-2 py-1 text-xs font-semibold transition"
-                            id="sentinelPreviewDownloadBtn"
-                            href="#"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            aria-disabled="true"
-                        >
+                        <a class="bg-primary text-background hover:bg-primary/90 inline-flex hidden items-center space-x-1 rounded-lg px-2 py-1 text-xs font-semibold transition" id="sentinelPreviewDownloadBtn" href="#" aria-disabled="true" target="_blank" rel="noopener noreferrer">
                             <i class="ri-download-cloud-2-line text-sm"></i>
                             <span>Download Scene</span>
                         </a>
@@ -556,7 +542,7 @@
                             <i class="ri-eye-off-line text-sm"></i>
                             <span>Hide Preview</span>
                         </button>
-                        <button class="bg-primary text-background hover:bg-primary/90 hidden inline-flex items-center space-x-1 rounded-lg px-2 py-1 text-xs font-semibold transition" id="sentinelPreviewShowBtn" type="button">
+                        <button class="bg-primary text-background hover:bg-primary/90 inline-flex hidden items-center space-x-1 rounded-lg px-2 py-1 text-xs font-semibold transition" id="sentinelPreviewShowBtn" type="button">
                             <i class="ri-eye-line text-sm"></i>
                             <span>Unhide Preview</span>
                         </button>
