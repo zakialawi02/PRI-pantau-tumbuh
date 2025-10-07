@@ -94,8 +94,58 @@ function formatCustomDate(
         return fallback;
     }
 }
+
+/**
+ * Formats a Date object into an ISO date string (YYYY-MM-DD) adjusted for the local timezone.
+ *
+ * This function takes a Date object and returns a string representation of the date
+ * in ISO format (YYYY-MM-DD), ensuring the date is adjusted for the local timezone.
+ * If the input is not a valid Date object, it returns an empty string.
+ *
+ * @param {Date} date - The Date object to format
+ * @returns {string} The formatted date string in YYYY-MM-DD format, or an empty string if input is invalid
+ *
+ * @example
+ * formatISODate(new Date("2023-12-01T10:30:00Z")) // Returns "2023-12-01" (adjusted for local timezone)
+ * formatISODate("invalid date") // Returns ""
+ */
+function formatISODate(date) {
+    if (!(date instanceof Date)) return "";
+    const copy = new Date(date.getTime());
+    copy.setMinutes(copy.getMinutes() - copy.getTimezoneOffset());
+    return copy.toISOString().split("T")[0];
+}
+
+/**
+ * Formats a date string into a readable medium-style date with short time format.
+ *
+ * @param {string|Date|null|undefined} value - The date string or Date object to format
+ * @returns {string} A formatted date string in medium date format with short time format,
+ *                   or "Unknown date" if value is falsy,
+ *                   or the original value if it cannot be parsed as a valid date
+ *
+ * @example
+ * formatReadableDate("2023-12-01T10:30:00Z") // Returns "1 Des 2023 10.30 UTC"
+ * formatReadableDate(null) // Returns "Unknown date"
+ * formatReadableDate("invalid-date") // Returns "invalid-date"
+ */
+function formatReadableDate(value) {
+    if (!value) return "Unknown date";
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return value;
+    return (
+        parsed.toLocaleString("id-ID", {
+            dateStyle: "medium",
+            timeStyle: "short",
+            timeZone: "UTC",
+        }) + " UTC"
+    );
+}
+
 window.timeAgo = timeAgo;
 window.formatCustomDate = formatCustomDate;
+window.formatISODate = formatISODate;
+window.formatReadableDate = formatReadableDate;
 
 /**
  * Formats a number into a currency string based on the specified locale and currency code.

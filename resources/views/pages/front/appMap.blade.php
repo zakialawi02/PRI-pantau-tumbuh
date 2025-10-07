@@ -183,64 +183,51 @@
                     <button class="hover:bg-foreground/20 bg-foreground/10 rounded px-2 py-1 text-sm" onclick="closePanels()">✖</button>
                 </div>
 
-                <div class="panel-content flex-1 space-y-3 overflow-y-auto p-2">
-                    <form class="bg-background/60 border-foreground/10 rounded-lg border p-2.5 shadow-sm" id="sentinelFilterForm">
+                <div class="panel-content flex-1 space-y-1 overflow-y-auto p-2">
+                    <form class="bg-background/60 border-foreground/10 rounded-lg border p-2 shadow-sm" id="sentinelFilterForm">
                         <div class="mb-1.5 flex items-center justify-between">
                             <h3 class="text-foreground text-sm font-semibold">Filter Collections</h3>
                             <button class="text-foreground/60 hover:text-primary text-xs font-medium transition" id="sentinelFilterResetButton" type="button">
                                 Reset
                             </button>
                         </div>
-                        <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                            <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="sentinelCloudFilter">
-                                <span>Max Cloud Cover (%)</span>
-                                <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-3 py-1.5 text-sm focus:outline-none focus:ring" id="sentinelCloudFilter" name="cloud-cover" type="number" value="40" max="100" min="0" placeholder="e.g. 30" step="1" />
-                            </label>
-                            <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="sentinelLatFilter">
-                                <span>Latitude</span>
-                                <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-3 py-1.5 text-sm focus:outline-none focus:ring" id="sentinelLatFilter" name="latitude" type="number" value="-1.24536" max="90" min="-90" placeholder="e.g. -6.2" step="0.000001" />
-                            </label>
-                            <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="sentinelLonFilter">
-                                <span>Longitude</span>
-                                <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-3 py-1.5 text-sm focus:outline-none focus:ring" id="sentinelLonFilter" name="longitude" type="number" value="114.54535" max="180" min="-180" placeholder="e.g. 106.8" step="0.000001" />
-                            </label>
-                            <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="sentinelProductLevel">
-                                <span>Product Level</span>
-                                <select class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-3 py-1.5 text-sm focus:outline-none focus:ring" id="sentinelProductLevel" name="product-level">
-                                    <option value="S2MSI2A" selected>Level-2A (Surface Reflectance)</option>
-                                    <option value="S2MSI1C">Level-1C (Top-of-Atmosphere)</option>
-                                </select>
-                            </label>
+                        <div class="flex flex-col space-y-1">
+                            <div class="grid grid-cols-2 gap-1">
+                                <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="sentinelCloudFilter">
+                                    <span>Max Cloud Cover (%)</span>
+                                    <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-1.5 py-0.5 text-sm focus:outline-none focus:ring" id="sentinelCloudFilter" name="cloud-cover" type="number" value="40" max="100" min="0" placeholder="e.g. 30" step="1" />
+                                </label>
+                                <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="sentinelProductLevel">
+                                    <span>Product Level</span>
+                                    <select class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-1.5 py-0.5 text-sm focus:outline-none focus:ring" id="sentinelProductLevel" name="product-level">
+                                        <option value="S2MSI2A" selected>Level-2A (Surface Reflectance)</option>
+                                        <option value="S2MSI1C">Level-1C (Top-of-Atmosphere)</option>
+                                    </select>
+                                </label>
+                            </div>
+                            <div class="grid grid-cols-1 gap-1">
+                                <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="sentinelLatFilter">
+                                    <span>Latitude</span>
+                                    <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-1.5 py-0.5 text-sm focus:outline-none focus:ring" id="sentinelLatFilter" name="latitude" type="number" value="-1.24536" max="90" min="-90" placeholder="e.g. -6.2" step="0.000001" />
+                                </label>
+                                <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="sentinelLonFilter">
+                                    <span>Longitude</span>
+                                    <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-1.5 py-0.5 text-sm focus:outline-none focus:ring" id="sentinelLonFilter" name="longitude" type="number" value="114.54535" max="180" min="-180" placeholder="e.g. 106.8" step="0.000001" />
+                                </label>
+                            </div>
                         </div>
-                        <p class="text-foreground/60 mt-1.5 text-[11px]">Provide both latitude and longitude to focus on a specific location, or clear both fields to search globally.</p>
-                        <div class="mt-2 flex flex-wrap gap-1.5">
+                        <p class="text-foreground/60 text-[11px]">Provide both latitude and longitude to focus on a specific location, or clear both fields to search globally.</p>
+                        <div class="mt-1 flex flex-wrap gap-1.5">
                             <button class="bg-primary hover:bg-primary/90 text-background inline-flex items-center justify-center rounded-lg px-3 py-1.5 text-xs font-semibold transition" type="submit">
                                 Apply Filters
                             </button>
                         </div>
                     </form>
-                    <div class="border-foreground/10 bg-background/60 mt-4 space-y-1.5 rounded-xl border p-3 text-xs">
-                        @if ($copernicusAccessToken)
-                            <p class="text-foreground/70 text-[11px] leading-snug">
-                                Full-scene downloads use a Copernicus access token requested automatically from the configured client credentials. Tokens rotate roughly every hour; ensure the credentials remain active to keep downloads available.
-                            </p>
-                        @elseif (!empty($copernicusCredentialsConfigured))
-                            <p class="text-foreground text-xs font-semibold uppercase tracking-wide">Copernicus token unavailable</p>
-                            <p class="text-foreground/70 mt-0.5 text-[11px] leading-snug">
-                                The application could not exchange the configured client credentials for an access token. Verify the client ID and secret on the server and check the logs for additional details.
-                            </p>
-                        @else
-                            <p class="text-foreground text-xs font-semibold uppercase tracking-wide">Copernicus access token missing</p>
-                            <p class="text-foreground/70 mt-0.5 text-[11px] leading-snug">
-                                Set the <code>COPERNICUS_CLIENT_ID</code> and <code>COPERNICUS_CLIENT_SECRET</code> environment variables to enable Sentinel-2 scene downloads.
-                            </p>
-                        @endif
-                    </div>
 
                     <div class="text-foreground/70 mt-4 text-sm" id="sentinelCollectionStatus">
                         Loading latest Sentinel-2 acquisitions...
                     </div>
-                    <div class="space-y-2.5" id="sentinelCollectionList"></div>
+                    <div class="mt-2 space-y-2" id="sentinelCollectionList"></div>
                 </div>
 
                 <div class="bg-background border-foreground/10 sticky bottom-0 border-t p-3">
@@ -253,9 +240,9 @@
                 </div>
 
                 <template id="sentinelCollectionTemplate">
-                    <div class="sentinel-card border-foreground/20 bg-background/60 flex flex-col rounded-xl border p-3 shadow-sm transition-all duration-200 hover:shadow-md">
-                        <div class="flex items-start space-x-3">
-                            <div class="border-foreground/10 bg-muted text-foreground/50 flex h-16 w-16 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border" data-sentinel-thumb>
+                    <div class="sentinel-card border-foreground/20 bg-background/60 flex flex-col rounded-xl border p-2 shadow-sm transition-all duration-200 hover:shadow-md">
+                        <div class="flex items-start space-x-2">
+                            <div class="border-foreground/10 bg-muted text-foreground/50 h-15 w-15 flex flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border" data-sentinel-thumb>
                                 <img class="hidden h-full w-full object-cover" data-sentinel-thumbnail alt="Sentinel-2 preview" />
                                 <div class="flex flex-col items-center text-[10px] font-medium" data-sentinel-placeholder>
                                     <i class="ri-landscape-line text-lg"></i>
@@ -269,7 +256,7 @@
                                 <p class="text-foreground/60 break-words text-xs" data-sentinel-details>Tile • Cloud cover</p>
                             </div>
                         </div>
-                        <div class="mt-3 flex flex-wrap gap-2" data-sentinel-actions>
+                        <div class="mt-2 flex flex-wrap gap-1" data-sentinel-actions>
                             <a class="bg-primary text-background hover:bg-primary/90 inline-flex hidden items-center space-x-1 rounded-lg px-2 py-1 text-xs font-semibold transition" data-sentinel-download href="#" aria-disabled="true" target="_blank" rel="noopener noreferrer">
                                 <i class="ri-download-cloud-2-line"></i>
                                 <span>Download Scene</span>
@@ -763,8 +750,242 @@
 
     @push('javascript')
         <script>
-            // Cache references to all uploader related DOM elements so the bootstrap logic can short-circuit
-            // gracefully when the template is rendered without the upload form.
+            const panelWrapper = document.getElementById("panel-wrapper");
+            const panels = document.querySelectorAll("#panel-wrapper section");
+            const sidebarButtons = document.querySelectorAll(".sidebar-btn");
+            const scrollContainer = document.getElementById('scroll-container');
+            const scrollLeftBtn = document.getElementById('scroll-left');
+            const scrollRightBtn = document.getElementById('scroll-right');
+
+
+            const scrollAmount = 150; // pixels per click
+
+            // Mobile nav arrows scroll the horizontal chip list into view.
+            scrollLeftBtn.addEventListener('click', () => {
+                scrollContainer.scrollBy({
+                    left: -scrollAmount,
+                    behavior: 'smooth'
+                });
+            });
+
+            scrollRightBtn.addEventListener('click', () => {
+                scrollContainer.scrollBy({
+                    left: scrollAmount,
+                    behavior: 'smooth'
+                });
+            });
+
+            // Optional: drag/grab to scroll
+            let isDown = false;
+            let startX;
+            let scrollLeft;
+
+            // Enable click-and-drag scrolling for a smoother touchpad-like experience on desktop.
+            scrollContainer.addEventListener('mousedown', (e) => {
+                isDown = true;
+                scrollContainer.classList.add('cursor-grabbing');
+                startX = e.pageX - scrollContainer.offsetLeft;
+                scrollLeft = scrollContainer.scrollLeft;
+            });
+
+            scrollContainer.addEventListener('mouseleave', () => {
+                isDown = false;
+                scrollContainer.classList.remove('cursor-grabbing');
+            });
+
+            scrollContainer.addEventListener('mouseup', () => {
+                isDown = false;
+                scrollContainer.classList.remove('cursor-grabbing');
+            });
+
+            scrollContainer.addEventListener('mousemove', (e) => {
+                if (!isDown) return;
+                e.preventDefault();
+                const x = e.pageX - scrollContainer.offsetLeft;
+                const walk = (x - startX) * 2; // scroll-fast
+                scrollContainer.scrollLeft = scrollLeft - walk;
+            });
+
+            // Toggle the requested panel and ensure the wrapper animates correctly for the viewport size.
+            function showPanel(id, btn = null) {
+                const isMobile = window.innerWidth < 768;
+
+                panels.forEach(p => p.classList.add("hidden"));
+                const targetPanel = document.getElementById(id);
+                targetPanel.classList.remove("hidden");
+
+                sidebarButtons.forEach(b => b.classList.remove("active"));
+                if (btn) btn.classList.add("active");
+                else {
+                    const matchedBtn = Array.from(sidebarButtons).find(b => b.getAttribute("onclick")?.includes(id));
+                    if (matchedBtn) matchedBtn.classList.add("active");
+                }
+
+                if (isMobile) {
+                    // reset posisi
+                    panelWrapper.classList.remove("translate-y-full");
+                    panelWrapper.classList.add("translate-y-0");
+
+                    // animasi slide-up
+                    panelWrapper.classList.remove("slide-down");
+                    panelWrapper.classList.add("slide-up");
+                } else {
+                    panelWrapper.classList.remove("w-0", "md:w-0");
+                    panelWrapper.classList.add("w-80", "md:w-80");
+                }
+
+                panelWrapper.dataset.activePanel = id;
+
+                if (id === 'sentinel-panel' && !sentinelLoadedOnce) {
+                    loadSentinelCollections();
+                }
+            }
+
+            // Collapse the panel wrapper and clear active states.
+            function closePanels() {
+                const isMobile = window.innerWidth < 768;
+
+                panels.forEach(p => p.classList.add("hidden"));
+                sidebarButtons.forEach(b => b.classList.remove("active"));
+                delete panelWrapper.dataset.activePanel;
+
+                if (isMobile) {
+                    // animasi slide-down
+                    panelWrapper.classList.remove("slide-up");
+                    panelWrapper.classList.add("slide-down");
+
+                    // setelah animasi selesai (500ms), sembunyikan sepenuhnya
+                    setTimeout(() => {
+                        panelWrapper.classList.remove("translate-y-0");
+                        panelWrapper.classList.add("translate-y-full");
+                    }, 480);
+                } else {
+                    panelWrapper.classList.remove("w-80", "md:w-80");
+                    panelWrapper.classList.add("w-0", "md:w-0");
+                }
+            }
+
+
+            // === DEFAULT STATE saat halaman load ===
+            // Open the default panel on load and fetch the initial Sentinel catalogue.
+            window.addEventListener("DOMContentLoaded", () => {
+                const defaultPanel = 'data-panel';
+                const isMobile = window.innerWidth < 768;
+
+                const defaultBtn = isMobile ?
+                    document.querySelector(`#scroll-container .sidebar-btn[onclick*='${defaultPanel}']`) :
+                    document.querySelector(`aside .sidebar-btn[onclick*='${defaultPanel}']`);
+
+                showPanel(defaultPanel, defaultBtn);
+
+                if (!sentinelLoadedOnce) {
+                    loadSentinelCollections();
+                }
+            });
+
+            // === RESPONSIVE HANDLER: SYNC STATE SAAT RESIZE ===
+            // Reconcile mobile/desktop panel classes whenever the viewport size changes.
+            window.addEventListener("resize", () => {
+                const isMobile = window.innerWidth < 768;
+                const activePanel = panelWrapper.dataset.activePanel;
+
+                // Jika tidak ada panel aktif (semua ditutup), keluar saja
+                if (!activePanel) {
+                    // Pastikan panel wrapper tertutup di semua mode
+                    panelWrapper.classList.add("translate-y-full");
+                    panelWrapper.classList.remove("translate-y-0", "w-80", "md:w-80");
+                    return;
+                }
+
+                // Hapus semua class transisi yang bisa bentrok
+                panelWrapper.classList.remove("slide-up", "slide-down");
+
+                if (isMobile) {
+                    // mobile mode: gunakan slide-up style
+                    panelWrapper.classList.remove("w-0", "md:w-0", "w-80", "md:w-80");
+                    panelWrapper.classList.remove("translate-y-full");
+                    panelWrapper.classList.add("translate-y-0", "opacity-100");
+                } else {
+                    // desktop mode: gunakan lebar tetap (sidebar style)
+                    panelWrapper.classList.remove("translate-y-full", "translate-y-0");
+                    panelWrapper.classList.add("w-80", "md:w-80", "opacity-100");
+                }
+
+                // perbarui tombol active sesuai mode baru
+                const activeBtn = isMobile ?
+                    document.querySelector(`#scroll-container .sidebar-btn[onclick*='${activePanel}']`) :
+                    document.querySelector(`aside .sidebar-btn[onclick*='${activePanel}']`);
+
+                sidebarButtons.forEach(b => b.classList.remove("active"));
+                if (activeBtn) activeBtn.classList.add("active");
+            });
+
+
+            // Buy Satellite Button Event
+            document.getElementById('buySatelliteBtn')?.addEventListener('click', function() {
+                const buyingPanel = document.getElementById('buyingPanel');
+                buyingPanel.classList.remove('hidden');
+            });
+            document.getElementById('buyingPanelCloseBtn')?.addEventListener('click', function() {
+                const buyingPanel = document.getElementById('buyingPanel');
+                buyingPanel.classList.add('hidden');
+            });
+
+
+            // Price calculation functions, estimates for the purchase panel.
+            function calculateTotalPrice() {
+                // Get area from global variable (set when polygon is drawn)
+                const areaInSquareMeters = window.geojsonArea || 0;
+                const areaInHectares = areaInSquareMeters / 10000; // Convert m² to hectares
+
+                // Calculate credit points needed (using global constant rate)
+                const creditPointsNeeded = areaInHectares * {{ config('app-constants.imagery_credit_cost_per_hectare') }};
+
+                // Update the display
+                const totalPriceElement = document.getElementById('total_price');
+                const priceContainer = totalPriceElement.parentElement;
+
+                if (areaInHectares > 0) {
+                    totalPriceElement.innerHTML = `
+                        <div class="flex justify-between items-center">
+                            <span class="text-lg font-bold text-green-700">${formatNumber(creditPointsNeeded.toFixed(2))} Credit Points</span>
+                            <i class="ri-coins-line font-base text-success text-xl"></i>
+                        </div>
+                        <div class="text-xs text-foreground-70 mt-1">
+                            ${formatNumber(areaInHectares)} hectares × {{ Number::format(config('app-constants.imagery_credit_cost_per_hectare'), locale: app()->getLocale()) }} credit points/hectare
+                        </div>
+                    `;
+                    priceContainer.classList.remove('bg-muted/60', 'border-muted');
+                    priceContainer.classList.add('bg-green-50', 'border-green-300', 'shadow-sm');
+
+                    // Add a subtle animation
+                    priceContainer.style.transform = 'scale(1.02)';
+                    setTimeout(() => {
+                        priceContainer.style.transform = 'scale(1)';
+                    }, 200);
+                } else {
+                    totalPriceElement.innerHTML = `
+                        <div class="flex items-center text-foreground/50">
+                            <i class="ri-information-line mr-2"></i>
+                            Draw an area to calculate credit points
+                        </div>
+                    `;
+                    priceContainer.classList.remove('bg-green-50', 'border-green-300', 'shadow-sm', 'bg-amber-50', 'border-amber-300');
+                    priceContainer.classList.add('bg-muted/60', 'border-muted');
+                }
+
+                // Add transition for smooth color changes
+                priceContainer.style.transition = 'all 0.3s ease-in-out';
+            }
+
+            // Make calculateTotalPrice available globally for map.js
+            window.calculateTotalPrice = calculateTotalPrice;
+        </script>
+    @endpush
+
+    @push('javascript')
+        <script>
+            // All uploader related DOM elements
             const sourceInput = document.getElementById('sourceType');
             const fileInput = document.getElementById('fileInput');
             const fileInfo = document.getElementById('fileInfo');
@@ -789,7 +1010,6 @@
 
             // Quickly verify whether every required element exists before wiring up listeners.
             const uploaderReady = Object.values(uploaderElements).every((element) => Boolean(element));
-
             if (!uploaderReady) {
                 console.warn('Imagery uploader controls missing. Skipping uploader bootstrap.', {
                     hasSourceInput: Boolean(sourceInput),
@@ -803,7 +1023,6 @@
                     hasMyDataContainer: Boolean(myDataContainer)
                 });
             } else {
-                // === STATE ===
                 // Track upload state locally so we can update the UI without querying the server.
                 let paused = false;
                 let uploading = false;
@@ -819,8 +1038,7 @@
                 setButtonState("idle");
                 loadMyData();
 
-                // === FILE SELECT ===
-                // Respond to a new file selection by updating the summary row and enabling the CTA.
+                // On input imagery file, updating the summary row and element.
                 fileInput.addEventListener("change", (e) => {
                     file = e.target.files[0];
                     if (!file) return;
@@ -830,9 +1048,9 @@
 
                     fileInfo.classList.remove("hidden");
                     fileInfo.innerHTML = `
-                <strong>Name:</strong> ${shortName}<br>
-                <strong>Size:</strong> ${sizeMB} MB
-            `;
+                        <strong>Name:</strong> ${shortName}<br>
+                        <strong>Size:</strong> ${sizeMB} MB
+                    `;
 
                     progressText.textContent = "✅ File ready to upload. Click 'Start Upload' to begin.";
                     progressBar.style.width = "0%";
@@ -840,8 +1058,7 @@
                     setButtonState("ready");
                 });
 
-                // === START UPLOAD ===
-                // Kick off a new chunked upload session with a pseudo-random upload id.
+                //  Start upload session with a pseudo-random upload id.
                 startBtn.addEventListener("click", () => {
                     if (!file) {
                         MyZkToast.warning("Please select a file first!");
@@ -862,8 +1079,7 @@
                     uploadNextChunk();
                 });
 
-                // === PAUSE ===
-                // Pause simply flips the flags so the recursive chunk uploader stops itself.
+                // Pause upload, flips the flags so the recursive chunk uploader stops itself.
                 pauseBtn.addEventListener("click", () => {
                     if (!uploading) return;
                     paused = true;
@@ -873,8 +1089,7 @@
                     setButtonState("paused");
                 });
 
-                // === RESUME ===
-                // Resume restarts the chunk loop without reinitialising counters or the upload id.
+                // Resume upload without reinitialising counters or the upload id.
                 resumeBtn.addEventListener("click", () => {
                     if (!file) return;
                     paused = false;
@@ -885,8 +1100,7 @@
                     uploadNextChunk();
                 });
 
-                // === UPLOAD CHUNK FUNCTION ===
-                // Upload the next file segment, retrying transient failures with exponential back-off.
+                // Upload the next chunk of the file, retrying transient failures with exponential back-off.
                 async function uploadNextChunk(retryCount = 0) {
                     if (paused || !file) return;
 
@@ -952,7 +1166,6 @@
                     }
                 }
 
-                // === MERGE CHUNKS FUNCTION ===
                 // Ask the backend to merge all uploaded chunks and register the final file metadata.
                 async function mergeChunks() {
                     setButtonState("merging");
@@ -962,7 +1175,7 @@
                     formData.append("upload_id", uploadId);
                     formData.append("filename", file.name);
                     formData.append("total_chunks", totalChunks);
-                    formData.append("source_type", sourceType); // Add source type to form data
+                    formData.append("source_type", sourceType);
 
                     try {
                         const res = await fetch('{{ route('upload.merge') }}', {
@@ -994,7 +1207,6 @@
                     }
                 }
 
-                // === AUTO RESET ===
                 // Reset the form state a few seconds after a successful or failed upload.
                 function autoReset() {
                     setTimeout(() => {
@@ -1007,14 +1219,13 @@
                     }, 4000);
                 }
 
-                // === LOAD MY DATA ===
-                // Fetch the authenticated user imagery list and render each entry with the template card.
+                // LOAD MY DATA, Fetch the authenticated user imagery list and render each entry with the template card.
                 async function loadMyData() {
                     myDataContainer.innerHTML = `
-                <div class="flex justify-center py-4">
-                    <p class="text-sm text-foreground/60 animate-pulse">Loading your imagery list...</p>
-                </div>
-            `;
+                    <div class="flex justify-center py-4">
+                        <p class="text-sm text-foreground/60 animate-pulse">Loading your imagery list...</p>
+                    </div>
+                `;
 
                     try {
                         const res = await fetch('{{ route('imagery.list') }}');
@@ -1059,39 +1270,11 @@
                         <div class="text-sm text-red-500 bg-red-50 border border-red-200 rounded p-3">
                             ❌ ${err.message}
                         </div>
-                    `;
+                        `;
                     }
                 }
 
             }
-
-            // === TAB FUNCTIONALITY ===
-            // Basic tab switcher for the pricing calculator and upload helper sections.
-            function initTabFunctionality() {
-                const tabButtons = document.querySelectorAll('.tab-btn');
-                const tabContents = document.querySelectorAll('.tab-content');
-
-                tabButtons.forEach(button => {
-                    button.addEventListener('click', () => {
-                        // Remove active class from all buttons and contents
-                        tabButtons.forEach(btn => btn.classList.remove('active'));
-                        tabContents.forEach(content => content.classList.remove('active'));
-
-                        // Add active class to clicked button
-                        button.classList.add('active');
-
-                        // Show corresponding content
-                        const tabId = button.getAttribute('data-tab');
-                        const content = document.getElementById(tabId);
-                        if (content) {
-                            content.classList.add('active');
-                        }
-                    });
-                });
-            }
-
-            // Initialize tab functionality when DOM is loaded
-            document.addEventListener('DOMContentLoaded', initTabFunctionality);
 
             // === HELPER FUNCTIONS ===
             // Centralised place to toggle the uploader button states for each lifecycle stage.
@@ -1142,14 +1325,7 @@
 
     @push('javascript')
         <script>
-            // === MAP PANEL & SENTINEL CATALOG CONTROLLER ===
-            // Everything below wires the sliding panels, Sentinel catalogue list and OpenLayers preview workflow.
-            const panelWrapper = document.getElementById("panel-wrapper");
-            const panels = document.querySelectorAll("#panel-wrapper section");
-            const sidebarButtons = document.querySelectorAll(".sidebar-btn");
-            const scrollContainer = document.getElementById('scroll-container');
-            const scrollLeftBtn = document.getElementById('scroll-left');
-            const scrollRightBtn = document.getElementById('scroll-right');
+            // All sentinel related DOM elements and default variables
             const sentinelStatus = document.getElementById('sentinelCollectionStatus');
             const sentinelList = document.getElementById('sentinelCollectionList');
             const sentinelTemplate = document.getElementById('sentinelCollectionTemplate');
@@ -1177,28 +1353,6 @@
             const defaultLatitude = -1.24536;
             const defaultLongitude = 114.54535;
             const defaultProductType = 'S2MSI2A';
-
-            const scrollAmount = 150; // pixels per click
-
-            // Format helper so Sentinel catalogue requests align with the API expectation.
-            const formatISODate = (date) => {
-                if (!(date instanceof Date)) return '';
-                const copy = new Date(date.getTime());
-                copy.setMinutes(copy.getMinutes() - copy.getTimezoneOffset());
-                return copy.toISOString().split('T')[0];
-            };
-
-            // Convert Sentinel timestamps to a human friendly format for the card and preview overlays.
-            const formatReadableDate = (value) => {
-                if (!value) return 'Unknown date';
-                const parsed = new Date(value);
-                if (Number.isNaN(parsed.getTime())) return value;
-                return parsed.toLocaleString('id-ID', {
-                    dateStyle: 'medium',
-                    timeStyle: 'short',
-                    timeZone: 'UTC'
-                }) + ' UTC';
-            };
 
             // Sentinel responses store cloud cover as a float, ensure consistent text output.
             const formatCloudCover = (value) => {
@@ -2577,229 +2731,6 @@
                     loadSentinelCollections(true);
                 });
             }
-
-            // Mobile nav arrows scroll the horizontal chip list into view.
-            scrollLeftBtn.addEventListener('click', () => {
-                scrollContainer.scrollBy({
-                    left: -scrollAmount,
-                    behavior: 'smooth'
-                });
-            });
-
-            scrollRightBtn.addEventListener('click', () => {
-                scrollContainer.scrollBy({
-                    left: scrollAmount,
-                    behavior: 'smooth'
-                });
-            });
-
-            // Optional: drag/grab to scroll
-            let isDown = false;
-            let startX;
-            let scrollLeft;
-
-            // Enable click-and-drag scrolling for a smoother touchpad-like experience on desktop.
-            scrollContainer.addEventListener('mousedown', (e) => {
-                isDown = true;
-                scrollContainer.classList.add('cursor-grabbing');
-                startX = e.pageX - scrollContainer.offsetLeft;
-                scrollLeft = scrollContainer.scrollLeft;
-            });
-
-            scrollContainer.addEventListener('mouseleave', () => {
-                isDown = false;
-                scrollContainer.classList.remove('cursor-grabbing');
-            });
-
-            scrollContainer.addEventListener('mouseup', () => {
-                isDown = false;
-                scrollContainer.classList.remove('cursor-grabbing');
-            });
-
-            scrollContainer.addEventListener('mousemove', (e) => {
-                if (!isDown) return;
-                e.preventDefault();
-                const x = e.pageX - scrollContainer.offsetLeft;
-                const walk = (x - startX) * 2; // scroll-fast
-                scrollContainer.scrollLeft = scrollLeft - walk;
-            });
-
-            // Toggle the requested panel and ensure the wrapper animates correctly for the viewport size.
-            function showPanel(id, btn = null) {
-                const isMobile = window.innerWidth < 768;
-
-                panels.forEach(p => p.classList.add("hidden"));
-                const targetPanel = document.getElementById(id);
-                targetPanel.classList.remove("hidden");
-
-                sidebarButtons.forEach(b => b.classList.remove("active"));
-                if (btn) btn.classList.add("active");
-                else {
-                    const matchedBtn = Array.from(sidebarButtons).find(b => b.getAttribute("onclick")?.includes(id));
-                    if (matchedBtn) matchedBtn.classList.add("active");
-                }
-
-                if (isMobile) {
-                    // reset posisi
-                    panelWrapper.classList.remove("translate-y-full");
-                    panelWrapper.classList.add("translate-y-0");
-
-                    // animasi slide-up
-                    panelWrapper.classList.remove("slide-down");
-                    panelWrapper.classList.add("slide-up");
-                } else {
-                    panelWrapper.classList.remove("w-0", "md:w-0");
-                    panelWrapper.classList.add("w-80", "md:w-80");
-                }
-
-                panelWrapper.dataset.activePanel = id;
-
-                if (id === 'sentinel-panel' && !sentinelLoadedOnce) {
-                    loadSentinelCollections();
-                }
-            }
-
-            // Collapse the panel wrapper and clear active states.
-            function closePanels() {
-                const isMobile = window.innerWidth < 768;
-
-                panels.forEach(p => p.classList.add("hidden"));
-                sidebarButtons.forEach(b => b.classList.remove("active"));
-                delete panelWrapper.dataset.activePanel;
-
-                if (isMobile) {
-                    // animasi slide-down
-                    panelWrapper.classList.remove("slide-up");
-                    panelWrapper.classList.add("slide-down");
-
-                    // setelah animasi selesai (500ms), sembunyikan sepenuhnya
-                    setTimeout(() => {
-                        panelWrapper.classList.remove("translate-y-0");
-                        panelWrapper.classList.add("translate-y-full");
-                    }, 480);
-                } else {
-                    panelWrapper.classList.remove("w-80", "md:w-80");
-                    panelWrapper.classList.add("w-0", "md:w-0");
-                }
-            }
-
-
-            // === DEFAULT STATE saat halaman load ===
-            // Open the default panel on load and fetch the initial Sentinel catalogue.
-            window.addEventListener("DOMContentLoaded", () => {
-                const defaultPanel = 'data-panel';
-                const isMobile = window.innerWidth < 768;
-
-                const defaultBtn = isMobile ?
-                    document.querySelector(`#scroll-container .sidebar-btn[onclick*='${defaultPanel}']`) :
-                    document.querySelector(`aside .sidebar-btn[onclick*='${defaultPanel}']`);
-
-                showPanel(defaultPanel, defaultBtn);
-
-                if (!sentinelLoadedOnce) {
-                    loadSentinelCollections();
-                }
-            });
-
-            // === RESPONSIVE HANDLER: SYNC STATE SAAT RESIZE ===
-            // Reconcile mobile/desktop panel classes whenever the viewport size changes.
-            window.addEventListener("resize", () => {
-                const isMobile = window.innerWidth < 768;
-                const activePanel = panelWrapper.dataset.activePanel;
-
-                // Jika tidak ada panel aktif (semua ditutup), keluar saja
-                if (!activePanel) {
-                    // Pastikan panel wrapper tertutup di semua mode
-                    panelWrapper.classList.add("translate-y-full");
-                    panelWrapper.classList.remove("translate-y-0", "w-80", "md:w-80");
-                    return;
-                }
-
-                // Hapus semua class transisi yang bisa bentrok
-                panelWrapper.classList.remove("slide-up", "slide-down");
-
-                if (isMobile) {
-                    // mobile mode: gunakan slide-up style
-                    panelWrapper.classList.remove("w-0", "md:w-0", "w-80", "md:w-80");
-                    panelWrapper.classList.remove("translate-y-full");
-                    panelWrapper.classList.add("translate-y-0", "opacity-100");
-                } else {
-                    // desktop mode: gunakan lebar tetap (sidebar style)
-                    panelWrapper.classList.remove("translate-y-full", "translate-y-0");
-                    panelWrapper.classList.add("w-80", "md:w-80", "opacity-100");
-                }
-
-                // perbarui tombol active sesuai mode baru
-                const activeBtn = isMobile ?
-                    document.querySelector(`#scroll-container .sidebar-btn[onclick*='${activePanel}']`) :
-                    document.querySelector(`aside .sidebar-btn[onclick*='${activePanel}']`);
-
-                sidebarButtons.forEach(b => b.classList.remove("active"));
-                if (activeBtn) activeBtn.classList.add("active");
-            });
-
-
-
-
-            // Buy Satellite Button Event
-            document.getElementById('buySatelliteBtn')?.addEventListener('click', function() {
-                const buyingPanel = document.getElementById('buyingPanel');
-                buyingPanel.classList.remove('hidden');
-            });
-            document.getElementById('buyingPanelCloseBtn')?.addEventListener('click', function() {
-                const buyingPanel = document.getElementById('buyingPanel');
-                buyingPanel.classList.add('hidden');
-            });
-
-            // Price calculation functions
-            // Translate the drawn polygon area into credit point estimates for the purchase panel.
-            function calculateTotalPrice() {
-                // Get area from global variable (set when polygon is drawn)
-                const areaInSquareMeters = window.geojsonArea || 0;
-                const areaInHectares = areaInSquareMeters / 10000; // Convert m² to hectares
-
-                // Calculate credit points needed (using global constant rate)
-                const creditPointsNeeded = areaInHectares * {{ config('app-constants.imagery_credit_cost_per_hectare') }};
-
-                // Update the display
-                const totalPriceElement = document.getElementById('total_price');
-                const priceContainer = totalPriceElement.parentElement;
-
-                if (areaInHectares > 0) {
-                    totalPriceElement.innerHTML = `
-                        <div class="flex justify-between items-center">
-                            <span class="text-lg font-bold text-green-700">${formatNumber(creditPointsNeeded.toFixed(2))} Credit Points</span>
-                            <i class="ri-coins-line font-base text-success text-xl"></i>
-                        </div>
-                        <div class="text-xs text-foreground-70 mt-1">
-                            ${formatNumber(areaInHectares)} hectares × {{ Number::format(config('app-constants.imagery_credit_cost_per_hectare'), locale: app()->getLocale()) }} credit points/hectare
-                        </div>
-                    `;
-                    priceContainer.classList.remove('bg-muted/60', 'border-muted');
-                    priceContainer.classList.add('bg-green-50', 'border-green-300', 'shadow-sm');
-
-                    // Add a subtle animation
-                    priceContainer.style.transform = 'scale(1.02)';
-                    setTimeout(() => {
-                        priceContainer.style.transform = 'scale(1)';
-                    }, 200);
-                } else {
-                    totalPriceElement.innerHTML = `
-                        <div class="flex items-center text-foreground/50">
-                            <i class="ri-information-line mr-2"></i>
-                            Draw an area to calculate credit points
-                        </div>
-                    `;
-                    priceContainer.classList.remove('bg-green-50', 'border-green-300', 'shadow-sm', 'bg-amber-50', 'border-amber-300');
-                    priceContainer.classList.add('bg-muted/60', 'border-muted');
-                }
-
-                // Add transition for smooth color changes
-                priceContainer.style.transition = 'all 0.3s ease-in-out';
-            }
-
-            // Make calculateTotalPrice available globally for map.js
-            window.calculateTotalPrice = calculateTotalPrice;
         </script>
     @endpush
 </x-app-front-map-layout>
