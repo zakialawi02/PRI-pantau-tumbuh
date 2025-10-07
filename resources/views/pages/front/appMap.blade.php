@@ -514,7 +514,13 @@
                             <p class="text-foreground/70 text-xs leading-tight" data-sentinel-preview-acquired>Select a collection to preview on the map.</p>
                             <p class="text-foreground/60 hidden text-xs leading-tight" data-sentinel-preview-details></p>
                         </div>
-                        <button class="text-foreground/50 hover:text-foreground transition" id="sentinelPreviewClearBtn" type="button">
+                        <button
+                            class="text-foreground/50 hover:text-foreground transition"
+                            id="sentinelPreviewClearBtn"
+                            type="button"
+                            aria-label="Close Sentinel preview"
+                            title="Close preview"
+                        >
                             <i class="ri-close-line text-base"></i>
                             <span class="sr-only">Clear Sentinel preview</span>
                         </button>
@@ -1336,6 +1342,16 @@
             const sentinelPreviewStatus = sentinelPreviewPanel?.querySelector('[data-sentinel-preview-status]');
             const sentinelPreviewClearBtn = document.getElementById('sentinelPreviewClearBtn');
             const sentinelPreviewDownloadBtn = document.getElementById('sentinelPreviewDownloadBtn');
+            const sentinelPreviewDefaults = sentinelPreviewPanel ? {
+                title: sentinelPreviewTitle?.textContent ?? '–',
+                acquired: sentinelPreviewAcquired?.textContent ?? '',
+                details: sentinelPreviewDetails?.textContent ?? '',
+                status: sentinelPreviewStatus?.textContent ?? ''
+            } : null;
+
+            if (sentinelPreviewPanel) {
+                sentinelPreviewPanel.setAttribute('aria-hidden', sentinelPreviewPanel.classList.contains('hidden') ? 'true' : 'false');
+            }
 
             const sentinelCatalogEndpoint = 'https://catalogue.dataspace.copernicus.eu/resto/api/collections/Sentinel2/search.json';
             let sentinelLoadedOnce = false;
@@ -1925,6 +1941,7 @@
                 const setPanelVisible = (visible) => {
                     if (sentinelPreviewPanel) {
                         sentinelPreviewPanel.classList.toggle('hidden', !visible);
+                        sentinelPreviewPanel.setAttribute('aria-hidden', visible ? 'false' : 'true');
                     }
                 };
 
@@ -2083,6 +2100,21 @@
                         bboxSource.clear();
                         bboxLayer.setVisible(false);
                         updateButtons();
+                        if (sentinelPreviewDefaults) {
+                            setPanelContent({
+                                title: sentinelPreviewDefaults.title,
+                                acquired: sentinelPreviewDefaults.acquired,
+                                details: sentinelPreviewDefaults.details,
+                                status: sentinelPreviewDefaults.status
+                            });
+                        } else {
+                            setPanelContent({
+                                title: 'Sentinel-2 Preview',
+                                acquired: 'Select a collection to preview on the map.',
+                                details: '',
+                                status: 'Awaiting preview selection.'
+                            });
+                        }
                         setPanelVisible(false);
                     }
                 };
@@ -2122,6 +2154,12 @@
                     createSentinelPreviewController()?.clear();
                 });
             }
+
+            document.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape' && sentinelPreviewPanel && !sentinelPreviewPanel.classList.contains('hidden')) {
+                    createSentinelPreviewController()?.clear();
+                }
+            });
 
             window.showSentinelPreviewOnMap = triggerSentinelPreview;
 
