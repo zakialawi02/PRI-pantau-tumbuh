@@ -1314,9 +1314,7 @@
                 }
             }
         </script>
-    @endpush
 
-    @push('javascript')
         <script>
             // All sentinel related DOM elements and default variables
             const sentinelStatus = document.getElementById('sentinelCollectionStatus');
@@ -1411,119 +1409,119 @@
                 }
             };
 
-                // Convert GeoJSON footprint/bbox data into an OpenLayers feature for display.
-                const resolveFootprintFeature = (data) => {
-                    if (!data) return null;
-                    const {
-                        footprint,
-                        geometry,
-                        bbox
-                    } = data;
-                    try {
-                        if (footprint) {
-                            return geoJsonParser.readFeature(footprint, {
-                                featureProjection: mapProjection,
-                                dataProjection
-                            });
-                        }
-                        if (geometry) {
-                            return geoJsonParser.readFeature({
-                                type: 'Feature',
-                                geometry
-                            }, {
-                                featureProjection: mapProjection,
-                                dataProjection
-                            });
-                        }
-                        if (Array.isArray(bbox) && bbox.length === 4) {
-                            const transformed = ol.proj.transformExtent(bbox, dataProjection, mapProjection);
-                            return new ol.Feature({
-                                geometry: ol.geom.Polygon.fromExtent(transformed)
-                            });
-                        }
-                    } catch (error) {
-                        console.error('Unable to construct Sentinel footprint', error);
-                    }
-                    return null;
-                };
-
-                const controller = {
-                    showPreview(data) {
-                        if (!data) return;
-                        const title = data.title || data.productId || 'Sentinel-2 Coverage';
-                        const acquiredText = data.acquiredText ??
-                            (data.acquisitionDate ?
-                                `Acquired: ${formatReadableDate(data.acquisitionDate)}` :
-                                'Acquisition date unavailable.');
-                        const detailParts = [];
-                        if (data.detailText) detailParts.push(data.detailText);
-                        const tileText = data.tileText || data.tileId;
-                        if (tileText) detailParts.push(tileText);
-                        if (typeof data.cloudCover === 'number' && !Number.isNaN(data.cloudCover)) {
-                            detailParts.push(`Cloud cover: ${formatCloudCover(Number(data.cloudCover))}`);
-                        }
-                        if (data.collection) detailParts.push(`Collection: ${data.collection}`);
-                        const detailText = detailParts.join(' • ');
-
-                        const downloadFilename = data.downloadFilename ??
-                            buildSentinelDownloadName(data.productId, title);
-
-                        setPanelVisible(true);
-
-                        bboxSource.clear();
-                        state.current = null;
-                        updateButtons();
-
-                        const footprint = resolveFootprintFeature(data);
-                        let extent = null;
-                        if (footprint) {
-                            bboxSource.addFeature(footprint);
-                            bboxLayer.setVisible(true);
-                            extent = footprint.getGeometry()?.getExtent() ?? null;
-                            focusExtent(extent);
-                        } else {
-                            bboxLayer.setVisible(false);
-                        }
-
-                        const baseDownloadUrl = data.downloadUrlBase || data.downloadUrl || null;
-                        const resolvedDownloadUrl = applySentinelTokenToUrl(baseDownloadUrl);
-
-                        const statusMessage = footprint ?
-                            'Displaying scene coverage on the map.' :
-                            'Coverage area unavailable for this product.';
-
-                        state.current = {
-                            ...data,
-                            extent,
-                            baseTitle: title,
-                            baseAcquired: acquiredText,
-                            baseDetails: detailText,
-                            downloadUrlBase: baseDownloadUrl,
-                            downloadUrl: resolvedDownloadUrl,
-                            downloadFilename
-                        };
-
-                        setPanelContent({
-                            title,
-                            acquired: acquiredText,
-                            details: detailText,
-                            status: buildSentinelStatusMessage(statusMessage)
+            // Convert GeoJSON footprint/bbox data into an OpenLayers feature for display.
+            const resolveFootprintFeature = (data) => {
+                if (!data) return null;
+                const {
+                    footprint,
+                    geometry,
+                    bbox
+                } = data;
+                try {
+                    if (footprint) {
+                        return geoJsonParser.readFeature(footprint, {
+                            featureProjection: mapProjection,
+                            dataProjection
                         });
-
-                        updateButtons();
-                    },
-                    clear() {
-                        state.current = null;
-                        bboxSource.clear();
-                        bboxLayer.setVisible(false);
-                        updateButtons();
-                        setPanelVisible(false);
                     }
-                };
-                updateButtons();
+                    if (geometry) {
+                        return geoJsonParser.readFeature({
+                            type: 'Feature',
+                            geometry
+                        }, {
+                            featureProjection: mapProjection,
+                            dataProjection
+                        });
+                    }
+                    if (Array.isArray(bbox) && bbox.length === 4) {
+                        const transformed = ol.proj.transformExtent(bbox, dataProjection, mapProjection);
+                        return new ol.Feature({
+                            geometry: ol.geom.Polygon.fromExtent(transformed)
+                        });
+                    }
+                } catch (error) {
+                    console.error('Unable to construct Sentinel footprint', error);
+                }
+                return null;
+            };
 
-                sentinelPreviewController = controller;
-                return controller;
+            const controller = {
+                showPreview(data) {
+                    if (!data) return;
+                    const title = data.title || data.productId || 'Sentinel-2 Coverage';
+                    const acquiredText = data.acquiredText ??
+                        (data.acquisitionDate ?
+                            `Acquired: ${formatReadableDate(data.acquisitionDate)}` :
+                            'Acquisition date unavailable.');
+                    const detailParts = [];
+                    if (data.detailText) detailParts.push(data.detailText);
+                    const tileText = data.tileText || data.tileId;
+                    if (tileText) detailParts.push(tileText);
+                    if (typeof data.cloudCover === 'number' && !Number.isNaN(data.cloudCover)) {
+                        detailParts.push(`Cloud cover: ${formatCloudCover(Number(data.cloudCover))}`);
+                    }
+                    if (data.collection) detailParts.push(`Collection: ${data.collection}`);
+                    const detailText = detailParts.join(' • ');
+
+                    const downloadFilename = data.downloadFilename ??
+                        buildSentinelDownloadName(data.productId, title);
+
+                    setPanelVisible(true);
+
+                    bboxSource.clear();
+                    state.current = null;
+                    updateButtons();
+
+                    const footprint = resolveFootprintFeature(data);
+                    let extent = null;
+                    if (footprint) {
+                        bboxSource.addFeature(footprint);
+                        bboxLayer.setVisible(true);
+                        extent = footprint.getGeometry()?.getExtent() ?? null;
+                        focusExtent(extent);
+                    } else {
+                        bboxLayer.setVisible(false);
+                    }
+
+                    const baseDownloadUrl = data.downloadUrlBase || data.downloadUrl || null;
+                    const resolvedDownloadUrl = applySentinelTokenToUrl(baseDownloadUrl);
+
+                    const statusMessage = footprint ?
+                        'Displaying scene coverage on the map.' :
+                        'Coverage area unavailable for this product.';
+
+                    state.current = {
+                        ...data,
+                        extent,
+                        baseTitle: title,
+                        baseAcquired: acquiredText,
+                        baseDetails: detailText,
+                        downloadUrlBase: baseDownloadUrl,
+                        downloadUrl: resolvedDownloadUrl,
+                        downloadFilename
+                    };
+
+                    setPanelContent({
+                        title,
+                        acquired: acquiredText,
+                        details: detailText,
+                        status: buildSentinelStatusMessage(statusMessage)
+                    });
+
+                    updateButtons();
+                },
+                clear() {
+                    state.current = null;
+                    bboxSource.clear();
+                    bboxLayer.setVisible(false);
+                    updateButtons();
+                    setPanelVisible(false);
+                }
+            };
+            updateButtons();
+
+            sentinelPreviewController = controller;
+            return controller;
             };
 
             if (typeof window !== 'undefined') {
