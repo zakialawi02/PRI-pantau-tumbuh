@@ -787,86 +787,113 @@
             const resumeBtn = document.getElementById('resumeBtn');
             const myDataContainer = document.getElementById('myDataContainer');
 
-            // === STATE ===
-            let paused = false;
-            let uploading = false;
-            let file = null;
-            let uploadId = null;
-            let currentChunk = 0;
-            let totalChunks = 0;
-            const chunkSize = 5 * 1024 * 1024; // 5 MB per chunk
-            let startTime = null;
-            let uploadedBytes = 0;
+            const uploaderElements = {
+                sourceInput,
+                fileInput,
+                fileInfo,
+                progressBar,
+                progressText,
+                startBtn,
+                pauseBtn,
+                resumeBtn,
+                myDataContainer
+            };
 
-            // === INIT ===
-            setButtonState("idle");
-            loadMyData();
+            const uploaderReady = Object.values(uploaderElements).every((element) => Boolean(element));
 
-            // === FILE SELECT ===
-            fileInput.addEventListener("change", (e) => {
-                file = e.target.files[0];
-                if (!file) return;
+            if (!uploaderReady) {
+                console.warn('Imagery uploader controls missing. Skipping uploader bootstrap.', {
+                    hasSourceInput: Boolean(sourceInput),
+                    hasFileInput: Boolean(fileInput),
+                    hasFileInfo: Boolean(fileInfo),
+                    hasProgressBar: Boolean(progressBar),
+                    hasProgressText: Boolean(progressText),
+                    hasStartBtn: Boolean(startBtn),
+                    hasPauseBtn: Boolean(pauseBtn),
+                    hasResumeBtn: Boolean(resumeBtn),
+                    hasMyDataContainer: Boolean(myDataContainer)
+                });
+            } else {
+                // === STATE ===
+                let paused = false;
+                let uploading = false;
+                let file = null;
+                let uploadId = null;
+                let currentChunk = 0;
+                let totalChunks = 0;
+                const chunkSize = 5 * 1024 * 1024; // 5 MB per chunk
+                let startTime = null;
+                let uploadedBytes = 0;
 
-                const sizeMB = (file.size / 1024 / 1024).toFixed(2);
-                const shortName = shortenFilename(file.name, 40);
+                // === INIT ===
+                setButtonState("idle");
+                loadMyData();
 
-                fileInfo.classList.remove("hidden");
-                fileInfo.innerHTML = `
+                // === FILE SELECT ===
+                fileInput.addEventListener("change", (e) => {
+                    file = e.target.files[0];
+                    if (!file) return;
+
+                    const sizeMB = (file.size / 1024 / 1024).toFixed(2);
+                    const shortName = shortenFilename(file.name, 40);
+
+                    fileInfo.classList.remove("hidden");
+                    fileInfo.innerHTML = `
                 <strong>Name:</strong> ${shortName}<br>
                 <strong>Size:</strong> ${sizeMB} MB
             `;
 
-                progressText.textContent = "✅ File ready to upload. Click 'Start Upload' to begin.";
-                progressBar.style.width = "0%";
-                MyZkToast.info("File ready to upload, click Start to begin.");
-                setButtonState("ready");
-            });
+                    progressText.textContent = "✅ File ready to upload. Click 'Start Upload' to begin.";
+                    progressBar.style.width = "0%";
+                    MyZkToast.info("File ready to upload, click Start to begin.");
+                    setButtonState("ready");
+                });
 
-            // === START UPLOAD ===
-            startBtn.addEventListener("click", () => {
-                if (!file) {
-                    MyZkToast.warning("Please select a file first!");
-                    return;
-                }
+                // === START UPLOAD ===
+                startBtn.addEventListener("click", () => {
+                    if (!file) {
+                        MyZkToast.warning("Please select a file first!");
+                        return;
+                    }
 
-                uploadId = Math.random().toString(36).substring(2, 12);
-                totalChunks = Math.ceil(file.size / chunkSize);
-                currentChunk = 0;
-                uploadedBytes = 0;
-                paused = false;
-                uploading = true;
-                startTime = performance.now();
+                    uploadId = Math.random().toString(36).substring(2, 12);
+                    totalChunks = Math.ceil(file.size / chunkSize);
+                    currentChunk = 0;
+                    uploadedBytes = 0;
+                    paused = false;
+                    uploading = true;
+                    startTime = performance.now();
 
-                MyZkToast.info("🚀 Upload started...");
-                progressText.textContent = `🚀 Uploading ${file.name}...`;
-                setButtonState("uploading");
-                uploadNextChunk();
-            });
+                    MyZkToast.info("🚀 Upload started...");
+                    progressText.textContent = `🚀 Uploading ${file.name}...`;
+                    setButtonState("uploading");
+                    uploadNextChunk();
+                });
 
-            // === PAUSE ===
-            pauseBtn.addEventListener("click", () => {
-                if (!uploading) return;
-                paused = true;
-                uploading = false;
-                progressText.textContent = "⏸️ Upload paused.";
-                MyZkToast.warning("Upload paused.");
-                setButtonState("paused");
-            });
+                // === PAUSE ===
+                pauseBtn.addEventListener("click", () => {
+                    if (!uploading) return;
+                    paused = true;
+                    uploading = false;
+                    progressText.textContent = "⏸️ Upload paused.";
+                    MyZkToast.warning("Upload paused.");
+                    setButtonState("paused");
+                });
 
-            // === RESUME ===
-            resumeBtn.addEventListener("click", () => {
-                if (!file) return;
-                paused = false;
-                uploading = true;
-                progressText.textContent = "▶️ Upload resumed...";
-                MyZkToast.info("Upload resumed...");
-                setButtonState("uploading");
-                uploadNextChunk();
-            });
+                // === RESUME ===
+                resumeBtn.addEventListener("click", () => {
+                    if (!file) return;
+                    paused = false;
+                    uploading = true;
+                    progressText.textContent = "▶️ Upload resumed...";
+                    MyZkToast.info("Upload resumed...");
+                    setButtonState("uploading");
+                    uploadNextChunk();
+                });
 
-            // === UPLOAD CHUNK FUNCTION ===
-            async function uploadNextChunk(retryCount = 0) {
-                if (paused || !file) return;
+                // === UPLOAD CHUNK FUNCTION ===
+                async function uploadNextChunk(retryCount = 0) {
+                    if (paused || !file) return;
 
                 if (currentChunk >= totalChunks) {
                     progressText.textContent = "🧩 Merging file on server...";
@@ -1038,6 +1065,8 @@
                 }
             }
 
+            }
+
             // === TAB FUNCTIONALITY ===
             function initTabFunctionality() {
                 const tabButtons = document.querySelectorAll('.tab-btn');
@@ -1067,6 +1096,9 @@
 
             // === HELPER FUNCTIONS ===
             function setButtonState(state) {
+                if (!startBtn || !pauseBtn || !resumeBtn) {
+                    return;
+                }
                 switch (state) {
                     case "idle":
                         startBtn.disabled = true;
@@ -1231,15 +1263,21 @@
                 if (typeof url !== 'string') return false;
                 const trimmed = url.trim();
                 if (!trimmed) return false;
-                if (!/^https?:\/\//i.test(trimmed)) return false;
                 const lowered = trimmed.toLowerCase();
                 if (sentinelPreviewIgnoredKeywords.some((keyword) => lowered.includes(keyword))) {
                     return false;
                 }
-                return lowered.includes('service=wms')
+                const hasProtocol = /^https?:\/\//i.test(trimmed);
+                const looksRelative = trimmed.startsWith('/') || trimmed.startsWith('./') || trimmed.startsWith('../');
+                const mentionsWms = lowered.includes('service=wms')
+                    || lowered.includes('request=getmap')
                     || lowered.includes('/wms')
                     || lowered.includes('ogc/wms')
                     || lowered.includes('/ows');
+                if (!hasProtocol && !looksRelative && !mentionsWms) {
+                    return false;
+                }
+                return mentionsWms;
             };
 
             const normalizeWmsCandidate = (url) => {
@@ -1289,6 +1327,87 @@
                 }
             };
 
+            const collectWmsServiceCandidates = (input, context = {}) => {
+                const results = [];
+                const seen = new Set();
+
+                const visit = (value, ctx) => {
+                    if (!value) return;
+
+                    if (typeof value === 'string') {
+                        const candidate = value.trim();
+                        if (!candidate || !isLikelyWmsUrl(candidate)) return;
+                        const normalizedContext = {
+                            layers: ctx.layers ?? null,
+                            styles: ctx.styles ?? null,
+                            version: ctx.version ?? null
+                        };
+
+                        const key = `${candidate}|${normalizedContext.layers ?? ''}|${normalizedContext.styles ?? ''}|${normalizedContext.version ?? ''}`;
+                        if (seen.has(key)) return;
+                        results.push({ url: candidate, ...normalizedContext });
+                        seen.add(key);
+                        return;
+                    }
+
+                    if (Array.isArray(value)) {
+                        value.forEach((item) => visit(item, ctx));
+                        return;
+                    }
+
+                    if (typeof value === 'object') {
+                        let layers = ctx.layers ?? null;
+                        let styles = ctx.styles ?? null;
+                        let version = ctx.version ?? null;
+
+                        Object.entries(value).forEach(([rawKey, rawValue]) => {
+                            const key = String(rawKey).toLowerCase();
+                            if (key === 'layers' || key === 'layer' || key.includes('layer')) {
+                                if (typeof rawValue === 'string' && rawValue.trim()) {
+                                    layers = rawValue.trim();
+                                } else if (Array.isArray(rawValue)) {
+                                    const joined = rawValue
+                                        .map((item) => (typeof item === 'string' ? item.trim() : ''))
+                                        .filter(Boolean)
+                                        .join(',');
+                                    if (joined) {
+                                        layers = joined;
+                                    }
+                                }
+                            } else if (key === 'styles' || key === 'style' || key.includes('style')) {
+                                if (typeof rawValue === 'string' && rawValue.trim()) {
+                                    styles = rawValue.trim();
+                                } else if (Array.isArray(rawValue)) {
+                                    const joined = rawValue
+                                        .map((item) => (typeof item === 'string' ? item.trim() : ''))
+                                        .filter(Boolean)
+                                        .join(',');
+                                    if (joined) {
+                                        styles = joined;
+                                    }
+                                }
+                            } else if (key === 'version') {
+                                if (typeof rawValue === 'string' && rawValue.trim()) {
+                                    version = rawValue.trim();
+                                }
+                            }
+                        });
+
+                        Object.entries(value).forEach(([rawKey, rawValue]) => {
+                            if (typeof rawValue === 'string') {
+                                visit(rawValue, { layers, styles, version });
+                            } else {
+                                visit(rawValue, { layers, styles, version });
+                            }
+                        });
+                    }
+                };
+
+                visit(input, { ...context });
+
+                return results;
+            };
+
             const resolveSentinelWmsConfig = (data) => {
                 if (!data) return null;
 
@@ -1304,19 +1423,29 @@
 
                 const registerFromValue = (value, score = 0) => {
                     if (!value) return;
-                    extractServiceUrls(value).forEach((candidateUrl) => {
-                        const candidate = normalizeWmsCandidate(candidateUrl);
-                        if (candidate) {
-                            registerCandidate(candidate, score);
+                    collectWmsServiceCandidates(value).forEach((entry) => {
+                        const candidate = normalizeWmsCandidate(entry.url);
+                        if (!candidate) return;
+                        const params = { ...(candidate.params ?? {}) };
+                        if (!params.LAYERS && entry.layers) {
+                            params.LAYERS = entry.layers;
                         }
+                        if (!params.STYLES && entry.styles) {
+                            params.STYLES = entry.styles;
+                        }
+                        if (Object.keys(params).length) {
+                            candidate.params = params;
+                        }
+                        if (!candidate.version && entry.version) {
+                            candidate.version = entry.version;
+                        }
+                        registerCandidate(candidate, score);
                     });
                 };
 
-                const directUrls = [];
-                if (typeof data.wms === 'string') directUrls.push({ value: data.wms, score: 96 });
-                if (typeof data.previewWms === 'string') directUrls.push({ value: data.previewWms, score: 94 });
-                if (typeof data.wmts === 'string') directUrls.push({ value: data.wmts, score: 80 });
-                directUrls.forEach(({ value, score }) => registerFromValue(value, score));
+                registerFromValue(data.wms, 96);
+                registerFromValue(data.previewWms, 94);
+                registerFromValue(data.wmts, 80);
 
                 const props = data.featureProperties ?? data.properties ?? {};
                 registerFromValue(props?.services, 92);
