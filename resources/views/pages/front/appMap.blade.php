@@ -1183,6 +1183,7 @@
             };
 
             const sentinelDownloadIgnoredKeywords = ['quicklook', 'thumbnail', 'thumb', 'overview', 'browse', 'preview', 'allorigins'];
+            const sentinelPreviewIgnoredKeywords = ['thumbnail', 'thumb', 'legend', 'logo', 'browse', 'allorigins'];
 
             const sanitizeSentinelToken = (value) => {
                 if (typeof value !== 'string') return '';
@@ -1224,6 +1225,171 @@
                     const separator = url.includes('?') ? '&' : '?';
                     return `${url}${separator}token=${encodeURIComponent(token)}`;
                 }
+            };
+
+            const isLikelyWmsUrl = (url) => {
+                if (typeof url !== 'string') return false;
+                const trimmed = url.trim();
+                if (!trimmed) return false;
+                if (!/^https?:\/\//i.test(trimmed)) return false;
+                const lowered = trimmed.toLowerCase();
+                if (sentinelPreviewIgnoredKeywords.some((keyword) => lowered.includes(keyword))) {
+                    return false;
+                }
+                return lowered.includes('service=wms')
+                    || lowered.includes('/wms')
+                    || lowered.includes('ogc/wms')
+                    || lowered.includes('/ows');
+            };
+
+            const normalizeWmsCandidate = (url) => {
+                if (!isLikelyWmsUrl(url)) return null;
+                try {
+                    const baseHref = typeof window !== 'undefined' && window.location
+                        ? window.location.href
+                        : 'https://example.com/';
+                    const parsed = new URL(url, baseHref);
+                    const baseUrl = `${parsed.origin}${parsed.pathname}`;
+                    const params = {};
+                    parsed.searchParams.forEach((value, key) => {
+                        if (value === undefined || value === null || value === '') return;
+                        const lower = key.toLowerCase();
+                        if (lower === 'token') return;
+                        if (['bbox', 'width', 'height', 'x', 'y', 'lat', 'lon'].includes(lower)) return;
+                        if (lower === 'request' || lower === 'service') return;
+                        if (lower === 'layers' || lower === 'layer') {
+                            params.LAYERS = value;
+                            return;
+                        }
+                        if (lower === 'styles' || lower === 'style') {
+                            params.STYLES = value;
+                            return;
+                        }
+                        params[key.toUpperCase()] = value;
+                    });
+
+                    if (!params.LAYERS) {
+                        const fallbackLayer = parsed.searchParams.get('LAYERS') || parsed.searchParams.get('layers');
+                        if (fallbackLayer) {
+                            params.LAYERS = fallbackLayer;
+                        }
+                    }
+
+                    const version = parsed.searchParams.get('VERSION') || parsed.searchParams.get('version') || null;
+
+                    return {
+                        url: baseUrl,
+                        params,
+                        version,
+                        originalUrl: url
+                    };
+                } catch (error) {
+                    console.warn('Unable to normalise WMS candidate', url, error);
+                    return null;
+                }
+            };
+
+            const resolveSentinelWmsConfig = (data) => {
+                if (!data) return null;
+
+                const candidates = new Map();
+                const registerCandidate = (candidate, score = 0) => {
+                    if (!candidate || !candidate.url) return;
+                    const key = `${candidate.url}|${candidate.params?.LAYERS ?? ''}|${candidate.params?.STYLES ?? ''}`;
+                    const existing = candidates.get(key);
+                    if (!existing || score > existing.score) {
+                        candidates.set(key, { ...candidate, score });
+                    }
+                };
+
+                const registerFromValue = (value, score = 0) => {
+                    if (!value) return;
+                    extractServiceUrls(value).forEach((candidateUrl) => {
+                        const candidate = normalizeWmsCandidate(candidateUrl);
+                        if (candidate) {
+                            registerCandidate(candidate, score);
+                        }
+                    });
+                };
+
+                const directUrls = [];
+                if (typeof data.wms === 'string') directUrls.push({ value: data.wms, score: 96 });
+                if (typeof data.previewWms === 'string') directUrls.push({ value: data.previewWms, score: 94 });
+                if (typeof data.wmts === 'string') directUrls.push({ value: data.wmts, score: 80 });
+                directUrls.forEach(({ value, score }) => registerFromValue(value, score));
+
+                const props = data.featureProperties ?? data.properties ?? {};
+                registerFromValue(props?.services, 92);
+
+                if (props && typeof props === 'object') {
+                    Object.entries(props).forEach(([key, value]) => {
+                        const lowered = String(key).toLowerCase();
+                        if (lowered.includes('wms') || lowered.includes('ogc') || lowered.includes('ows')) {
+                            registerFromValue(value, lowered.includes('wms') ? 95 : 85);
+                        }
+                    });
+                }
+
+                const services = data.services ?? props?.services;
+                if (services && typeof services === 'object') {
+                    Object.entries(services).forEach(([key, value]) => {
+                        const lowered = String(key).toLowerCase();
+                        let score = 84;
+                        if (lowered.includes('wms')) score = 98;
+                        else if (lowered.includes('ogc') || lowered.includes('ows')) score = 90;
+                        registerFromValue(value, score);
+                    });
+                } else {
+                    registerFromValue(services, 82);
+                }
+
+                const links = Array.isArray(data.links) ? data.links : props?.links;
+                if (Array.isArray(links)) {
+                    links.forEach((link) => {
+                        const href = typeof link?.href === 'string' ? link.href : null;
+                        if (!href) return;
+                        const rel = typeof link?.rel === 'string' ? link.rel.toLowerCase() : '';
+                        const type = typeof link?.type === 'string' ? link.type.toLowerCase() : '';
+                        let score = 70;
+                        if (rel.includes('wms') || rel.includes('ogc')) score += 20;
+                        if (type.includes('wms')) score += 18;
+                        registerFromValue(href, score);
+                    });
+                }
+
+                const assets = data.assets ?? props?.assets;
+                if (assets && typeof assets === 'object') {
+                    Object.entries(assets).forEach(([key, value]) => {
+                        const lowered = String(key).toLowerCase();
+                        if (sentinelPreviewIgnoredKeywords.some((keyword) => lowered.includes(keyword))) {
+                            return;
+                        }
+                        if (lowered.includes('wms') || lowered.includes('ogc') || lowered.includes('ows')) {
+                            registerFromValue(value, lowered.includes('wms') ? 90 : 78);
+                        }
+                    });
+                }
+
+                if (!candidates.size) {
+                    return null;
+                }
+
+                const sorted = Array.from(candidates.values()).sort((a, b) => b.score - a.score);
+                const best = sorted[0];
+                if (!best || !best.url) return null;
+
+                if (!best.params?.LAYERS) {
+                    const fallbackLayer = data.productId || data.tileId || props?.productIdentifier || props?.title || null;
+                    if (fallbackLayer) {
+                        best.params = { ...(best.params ?? {}), LAYERS: fallbackLayer };
+                    }
+                }
+
+                if (!best.params?.LAYERS) {
+                    return null;
+                }
+
+                return best;
             };
 
             const isValidSentinelDownloadUrl = (url) => {
@@ -1430,7 +1596,8 @@
                 const state = {
                     current: null,
                     hasImage: false,
-                    imageHidden: false
+                    imageHidden: false,
+                    previewType: null
                 };
 
                 const setPanelContent = ({ title, acquired, details, status }) => {
@@ -1501,6 +1668,7 @@
                 const clearPreviewLayer = () => {
                     previewLayer.setSource(null);
                     previewLayer.setVisible(false);
+                    state.previewType = null;
                 };
 
                 const focusExtent = (extent) => {
@@ -1515,19 +1683,83 @@
                     }
                 };
 
-                const applyPreviewSource = (url, extent) => {
-                    if (!url || !extent) return;
+                const applyStaticPreview = (url, extent) => {
+                    if (!url || !extent) return false;
                     try {
                         const imageExtent = ol.proj.transformExtent(extent, mapProjection, mapProjection);
                         previewLayer.setSource(new ol.source.ImageStatic({
                             url,
                             imageExtent,
-                            projection: mapProjection
+                            projection: mapProjection,
+                            crossOrigin: 'anonymous'
                         }));
+                        state.previewType = 'static';
                         previewLayer.setVisible(!state.imageHidden);
+                        return true;
                     } catch (error) {
                         console.error('Unable to create Sentinel preview source', error);
                         clearPreviewLayer();
+                        return false;
+                    }
+                };
+
+                const applyWmsPreview = (config, callbacks = {}) => {
+                    if (!config || !config.url) return false;
+                    try {
+                        let wmsUrl = config.url;
+                        const tokenised = applySentinelTokenToUrl(wmsUrl);
+                        if (tokenised) {
+                            wmsUrl = tokenised;
+                        }
+
+                        const params = { ...(config.params ?? {}) };
+                        if (!params.LAYERS) {
+                            return false;
+                        }
+
+                        const projectionCode = mapProjection?.getCode?.() ?? 'EPSG:3857';
+                        if (!params.CRS) params.CRS = projectionCode;
+                        if (!params.SRS) params.SRS = projectionCode;
+                        if (!params.FORMAT) params.FORMAT = 'image/png';
+                        if (!params.TRANSPARENT) params.TRANSPARENT = 'true';
+                        if (!params.VERSION && config.version) params.VERSION = config.version;
+
+                        const source = new ol.source.ImageWMS({
+                            url: wmsUrl,
+                            params,
+                            ratio: 1.0,
+                            crossOrigin: 'anonymous'
+                        });
+
+                        const handleLoadEnd = () => {
+                            if (typeof source.un === 'function') {
+                                source.un('imageloadend', handleLoadEnd);
+                                source.un('imageloaderror', handleLoadError);
+                            }
+                            callbacks.onLoad?.();
+                        };
+
+                        const handleLoadError = (event) => {
+                            if (typeof source.un === 'function') {
+                                source.un('imageloadend', handleLoadEnd);
+                                source.un('imageloaderror', handleLoadError);
+                            }
+                            callbacks.onError?.(event);
+                        };
+
+                        if (typeof source.on === 'function') {
+                            source.on('imageloadend', handleLoadEnd);
+                            source.on('imageloaderror', handleLoadError);
+                        }
+
+                        previewLayer.setSource(source);
+                        state.previewType = 'wms';
+                        previewLayer.setVisible(!state.imageHidden);
+                        return true;
+                    } catch (error) {
+                        console.error('Unable to create Sentinel WMS preview', error);
+                        clearPreviewLayer();
+                        return false;
                     }
                 };
 
@@ -1584,22 +1816,13 @@
                             ?? buildSentinelDownloadName(data.productId, title);
 
                         setPanelVisible(true);
-                        setPanelContent({
-                            title,
-                            acquired: acquiredText,
-                            details: detailText,
-                            status: buildSentinelStatusMessage(
-                                data.quicklookUrl
-                                    ? 'Loading preview...'
-                                    : 'Preview image not available. Showing coverage.'
-                            )
-                        });
 
                         bboxSource.clear();
                         clearPreviewLayer();
                         state.current = null;
                         state.hasImage = false;
                         state.imageHidden = false;
+                        state.previewType = null;
                         updateButtons();
 
                         const footprint = resolveFootprintFeature(data);
@@ -1627,9 +1850,61 @@
                             downloadFilename
                         };
 
-                        state.hasImage = Boolean(data.quicklookUrl && extent);
-                        state.imageHidden = false;
-                        updateButtons();
+                        const wmsConfig = resolveSentinelWmsConfig(state.current);
+                        state.current.wmsConfig = wmsConfig;
+
+                        const hasWmsCandidate = Boolean(wmsConfig);
+                        const hasQuicklook = Boolean(data.quicklookUrl && extent);
+
+                        const initialStatus = hasWmsCandidate
+                            ? 'Loading Sentinel-2 scene via WMS...'
+                            : (hasQuicklook
+                                ? 'Loading preview image...'
+                                : 'Preview image not available. Showing coverage.');
+
+                        setPanelContent({
+                            title,
+                            acquired: acquiredText,
+                            details: detailText,
+                            status: buildSentinelStatusMessage(initialStatus)
+                        });
+
+                        const renderQuicklookPreview = () => {
+                            if (!hasQuicklook) return false;
+                            setPanelContent({
+                                status: buildSentinelStatusMessage('Loading preview image...')
+                            });
+                            const loader = new Image();
+                            loader.crossOrigin = 'anonymous';
+                            loader.onload = () => {
+                                if (!state.current) return;
+                                const applied = applyStaticPreview(data.quicklookUrl, extent);
+                                state.hasImage = applied;
+                                state.imageHidden = false;
+                                updateButtons();
+                                setPanelContent({
+                                    status: buildSentinelStatusMessage(
+                                        applied
+                                            ? (state.imageHidden
+                                                ? 'Preview image loaded. Use "Unhide Preview" to display it.'
+                                                : 'Preview image displayed on the map.')
+                                            : 'Unable to load preview image. Showing coverage only.'
+                                    )
+                                });
+                            };
+                            loader.onerror = () => {
+                                clearPreviewLayer();
+                                state.hasImage = false;
+                                state.imageHidden = false;
+                                state.previewType = null;
+                                updateButtons();
+                                setPanelContent({
+                                    status: buildSentinelStatusMessage('Unable to load preview image. Showing coverage only.')
+                                });
+                            };
+                            loader.src = data.quicklookUrl;
+                            return true;
+                        };
 
                         if (!extent) {
                             setPanelContent({
@@ -1637,44 +1912,53 @@
                             });
                         }
 
-                        if (!state.hasImage) {
-                            clearPreviewLayer();
-                            if (extent) {
-                            setPanelContent({
-                                status: buildSentinelStatusMessage(
-                                    data.quicklookUrl
-                                        ? 'Unable to position preview image. Showing coverage only.'
-                                        : 'Preview image not available. Showing coverage.'
-                                )
+                        if (hasWmsCandidate) {
+                            const applied = applyWmsPreview(wmsConfig, {
+                                onLoad: () => {
+                                    if (!state.current) return;
+                                    state.hasImage = true;
+                                    updateButtons();
+                                    setPanelContent({
+                                        status: buildSentinelStatusMessage(
+                                            state.imageHidden
+                                                ? 'Preview imagery loaded. Use "Unhide Preview" to display it.'
+                                                : 'Preview imagery displayed on the map.'
+                                        )
+                                    });
+                                },
+                                onError: () => {
+                                    clearPreviewLayer();
+                                    state.hasImage = false;
+                                    state.previewType = null;
+                                    updateButtons();
+                                    if (!renderQuicklookPreview()) {
+                                        setPanelContent({
+                                            status: buildSentinelStatusMessage('Unable to load WMS preview imagery. Showing coverage only.')
+                                        });
+                                    }
+                                }
                             });
+
+                            if (applied) {
+                                state.hasImage = true;
+                                state.imageHidden = false;
+                                updateButtons();
+                                return;
+                            }
                         }
+
+                        if (renderQuicklookPreview()) {
                             return;
                         }
 
-                        const loader = new Image();
-                        loader.crossOrigin = 'anonymous';
-                        loader.onload = () => {
-                            if (!state.current) return;
-                            applyPreviewSource(data.quicklookUrl, extent);
-                            updateButtons();
-                            setPanelContent({
-                                status: buildSentinelStatusMessage(
-                                    state.imageHidden
-                                        ? 'Preview image loaded. Use "Unhide Preview" to display it.'
-                                        : 'Preview image displayed on the map.'
-                                )
-                            });
-                        };
-                        loader.onerror = () => {
-                            clearPreviewLayer();
-                            state.hasImage = false;
-                            state.imageHidden = false;
-                            updateButtons();
-                            setPanelContent({
-                                status: buildSentinelStatusMessage('Unable to load preview image. Showing coverage only.')
-                            });
-                        };
-                        loader.src = data.quicklookUrl;
+                        clearPreviewLayer();
+                        state.hasImage = false;
+                        state.imageHidden = false;
+                        state.previewType = null;
+                        updateButtons();
+                        setPanelContent({
+                            status: buildSentinelStatusMessage('Preview image not available. Showing coverage.')
+                        });
                     },
                     hideImage() {
                         if (!state.current || !state.hasImage) return;
@@ -1906,23 +2190,28 @@
                     if (hasCoverage || quicklookUrl) {
                         previewButton.disabled = false;
                         previewButton.title = 'Display preview on the map';
-                        previewButton.addEventListener('click', () => {
-                            window.showSentinelPreviewOnMap?.({
-                                title: titleText,
-                                productId,
-                                quicklookUrl,
-                                downloadUrl: downloadUrlWithToken,
-                                downloadUrlBase: downloadUrl,
-                                downloadFilename,
-                                geometry: feature?.geometry,
-                                bbox: bboxArray,
-                                acquisitionDate,
-                                tileText,
-                                cloudCover,
-                                collection: props.collection || feature?.collection || null
-                            });
-                        });
-                    } else {
+                                previewButton.addEventListener('click', () => {
+                                    window.showSentinelPreviewOnMap?.({
+                                        title: titleText,
+                                        productId,
+                                        quicklookUrl,
+                                        downloadUrl: downloadUrlWithToken,
+                                        downloadUrlBase: downloadUrl,
+                                        downloadFilename,
+                                        geometry: feature?.geometry,
+                                        bbox: bboxArray,
+                                        acquisitionDate,
+                                        tileText,
+                                        cloudCover,
+                                        collection: props.collection || feature?.collection || null,
+                                        services: props?.services ?? null,
+                                        links,
+                                        assets,
+                                        featureProperties: props,
+                                        featureId: feature?.id ?? null
+                                    });
+                                });
+                            } else {
                         previewButton.disabled = true;
                         previewButton.title = 'Preview not available for this product';
                     }
