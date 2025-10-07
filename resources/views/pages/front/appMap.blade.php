@@ -205,6 +205,16 @@
                                     </select>
                                 </label>
                             </div>
+                            <div class="grid grid-cols-1 gap-1 sm:grid-cols-2">
+                                <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="sentinelStartDate">
+                                    <span>Start Date</span>
+                                    <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-1.5 py-0.5 text-sm focus:outline-none focus:ring" id="sentinelStartDate" name="start-date" type="date" autocomplete="off" />
+                                </label>
+                                <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="sentinelEndDate">
+                                    <span>End Date</span>
+                                    <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-1.5 py-0.5 text-sm focus:outline-none focus:ring" id="sentinelEndDate" name="end-date" type="date" autocomplete="off" />
+                                </label>
+                            </div>
                             <div class="grid grid-cols-1 gap-1">
                                 <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="sentinelLatFilter">
                                     <span>Latitude</span>
@@ -1325,6 +1335,8 @@
             const sentinelFilterForm = document.getElementById('sentinelFilterForm');
             const sentinelFilterResetButton = document.getElementById('sentinelFilterResetButton');
             const sentinelCloudInput = document.getElementById('sentinelCloudFilter');
+            const sentinelStartDateInput = document.getElementById('sentinelStartDate');
+            const sentinelEndDateInput = document.getElementById('sentinelEndDate');
             const sentinelLatInput = document.getElementById('sentinelLatFilter');
             const sentinelLonInput = document.getElementById('sentinelLonFilter');
             const sentinelLevelInput = document.getElementById('sentinelProductLevel');
@@ -1348,6 +1360,98 @@
             const defaultLatitude = -1.24536;
             const defaultLongitude = 114.54535;
             const defaultProductType = 'S2MSI2A';
+            const sentinelDefaultMonthsBack = 1;
+
+            const getDateRangeHelper = typeof window.getDefaultDateRange === 'function'
+                ? window.getDefaultDateRange
+                : (monthsBack = 1) => {
+                    const months = Number.isFinite(monthsBack) && monthsBack > 0 ? monthsBack : 1;
+                    const end = new Date();
+                    end.setHours(23, 59, 59, 999);
+                    const start = new Date(end.getTime());
+                    start.setMonth(start.getMonth() - months);
+                    start.setHours(0, 0, 0, 0);
+                    return { start, end };
+                };
+
+            const parseDateHelper = typeof window.parseDateInput === 'function'
+                ? window.parseDateInput
+                : (value) => {
+                    if (value instanceof Date && !Number.isNaN(value.getTime())) {
+                        return new Date(value.getTime());
+                    }
+                    if (typeof value === 'string' && value.trim() !== '') {
+                        const parsed = new Date(value);
+                        if (!Number.isNaN(parsed.getTime())) {
+                            return parsed;
+                        }
+                    }
+                    return null;
+                };
+
+            const ensureIsoDateString = (date) => {
+                if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+                    return '';
+                }
+                return typeof window.formatISODate === 'function'
+                    ? window.formatISODate(date)
+                    : date.toISOString().split('T')[0];
+            };
+
+            const syncSentinelDateConstraints = () => {
+                if (!sentinelStartDateInput || !sentinelEndDateInput) return;
+                sentinelEndDateInput.min = sentinelStartDateInput.value || '';
+                sentinelStartDateInput.max = sentinelEndDateInput.value || '';
+            };
+
+            let sentinelDefaultStartValue = '';
+            let sentinelDefaultEndValue = '';
+
+            const applySentinelDefaultDates = (force = false) => {
+                const sentinelDefaultRange = getDateRangeHelper(sentinelDefaultMonthsBack) || {};
+                const sentinelDefaultStartDate = parseDateHelper(sentinelDefaultRange.start) ?? new Date();
+                sentinelDefaultStartDate.setHours(0, 0, 0, 0);
+                const sentinelDefaultEndDate = parseDateHelper(sentinelDefaultRange.end) ?? new Date();
+                sentinelDefaultEndDate.setHours(23, 59, 59, 999);
+
+                sentinelDefaultStartValue = ensureIsoDateString(sentinelDefaultStartDate);
+                sentinelDefaultEndValue = ensureIsoDateString(sentinelDefaultEndDate);
+
+                if (sentinelStartDateInput && (force || !sentinelStartDateInput.value)) {
+                    sentinelStartDateInput.value = sentinelDefaultStartValue;
+                }
+                if (sentinelEndDateInput && (force || !sentinelEndDateInput.value)) {
+                    sentinelEndDateInput.value = sentinelDefaultEndValue;
+                }
+
+                syncSentinelDateConstraints();
+            };
+
+            const waitForFormatISODate = (callback, attempts = 10, delayMs = 50) => {
+                if (typeof window.formatISODate === 'function' || attempts <= 0) {
+                    callback();
+                    return;
+                }
+                setTimeout(() => {
+                    waitForFormatISODate(callback, attempts - 1, delayMs);
+                }, delayMs);
+            };
+
+            waitForFormatISODate(() => applySentinelDefaultDates(false));
+
+            sentinelStartDateInput?.addEventListener('change', () => {
+                if (sentinelEndDateInput && sentinelStartDateInput.value && sentinelEndDateInput.value && sentinelEndDateInput.value < sentinelStartDateInput.value) {
+                    sentinelEndDateInput.value = sentinelStartDateInput.value;
+                }
+                syncSentinelDateConstraints();
+            });
+
+            sentinelEndDateInput?.addEventListener('change', () => {
+                if (sentinelStartDateInput && sentinelEndDateInput.value && sentinelStartDateInput.value && sentinelStartDateInput.value > sentinelEndDateInput.value) {
+                    sentinelStartDateInput.value = sentinelEndDateInput.value;
+                }
+                syncSentinelDateConstraints();
+            });
 
             // Sentinel responses store cloud cover as a float, ensure consistent text output.
             const formatCloudCover = (value) => {
@@ -2318,6 +2422,7 @@
             // Pull the latest Sentinel results with optional filters and populate the panel list.
             async function loadSentinelCollections(forceRefresh = false) {
                 if (!sentinelStatus || !sentinelList) return;
+                syncSentinelDateConstraints();
 
                 if (forceRefresh && window.MyZkToast?.info) {
                     window.MyZkToast.info('Refreshing Sentinel-2 catalogue...');
@@ -2327,20 +2432,48 @@
                 sentinelStatus.textContent = 'Fetching latest Sentinel-2 collections...';
                 sentinelList.innerHTML = '';
 
-                const endDate = new Date();
-                const startDate = new Date(endDate);
-                startDate.setMonth(startDate.getMonth() - 1);
-                startDate.setHours(0, 0, 0, 0);
-                const endDateAdjusted = new Date(endDate);
-                endDateAdjusted.setHours(23, 59, 59, 999);
-
                 const params = new URLSearchParams({
-                    startDate: formatISODate(startDate),
-                    completionDate: formatISODate(endDateAdjusted),
                     maxRecords: '20',
                     sortParam: 'startDate',
                     sortOrder: 'descending'
                 });
+
+                const startDateRaw = sentinelStartDateInput?.value?.trim();
+                const endDateRaw = sentinelEndDateInput?.value?.trim();
+
+                let startDate = parseDateHelper(startDateRaw)
+                    ?? parseDateHelper(sentinelDefaultStartValue)
+                    ?? parseDateHelper(new Date());
+                let endDate = parseDateHelper(endDateRaw)
+                    ?? parseDateHelper(sentinelDefaultEndValue)
+                    ?? parseDateHelper(new Date());
+
+                if (!startDate || !endDate) {
+                    sentinelStatus.textContent = 'Please provide a valid start and end date to filter collections.';
+                    sentinelList.innerHTML = '';
+                    return;
+                }
+
+                startDate.setHours(0, 0, 0, 0);
+                endDate.setHours(23, 59, 59, 999);
+
+                if (startDate > endDate) {
+                    sentinelStatus.textContent = 'Start date must be earlier than or equal to end date.';
+                    sentinelList.innerHTML = '';
+                    return;
+                }
+
+                const startDateIso = ensureIsoDateString(startDate);
+                const endDateIso = ensureIsoDateString(endDate);
+
+                if (!startDateIso || !endDateIso) {
+                    sentinelStatus.textContent = 'Unable to format the selected date range. Please adjust the dates and try again.';
+                    sentinelList.innerHTML = '';
+                    return;
+                }
+
+                params.set('startDate', startDateIso);
+                params.set('completionDate', endDateIso);
 
                 const productTypeRaw = sentinelLevelInput?.value?.trim();
                 const productType = ['S2MSI2A', 'S2MSI1C'].includes(productTypeRaw) ? productTypeRaw : defaultProductType;
@@ -2391,7 +2524,7 @@
                     const features = Array.isArray(response?.features) ? response.features : [];
 
                     if (!features.length) {
-                        sentinelStatus.textContent = 'No Sentinel-2 collections found in the last 30 days.';
+                        sentinelStatus.textContent = 'No Sentinel-2 collections found for the selected date range.';
                     } else {
                         sentinelStatus.classList.add('hidden');
                         features.forEach(feature => {
@@ -2473,6 +2606,7 @@
             if (sentinelFilterResetButton) {
                 sentinelFilterResetButton.addEventListener('click', () => {
                     if (sentinelCloudInput) sentinelCloudInput.value = defaultCloudCoverMax;
+                    applySentinelDefaultDates(true);
                     if (sentinelLatInput) sentinelLatInput.value = defaultLatitude;
                     if (sentinelLonInput) sentinelLonInput.value = defaultLongitude;
                     if (sentinelLevelInput) sentinelLevelInput.value = defaultProductType;

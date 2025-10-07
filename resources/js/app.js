@@ -117,6 +117,47 @@ function formatISODate(date) {
 }
 
 /**
+ * Calculates a default date range ending today at 23:59 and starting
+ * a configurable number of months in the past at 00:00.
+ *
+ * @param {number} [monthsBack=1] - Number of months to subtract from the end date.
+ * @returns {{start: Date, end: Date}} An object containing start and end Date instances.
+ */
+function getDefaultDateRange(monthsBack = 1) {
+    const months = Number.isFinite(monthsBack) && monthsBack > 0 ? monthsBack : 1;
+    const end = new Date();
+    const endClone = new Date(end.getTime());
+    endClone.setHours(23, 59, 59, 999);
+
+    const startClone = new Date(endClone.getTime());
+    startClone.setMonth(startClone.getMonth() - months);
+    startClone.setHours(0, 0, 0, 0);
+
+    return { start: startClone, end: endClone };
+}
+
+/**
+ * Attempts to coerce the provided value into a valid Date instance.
+ *
+ * @param {string|Date|null|undefined} value - Input value to parse.
+ * @returns {Date|null} A new Date instance when the value can be parsed, otherwise null.
+ */
+function parseDateInput(value) {
+    if (value instanceof Date && !Number.isNaN(value.getTime())) {
+        return new Date(value.getTime());
+    }
+
+    if (typeof value === "string" && value.trim() !== "") {
+        const parsed = new Date(value);
+        if (!Number.isNaN(parsed.getTime())) {
+            return parsed;
+        }
+    }
+
+    return null;
+}
+
+/**
  * Formats a date string into a readable medium-style date with short time format.
  *
  * @param {string|Date|null|undefined} value - The date string or Date object to format
@@ -146,6 +187,8 @@ window.timeAgo = timeAgo;
 window.formatCustomDate = formatCustomDate;
 window.formatISODate = formatISODate;
 window.formatReadableDate = formatReadableDate;
+window.getDefaultDateRange = getDefaultDateRange;
+window.parseDateInput = parseDateInput;
 
 /**
  * Formats a number into a currency string based on the specified locale and currency code.

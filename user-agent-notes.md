@@ -6,12 +6,14 @@
   **Tindakan:** Menambahkan pemicu `map:ready` dan menunggu inisialisasi peta sebelum menampilkan preview.
 - **Pertanyaan:** "Saya ingin bisa download scene citranya, bukan thumbnail."  
   **Tindakan:** Menambahkan aksi unduh scene lengkap serta heuristik pemilihan URL download.
-- **Pertanyaan:** "Token tidak ditemukan / tidak bisa diparse."  
+- **Pertanyaan:** "Token tidak ditemukan / tidak bisa diparse."
   **Tindakan:** Mengganti input manual dengan kredensial server dan layanan refresh token otomatis.
 - **Pertanyaan:** "Preview coverage berhasil tapi citra tidak, jangan pakai thumbnail."
   **Tindakan:** Mengganti rendering quicklook dengan layer WMS Copernicus sebagai preview utama dan tetap menampilkan kotak batas.
 - **Pertanyaan:** "Preview masih mencoba quicklook dan gagal karena CORS."
   **Tindakan:** Memperbaiki deteksi layanan WMS supaya URL bersarang/objek ikut terbaca, meneruskan parameter layer bawaan, dan melewati inisialisasi uploader ketika elemen tombol tidak muncul.
+- **Pertanyaan:** "kenapa yang di app.js declare nya tidak pertama sehingga untuk panggil 'formatISODate' langsung diawal not define"
+  **Tindakan:** Menjelaskan bahwa bundel `app.js` dimuat terpisah oleh Vite sehingga skrip inline di Blade dapat berjalan sebelum fungsi global tersedia; solusi sementara adalah menunggu registrasi global sebelum memakai `formatISODate`.
 
 ## Catatan Tambahan
 
