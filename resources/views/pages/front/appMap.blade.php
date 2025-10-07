@@ -263,7 +263,7 @@
                             </a>
                             <button class="hover:bg-primary/10 text-primary border-primary/40 inline-flex items-center space-x-1 rounded-lg border px-2 py-1 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50" data-sentinel-preview type="button">
                                 <i class="ri-image-line"></i>
-                                <span>Preview on Map</span>
+                                <span>View on Map</span>
                             </button>
                         </div>
                     </div>
@@ -504,35 +504,27 @@
                 </div>
             </div>
 
-            <!-- Sentinel Preview Panel -->
+            <!-- Sentinel Coverage Panel -->
             <div class="absolute left-2 right-2 top-[6.5rem] z-40 flex justify-end sm:left-auto sm:right-2 sm:w-80">
                 <div class="border-foreground/15 bg-background/95 supports-[backdrop-filter]:bg-background/70 pointer-events-auto hidden w-full max-w-md rounded-xl border p-3 text-xs shadow-lg backdrop-blur" id="sentinelPreviewPanel">
                     <div class="flex items-start justify-between gap-2">
                         <div class="space-y-1">
-                            <p class="text-primary text-[10px] font-semibold uppercase tracking-wide">Sentinel-2 Preview</p>
+                            <p class="text-primary text-[10px] font-semibold uppercase tracking-wide">Sentinel-2 Coverage</p>
                             <p class="text-foreground text-sm font-semibold leading-tight" data-sentinel-preview-title>–</p>
-                            <p class="text-foreground/70 text-xs leading-tight" data-sentinel-preview-acquired>Select a collection to preview on the map.</p>
+                            <p class="text-foreground/70 text-xs leading-tight" data-sentinel-preview-acquired>Select a collection to view coverage on the map.</p>
                             <p class="text-foreground/60 hidden text-xs leading-tight" data-sentinel-preview-details></p>
                         </div>
                         <button class="text-foreground/50 hover:text-foreground transition" id="sentinelPreviewClearBtn" type="button">
                             <i class="ri-close-line text-base"></i>
-                            <span class="sr-only">Clear Sentinel preview</span>
+                            <span class="sr-only">Clear Sentinel coverage</span>
                         </button>
                     </div>
-                    <p class="text-foreground/70 mt-2 text-xs" data-sentinel-preview-status>Awaiting preview selection.</p>
+                    <p class="text-foreground/70 mt-2 text-xs" data-sentinel-preview-status>Awaiting coverage selection.</p>
                     <div class="mt-2 flex flex-wrap gap-1.5" id="sentinelPreviewActions">
                         <a class="bg-primary text-background hover:bg-primary/90 inline-flex hidden items-center space-x-1 rounded-lg px-2 py-1 text-xs font-semibold transition" id="sentinelPreviewDownloadBtn" href="#" aria-disabled="true" target="_blank" rel="noopener noreferrer">
                             <i class="ri-download-cloud-2-line text-sm"></i>
                             <span>Download Scene</span>
                         </a>
-                        <button class="bg-primary text-background hover:bg-primary/90 inline-flex items-center space-x-1 rounded-lg px-2 py-1 text-xs font-semibold transition" id="sentinelPreviewHideBtn" type="button">
-                            <i class="ri-eye-off-line text-sm"></i>
-                            <span>Hide Preview</span>
-                        </button>
-                        <button class="bg-primary text-background hover:bg-primary/90 inline-flex hidden items-center space-x-1 rounded-lg px-2 py-1 text-xs font-semibold transition" id="sentinelPreviewShowBtn" type="button">
-                            <i class="ri-eye-line text-sm"></i>
-                            <span>Unhide Preview</span>
-                        </button>
                     </div>
                 </div>
             </div>
@@ -1342,8 +1334,6 @@
             const sentinelPreviewAcquired = sentinelPreviewPanel?.querySelector('[data-sentinel-preview-acquired]');
             const sentinelPreviewDetails = sentinelPreviewPanel?.querySelector('[data-sentinel-preview-details]');
             const sentinelPreviewStatus = sentinelPreviewPanel?.querySelector('[data-sentinel-preview-status]');
-            const sentinelPreviewHideBtn = document.getElementById('sentinelPreviewHideBtn');
-            const sentinelPreviewShowBtn = document.getElementById('sentinelPreviewShowBtn');
             const sentinelPreviewClearBtn = document.getElementById('sentinelPreviewClearBtn');
             const sentinelPreviewDownloadBtn = document.getElementById('sentinelPreviewDownloadBtn');
 
@@ -1376,7 +1366,6 @@
             };
 
             const sentinelDownloadIgnoredKeywords = ['quicklook', 'thumbnail', 'thumb', 'overview', 'browse', 'preview', 'allorigins'];
-            const sentinelPreviewIgnoredKeywords = ['thumbnail', 'thumb', 'legend', 'logo', 'browse', 'allorigins'];
 
             // Trim any whitespace from the access token resolved from the backend configuration.
             const sanitizeSentinelToken = (value) => {
@@ -1422,684 +1411,6 @@
                 }
             };
 
-            // Lightweight heuristics that help filter out non-WMS entries from the metadata payload.
-            const isLikelyWmsUrl = (url) => {
-                if (typeof url !== 'string') return false;
-                const trimmed = url.trim();
-                if (!trimmed) return false;
-                const lowered = trimmed.toLowerCase();
-                if (sentinelPreviewIgnoredKeywords.some((keyword) => lowered.includes(keyword))) {
-                    return false;
-                }
-                const hasProtocol = /^https?:\/\//i.test(trimmed);
-                const looksRelative = trimmed.startsWith('/') || trimmed.startsWith('./') || trimmed.startsWith('../');
-                const mentionsWms = lowered.includes('service=wms') ||
-                    lowered.includes('request=getmap') ||
-                    lowered.includes('/wms') ||
-                    lowered.includes('ogc/wms') ||
-                    lowered.includes('/ows');
-                if (!hasProtocol && !looksRelative && !mentionsWms) {
-                    return false;
-                }
-                return mentionsWms;
-            };
-
-            // Remove volatile query parameters and capture relevant metadata for an OpenLayers WMS source.
-            const normalizeWmsCandidate = (url) => {
-                if (!isLikelyWmsUrl(url)) return null;
-                try {
-                    const baseHref = typeof window !== 'undefined' && window.location ?
-                        window.location.href :
-                        'https://example.com/';
-                    const parsed = new URL(url, baseHref);
-                    const baseUrl = `${parsed.origin}${parsed.pathname}`;
-                    const params = {};
-                    parsed.searchParams.forEach((value, key) => {
-                        if (value === undefined || value === null || value === '') return;
-                        const lower = key.toLowerCase();
-                        if (lower === 'token') return;
-                        if (['bbox', 'width', 'height', 'x', 'y', 'lat', 'lon'].includes(lower)) return;
-                        if (lower === 'request' || lower === 'service') return;
-                        if (lower === 'layers' || lower === 'layer') {
-                            params.LAYERS = value;
-                            return;
-                        }
-                        if (lower === 'styles' || lower === 'style') {
-                            params.STYLES = value;
-                            return;
-                        }
-                        params[key.toUpperCase()] = value;
-                    });
-
-                    if (!params.LAYERS) {
-                        const fallbackLayer = parsed.searchParams.get('LAYERS') || parsed.searchParams.get('layers');
-                        if (fallbackLayer) {
-                            params.LAYERS = fallbackLayer;
-                        }
-                    }
-
-                    const version = parsed.searchParams.get('VERSION') || parsed.searchParams.get('version') || null;
-
-                    return {
-                        url: baseUrl,
-                        params,
-                        version,
-                        originalUrl: url
-                    };
-                } catch (error) {
-                    console.warn('Unable to normalise WMS candidate', url, error);
-                    return null;
-                }
-            };
-
-            // Recursively walk nested metadata objects and gather potential WMS endpoint strings.
-            const collectWmsServiceCandidates = (input, context = {}) => {
-                const results = [];
-                const seen = new Set();
-
-                const visit = (value, ctx) => {
-                    if (!value) return;
-
-                    if (typeof value === 'string') {
-                        const candidate = value.trim();
-                        if (!candidate || !isLikelyWmsUrl(candidate)) return;
-                        const normalizedContext = {
-                            layers: ctx.layers ?? null,
-                            styles: ctx.styles ?? null,
-                            version: ctx.version ?? null
-                        };
-
-                        const key = `${candidate}|${normalizedContext.layers ?? ''}|${normalizedContext.styles ?? ''}|${normalizedContext.version ?? ''}`;
-                        if (seen.has(key)) return;
-                        results.push({
-                            url: candidate,
-                            ...normalizedContext
-                        });
-                        seen.add(key);
-                        return;
-                    }
-
-                    if (Array.isArray(value)) {
-                        value.forEach((item) => visit(item, ctx));
-                        return;
-                    }
-
-                    if (typeof value === 'object') {
-                        let layers = ctx.layers ?? null;
-                        let styles = ctx.styles ?? null;
-                        let version = ctx.version ?? null;
-
-                        Object.entries(value).forEach(([rawKey, rawValue]) => {
-                            const key = String(rawKey).toLowerCase();
-                            if (key === 'layers' || key === 'layer' || key.includes('layer')) {
-                                if (typeof rawValue === 'string' && rawValue.trim()) {
-                                    layers = rawValue.trim();
-                                } else if (Array.isArray(rawValue)) {
-                                    const joined = rawValue
-                                        .map((item) => (typeof item === 'string' ? item.trim() : ''))
-                                        .filter(Boolean)
-                                        .join(',');
-                                    if (joined) {
-                                        layers = joined;
-                                    }
-                                }
-                            } else if (key === 'styles' || key === 'style' || key.includes('style')) {
-                                if (typeof rawValue === 'string' && rawValue.trim()) {
-                                    styles = rawValue.trim();
-                                } else if (Array.isArray(rawValue)) {
-                                    const joined = rawValue
-                                        .map((item) => (typeof item === 'string' ? item.trim() : ''))
-                                        .filter(Boolean)
-                                        .join(',');
-                                    if (joined) {
-                                        styles = joined;
-                                    }
-                                }
-                            } else if (key === 'version') {
-                                if (typeof rawValue === 'string' && rawValue.trim()) {
-                                    version = rawValue.trim();
-                                }
-                            }
-                        });
-
-                        Object.entries(value).forEach(([rawKey, rawValue]) => {
-                            if (typeof rawValue === 'string') {
-                                visit(rawValue, {
-                                    layers,
-                                    styles,
-                                    version
-                                });
-                            } else {
-                                visit(rawValue, {
-                                    layers,
-                                    styles,
-                                    version
-                                });
-                            }
-                        });
-                    }
-                };
-
-                visit(input, {
-                    ...context
-                });
-
-                return results;
-            };
-
-            // Use the gathered candidates to determine the best scoring WMS configuration for a scene.
-            const resolveSentinelWmsConfig = (data) => {
-                if (!data) return null;
-
-                const candidates = new Map();
-                const registerCandidate = (candidate, score = 0) => {
-                    if (!candidate || !candidate.url) return;
-                    const key = `${candidate.url}|${candidate.params?.LAYERS ?? ''}|${candidate.params?.STYLES ?? ''}`;
-                    const existing = candidates.get(key);
-                    if (!existing || score > existing.score) {
-                        candidates.set(key, {
-                            ...candidate,
-                            score
-                        });
-                    }
-                };
-
-                const registerFromValue = (value, score = 0) => {
-                    if (!value) return;
-                    collectWmsServiceCandidates(value).forEach((entry) => {
-                        const candidate = normalizeWmsCandidate(entry.url);
-                        if (!candidate) return;
-                        const params = {
-                            ...(candidate.params ?? {})
-                        };
-                        if (!params.LAYERS && entry.layers) {
-                            params.LAYERS = entry.layers;
-                        }
-                        if (!params.STYLES && entry.styles) {
-                            params.STYLES = entry.styles;
-                        }
-                        if (Object.keys(params).length) {
-                            candidate.params = params;
-                        }
-                        if (!candidate.version && entry.version) {
-                            candidate.version = entry.version;
-                        }
-                        registerCandidate(candidate, score);
-                    });
-                };
-
-                registerFromValue(data.wms, 96);
-                registerFromValue(data.previewWms, 94);
-                registerFromValue(data.wmts, 80);
-
-                const props = data.featureProperties ?? data.properties ?? {};
-                registerFromValue(props?.services, 92);
-
-                if (props && typeof props === 'object') {
-                    Object.entries(props).forEach(([key, value]) => {
-                        const lowered = String(key).toLowerCase();
-                        if (lowered.includes('wms') || lowered.includes('ogc') || lowered.includes('ows')) {
-                            registerFromValue(value, lowered.includes('wms') ? 95 : 85);
-                        }
-                    });
-                }
-
-                const services = data.services ?? props?.services;
-                if (services && typeof services === 'object') {
-                    Object.entries(services).forEach(([key, value]) => {
-                        const lowered = String(key).toLowerCase();
-                        let score = 84;
-                        if (lowered.includes('wms')) score = 98;
-                        else if (lowered.includes('ogc') || lowered.includes('ows')) score = 90;
-                        registerFromValue(value, score);
-                    });
-                } else {
-                    registerFromValue(services, 82);
-                }
-
-                const links = Array.isArray(data.links) ? data.links : props?.links;
-                if (Array.isArray(links)) {
-                    links.forEach((link) => {
-                        const href = typeof link?.href === 'string' ? link.href : null;
-                        if (!href) return;
-                        const rel = typeof link?.rel === 'string' ? link.rel.toLowerCase() : '';
-                        const type = typeof link?.type === 'string' ? link.type.toLowerCase() : '';
-                        let score = 70;
-                        if (rel.includes('wms') || rel.includes('ogc')) score += 20;
-                        if (type.includes('wms')) score += 18;
-                        registerFromValue(href, score);
-                    });
-                }
-
-                const assets = data.assets ?? props?.assets;
-                if (assets && typeof assets === 'object') {
-                    Object.entries(assets).forEach(([key, value]) => {
-                        const lowered = String(key).toLowerCase();
-                        if (sentinelPreviewIgnoredKeywords.some((keyword) => lowered.includes(keyword))) {
-                            return;
-                        }
-                        if (lowered.includes('wms') || lowered.includes('ogc') || lowered.includes('ows')) {
-                            registerFromValue(value, lowered.includes('wms') ? 90 : 78);
-                        }
-                    });
-                }
-
-                if (!candidates.size) {
-                    return null;
-                }
-
-                const sorted = Array.from(candidates.values()).sort((a, b) => b.score - a.score);
-                const best = sorted[0];
-                if (!best || !best.url) return null;
-
-                if (!best.params?.LAYERS) {
-                    const fallbackLayer = data.productId || data.tileId || props?.productIdentifier || props?.title || null;
-                    if (fallbackLayer) {
-                        best.params = {
-                            ...(best.params ?? {}),
-                            LAYERS: fallbackLayer
-                        };
-                    }
-                }
-
-                if (!best.params?.LAYERS) {
-                    return null;
-                }
-
-                return best;
-            };
-
-            const isValidSentinelDownloadUrl = (url) => {
-                if (typeof url !== 'string') return false;
-                const trimmed = url.trim();
-                if (!trimmed) return false;
-                if (!/^https?:\/\//i.test(trimmed)) return false;
-                const lowered = trimmed.toLowerCase();
-                return !sentinelDownloadIgnoredKeywords.some((keyword) => lowered.includes(keyword));
-            };
-
-            const extractServiceUrls = (service) => {
-                const results = [];
-                if (!service) return results;
-                if (typeof service === 'string') {
-                    results.push(service);
-                    return results;
-                }
-                if (Array.isArray(service)) {
-                    service.forEach((item) => {
-                        results.push(...extractServiceUrls(item));
-                    });
-                    return results;
-                }
-                if (typeof service === 'object') {
-                    ['url', 'href', 'https', 'http'].forEach((key) => {
-                        const value = service[key];
-                        if (typeof value === 'string') {
-                            results.push(value);
-                        }
-                    });
-                }
-                return results;
-            };
-
-            // Evaluate every link/asset reference and pick the most appropriate full scene download URL.
-            const resolveSentinelDownloadUrl = (feature) => {
-                if (!feature) return null;
-
-                const props = feature.properties ?? {};
-                const links = Array.isArray(feature.links) ? feature.links : [];
-                const assets = feature.assets ?? {};
-
-                const candidateScores = new Map();
-                const registerCandidate = (url, score = 0) => {
-                    if (!isValidSentinelDownloadUrl(url)) return;
-                    const existing = candidateScores.get(url);
-                    if (existing === undefined || score > existing) {
-                        candidateScores.set(url, score);
-                    }
-                };
-
-                const registerFromService = (service, score = 0) => {
-                    extractServiceUrls(service).forEach((url) => {
-                        registerCandidate(url, score);
-                    });
-                };
-
-                const linkScoreByRel = {
-                    enclosure: 100,
-                    download: 95,
-                    data: 90,
-                    alternate: 75,
-                    source: 70,
-                    self: 65
-                };
-
-                links.forEach((link) => {
-                    const href = typeof link?.href === 'string' ? link.href : null;
-                    if (!href) return;
-                    const rel = typeof link?.rel === 'string' ? link.rel.toLowerCase() : '';
-                    const type = typeof link?.type === 'string' ? link.type.toLowerCase() : '';
-                    let score = linkScoreByRel[rel] ?? 60;
-                    if (type.includes('zip') || type.includes('safe') || type.includes('application/octet-stream')) {
-                        score += 15;
-                    }
-                    registerCandidate(href, score);
-                });
-
-                ['downloadUrl', 'productDownloadUrl', 'productUrl', 'dataUrl', 'url', 'servicesDownloadUrl', 'resourceUrl'].forEach((key) => {
-                    const value = props[key];
-                    if (typeof value === 'string') {
-                        registerCandidate(value, 92);
-                    }
-                });
-
-                const services = props.services;
-                if (services && typeof services === 'object' && !Array.isArray(services)) {
-                    Object.entries(services).forEach(([key, serviceValue]) => {
-                        const lowerKey = String(key).toLowerCase();
-                        let score = 70;
-                        if (lowerKey.includes('download')) score = 95;
-                        else if (lowerKey.includes('data')) score = 88;
-                        else if (lowerKey.includes('s3') || lowerKey.includes('aws')) score = 82;
-                        registerFromService(serviceValue, score);
-                    });
-                } else {
-                    registerFromService(services, 80);
-                }
-
-                Object.entries(assets).forEach(([key, assetValue]) => {
-                    const lowerKey = String(key).toLowerCase();
-                    if (sentinelDownloadIgnoredKeywords.some((keyword) => lowerKey.includes(keyword))) {
-                        return;
-                    }
-                    const href = typeof assetValue === 'string' ?
-                        assetValue :
-                        (typeof assetValue?.href === 'string' ?
-                            assetValue.href :
-                            (typeof assetValue?.url === 'string' ? assetValue.url : null));
-                    if (!href) return;
-                    let score = 68;
-                    if (Array.isArray(assetValue?.roles)) {
-                        const roleScore = assetValue.roles.some((role) => ['data', 'download', 'product', 'analytic'].includes(String(role).toLowerCase()));
-                        if (roleScore) score += 20;
-                    }
-                    const type = typeof assetValue?.type === 'string' ? assetValue.type.toLowerCase() : '';
-                    if (type.includes('zip') || type.includes('safe') || type.includes('geotiff') || type.includes('jp2')) {
-                        score += 12;
-                    }
-                    if (/(data|product|tile|granule|image|scene)/.test(lowerKey)) {
-                        score += 6;
-                    }
-                    registerCandidate(href, score);
-                });
-
-                const propsAssets = props.assets;
-                if (propsAssets && typeof propsAssets === 'object' && !Array.isArray(propsAssets)) {
-                    Object.entries(propsAssets).forEach(([key, assetValue]) => {
-                        const lowerKey = String(key).toLowerCase();
-                        if (sentinelDownloadIgnoredKeywords.some((keyword) => lowerKey.includes(keyword))) {
-                            return;
-                        }
-                        if (typeof assetValue === 'string') {
-                            registerCandidate(assetValue, 66);
-                        } else if (assetValue && typeof assetValue === 'object') {
-                            if (typeof assetValue.href === 'string') {
-                                registerCandidate(assetValue.href, 66);
-                            }
-                            if (typeof assetValue.url === 'string') {
-                                registerCandidate(assetValue.url, 66);
-                            }
-                        }
-                    });
-                }
-
-                let bestUrl = null;
-                let bestScore = -Infinity;
-                candidateScores.forEach((score, url) => {
-                    if (score > bestScore) {
-                        bestScore = score;
-                        bestUrl = url;
-                    }
-                });
-
-                return bestUrl ?? null;
-            };
-
-            let sentinelPreviewController = null;
-
-            // Lazily create a preview controller that renders coverage + WMS previews on the shared map instance.
-            const createSentinelPreviewController = () => {
-                if (sentinelPreviewController) {
-                    return sentinelPreviewController;
-                }
-
-                if (typeof window === 'undefined' || typeof ol === 'undefined') {
-                    return null;
-                }
-
-                const mapInstance = window.map;
-                const mapProjection = mapInstance?.getView?.()?.getProjection?.();
-                if (!mapInstance || !mapProjection) {
-                    return null;
-                }
-
-                const dataProjection = 'EPSG:4326';
-                const geoJsonParser = new ol.format.GeoJSON();
-
-                const bboxSource = new ol.source.Vector();
-                const bboxLayer = new ol.layer.Vector({
-                    source: bboxSource,
-                    style: new ol.style.Style({
-                        stroke: new ol.style.Stroke({
-                            color: 'rgba(59,130,246,0.9)',
-                            width: 2,
-                            lineDash: [6, 6]
-                        }),
-                        fill: new ol.style.Fill({
-                            color: 'rgba(59,130,246,0.15)'
-                        })
-                    }),
-                    visible: false,
-                    zIndex: 1200
-                });
-
-                const previewLayer = new ol.layer.Image({
-                    visible: false,
-                    opacity: 0.8,
-                    zIndex: 1150
-                });
-
-                mapInstance.addLayer(previewLayer);
-                mapInstance.addLayer(bboxLayer);
-
-                const state = {
-                    current: null,
-                    hasImage: false,
-                    imageHidden: false,
-                    previewType: null
-                };
-
-                // Helper to keep the overlay metadata text in sync with the currently selected product.
-                const setPanelContent = ({
-                    title,
-                    acquired,
-                    details,
-                    status
-                }) => {
-                    if (title !== undefined && sentinelPreviewTitle) {
-                        sentinelPreviewTitle.textContent = title;
-                    }
-                    if (acquired !== undefined && sentinelPreviewAcquired) {
-                        sentinelPreviewAcquired.textContent = acquired;
-                    }
-                    if (details !== undefined && sentinelPreviewDetails) {
-                        sentinelPreviewDetails.textContent = details;
-                        sentinelPreviewDetails.classList.toggle('hidden', !details);
-                    }
-                    if (status !== undefined && sentinelPreviewStatus) {
-                        sentinelPreviewStatus.textContent = status;
-                    }
-                };
-
-                // Toggle the preview overlay visibility without tearing down the DOM node.
-                const setPanelVisible = (visible) => {
-                    if (sentinelPreviewPanel) {
-                        sentinelPreviewPanel.classList.toggle('hidden', !visible);
-                    }
-                };
-
-                // Update the preview control buttons based on the current selection and loading state.
-                const updateButtons = () => {
-                    const hasSelection = Boolean(state.current);
-                    const canToggleImage = hasSelection && state.hasImage;
-
-                    if (sentinelPreviewHideBtn) {
-                        sentinelPreviewHideBtn.disabled = !canToggleImage || state.imageHidden;
-                        sentinelPreviewHideBtn.textContent = state.imageHidden ? 'Preview hidden' : 'Hide preview';
-                    }
-
-                    if (sentinelPreviewShowBtn) {
-                        sentinelPreviewShowBtn.disabled = !canToggleImage || !state.imageHidden;
-                        sentinelPreviewShowBtn.textContent = state.imageHidden ? 'Unhide Preview' : 'Preview Visible';
-                    }
-
-                    if (sentinelPreviewClearBtn) {
-                        sentinelPreviewClearBtn.disabled = !hasSelection;
-                    }
-
-                    if (sentinelPreviewDownloadBtn) {
-                        const downloadUrl = hasSelection ? state.current?.downloadUrl : null;
-                        if (downloadUrl) {
-                            const label = state.current?.productId || state.current?.baseTitle || 'Sentinel-2 scene';
-                            const downloadName = state.current?.downloadFilename ||
-                                buildSentinelDownloadName(state.current?.productId, state.current?.baseTitle);
-
-                            sentinelPreviewDownloadBtn.classList.remove('hidden');
-                            sentinelPreviewDownloadBtn.setAttribute('href', downloadUrl);
-                            sentinelPreviewDownloadBtn.setAttribute('aria-disabled', 'false');
-                            sentinelPreviewDownloadBtn.setAttribute('title', `Download full scene for ${label}`);
-                            sentinelPreviewDownloadBtn.setAttribute('download', downloadName);
-                            sentinelPreviewDownloadBtn.dataset.downloadBase = state.current?.downloadUrlBase || '';
-                            sentinelPreviewDownloadBtn.tabIndex = 0;
-                        } else {
-                            sentinelPreviewDownloadBtn.classList.add('hidden');
-                            sentinelPreviewDownloadBtn.removeAttribute('href');
-                            sentinelPreviewDownloadBtn.removeAttribute('download');
-                            sentinelPreviewDownloadBtn.setAttribute('aria-disabled', 'true');
-                            delete sentinelPreviewDownloadBtn.dataset.downloadBase;
-                            sentinelPreviewDownloadBtn.tabIndex = -1;
-                        }
-                    }
-                };
-
-                // Remove any raster source from the preview image layer.
-                const clearPreviewLayer = () => {
-                    previewLayer.setSource(null);
-                    previewLayer.setVisible(false);
-                    state.previewType = null;
-                };
-
-                // Animate the map viewport to the selected scene coverage.
-                const focusExtent = (extent) => {
-                    if (!extent) return;
-                    try {
-                        const view = mapInstance.getView();
-                        if (view && typeof view.fit === 'function') {
-                            view.fit(extent, {
-                                padding: [50, 50, 50, 50],
-                                duration: 500,
-                                maxZoom: 14
-                            });
-                        }
-                    } catch (error) {
-                        console.error('Failed to fit map to extent', error);
-                    }
-                };
-
-                // Fallback renderer for quicklook JPEGs when no WMS is available.
-                const applyStaticPreview = (url, extent) => {
-                    if (!url || !extent) return false;
-                    try {
-                        const imageExtent = ol.proj.transformExtent(extent, mapProjection, mapProjection);
-                        previewLayer.setSource(new ol.source.ImageStatic({
-                            url,
-                            imageExtent,
-                            projection: mapProjection,
-                            crossOrigin: 'anonymous'
-                        }));
-                        state.previewType = 'static';
-                        previewLayer.setVisible(!state.imageHidden);
-                        return true;
-                    } catch (error) {
-                        console.error('Unable to create Sentinel preview source', error);
-                        clearPreviewLayer();
-                        return false;
-                    }
-                };
-
-                // Configure an OpenLayers ImageWMS source for high resolution previews.
-                const applyWmsPreview = (config, callbacks = {}) => {
-                    if (!config || !config.url) return false;
-                    try {
-                        let wmsUrl = config.url;
-                        const tokenised = applySentinelTokenToUrl(wmsUrl);
-                        if (tokenised) {
-                            wmsUrl = tokenised;
-                        }
-
-                        const params = {
-                            ...(config.params ?? {})
-                        };
-                        if (!params.LAYERS) {
-                            return false;
-                        }
-
-                        const projectionCode = mapProjection?.getCode?.() ?? 'EPSG:3857';
-                        if (!params.CRS) params.CRS = projectionCode;
-                        if (!params.SRS) params.SRS = projectionCode;
-                        if (!params.FORMAT) params.FORMAT = 'image/png';
-                        if (!params.TRANSPARENT) params.TRANSPARENT = 'true';
-                        if (!params.VERSION && config.version) params.VERSION = config.version;
-
-                        const source = new ol.source.ImageWMS({
-                            url: wmsUrl,
-                            params,
-                            ratio: 1.0,
-                            crossOrigin: 'anonymous'
-                        });
-
-                        const handleLoadEnd = () => {
-                            if (typeof source.un === 'function') {
-                                source.un('imageloadend', handleLoadEnd);
-                                source.un('imageloaderror', handleLoadError);
-                            }
-                            callbacks.onLoad?.();
-                        };
-
-                        const handleLoadError = (event) => {
-                            if (typeof source.un === 'function') {
-                                source.un('imageloadend', handleLoadEnd);
-                                source.un('imageloaderror', handleLoadError);
-                            }
-                            callbacks.onError?.(event);
-                        };
-
-                        if (typeof source.on === 'function') {
-                            source.on('imageloadend', handleLoadEnd);
-                            source.on('imageloaderror', handleLoadError);
-                        }
-
-                        previewLayer.setSource(source);
-                        state.previewType = 'wms';
-                        previewLayer.setVisible(!state.imageHidden);
-                        return true;
-                    } catch (error) {
-                        console.error('Unable to create Sentinel WMS preview', error);
-                        clearPreviewLayer();
-                        return false;
-                    }
-                };
-
                 // Convert GeoJSON footprint/bbox data into an OpenLayers feature for display.
                 const resolveFootprintFeature = (data) => {
                     if (!data) return null;
@@ -2139,7 +1450,7 @@
                 const controller = {
                     showPreview(data) {
                         if (!data) return;
-                        const title = data.title || data.productId || 'Sentinel-2 Preview';
+                        const title = data.title || data.productId || 'Sentinel-2 Coverage';
                         const acquiredText = data.acquiredText ??
                             (data.acquisitionDate ?
                                 `Acquired: ${formatReadableDate(data.acquisitionDate)}` :
@@ -2160,11 +1471,7 @@
                         setPanelVisible(true);
 
                         bboxSource.clear();
-                        clearPreviewLayer();
                         state.current = null;
-                        state.hasImage = false;
-                        state.imageHidden = false;
-                        state.previewType = null;
                         updateButtons();
 
                         const footprint = resolveFootprintFeature(data);
@@ -2181,6 +1488,10 @@
                         const baseDownloadUrl = data.downloadUrlBase || data.downloadUrl || null;
                         const resolvedDownloadUrl = applySentinelTokenToUrl(baseDownloadUrl);
 
+                        const statusMessage = footprint ?
+                            'Displaying scene coverage on the map.' :
+                            'Coverage area unavailable for this product.';
+
                         state.current = {
                             ...data,
                             extent,
@@ -2192,148 +1503,23 @@
                             downloadFilename
                         };
 
-                        const wmsConfig = resolveSentinelWmsConfig(state.current);
-                        state.current.wmsConfig = wmsConfig;
-
-                        const hasWmsCandidate = Boolean(wmsConfig);
-                        const hasQuicklook = Boolean(data.quicklookUrl && extent);
-
-                        const initialStatus = hasWmsCandidate ?
-                            'Loading Sentinel-2 scene via WMS...' :
-                            (hasQuicklook ?
-                                'Loading preview image...' :
-                                'Preview image not available. Showing coverage.');
-
                         setPanelContent({
                             title,
                             acquired: acquiredText,
                             details: detailText,
-                            status: buildSentinelStatusMessage(initialStatus)
+                            status: buildSentinelStatusMessage(statusMessage)
                         });
 
-                        const renderQuicklookPreview = () => {
-                            if (!hasQuicklook) return false;
-                            setPanelContent({
-                                status: buildSentinelStatusMessage('Loading preview image...')
-                            });
-                            const loader = new Image();
-                            loader.crossOrigin = 'anonymous';
-                            loader.onload = () => {
-                                if (!state.current) return;
-                                const applied = applyStaticPreview(data.quicklookUrl, extent);
-                                state.hasImage = applied;
-                                state.imageHidden = false;
-                                updateButtons();
-                                setPanelContent({
-                                    status: buildSentinelStatusMessage(
-                                        applied ?
-                                        (state.imageHidden ?
-                                            'Preview image loaded. Use "Unhide Preview" to display it.' :
-                                            'Preview image displayed on the map.') :
-                                        'Unable to load preview image. Showing coverage only.'
-                                    )
-                                });
-                            };
-                            loader.onerror = () => {
-                                clearPreviewLayer();
-                                state.hasImage = false;
-                                state.imageHidden = false;
-                                state.previewType = null;
-                                updateButtons();
-                                setPanelContent({
-                                    status: buildSentinelStatusMessage('Unable to load preview image. Showing coverage only.')
-                                });
-                            };
-                            loader.src = data.quicklookUrl;
-                            return true;
-                        };
-
-                        if (!extent) {
-                            setPanelContent({
-                                status: buildSentinelStatusMessage('Coverage area unavailable for this product.')
-                            });
-                        }
-
-                        if (hasWmsCandidate) {
-                            const applied = applyWmsPreview(wmsConfig, {
-                                onLoad: () => {
-                                    if (!state.current) return;
-                                    state.hasImage = true;
-                                    updateButtons();
-                                    setPanelContent({
-                                        status: buildSentinelStatusMessage(
-                                            state.imageHidden ?
-                                            'Preview imagery loaded. Use "Unhide Preview" to display it.' :
-                                            'Preview imagery displayed on the map.'
-                                        )
-                                    });
-                                },
-                                onError: () => {
-                                    clearPreviewLayer();
-                                    state.hasImage = false;
-                                    state.previewType = null;
-                                    updateButtons();
-                                    if (!renderQuicklookPreview()) {
-                                        setPanelContent({
-                                            status: buildSentinelStatusMessage('Unable to load WMS preview imagery. Showing coverage only.')
-                                        });
-                                    }
-                                }
-                            });
-
-                            if (applied) {
-                                state.hasImage = true;
-                                state.imageHidden = false;
-                                updateButtons();
-                                return;
-                            }
-                        }
-
-                        if (renderQuicklookPreview()) {
-                            return;
-                        }
-
-                        clearPreviewLayer();
-                        state.hasImage = false;
-                        state.imageHidden = false;
-                        state.previewType = null;
                         updateButtons();
-                        setPanelContent({
-                            status: buildSentinelStatusMessage('Preview image not available. Showing coverage.')
-                        });
-                    },
-                    hideImage() {
-                        if (!state.current || !state.hasImage) return;
-                        state.imageHidden = true;
-                        previewLayer.setVisible(false);
-                        updateButtons();
-                        setPanelContent({
-                            status: buildSentinelStatusMessage('Preview hidden. Bounding box remains visible.')
-                        });
-                    },
-                    showImage() {
-                        if (!state.current || !state.hasImage) return;
-                        state.imageHidden = false;
-                        previewLayer.setVisible(true);
-                        updateButtons();
-                        setPanelContent({
-                            status: buildSentinelStatusMessage('Preview image visible.')
-                        });
                     },
                     clear() {
                         state.current = null;
-                        state.hasImage = false;
-                        state.imageHidden = false;
                         bboxSource.clear();
                         bboxLayer.setVisible(false);
-                        clearPreviewLayer();
                         updateButtons();
                         setPanelVisible(false);
                     }
                 };
-
-                sentinelPreviewHideBtn?.classList.remove('hidden');
-                sentinelPreviewShowBtn?.classList.remove('hidden');
                 updateButtons();
 
                 sentinelPreviewController = controller;
@@ -2357,25 +1543,11 @@
                 if (!payload) return;
                 const controller = createSentinelPreviewController();
                 if (!controller) {
-                    console.warn('Sentinel preview controller is unavailable. Map is not ready yet.');
+                    console.warn('Sentinel coverage controller is unavailable. Map is not ready yet.');
                     return;
                 }
                 controller.showPreview(payload);
             };
-
-            if (sentinelPreviewHideBtn) {
-                sentinelPreviewHideBtn.addEventListener('click', (event) => {
-                    event.preventDefault();
-                    createSentinelPreviewController()?.hideImage();
-                });
-            }
-
-            if (sentinelPreviewShowBtn) {
-                sentinelPreviewShowBtn.addEventListener('click', (event) => {
-                    event.preventDefault();
-                    createSentinelPreviewController()?.showImage();
-                });
-            }
 
             if (sentinelPreviewClearBtn) {
                 sentinelPreviewClearBtn.addEventListener('click', (event) => {
@@ -2386,10 +1558,7 @@
 
             window.showSentinelPreviewOnMap = triggerSentinelPreview;
 
-            if (!createSentinelPreviewController()) {
-                sentinelPreviewHideBtn?.classList.add('hidden');
-                sentinelPreviewShowBtn?.classList.add('hidden');
-            }
+            createSentinelPreviewController();
 
             // Wrapper around fetch that retries via AllOrigins when CORS rejects the primary request.
             async function fetchSentinelCatalog(url) {
@@ -2536,7 +1705,7 @@
                 if (previewButton) {
                     if (hasCoverage || quicklookUrl) {
                         previewButton.disabled = false;
-                        previewButton.title = 'Display preview on the map';
+                        previewButton.title = 'Display coverage on the map';
                         previewButton.addEventListener('click', () => {
                             window.showSentinelPreviewOnMap?.({
                                 title: titleText,
@@ -2560,7 +1729,7 @@
                         });
                     } else {
                         previewButton.disabled = true;
-                        previewButton.title = 'Preview not available for this product';
+                        previewButton.title = 'Coverage not available for this product';
                     }
                 }
 
