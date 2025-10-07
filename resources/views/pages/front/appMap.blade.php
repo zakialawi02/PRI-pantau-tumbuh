@@ -525,14 +525,6 @@
                             <i class="ri-download-cloud-2-line text-sm"></i>
                             <span>Download Scene</span>
                         </a>
-                        <button class="bg-primary text-background hover:bg-primary/90 inline-flex items-center space-x-1 rounded-lg px-2 py-1 text-xs font-semibold transition" id="sentinelPreviewHideBtn" type="button">
-                            <i class="ri-eye-off-line text-sm"></i>
-                            <span>Hide Preview</span>
-                        </button>
-                        <button class="bg-primary text-background hover:bg-primary/90 inline-flex hidden items-center space-x-1 rounded-lg px-2 py-1 text-xs font-semibold transition" id="sentinelPreviewShowBtn" type="button">
-                            <i class="ri-eye-line text-sm"></i>
-                            <span>Unhide Preview</span>
-                        </button>
                     </div>
                 </div>
             </div>
@@ -948,7 +940,7 @@
                 if (areaInHectares > 0) {
                     totalPriceElement.innerHTML = `
                         <div class="flex justify-between items-center">
-                            <span class="text-lg font-bold text-green-700">${formatNumber(creditPointsNeeded.toFixed(2))} Credit Points</span>
+                            <span class="text-lg font-bold text-green-700">${formatNumber(creditPointsNeeded.toFixed(2),2)} Credit Points</span>
                             <i class="ri-coins-line font-base text-success text-xl"></i>
                         </div>
                         <div class="text-xs text-foreground-70 mt-1">
@@ -1342,8 +1334,6 @@
             const sentinelPreviewAcquired = sentinelPreviewPanel?.querySelector('[data-sentinel-preview-acquired]');
             const sentinelPreviewDetails = sentinelPreviewPanel?.querySelector('[data-sentinel-preview-details]');
             const sentinelPreviewStatus = sentinelPreviewPanel?.querySelector('[data-sentinel-preview-status]');
-            const sentinelPreviewHideBtn = document.getElementById('sentinelPreviewHideBtn');
-            const sentinelPreviewShowBtn = document.getElementById('sentinelPreviewShowBtn');
             const sentinelPreviewClearBtn = document.getElementById('sentinelPreviewClearBtn');
             const sentinelPreviewDownloadBtn = document.getElementById('sentinelPreviewDownloadBtn');
 
@@ -1903,20 +1893,10 @@
                     zIndex: 1200
                 });
 
-                const previewLayer = new ol.layer.Image({
-                    visible: false,
-                    opacity: 0.8,
-                    zIndex: 1150
-                });
-
-                mapInstance.addLayer(previewLayer);
                 mapInstance.addLayer(bboxLayer);
 
                 const state = {
-                    current: null,
-                    hasImage: false,
-                    imageHidden: false,
-                    previewType: null
+                    current: null
                 };
 
                 // Helper to keep the overlay metadata text in sync with the currently selected product.
@@ -1951,17 +1931,6 @@
                 // Update the preview control buttons based on the current selection and loading state.
                 const updateButtons = () => {
                     const hasSelection = Boolean(state.current);
-                    const canToggleImage = hasSelection && state.hasImage;
-
-                    if (sentinelPreviewHideBtn) {
-                        sentinelPreviewHideBtn.disabled = !canToggleImage || state.imageHidden;
-                        sentinelPreviewHideBtn.textContent = state.imageHidden ? 'Preview hidden' : 'Hide preview';
-                    }
-
-                    if (sentinelPreviewShowBtn) {
-                        sentinelPreviewShowBtn.disabled = !canToggleImage || !state.imageHidden;
-                        sentinelPreviewShowBtn.textContent = state.imageHidden ? 'Unhide Preview' : 'Preview Visible';
-                    }
 
                     if (sentinelPreviewClearBtn) {
                         sentinelPreviewClearBtn.disabled = !hasSelection;
@@ -1992,13 +1961,6 @@
                     }
                 };
 
-                // Remove any raster source from the preview image layer.
-                const clearPreviewLayer = () => {
-                    previewLayer.setSource(null);
-                    previewLayer.setVisible(false);
-                    state.previewType = null;
-                };
-
                 // Animate the map viewport to the selected scene coverage.
                 const focusExtent = (extent) => {
                     if (!extent) return;
@@ -2013,90 +1975,6 @@
                         }
                     } catch (error) {
                         console.error('Failed to fit map to extent', error);
-                    }
-                };
-
-                // Fallback renderer for quicklook JPEGs when no WMS is available.
-                const applyStaticPreview = (url, extent) => {
-                    if (!url || !extent) return false;
-                    try {
-                        const imageExtent = ol.proj.transformExtent(extent, mapProjection, mapProjection);
-                        previewLayer.setSource(new ol.source.ImageStatic({
-                            url,
-                            imageExtent,
-                            projection: mapProjection,
-                            crossOrigin: 'anonymous'
-                        }));
-                        state.previewType = 'static';
-                        previewLayer.setVisible(!state.imageHidden);
-                        return true;
-                    } catch (error) {
-                        console.error('Unable to create Sentinel preview source', error);
-                        clearPreviewLayer();
-                        return false;
-                    }
-                };
-
-                // Configure an OpenLayers ImageWMS source for high resolution previews.
-                const applyWmsPreview = (config, callbacks = {}) => {
-                    if (!config || !config.url) return false;
-                    try {
-                        let wmsUrl = config.url;
-                        const tokenised = applySentinelTokenToUrl(wmsUrl);
-                        if (tokenised) {
-                            wmsUrl = tokenised;
-                        }
-
-                        const params = {
-                            ...(config.params ?? {})
-                        };
-                        if (!params.LAYERS) {
-                            return false;
-                        }
-
-                        const projectionCode = mapProjection?.getCode?.() ?? 'EPSG:3857';
-                        if (!params.CRS) params.CRS = projectionCode;
-                        if (!params.SRS) params.SRS = projectionCode;
-                        if (!params.FORMAT) params.FORMAT = 'image/png';
-                        if (!params.TRANSPARENT) params.TRANSPARENT = 'true';
-                        if (!params.VERSION && config.version) params.VERSION = config.version;
-
-                        const source = new ol.source.ImageWMS({
-                            url: wmsUrl,
-                            params,
-                            ratio: 1.0,
-                            crossOrigin: 'anonymous'
-                        });
-
-                        const handleLoadEnd = () => {
-                            if (typeof source.un === 'function') {
-                                source.un('imageloadend', handleLoadEnd);
-                                source.un('imageloaderror', handleLoadError);
-                            }
-                            callbacks.onLoad?.();
-                        };
-
-                        const handleLoadError = (event) => {
-                            if (typeof source.un === 'function') {
-                                source.un('imageloadend', handleLoadEnd);
-                                source.un('imageloaderror', handleLoadError);
-                            }
-                            callbacks.onError?.(event);
-                        };
-
-                        if (typeof source.on === 'function') {
-                            source.on('imageloadend', handleLoadEnd);
-                            source.on('imageloaderror', handleLoadError);
-                        }
-
-                        previewLayer.setSource(source);
-                        state.previewType = 'wms';
-                        previewLayer.setVisible(!state.imageHidden);
-                        return true;
-                    } catch (error) {
-                        console.error('Unable to create Sentinel WMS preview', error);
-                        clearPreviewLayer();
-                        return false;
                     }
                 };
 
@@ -2160,11 +2038,7 @@
                         setPanelVisible(true);
 
                         bboxSource.clear();
-                        clearPreviewLayer();
                         state.current = null;
-                        state.hasImage = false;
-                        state.imageHidden = false;
-                        state.previewType = null;
                         updateButtons();
 
                         const footprint = resolveFootprintFeature(data);
@@ -2180,6 +2054,9 @@
 
                         const baseDownloadUrl = data.downloadUrlBase || data.downloadUrl || null;
                         const resolvedDownloadUrl = applySentinelTokenToUrl(baseDownloadUrl);
+                        const statusMessage = footprint ?
+                            'Coverage footprint displayed on the map. Imagery preview is disabled.' :
+                            'Coverage area unavailable for this product.';
 
                         state.current = {
                             ...data,
@@ -2192,148 +2069,24 @@
                             downloadFilename
                         };
 
-                        const wmsConfig = resolveSentinelWmsConfig(state.current);
-                        state.current.wmsConfig = wmsConfig;
-
-                        const hasWmsCandidate = Boolean(wmsConfig);
-                        const hasQuicklook = Boolean(data.quicklookUrl && extent);
-
-                        const initialStatus = hasWmsCandidate ?
-                            'Loading Sentinel-2 scene via WMS...' :
-                            (hasQuicklook ?
-                                'Loading preview image...' :
-                                'Preview image not available. Showing coverage.');
-
                         setPanelContent({
                             title,
                             acquired: acquiredText,
                             details: detailText,
-                            status: buildSentinelStatusMessage(initialStatus)
+                            status: buildSentinelStatusMessage(statusMessage)
                         });
 
-                        const renderQuicklookPreview = () => {
-                            if (!hasQuicklook) return false;
-                            setPanelContent({
-                                status: buildSentinelStatusMessage('Loading preview image...')
-                            });
-                            const loader = new Image();
-                            loader.crossOrigin = 'anonymous';
-                            loader.onload = () => {
-                                if (!state.current) return;
-                                const applied = applyStaticPreview(data.quicklookUrl, extent);
-                                state.hasImage = applied;
-                                state.imageHidden = false;
-                                updateButtons();
-                                setPanelContent({
-                                    status: buildSentinelStatusMessage(
-                                        applied ?
-                                        (state.imageHidden ?
-                                            'Preview image loaded. Use "Unhide Preview" to display it.' :
-                                            'Preview image displayed on the map.') :
-                                        'Unable to load preview image. Showing coverage only.'
-                                    )
-                                });
-                            };
-                            loader.onerror = () => {
-                                clearPreviewLayer();
-                                state.hasImage = false;
-                                state.imageHidden = false;
-                                state.previewType = null;
-                                updateButtons();
-                                setPanelContent({
-                                    status: buildSentinelStatusMessage('Unable to load preview image. Showing coverage only.')
-                                });
-                            };
-                            loader.src = data.quicklookUrl;
-                            return true;
-                        };
-
-                        if (!extent) {
-                            setPanelContent({
-                                status: buildSentinelStatusMessage('Coverage area unavailable for this product.')
-                            });
-                        }
-
-                        if (hasWmsCandidate) {
-                            const applied = applyWmsPreview(wmsConfig, {
-                                onLoad: () => {
-                                    if (!state.current) return;
-                                    state.hasImage = true;
-                                    updateButtons();
-                                    setPanelContent({
-                                        status: buildSentinelStatusMessage(
-                                            state.imageHidden ?
-                                            'Preview imagery loaded. Use "Unhide Preview" to display it.' :
-                                            'Preview imagery displayed on the map.'
-                                        )
-                                    });
-                                },
-                                onError: () => {
-                                    clearPreviewLayer();
-                                    state.hasImage = false;
-                                    state.previewType = null;
-                                    updateButtons();
-                                    if (!renderQuicklookPreview()) {
-                                        setPanelContent({
-                                            status: buildSentinelStatusMessage('Unable to load WMS preview imagery. Showing coverage only.')
-                                        });
-                                    }
-                                }
-                            });
-
-                            if (applied) {
-                                state.hasImage = true;
-                                state.imageHidden = false;
-                                updateButtons();
-                                return;
-                            }
-                        }
-
-                        if (renderQuicklookPreview()) {
-                            return;
-                        }
-
-                        clearPreviewLayer();
-                        state.hasImage = false;
-                        state.imageHidden = false;
-                        state.previewType = null;
                         updateButtons();
-                        setPanelContent({
-                            status: buildSentinelStatusMessage('Preview image not available. Showing coverage.')
-                        });
-                    },
-                    hideImage() {
-                        if (!state.current || !state.hasImage) return;
-                        state.imageHidden = true;
-                        previewLayer.setVisible(false);
-                        updateButtons();
-                        setPanelContent({
-                            status: buildSentinelStatusMessage('Preview hidden. Bounding box remains visible.')
-                        });
-                    },
-                    showImage() {
-                        if (!state.current || !state.hasImage) return;
-                        state.imageHidden = false;
-                        previewLayer.setVisible(true);
-                        updateButtons();
-                        setPanelContent({
-                            status: buildSentinelStatusMessage('Preview image visible.')
-                        });
                     },
                     clear() {
                         state.current = null;
-                        state.hasImage = false;
-                        state.imageHidden = false;
                         bboxSource.clear();
                         bboxLayer.setVisible(false);
-                        clearPreviewLayer();
                         updateButtons();
                         setPanelVisible(false);
                     }
                 };
 
-                sentinelPreviewHideBtn?.classList.remove('hidden');
-                sentinelPreviewShowBtn?.classList.remove('hidden');
                 updateButtons();
 
                 sentinelPreviewController = controller;
@@ -2363,20 +2116,6 @@
                 controller.showPreview(payload);
             };
 
-            if (sentinelPreviewHideBtn) {
-                sentinelPreviewHideBtn.addEventListener('click', (event) => {
-                    event.preventDefault();
-                    createSentinelPreviewController()?.hideImage();
-                });
-            }
-
-            if (sentinelPreviewShowBtn) {
-                sentinelPreviewShowBtn.addEventListener('click', (event) => {
-                    event.preventDefault();
-                    createSentinelPreviewController()?.showImage();
-                });
-            }
-
             if (sentinelPreviewClearBtn) {
                 sentinelPreviewClearBtn.addEventListener('click', (event) => {
                     event.preventDefault();
@@ -2385,11 +2124,6 @@
             }
 
             window.showSentinelPreviewOnMap = triggerSentinelPreview;
-
-            if (!createSentinelPreviewController()) {
-                sentinelPreviewHideBtn?.classList.add('hidden');
-                sentinelPreviewShowBtn?.classList.add('hidden');
-            }
 
             // Wrapper around fetch that retries via AllOrigins when CORS rejects the primary request.
             async function fetchSentinelCatalog(url) {
