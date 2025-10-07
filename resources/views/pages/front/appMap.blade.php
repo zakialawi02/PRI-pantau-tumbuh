@@ -177,7 +177,7 @@
             </section>
 
             <!-- ========== SENTINEL COLLECTION PANEL ========== -->
-            <section class="flex hidden h-full flex-col shadow-xl" id="sentinel-panel" data-sentinel-token="{{ $copernicusAccessToken ?? '' }}">
+            <section class="flex hidden h-full flex-col shadow-xl" id="sentinel-panel" data-sentinel-token="{{ $copernicusAccessToken ?? '' }}" data-sentinel-credentials="{{ ($copernicusCredentialsConfigured ?? false) ? 'true' : 'false' }}">
                 <div class="bg-background border-foreground/10 sticky top-0 z-20 flex items-center justify-between border-b p-2">
                     <h2 class="text-lg font-bold">🛰️ Sentinel-2 Collections</h2>
                     <button class="hover:bg-foreground/20 bg-foreground/10 rounded px-2 py-1 text-sm" onclick="closePanels()">✖</button>
@@ -222,12 +222,17 @@
                     <div class="mt-4 space-y-1.5 rounded-xl border border-foreground/10 bg-background/60 p-3 text-xs">
                         @if ($copernicusAccessToken)
                             <p class="text-foreground/70 text-[11px] leading-snug">
-                                Full-scene downloads use a Copernicus access token configured on the server. Tokens expire roughly every hour, so replace the environment value whenever downloads stop working.
+                                Full-scene downloads use a Copernicus access token requested automatically from the configured client credentials. Tokens rotate roughly every hour; ensure the credentials remain active to keep downloads available.
+                            </p>
+                        @elseif (!empty($copernicusCredentialsConfigured))
+                            <p class="text-foreground text-xs font-semibold uppercase tracking-wide">Copernicus token unavailable</p>
+                            <p class="text-foreground/70 mt-0.5 text-[11px] leading-snug">
+                                The application could not exchange the configured client credentials for an access token. Verify the client ID and secret on the server and check the logs for additional details.
                             </p>
                         @else
                             <p class="text-foreground text-xs font-semibold uppercase tracking-wide">Copernicus access token missing</p>
                             <p class="text-foreground/70 mt-0.5 text-[11px] leading-snug">
-                                Set the <code>COPERNICUS_ACCESS_TOKEN</code> environment variable to enable Sentinel-2 scene downloads.
+                                Set the <code>COPERNICUS_CLIENT_ID</code> and <code>COPERNICUS_CLIENT_SECRET</code> environment variables to enable Sentinel-2 scene downloads.
                             </p>
                         @endif
                     </div>
@@ -1184,12 +1189,28 @@
                 return value.trim();
             };
 
-            const sentinelDownloadToken = sanitizeSentinelToken(sentinelPanelEl?.dataset?.sentinelToken ?? '');
+            let sentinelDownloadToken = sanitizeSentinelToken(sentinelPanelEl?.dataset?.sentinelToken ?? '');
+            const sentinelTokenConfigured = (sentinelPanelEl?.dataset?.sentinelCredentials ?? '').toLowerCase() === 'true';
+
+            const hasSentinelToken = () => sanitizeSentinelToken(sentinelDownloadToken).length > 0;
+
+            const buildSentinelStatusMessage = (message) => {
+                const parts = [];
+                if (message) parts.push(message);
+                if (!hasSentinelToken()) {
+                    parts.push(
+                        sentinelTokenConfigured
+                            ? 'Download unavailable: Copernicus access token could not be issued.'
+                            : 'Configure Copernicus credentials on the server to enable downloads.'
+                    );
+                }
+                return parts.join(' ');
+            };
 
             const applySentinelTokenToUrl = (url) => {
-                if (!url) return url;
+                if (!url) return null;
                 const token = sanitizeSentinelToken(sentinelDownloadToken);
-                if (!token) return url;
+                if (!token) return null;
                 try {
                     const baseHref = typeof window !== 'undefined' && window.location ? window.location.href : 'https://example.com/';
                     const parsed = new URL(url, baseHref);
@@ -1567,9 +1588,11 @@
                             title,
                             acquired: acquiredText,
                             details: detailText,
-                            status: data.quicklookUrl
-                                ? 'Loading preview...'
-                                : 'Preview image not available. Showing coverage.'
+                            status: buildSentinelStatusMessage(
+                                data.quicklookUrl
+                                    ? 'Loading preview...'
+                                    : 'Preview image not available. Showing coverage.'
+                            )
                         });
 
                         bboxSource.clear();
@@ -1591,7 +1614,7 @@
                         }
 
                         const baseDownloadUrl = data.downloadUrlBase || data.downloadUrl || null;
-                        const resolvedDownloadUrl = applySentinelTokenToUrl(baseDownloadUrl) || baseDownloadUrl;
+                        const resolvedDownloadUrl = applySentinelTokenToUrl(baseDownloadUrl);
 
                         state.current = {
                             ...data,
@@ -1610,19 +1633,21 @@
 
                         if (!extent) {
                             setPanelContent({
-                                status: 'Coverage area unavailable for this product.'
+                                status: buildSentinelStatusMessage('Coverage area unavailable for this product.')
                             });
                         }
 
                         if (!state.hasImage) {
                             clearPreviewLayer();
                             if (extent) {
-                                setPanelContent({
-                                    status: data.quicklookUrl
+                            setPanelContent({
+                                status: buildSentinelStatusMessage(
+                                    data.quicklookUrl
                                         ? 'Unable to position preview image. Showing coverage only.'
                                         : 'Preview image not available. Showing coverage.'
-                                });
-                            }
+                                )
+                            });
+                        }
                             return;
                         }
 
@@ -1633,9 +1658,11 @@
                             applyPreviewSource(data.quicklookUrl, extent);
                             updateButtons();
                             setPanelContent({
-                                status: state.imageHidden
-                                    ? 'Preview image loaded. Use "Unhide Preview" to display it.'
-                                    : 'Preview image displayed on the map.'
+                                status: buildSentinelStatusMessage(
+                                    state.imageHidden
+                                        ? 'Preview image loaded. Use "Unhide Preview" to display it.'
+                                        : 'Preview image displayed on the map.'
+                                )
                             });
                         };
                         loader.onerror = () => {
@@ -1644,7 +1671,7 @@
                             state.imageHidden = false;
                             updateButtons();
                             setPanelContent({
-                                status: 'Unable to load preview image. Showing coverage only.'
+                                status: buildSentinelStatusMessage('Unable to load preview image. Showing coverage only.')
                             });
                         };
                         loader.src = data.quicklookUrl;
@@ -1655,7 +1682,7 @@
                         previewLayer.setVisible(false);
                         updateButtons();
                         setPanelContent({
-                            status: 'Preview hidden. Bounding box remains visible.'
+                            status: buildSentinelStatusMessage('Preview hidden. Bounding box remains visible.')
                         });
                     },
                     showImage() {
@@ -1664,7 +1691,7 @@
                         previewLayer.setVisible(true);
                         updateButtons();
                         setPanelContent({
-                            status: 'Preview image visible.'
+                            status: buildSentinelStatusMessage('Preview image visible.')
                         });
                     },
                     clear() {
@@ -1810,10 +1837,11 @@
                 const downloadUrl = resolveSentinelDownloadUrl(feature);
                 const downloadUrlWithToken = applySentinelTokenToUrl(downloadUrl);
                 const downloadFilename = buildSentinelDownloadName(productId, titleText);
+                const tokenAvailable = hasSentinelToken();
 
                 if (downloadButton) {
-                    if (downloadUrl) {
-                        const finalDownloadUrl = downloadUrlWithToken || downloadUrl;
+                    if (downloadUrl && downloadUrlWithToken && tokenAvailable) {
+                        const finalDownloadUrl = downloadUrlWithToken;
                         downloadButton.classList.remove('hidden');
                         downloadButton.setAttribute('href', finalDownloadUrl);
                         downloadButton.setAttribute('aria-disabled', 'false');
@@ -1883,7 +1911,7 @@
                                 title: titleText,
                                 productId,
                                 quicklookUrl,
-                                downloadUrl,
+                                downloadUrl: downloadUrlWithToken,
                                 downloadUrlBase: downloadUrl,
                                 downloadFilename,
                                 geometry: feature?.geometry,

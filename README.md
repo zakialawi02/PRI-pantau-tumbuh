@@ -83,34 +83,25 @@ DB_PASSWORD=
 -   `DB_USERNAME` - Database username
 -   `DB_PASSWORD` - Database password
 
-### Copernicus Data Space access token
+### Copernicus Data Space credentials
 
-Downloading full Sentinel-2 scenes from the Copernicus Data Space Ecosystem requires a short-lived OAuth access token. Follow the steps below to obtain one and enable downloads inside the Sentinel panel:
+Downloading full Sentinel-2 scenes from the Copernicus Data Space Ecosystem requires OAuth credentials. The application now requests and refreshes access tokens automatically when valid client credentials are configured in the environment.
 
 1. Sign in at [dataspace.copernicus.eu](https://dataspace.copernicus.eu/).
 2. Open your account menu and navigate to **API & Credentials**.
-3. Create a service account (or reuse an existing one) to receive a **client ID** and **client secret**.
-4. Request an access token by calling the token endpoint:
-
-    ```bash
-    curl -X POST \
-         -d "grant_type=client_credentials" \
-         -d "client_id=YOUR_CLIENT_ID" \
-         -d "client_secret=YOUR_CLIENT_SECRET" \
-         https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token
-    ```
-
-    The response contains an `access_token` string that remains valid for roughly one hour.
-
-5. Copy the `access_token` value and store it in your Laravel environment file:
+3. Create (or reuse) a service account to obtain a **client ID** and **client secret**.
+4. Store both values in your Laravel environment file:
 
     ```env
-    COPERNICUS_ACCESS_TOKEN="eyJhbGciOi..."
+    COPERNICUS_CLIENT_ID=your-client-id
+    COPERNICUS_CLIENT_SECRET=your-client-secret
+    # Optional: override the cache duration (seconds) for the short-lived token
+    # COPERNICUS_TOKEN_CACHE_SECONDS=3300
     ```
 
-6. Reload the application (or redeploy if you are running in production) so the new token is embedded in the Sentinel panel downloads.
+5. Reload the application (or redeploy if you are running in production).
 
-The token expires roughly every hour. When it does, repeat steps 4–6 with a freshly issued token.
+On every request the backend exchanges the configured client credentials for an access token and caches it briefly. Sentinel scene downloads will include a fresh token automatically, and the UI will surface an alert if the credentials are missing or invalid.
 
 ### Database Configuration
 

@@ -52,7 +52,10 @@ return [
     ],
 
     'copernicus' => [
-        'access_token' => env('COPERNICUS_ACCESS_TOKEN'),
+        'client_id' => env('COPERNICUS_CLIENT_ID'),
+        'client_secret' => env('COPERNICUS_CLIENT_SECRET'),
+        'token_endpoint' => env('COPERNICUS_TOKEN_ENDPOINT', 'https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token'),
+        'token_cache_seconds' => env('COPERNICUS_TOKEN_CACHE_SECONDS', 3300),
     ],
 
 ];
