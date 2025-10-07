@@ -1658,57 +1658,67 @@
                 return bestUrl ?? null;
             };
 
-            let sentinelPreviewController = null;
-
-            // Lazily create a preview controller that renders coverage.
-            const createSentinelPreviewController = () => {
-                if (sentinelPreviewController) {
-                    return sentinelPreviewController;
-                }
-
-                if (typeof window === 'undefined' || typeof ol === 'undefined') {
-                    return null;
-                }
-
-                const mapInstance = window.map;
-                const mapProjection = mapInstance?.getView?.()?.getProjection?.();
-                if (!mapInstance || !mapProjection) {
-                    return null;
-                }
-
-                const dataProjection = 'EPSG:4326';
-                const geoJsonParser = new ol.format.GeoJSON();
-
-                const bboxSource = new ol.source.Vector();
-                const bboxLayer = new ol.layer.Vector({
-                    source: bboxSource,
-                    style: new ol.style.Style({
-                        stroke: new ol.style.Stroke({
-                            color: 'rgba(59,130,246,0.9)',
-                            width: 2,
-                            lineDash: [6, 6]
-                        }),
-                        fill: new ol.style.Fill({
-                            color: 'rgba(59,130,246,0.15)'
-                        })
-                    }),
-                    visible: false,
-                    zIndex: 1200
-                });
-
-                mapInstance.addLayer(bboxLayer);
-
-                const state = {
+            const sentinelPreviewModule = (() => {
+                const moduleState = {
+                    map: null,
+                    projection: null,
+                    source: null,
+                    layer: null,
                     current: null
                 };
 
-                // Helper to keep the overlay metadata text in sync with the currently selected product.
+                let geoJsonParser = null;
+                const dataProjection = 'EPSG:4326';
+
+                const ensureContext = () => {
+                    if (typeof window === 'undefined' || typeof ol === 'undefined') {
+                        return null;
+                    }
+
+                    const mapInstance = window.map;
+                    const mapProjection = mapInstance?.getView?.()?.getProjection?.();
+                    if (!mapInstance || !mapProjection) {
+                        return null;
+                    }
+
+                    if (!moduleState.layer) {
+                        moduleState.source = new ol.source.Vector();
+                        moduleState.layer = new ol.layer.Vector({
+                            source: moduleState.source,
+                            style: new ol.style.Style({
+                                stroke: new ol.style.Stroke({
+                                    color: 'rgba(59,130,246,0.9)',
+                                    width: 2,
+                                    lineDash: [6, 6]
+                                }),
+                                fill: new ol.style.Fill({
+                                    color: 'rgba(59,130,246,0.15)'
+                                })
+                            }),
+                            visible: false,
+                            zIndex: 1200
+                        });
+                        mapInstance.addLayer(moduleState.layer);
+                    }
+
+                    geoJsonParser = geoJsonParser ?? new ol.format.GeoJSON();
+                    moduleState.map = mapInstance;
+                    moduleState.projection = mapProjection;
+                    return moduleState;
+                };
+
+                const togglePanel = (visible) => {
+                    if (!sentinelPreviewPanel) return;
+                    sentinelPreviewPanel.classList.toggle('hidden', !visible);
+                    sentinelPreviewPanel.setAttribute('aria-hidden', visible ? 'false' : 'true');
+                };
+
                 const setPanelContent = ({
                     title,
                     acquired,
                     details,
                     status
-                }) => {
+                } = {}) => {
                     if (title !== undefined && sentinelPreviewTitle) {
                         sentinelPreviewTitle.textContent = title;
                     }
@@ -1724,56 +1734,14 @@
                     }
                 };
 
-                // Toggle the preview overlay visibility without tearing down the DOM node.
-                const setPanelVisible = (visible) => {
-                    if (sentinelPreviewPanel) {
-                        sentinelPreviewPanel.classList.toggle('hidden', !visible);
-                        sentinelPreviewPanel.setAttribute('aria-hidden', visible ? 'false' : 'true');
-                    }
-                };
-
-                // Update the preview control buttons based on the current selection and loading state.
-                const updateButtons = () => {
-                    const hasSelection = Boolean(state.current);
-
-                    if (sentinelPreviewClearBtn) {
-                        sentinelPreviewClearBtn.disabled = !hasSelection;
-                        sentinelPreviewClearBtn.setAttribute('aria-disabled', hasSelection ? 'false' : 'true');
-                    }
-
-                    if (sentinelPreviewDownloadBtn) {
-                        const downloadUrl = hasSelection ? state.current?.downloadUrl : null;
-                        if (downloadUrl) {
-                            const label = state.current?.productId || state.current?.baseTitle || 'Sentinel-2 scene';
-                            const downloadName = state.current?.downloadFilename ||
-                                buildSentinelDownloadName(state.current?.productId, state.current?.baseTitle);
-
-                            sentinelPreviewDownloadBtn.classList.remove('hidden');
-                            sentinelPreviewDownloadBtn.setAttribute('href', downloadUrl);
-                            sentinelPreviewDownloadBtn.setAttribute('aria-disabled', 'false');
-                            sentinelPreviewDownloadBtn.setAttribute('title', `Download full scene for ${label}`);
-                            sentinelPreviewDownloadBtn.setAttribute('download', downloadName);
-                            sentinelPreviewDownloadBtn.dataset.downloadBase = state.current?.downloadUrlBase || '';
-                            sentinelPreviewDownloadBtn.tabIndex = 0;
-                        } else {
-                            sentinelPreviewDownloadBtn.classList.add('hidden');
-                            sentinelPreviewDownloadBtn.removeAttribute('href');
-                            sentinelPreviewDownloadBtn.removeAttribute('download');
-                            sentinelPreviewDownloadBtn.setAttribute('aria-disabled', 'true');
-                            delete sentinelPreviewDownloadBtn.dataset.downloadBase;
-                            sentinelPreviewDownloadBtn.tabIndex = -1;
-                        }
-                    }
-                };
-
-                // Animate the map viewport to the selected scene coverage.
                 const focusExtent = (extent) => {
                     if (!extent) return;
+                    const mapInstance = moduleState.map;
                     try {
-                        const view = mapInstance.getView();
+                        const view = mapInstance?.getView?.();
                         if (view && typeof view.fit === 'function') {
                             view.fit(extent, {
-                                padding: [50, 50, 50, 50],
+                                padding: [32, 32, 32, 32],
                                 duration: 500,
                                 maxZoom: 14
                             });
@@ -1783,32 +1751,71 @@
                     }
                 };
 
-                // Convert GeoJSON footprint/bbox data into an OpenLayers feature for display.
-                const resolveFootprintFeature = (data) => {
-                    if (!data) return null;
+                const updateButtons = () => {
+                    const hasSelection = Boolean(moduleState.current);
+
+                    if (sentinelPreviewClearBtn) {
+                        sentinelPreviewClearBtn.disabled = !hasSelection;
+                        sentinelPreviewClearBtn.setAttribute('aria-disabled', hasSelection ? 'false' : 'true');
+                    }
+
+                    if (!sentinelPreviewDownloadBtn) return;
+
+                    const downloadUrl = moduleState.current?.downloadUrl ?? null;
+                    const downloadName = moduleState.current?.downloadFilename ?? 'sentinel-2-product.zip';
+                    const downloadBase = moduleState.current?.downloadUrlBase ?? '';
+                    const label = moduleState.current?.baseTitle ?? 'Sentinel-2 product';
+
+                    if (downloadUrl && hasSentinelToken()) {
+                        sentinelPreviewDownloadBtn.classList.remove('hidden');
+                        sentinelPreviewDownloadBtn.setAttribute('href', downloadUrl);
+                        sentinelPreviewDownloadBtn.setAttribute('aria-disabled', 'false');
+                        sentinelPreviewDownloadBtn.setAttribute('title', `Download full scene for ${label}`);
+                        sentinelPreviewDownloadBtn.setAttribute('download', downloadName);
+                        sentinelPreviewDownloadBtn.dataset.downloadBase = downloadBase;
+                        sentinelPreviewDownloadBtn.tabIndex = 0;
+                    } else {
+                        sentinelPreviewDownloadBtn.classList.add('hidden');
+                        sentinelPreviewDownloadBtn.removeAttribute('href');
+                        sentinelPreviewDownloadBtn.removeAttribute('download');
+                        sentinelPreviewDownloadBtn.removeAttribute('title');
+                        sentinelPreviewDownloadBtn.setAttribute('aria-disabled', 'true');
+                        delete sentinelPreviewDownloadBtn.dataset.downloadBase;
+                        sentinelPreviewDownloadBtn.tabIndex = -1;
+                    }
+                };
+
+                const buildFootprintFeature = (data) => {
+                    if (!data || !geoJsonParser || !moduleState.projection) {
+                        return null;
+                    }
+
                     const {
                         footprint,
                         geometry,
                         bbox
                     } = data;
+
                     try {
                         if (footprint) {
                             return geoJsonParser.readFeature(footprint, {
-                                featureProjection: mapProjection,
+                                featureProjection: moduleState.projection,
                                 dataProjection
                             });
                         }
+
                         if (geometry) {
                             return geoJsonParser.readFeature({
                                 type: 'Feature',
                                 geometry
                             }, {
-                                featureProjection: mapProjection,
+                                featureProjection: moduleState.projection,
                                 dataProjection
                             });
                         }
+
                         if (Array.isArray(bbox) && bbox.length === 4) {
-                            const transformed = ol.proj.transformExtent(bbox, dataProjection, mapProjection);
+                            const transformed = ol.proj.transformExtent(bbox, dataProjection, moduleState.projection);
                             return new ol.Feature({
                                 geometry: ol.geom.Polygon.fromExtent(transformed)
                             });
@@ -1816,126 +1823,125 @@
                     } catch (error) {
                         console.error('Unable to construct Sentinel footprint', error);
                     }
+
                     return null;
                 };
 
-                const controller = {
-                    showPreview(data) {
-                        if (!data) return;
-                        const title = data.title || data.productId || 'Sentinel-2 Preview';
-                        const acquiredText = data.acquiredText ??
-                            (data.acquisitionDate ?
-                                `Acquired: ${formatReadableDate(data.acquisitionDate)}` :
-                                'Acquisition date unavailable.');
-                        const detailParts = [];
-                        if (data.detailText) detailParts.push(data.detailText);
-                        const tileText = data.tileText || data.tileId;
-                        if (tileText) detailParts.push(tileText);
-                        if (typeof data.cloudCover === 'number' && !Number.isNaN(data.cloudCover)) {
-                            detailParts.push(`Cloud cover: ${formatCloudCover(Number(data.cloudCover))}`);
-                        }
-                        if (data.collection) detailParts.push(`Collection: ${data.collection}`);
-                        const detailText = detailParts.join(' • ');
-
-                        const downloadFilename = data.downloadFilename ??
-                            buildSentinelDownloadName(data.productId, title);
-
-                        setPanelVisible(true);
-
-                        bboxSource.clear();
-                        state.current = null;
-                        updateButtons();
-
-                        const footprint = resolveFootprintFeature(data);
-                        let extent = null;
-                        if (footprint) {
-                            bboxSource.addFeature(footprint);
-                            bboxLayer.setVisible(true);
-                            extent = footprint.getGeometry()?.getExtent() ?? null;
-                            focusExtent(extent);
-                        } else {
-                            bboxLayer.setVisible(false);
-                        }
-
-                        const baseDownloadUrl = data.downloadUrlBase || data.downloadUrl || null;
-                        const resolvedDownloadUrl = applySentinelTokenToUrl(baseDownloadUrl);
-                        const statusMessage = footprint ?
-                            'Coverage footprint displayed on the map. Imagery preview is disabled.' :
-                            'Coverage area unavailable for this product.';
-
-                        state.current = {
-                            ...data,
-                            extent,
-                            baseTitle: title,
-                            baseAcquired: acquiredText,
-                            baseDetails: detailText,
-                            downloadUrlBase: baseDownloadUrl,
-                            downloadUrl: resolvedDownloadUrl,
-                            downloadFilename
-                        };
-
-                        setPanelContent({
-                            title,
-                            acquired: acquiredText,
-                            details: detailText,
-                            status: buildSentinelStatusMessage(statusMessage)
-                        });
-
-                        updateButtons();
-                    },
-                    clear() {
-                        state.current = null;
-                        bboxSource.clear();
-                        bboxLayer.setVisible(false);
-                        updateButtons();
-                        setPanelContent({
-                            title: sentinelPreviewDefaultTitle,
-                            acquired: sentinelPreviewDefaultAcquired,
-                            details: sentinelPreviewDefaultDetails,
-                            status: sentinelPreviewDefaultStatus
-                        });
-                        setPanelVisible(false);
+                const show = (payload) => {
+                    if (!payload) return;
+                    const context = ensureContext();
+                    if (!context) {
+                        console.warn('Sentinel preview controller is unavailable. Map is not ready yet.');
+                        return;
                     }
+
+                    context.source?.clear();
+                    context.layer?.setVisible(false);
+                    moduleState.current = null;
+                    updateButtons();
+
+                    const title = payload.title || payload.productId || 'Sentinel-2 Preview';
+                    const acquiredText = payload.acquiredText ??
+                        (payload.acquisitionDate ?
+                            `Acquired: ${formatReadableDate(payload.acquisitionDate)}` :
+                            'Acquisition date unavailable.');
+
+                    const detailParts = [];
+                    if (payload.detailText) detailParts.push(payload.detailText);
+                    const tileText = payload.tileText || payload.tileId;
+                    if (tileText) detailParts.push(tileText);
+                    if (typeof payload.cloudCover === 'number' && !Number.isNaN(payload.cloudCover)) {
+                        detailParts.push(`Cloud cover: ${formatCloudCover(Number(payload.cloudCover))}`);
+                    }
+                    if (payload.collection) detailParts.push(`Collection: ${payload.collection}`);
+                    const detailText = detailParts.join(' • ');
+
+                    const feature = buildFootprintFeature(payload);
+                    let extent = null;
+                    if (feature) {
+                        context.source.addFeature(feature);
+                        context.layer.setVisible(true);
+                        extent = feature.getGeometry()?.getExtent?.() ?? null;
+                        focusExtent(extent);
+                    }
+
+                    const baseDownloadUrl = payload.downloadUrlBase || payload.downloadUrl || null;
+                    const resolvedDownloadUrl = applySentinelTokenToUrl(baseDownloadUrl);
+                    const downloadFilename = payload.downloadFilename ??
+                        buildSentinelDownloadName(payload.productId, title);
+
+                    const statusMessage = feature ?
+                        'Coverage footprint displayed on the map. Imagery preview is disabled.' :
+                        'Coverage area unavailable for this product.';
+
+                    moduleState.current = {
+                        ...payload,
+                        extent,
+                        baseTitle: title,
+                        baseAcquired: acquiredText,
+                        baseDetails: detailText,
+                        downloadUrlBase: baseDownloadUrl,
+                        downloadUrl: resolvedDownloadUrl,
+                        downloadFilename
+                    };
+
+                    setPanelContent({
+                        title,
+                        acquired: acquiredText,
+                        details: detailText,
+                        status: buildSentinelStatusMessage(statusMessage)
+                    });
+
+                    togglePanel(true);
+                    updateButtons();
                 };
 
-                setPanelVisible(false);
+                const clear = () => {
+                    moduleState.current = null;
+                    moduleState.source?.clear();
+                    moduleState.layer?.setVisible(false);
+                    setPanelContent({
+                        title: sentinelPreviewDefaultTitle,
+                        acquired: sentinelPreviewDefaultAcquired,
+                        details: sentinelPreviewDefaultDetails,
+                        status: sentinelPreviewDefaultStatus
+                    });
+                    togglePanel(false);
+                    updateButtons();
+                };
+
+                togglePanel(false);
                 updateButtons();
 
-                sentinelPreviewController = controller;
-                return controller;
-            };
+                return {
+                    ensure: ensureContext,
+                    show,
+                    clear
+                };
+            })();
 
             if (typeof window !== 'undefined') {
                 if (window.map) {
-                    createSentinelPreviewController();
+                    sentinelPreviewModule.ensure();
                 } else {
                     window.addEventListener('map:ready', () => {
-                        createSentinelPreviewController();
+                        sentinelPreviewModule.ensure();
                     }, {
                         once: true
                     });
                 }
             }
 
-            // Public entry point invoked by catalogue cards to render a scene on the map.
-            const triggerSentinelPreview = (payload) => {
-                if (!payload) return;
-                const controller = createSentinelPreviewController();
-                if (!controller) {
-                    console.warn('Sentinel preview controller is unavailable. Map is not ready yet.');
-                    return;
-                }
-                controller.showPreview(payload);
-            };
-
             if (sentinelPreviewClearBtn) {
                 sentinelPreviewClearBtn.addEventListener('click', (event) => {
                     event.preventDefault();
-                    createSentinelPreviewController()?.clear();
+                    sentinelPreviewModule.clear();
                 });
             }
 
-            window.showSentinelPreviewOnMap = triggerSentinelPreview;
+            window.showSentinelPreviewOnMap = (payload) => {
+                sentinelPreviewModule.show(payload);
+            };
 
             // Wrapper around fetch that retries via AllOrigins when CORS rejects the primary request.
             async function fetchSentinelCatalog(url) {
