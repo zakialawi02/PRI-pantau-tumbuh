@@ -514,9 +514,9 @@
                             <p class="text-foreground/70 text-xs leading-tight" data-sentinel-preview-acquired>Select a collection to preview on the map.</p>
                             <p class="text-foreground/60 hidden text-xs leading-tight" data-sentinel-preview-details></p>
                         </div>
-                        <button class="text-foreground/50 hover:text-foreground transition" id="sentinelPreviewClearBtn" type="button">
-                            <i class="ri-close-line text-base"></i>
-                            <span class="sr-only">Clear Sentinel preview</span>
+                        <button class="text-foreground/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-transparent transition disabled:cursor-not-allowed disabled:opacity-40" id="sentinelPreviewClearBtn" type="button" title="Tutup panel preview">
+                            <i class="ri-close-line text-sm"></i>
+                            <span class="sr-only">Tutup preview Sentinel</span>
                         </button>
                     </div>
                     <p class="text-foreground/70 mt-2 text-xs" data-sentinel-preview-status>Awaiting preview selection.</p>
@@ -1337,6 +1337,11 @@
             const sentinelPreviewClearBtn = document.getElementById('sentinelPreviewClearBtn');
             const sentinelPreviewDownloadBtn = document.getElementById('sentinelPreviewDownloadBtn');
 
+            const sentinelPreviewDefaultTitle = sentinelPreviewTitle?.textContent ?? '–';
+            const sentinelPreviewDefaultAcquired = sentinelPreviewAcquired?.textContent ?? '';
+            const sentinelPreviewDefaultDetails = sentinelPreviewDetails?.textContent ?? '';
+            const sentinelPreviewDefaultStatus = sentinelPreviewStatus?.textContent ?? '';
+
             const sentinelCatalogEndpoint = 'https://catalogue.dataspace.copernicus.eu/resto/api/collections/Sentinel2/search.json';
             let sentinelLoadedOnce = false;
             const defaultCloudCoverMax = 40;
@@ -1925,6 +1930,7 @@
                 const setPanelVisible = (visible) => {
                     if (sentinelPreviewPanel) {
                         sentinelPreviewPanel.classList.toggle('hidden', !visible);
+                        sentinelPreviewPanel.setAttribute('aria-hidden', visible ? 'false' : 'true');
                     }
                 };
 
@@ -1934,6 +1940,7 @@
 
                     if (sentinelPreviewClearBtn) {
                         sentinelPreviewClearBtn.disabled = !hasSelection;
+                        sentinelPreviewClearBtn.setAttribute('aria-disabled', hasSelection ? 'false' : 'true');
                     }
 
                     if (sentinelPreviewDownloadBtn) {
@@ -2083,10 +2090,17 @@
                         bboxSource.clear();
                         bboxLayer.setVisible(false);
                         updateButtons();
+                        setPanelContent({
+                            title: sentinelPreviewDefaultTitle,
+                            acquired: sentinelPreviewDefaultAcquired,
+                            details: sentinelPreviewDefaultDetails,
+                            status: sentinelPreviewDefaultStatus
+                        });
                         setPanelVisible(false);
                     }
                 };
 
+                setPanelVisible(false);
                 updateButtons();
 
                 sentinelPreviewController = controller;
