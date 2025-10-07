@@ -51,4 +51,8 @@ return [
         'redirect' => env('FACEBOOK_CALLBACK_URL'),
     ],
 
+    'copernicus' => [
+        'access_token' => env('COPERNICUS_ACCESS_TOKEN'),
+    ],
+
 ];

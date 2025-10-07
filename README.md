@@ -102,9 +102,15 @@ Downloading full Sentinel-2 scenes from the Copernicus Data Space Ecosystem requ
 
     The response contains an `access_token` string that remains valid for roughly one hour.
 
-5. Open the Sentinel panel in the application, paste the `access_token` into the **Copernicus Access Token** field, and the app will attach it automatically to every download link.
+5. Copy the `access_token` value and store it in your Laravel environment file:
 
-The token is stored only in your browser’s local storage. When it expires, repeat steps 4–5 to refresh your credentials.
+    ```env
+    COPERNICUS_ACCESS_TOKEN="eyJhbGciOi..."
+    ```
+
+6. Reload the application (or redeploy if you are running in production) so the new token is embedded in the Sentinel panel downloads.
+
+The token expires roughly every hour. When it does, repeat steps 4–6 with a freshly issued token.
 
 ### Database Configuration
 

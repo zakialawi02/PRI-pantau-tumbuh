@@ -9,7 +9,11 @@ class MapController extends Controller
     public function index()
     {
         $imagery = ImageryData::with('user')->get();
+        $copernicusAccessToken = config('services.copernicus.access_token');
 
-        return view('pages.front.appMap', compact('imagery'));
+        return view('pages.front.appMap', [
+            'imagery' => $imagery,
+            'copernicusAccessToken' => $copernicusAccessToken,
+        ]);
     }
 }

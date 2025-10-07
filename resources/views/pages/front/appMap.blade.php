@@ -177,7 +177,7 @@
             </section>
 
             <!-- ========== SENTINEL COLLECTION PANEL ========== -->
-            <section class="flex hidden h-full flex-col shadow-xl" id="sentinel-panel">
+            <section class="flex hidden h-full flex-col shadow-xl" id="sentinel-panel" data-sentinel-token="{{ $copernicusAccessToken ?? '' }}">
                 <div class="bg-background border-foreground/10 sticky top-0 z-20 flex items-center justify-between border-b p-2">
                     <h2 class="text-lg font-bold">🛰️ Sentinel-2 Collections</h2>
                     <button class="hover:bg-foreground/20 bg-foreground/10 rounded px-2 py-1 text-sm" onclick="closePanels()">✖</button>
@@ -219,28 +219,17 @@
                             </button>
                         </div>
                     </form>
-                    <div class="mt-4 space-y-2.5 rounded-xl border border-foreground/10 bg-background/60 p-3 text-xs" id="sentinelDownloadTokenContainer">
-                        <div class="flex items-start justify-between gap-2">
-                            <div class="flex min-w-0 flex-col">
-                                <p class="text-foreground text-xs font-semibold uppercase tracking-wide">Copernicus Access Token</p>
-                                <p class="text-foreground/70 mt-0.5 text-[11px] leading-snug">Paste a valid Copernicus Data Space Ecosystem access token to enable full-scene downloads.</p>
-                            </div>
-                            <button class="text-foreground/70 hover:text-primary inline-flex items-center rounded px-2 py-1 text-[11px] font-medium transition disabled:opacity-40" type="button" id="sentinelDownloadTokenClearBtn">
-                                Clear
-                            </button>
-                        </div>
-                        <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-3 py-1.5 text-xs focus:outline-none focus:ring" id="sentinelDownloadToken" type="text" inputmode="text" spellcheck="false" autocomplete="off" placeholder="Paste access token (starts with ey...)" />
-                        <p class="text-foreground/60 text-[11px] leading-snug" id="sentinelDownloadTokenStatus">No token saved. Protected downloads will fail.</p>
-                        <details class="border-foreground/15 text-foreground/70 space-y-1 rounded-lg border px-2.5 py-2 text-[11px]">
-                            <summary class="cursor-pointer font-medium text-foreground">Where do I get this token?</summary>
-                            <ol class="space-y-1 pl-4">
-                                <li>1. Sign in at <a class="text-primary hover:underline" href="https://dataspace.copernicus.eu/" target="_blank" rel="noopener noreferrer">dataspace.copernicus.eu</a>.</li>
-                                <li>2. Open your profile &rarr; <strong>API &amp; Credentials</strong> and create a service account.</li>
-                                <li>3. Use the provided client ID &amp; secret to request an access token via the OAuth token endpoint.</li>
-                                <li>4. Paste the resulting <code>access_token</code> value here. Tokens usually expire after one hour.</li>
-                            </ol>
-                            <p class="text-foreground/60">The token is stored only in this browser and sent with every scene download request.</p>
-                        </details>
+                    <div class="mt-4 space-y-1.5 rounded-xl border border-foreground/10 bg-background/60 p-3 text-xs">
+                        @if ($copernicusAccessToken)
+                            <p class="text-foreground/70 text-[11px] leading-snug">
+                                Full-scene downloads use a Copernicus access token configured on the server. Tokens expire roughly every hour, so replace the environment value whenever downloads stop working.
+                            </p>
+                        @else
+                            <p class="text-foreground text-xs font-semibold uppercase tracking-wide">Copernicus access token missing</p>
+                            <p class="text-foreground/70 mt-0.5 text-[11px] leading-snug">
+                                Set the <code>COPERNICUS_ACCESS_TOKEN</code> environment variable to enable Sentinel-2 scene downloads.
+                            </p>
+                        @endif
                     </div>
 
                     <div class="text-foreground/70 mt-4 text-sm" id="sentinelCollectionStatus">
@@ -1132,6 +1121,7 @@
             const sentinelLatInput = document.getElementById('sentinelLatFilter');
             const sentinelLonInput = document.getElementById('sentinelLonFilter');
             const sentinelLevelInput = document.getElementById('sentinelProductLevel');
+            const sentinelPanelEl = document.getElementById('sentinel-panel');
             const sentinelPreviewPanel = document.getElementById('sentinelPreviewPanel');
             const sentinelPreviewTitle = sentinelPreviewPanel?.querySelector('[data-sentinel-preview-title]');
             const sentinelPreviewAcquired = sentinelPreviewPanel?.querySelector('[data-sentinel-preview-acquired]');
@@ -1141,9 +1131,6 @@
             const sentinelPreviewShowBtn = document.getElementById('sentinelPreviewShowBtn');
             const sentinelPreviewClearBtn = document.getElementById('sentinelPreviewClearBtn');
             const sentinelPreviewDownloadBtn = document.getElementById('sentinelPreviewDownloadBtn');
-            const sentinelTokenInput = document.getElementById('sentinelDownloadToken');
-            const sentinelTokenStatus = document.getElementById('sentinelDownloadTokenStatus');
-            const sentinelTokenClearBtn = document.getElementById('sentinelDownloadTokenClearBtn');
 
             const sentinelCatalogEndpoint = 'https://catalogue.dataspace.copernicus.eu/resto/api/collections/Sentinel2/search.json';
             let sentinelLoadedOnce = false;
@@ -1192,13 +1179,12 @@
 
             const sentinelDownloadIgnoredKeywords = ['quicklook', 'thumbnail', 'thumb', 'overview', 'browse', 'preview', 'allorigins'];
 
-            const sentinelTokenStorageKey = 'pantautumbuh.sentinelDownloadToken';
-            let sentinelDownloadToken = '';
-
             const sanitizeSentinelToken = (value) => {
                 if (typeof value !== 'string') return '';
                 return value.trim();
             };
+
+            const sentinelDownloadToken = sanitizeSentinelToken(sentinelPanelEl?.dataset?.sentinelToken ?? '');
 
             const applySentinelTokenToUrl = (url) => {
                 if (!url) return url;
@@ -1218,82 +1204,6 @@
                     return `${url}${separator}token=${encodeURIComponent(token)}`;
                 }
             };
-
-            const persistSentinelToken = (value) => {
-                const token = sanitizeSentinelToken(value);
-                sentinelDownloadToken = token;
-                try {
-                    if (token) {
-                        window.localStorage?.setItem(sentinelTokenStorageKey, token);
-                    } else {
-                        window.localStorage?.removeItem(sentinelTokenStorageKey);
-                    }
-                } catch (error) {
-                    console.warn('Unable to persist Sentinel download token', error);
-                }
-                updateSentinelTokenStatus();
-                refreshSentinelDownloadLinks();
-            };
-
-            const loadSentinelTokenFromStorage = () => {
-                let stored = '';
-                try {
-                    stored = window.localStorage?.getItem(sentinelTokenStorageKey) ?? '';
-                } catch (error) {
-                    stored = '';
-                }
-                sentinelDownloadToken = sanitizeSentinelToken(stored);
-                if (sentinelTokenInput) {
-                    sentinelTokenInput.value = sentinelDownloadToken;
-                }
-                updateSentinelTokenStatus();
-            };
-
-            const commitSentinelTokenFromInput = (value) => {
-                const next = sanitizeSentinelToken(value);
-                if (next === sanitizeSentinelToken(sentinelDownloadToken)) {
-                    updateSentinelTokenStatus();
-                    return;
-                }
-                persistSentinelToken(next);
-                if (sentinelTokenInput) {
-                    sentinelTokenInput.value = sanitizeSentinelToken(sentinelDownloadToken);
-                }
-            };
-
-            function updateSentinelTokenStatus() {
-                if (!sentinelTokenStatus) return;
-                const token = sanitizeSentinelToken(sentinelDownloadToken);
-                if (token) {
-                    sentinelTokenStatus.textContent = 'Token saved locally. Downloads will include this credential.';
-                    sentinelTokenStatus.classList.remove('text-foreground/60');
-                    sentinelTokenStatus.classList.add('text-primary');
-                    sentinelTokenClearBtn?.removeAttribute('disabled');
-                } else {
-                    sentinelTokenStatus.textContent = 'No token saved. Protected downloads will fail.';
-                    sentinelTokenStatus.classList.add('text-foreground/60');
-                    sentinelTokenStatus.classList.remove('text-primary');
-                    sentinelTokenClearBtn?.setAttribute('disabled', 'true');
-                }
-            }
-
-            function refreshSentinelDownloadLinks() {
-                document.querySelectorAll('[data-sentinel-download]').forEach((link) => {
-                    const base = link?.dataset?.downloadBase || '';
-                    if (!base) return;
-                    const finalUrl = applySentinelTokenToUrl(base);
-                    if (finalUrl) {
-                        link.setAttribute('href', finalUrl);
-                        link.setAttribute('aria-disabled', 'false');
-                        link.tabIndex = 0;
-                    } else {
-                        link.setAttribute('aria-disabled', 'true');
-                        link.tabIndex = -1;
-                    }
-                });
-                const controller = createSentinelPreviewController();
-                controller?.updateDownloadToken?.();
-            }
 
             const isValidSentinelDownloadUrl = (url) => {
                 if (typeof url !== 'string') return false;
@@ -1757,12 +1667,6 @@
                             status: 'Preview image visible.'
                         });
                     },
-                    updateDownloadToken() {
-                        if (!state.current || !state.current.downloadUrlBase) return;
-                        const refreshed = applySentinelTokenToUrl(state.current.downloadUrlBase) || state.current.downloadUrlBase;
-                        state.current.downloadUrl = refreshed;
-                        updateButtons();
-                    },
                     clear() {
                         state.current = null;
                         state.hasImage = false;
@@ -1784,7 +1688,6 @@
             };
 
             if (typeof window !== 'undefined') {
-                loadSentinelTokenFromStorage();
                 if (window.map) {
                     createSentinelPreviewController();
                 } else {
@@ -1826,24 +1729,6 @@
             }
 
             window.showSentinelPreviewOnMap = triggerSentinelPreview;
-
-            if (sentinelTokenInput) {
-                const handleTokenEvent = (event) => {
-                    commitSentinelTokenFromInput(event.target?.value ?? '');
-                };
-                sentinelTokenInput.addEventListener('change', handleTokenEvent);
-                sentinelTokenInput.addEventListener('blur', handleTokenEvent);
-            }
-
-            if (sentinelTokenClearBtn) {
-                sentinelTokenClearBtn.addEventListener('click', (event) => {
-                    event.preventDefault();
-                    if (sentinelTokenInput) {
-                        sentinelTokenInput.value = '';
-                    }
-                    persistSentinelToken('');
-                });
-            }
 
             if (!createSentinelPreviewController()) {
                 sentinelPreviewHideBtn?.classList.add('hidden');
