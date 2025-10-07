@@ -749,6 +749,8 @@
             const scrollLeftBtn = document.getElementById('scroll-left');
             const scrollRightBtn = document.getElementById('scroll-right');
 
+            const sentinelCollectionsReadyEvent = 'sentinelCollectionsReady';
+
 
             const scrollAmount = 150; // pixels per click
             let sentinelLoadedOnce = false;
@@ -799,6 +801,22 @@
                 scrollContainer.scrollLeft = scrollLeft - walk;
             });
 
+            const requestSentinelCollections = (forceRefresh = false) => {
+                if (typeof window.loadSentinelCollections === 'function') {
+                    window.loadSentinelCollections(forceRefresh);
+                    return;
+                }
+
+                const handleReady = () => {
+                    window.removeEventListener(sentinelCollectionsReadyEvent, handleReady);
+                    if (typeof window.loadSentinelCollections === 'function') {
+                        window.loadSentinelCollections(forceRefresh);
+                    }
+                };
+
+                window.addEventListener(sentinelCollectionsReadyEvent, handleReady);
+            };
+
             // Toggle the requested panel and ensure the wrapper animates correctly for the viewport size.
             function showPanel(id, btn = null) {
                 const isMobile = window.innerWidth < 768;
@@ -830,7 +848,7 @@
                 panelWrapper.dataset.activePanel = id;
 
                 if (id === 'sentinel-panel' && !sentinelLoadedOnce) {
-                    loadSentinelCollections();
+                    requestSentinelCollections();
                 }
             }
 
@@ -872,7 +890,7 @@
                 showPanel(defaultPanel, defaultBtn);
 
                 if (!sentinelLoadedOnce) {
-                    loadSentinelCollections();
+                    requestSentinelCollections();
                 }
             });
 
@@ -1844,6 +1862,9 @@
                     }
                 }
             }
+
+            window.loadSentinelCollections = loadSentinelCollections;
+            window.dispatchEvent(new Event('sentinelCollectionsReady'));
 
             if (sentinelCloudInput && sentinelCloudInput.value === '') {
                 sentinelCloudInput.value = defaultCloudCoverMax;
