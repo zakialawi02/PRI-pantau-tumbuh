@@ -2446,11 +2446,15 @@
                 const startDateRaw = sentinelStartDateInput?.value?.trim();
                 const endDateRaw = sentinelEndDateInput?.value?.trim();
 
+                const sentinelRangeFallback = getDateRangeHelper(sentinelDefaultMonthsBack) || {};
+
                 let startDate = parseDateHelper(startDateRaw)
                     ?? parseDateHelper(sentinelDefaultStartValue)
+                    ?? parseDateHelper(sentinelRangeFallback.start)
                     ?? parseDateHelper(new Date());
                 let endDate = parseDateHelper(endDateRaw)
                     ?? parseDateHelper(sentinelDefaultEndValue)
+                    ?? parseDateHelper(sentinelRangeFallback.end)
                     ?? parseDateHelper(new Date());
 
                 if (!startDate || !endDate) {
