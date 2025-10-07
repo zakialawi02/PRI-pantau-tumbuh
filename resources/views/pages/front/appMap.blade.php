@@ -775,214 +775,283 @@
         </div>
     </div>
 
-    @push('javascript')
-        <script>
-            // Cache references to all uploader related DOM elements so the bootstrap logic can short-circuit
-            // gracefully when the template is rendered without the upload form.
-            const sourceInput = document.getElementById('sourceType');
-            const fileInput = document.getElementById('fileInput');
-            const fileInfo = document.getElementById('fileInfo');
-            const progressBar = document.getElementById('progressBar');
-            const progressText = document.getElementById('progressText');
-            const startBtn = document.getElementById('startBtn');
-            const pauseBtn = document.getElementById('pauseBtn');
-            const resumeBtn = document.getElementById('resumeBtn');
-            const myDataContainer = document.getElementById('myDataContainer');
+    
+@push('javascript')
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const uploader = createImageryUploader();
+            if (uploader) {
+                uploader.init();
+            }
+            initTabFunctionality();
+        });
 
-            const uploaderElements = {
-                sourceInput,
-                fileInput,
-                fileInfo,
-                progressBar,
-                progressText,
-                startBtn,
-                pauseBtn,
-                resumeBtn,
-                myDataContainer
+        function createImageryUploader() {
+            const elements = {
+                sourceInput: document.getElementById('sourceType'),
+                fileInput: document.getElementById('fileInput'),
+                fileInfo: document.getElementById('fileInfo'),
+                progressBar: document.getElementById('progressBar'),
+                progressText: document.getElementById('progressText'),
+                startBtn: document.getElementById('startBtn'),
+                pauseBtn: document.getElementById('pauseBtn'),
+                resumeBtn: document.getElementById('resumeBtn'),
+                myDataContainer: document.getElementById('myDataContainer'),
             };
 
-            // Quickly verify whether every required element exists before wiring up listeners.
-            const uploaderReady = Object.values(uploaderElements).every((element) => Boolean(element));
+            const ready = Object.values(elements).every(Boolean);
 
-            if (!uploaderReady) {
+            if (!ready) {
                 console.warn('Imagery uploader controls missing. Skipping uploader bootstrap.', {
-                    hasSourceInput: Boolean(sourceInput),
-                    hasFileInput: Boolean(fileInput),
-                    hasFileInfo: Boolean(fileInfo),
-                    hasProgressBar: Boolean(progressBar),
-                    hasProgressText: Boolean(progressText),
-                    hasStartBtn: Boolean(startBtn),
-                    hasPauseBtn: Boolean(pauseBtn),
-                    hasResumeBtn: Boolean(resumeBtn),
-                    hasMyDataContainer: Boolean(myDataContainer)
+                    hasSourceInput: Boolean(elements.sourceInput),
+                    hasFileInput: Boolean(elements.fileInput),
+                    hasFileInfo: Boolean(elements.fileInfo),
+                    hasProgressBar: Boolean(elements.progressBar),
+                    hasProgressText: Boolean(elements.progressText),
+                    hasStartBtn: Boolean(elements.startBtn),
+                    hasPauseBtn: Boolean(elements.pauseBtn),
+                    hasResumeBtn: Boolean(elements.resumeBtn),
+                    hasMyDataContainer: Boolean(elements.myDataContainer),
                 });
-            } else {
-                // === STATE ===
-                // Track upload state locally so we can update the UI without querying the server.
-                let paused = false;
-                let uploading = false;
-                let file = null;
-                let uploadId = null;
-                let currentChunk = 0;
-                let totalChunks = 0;
-                const chunkSize = 5 * 1024 * 1024; // 5 MB per chunk
-                let startTime = null;
-                let uploadedBytes = 0;
+                return null;
+            }
 
-                // === INIT ===
-                setButtonState("idle");
-                loadMyData();
+            const toast = window.MyZkToast ?? {};
+            const state = {
+                paused: false,
+                uploading: false,
+                file: null,
+                uploadId: null,
+                currentChunk: 0,
+                totalChunks: 0,
+                uploadedBytes: 0,
+                startTime: null,
+            };
+            const chunkSize = 5 * 1024 * 1024;
+            const defaultProgressMessage = elements.progressText?.textContent?.trim() || 'Ready for next upload.';
+            let resetTimer = null;
 
-                // === FILE SELECT ===
-                // Respond to a new file selection by updating the summary row and enabling the CTA.
-                fileInput.addEventListener("change", (e) => {
-                    file = e.target.files[0];
-                    if (!file) return;
+            const notify = (type, message) => {
+                if (typeof toast[type] === 'function') {
+                    toast[type](message);
+                }
+            };
 
-                    const sizeMB = (file.size / 1024 / 1024).toFixed(2);
-                    const shortName = shortenFilename(file.name, 40);
+            const setButtonState = (status) => {
+                if (!elements.startBtn || !elements.pauseBtn || !elements.resumeBtn) {
+                    return;
+                }
 
-                    fileInfo.classList.remove("hidden");
-                    fileInfo.innerHTML = `
-                <strong>Name:</strong> ${shortName}<br>
-                <strong>Size:</strong> ${sizeMB} MB
-            `;
+                const config = {
+                    idle: [true, true, true],
+                    ready: [false, true, true],
+                    uploading: [true, false, true],
+                    paused: [true, true, false],
+                    merging: [true, true, true],
+                    done: [true, true, true],
+                    error: [false, true, true],
+                };
 
-                    progressText.textContent = "✅ File ready to upload. Click 'Start Upload' to begin.";
-                    progressBar.style.width = "0%";
-                    MyZkToast.info("File ready to upload, click Start to begin.");
-                    setButtonState("ready");
-                });
+                const [startDisabled, pauseDisabled, resumeDisabled] = config[status] ?? config.idle;
+                elements.startBtn.disabled = startDisabled;
+                elements.pauseBtn.disabled = pauseDisabled;
+                elements.resumeBtn.disabled = resumeDisabled;
+            };
 
-                // === START UPLOAD ===
-                // Kick off a new chunked upload session with a pseudo-random upload id.
-                startBtn.addEventListener("click", () => {
-                    if (!file) {
-                        MyZkToast.warning("Please select a file first!");
-                        return;
-                    }
+            const updateProgressBar = (progress) => {
+                if (!elements.progressBar) return;
+                const safeProgress = Math.min(Math.max(progress, 0), 100);
+                elements.progressBar.style.width = `${safeProgress}%`;
+            };
 
-                    uploadId = Math.random().toString(36).substring(2, 12);
-                    totalChunks = Math.ceil(file.size / chunkSize);
-                    currentChunk = 0;
-                    uploadedBytes = 0;
-                    paused = false;
-                    uploading = true;
-                    startTime = performance.now();
+            const updateProgressText = (text) => {
+                if (elements.progressText) {
+                    elements.progressText.textContent = text;
+                }
+            };
 
-                    MyZkToast.info("🚀 Upload started...");
-                    progressText.textContent = `🚀 Uploading ${file.name}...`;
-                    setButtonState("uploading");
-                    uploadNextChunk();
-                });
+            const resetFileInfo = () => {
+                elements.fileInput.value = '';
+                elements.fileInfo.classList.add('hidden');
+                elements.fileInfo.innerHTML = '';
+            };
 
-                // === PAUSE ===
-                // Pause simply flips the flags so the recursive chunk uploader stops itself.
-                pauseBtn.addEventListener("click", () => {
-                    if (!uploading) return;
-                    paused = true;
-                    uploading = false;
-                    progressText.textContent = "⏸️ Upload paused.";
-                    MyZkToast.warning("Upload paused.");
-                    setButtonState("paused");
-                });
+            const resetUploader = (message = defaultProgressMessage) => {
+                state.paused = false;
+                state.uploading = false;
+                state.file = null;
+                state.uploadId = null;
+                state.currentChunk = 0;
+                state.totalChunks = 0;
+                state.uploadedBytes = 0;
+                state.startTime = null;
+                resetFileInfo();
+                updateProgressBar(0);
+                updateProgressText(message);
+                setButtonState('idle');
+            };
 
-                // === RESUME ===
-                // Resume restarts the chunk loop without reinitialising counters or the upload id.
-                resumeBtn.addEventListener("click", () => {
-                    if (!file) return;
-                    paused = false;
-                    uploading = true;
-                    progressText.textContent = "▶️ Upload resumed...";
-                    MyZkToast.info("Upload resumed...");
-                    setButtonState("uploading");
-                    uploadNextChunk();
-                });
+            const scheduleReset = () => {
+                window.clearTimeout(resetTimer);
+                resetTimer = window.setTimeout(() => resetUploader(), 4000);
+            };
 
-                // === UPLOAD CHUNK FUNCTION ===
-                // Upload the next file segment, retrying transient failures with exponential back-off.
-                async function uploadNextChunk(retryCount = 0) {
-                    if (paused || !file) return;
+            const renderSelectedFile = (selectedFile) => {
+                if (!selectedFile) {
+                    resetUploader();
+                    return;
+                }
 
-                if (currentChunk >= totalChunks) {
-                    progressText.textContent = "🧩 Merging file on server...";
+                const sizeMB = (selectedFile.size / 1024 / 1024).toFixed(2);
+                const shortName = shortenFilename(selectedFile.name, 40);
+
+                elements.fileInfo.classList.remove('hidden');
+                elements.fileInfo.innerHTML = `
+            <strong>Name:</strong> ${shortName}<br>
+            <strong>Size:</strong> ${sizeMB} MB
+        `;
+
+                updateProgressText("✅ File ready to upload. Click 'Start Upload' to begin.");
+                updateProgressBar(0);
+                notify('info', 'File ready to upload, click Start to begin.');
+                setButtonState('ready');
+            };
+
+            const beginUploadSession = () => {
+                state.uploadId = Math.random().toString(36).substring(2, 12);
+                state.totalChunks = Math.ceil(state.file.size / chunkSize);
+                state.currentChunk = 0;
+                state.uploadedBytes = 0;
+                state.paused = false;
+                state.uploading = true;
+                state.startTime = performance.now();
+
+                notify('info', '🚀 Upload started...');
+                updateProgressText(`🚀 Uploading ${state.file.name}...`);
+                setButtonState('uploading');
+                uploadNextChunk();
+            };
+
+            const handleFileSelection = (event) => {
+                const selectedFile = event.target.files?.[0] ?? null;
+                state.file = selectedFile;
+
+                if (!selectedFile) {
+                    resetUploader();
+                    return;
+                }
+
+                renderSelectedFile(selectedFile);
+            };
+
+            const handleStartUpload = () => {
+                if (!state.file) {
+                    notify('warning', 'Please select a file first!');
+                    return;
+                }
+
+                beginUploadSession();
+            };
+
+            const handlePauseUpload = () => {
+                if (!state.uploading) return;
+                state.paused = true;
+                state.uploading = false;
+                updateProgressText('⏸️ Upload paused.');
+                notify('warning', 'Upload paused.');
+                setButtonState('paused');
+            };
+
+            const handleResumeUpload = () => {
+                if (!state.file) return;
+                state.paused = false;
+                state.uploading = true;
+                updateProgressText('▶️ Upload resumed...');
+                notify('info', 'Upload resumed...');
+                setButtonState('uploading');
+                uploadNextChunk();
+            };
+
+            const uploadNextChunk = async (retryCount = 0) => {
+                if (state.paused || !state.file) return;
+
+                if (state.currentChunk >= state.totalChunks) {
+                    updateProgressText('🧩 Merging file on server...');
                     return mergeChunks();
                 }
 
-                const start = currentChunk * chunkSize;
-                const end = Math.min(file.size, start + chunkSize);
-                const chunk = file.slice(start, end);
+                const start = state.currentChunk * chunkSize;
+                const end = Math.min(state.file.size, start + chunkSize);
+                const chunk = state.file.slice(start, end);
                 const chunkSizeBytes = end - start;
 
                 const formData = new FormData();
-                formData.append("upload_id", uploadId);
-                formData.append("chunk_index", currentChunk);
-                formData.append("chunk", chunk);
+                formData.append('upload_id', state.uploadId);
+                formData.append('chunk_index', state.currentChunk);
+                formData.append('chunk', chunk);
 
                 try {
                     const res = await fetch('{{ route('upload.chunk') }}', {
-                        method: "POST",
+                        method: 'POST',
                         headers: {
-                            "X-CSRF-TOKEN": "{{ csrf_token() }}"
+                            'X-CSRF-TOKEN': '{{ csrf_token() }}',
                         },
                         body: formData,
                     });
 
                     const data = await res.json();
                     if (!res.ok || !data.success) {
-                        throw new Error(data.message || `Chunk ${currentChunk} failed.`);
+                        throw new Error(data.message || `Chunk ${state.currentChunk} failed.`);
                     }
 
-                    currentChunk++;
-                    uploadedBytes += chunkSizeBytes;
+                    state.currentChunk += 1;
+                    state.uploadedBytes += chunkSizeBytes;
 
-                    const now = performance.now();
-                    const elapsedSec = (now - startTime) / 1000;
-                    const speedMBps = (uploadedBytes / 1024 / 1024 / elapsedSec).toFixed(2);
-                    const remainingBytes = file.size - uploadedBytes;
-                    const estRemainingSec = remainingBytes / (speedMBps * 1024 * 1024);
-                    const etaText = estRemainingSec > 0 ? formatTimeETA(estRemainingSec) : "-";
+                    const elapsedSec = Math.max((performance.now() - state.startTime) / 1000, 0.001);
+                    const speedMBps = state.uploadedBytes / 1024 / 1024 / elapsedSec;
+                    const remainingBytes = state.file.size - state.uploadedBytes;
+                    const etaSeconds = speedMBps > 0 ? remainingBytes / (speedMBps * 1024 * 1024) : 0;
+                    const etaText = etaSeconds > 0 ? formatTimeETA(etaSeconds) : '-';
 
-                    const progress = Math.round((currentChunk / totalChunks) * 100);
-                    progressBar.style.width = `${progress}%`;
-                    progressText.textContent = `Uploading... ${progress}% | 🚀 ${speedMBps} MB/s | ⏳ ETA: ${etaText}`;
+                    const progress = Math.round((state.currentChunk / state.totalChunks) * 100);
+                    updateProgressBar(progress);
+                    updateProgressText(`Uploading... ${progress}% | 🚀 ${speedMBps.toFixed(2)} MB/s | ⏳ ETA: ${etaText}`);
 
                     if (progress === 100) {
-                        MyZkToast.info("Merging file on server...");
+                        notify('info', 'Merging file on server...');
                     }
 
-                    if (!paused) uploadNextChunk();
-
+                    if (!state.paused) {
+                        uploadNextChunk();
+                    }
                 } catch (err) {
                     if (retryCount < 3) {
-                        setTimeout(() => uploadNextChunk(retryCount + 1), 2000 * (retryCount + 1));
+                        const delay = 2000 * (retryCount + 1);
+                        window.setTimeout(() => uploadNextChunk(retryCount + 1), delay);
                     } else {
-                        progressText.textContent = `❌ Chunk ${currentChunk} failed after 3 retries. Upload paused.`;
-                        MyZkToast.error(`Chunk ${currentChunk} failed after 3 retries.`);
-                        paused = true;
-                        uploading = false;
-                        setButtonState("paused");
+                        updateProgressText(`❌ Chunk ${state.currentChunk} failed after 3 retries. Upload paused.`);
+                        notify('error', `Chunk ${state.currentChunk} failed after 3 retries.`);
+                        state.paused = true;
+                        state.uploading = false;
+                        setButtonState('paused');
                     }
                 }
-            }
+            };
 
-            // === MERGE CHUNKS FUNCTION ===
-            // Ask the backend to merge all uploaded chunks and register the final file metadata.
-            async function mergeChunks() {
-                setButtonState("merging");
+            const mergeChunks = async () => {
+                setButtonState('merging');
 
-                const sourceType = sourceInput.value;
                 const formData = new FormData();
-                formData.append("upload_id", uploadId);
-                formData.append("filename", file.name);
-                formData.append("total_chunks", totalChunks);
-                formData.append("source_type", sourceType); // Add source type to form data
+                formData.append('upload_id', state.uploadId);
+                formData.append('filename', state.file?.name ?? '');
+                formData.append('total_chunks', state.totalChunks);
+                formData.append('source_type', elements.sourceInput?.value ?? '');
 
                 try {
                     const res = await fetch('{{ route('upload.merge') }}', {
-                        method: "POST",
+                        method: 'POST',
                         headers: {
-                            "X-CSRF-TOKEN": "{{ csrf_token() }}"
+                            'X-CSRF-TOKEN': '{{ csrf_token() }}',
                         },
                         body: formData,
                     });
@@ -990,282 +1059,761 @@
                     const result = await res.json();
 
                     if (res.ok && result.success) {
-                        progressBar.style.width = "100%";
-                        progressText.textContent = `✅ Upload complete! ${result.message || "Upload completed. Processing started in background."}`;
-                        MyZkToast.success(result.message || "Upload completed successfully!");
-                        setButtonState("done");
+                        updateProgressBar(100);
+                        updateProgressText(`✅ Upload complete! ${result.message || 'Upload completed. Processing started in background.'}`);
+                        notify('success', result.message || 'Upload completed successfully!');
+                        state.uploading = false;
+                        setButtonState('done');
                         await loadMyData();
-                        autoReset();
+                        scheduleReset();
                     } else {
-                        throw new Error(result.message || "Failed to merge file on server.");
+                        throw new Error(result.message || 'Failed to merge file on server.');
                     }
-
                 } catch (err) {
-                    progressText.textContent = `❌ Error: ${err.message}`;
-                    MyZkToast.error(err.message || "Server error during merge.");
-                    setButtonState("error");
-                    autoReset();
+                    updateProgressText(`❌ Error: ${err.message}`);
+                    notify('error', err.message || 'Server error during merge.');
+                    state.uploading = false;
+                    setButtonState('error');
+                    scheduleReset();
                 }
+            };
+
+            const bindEvents = () => {
+                elements.fileInput.addEventListener('change', handleFileSelection);
+                elements.startBtn.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    handleStartUpload();
+                });
+                elements.pauseBtn.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    handlePauseUpload();
+                });
+                elements.resumeBtn.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    handleResumeUpload();
+                });
+            };
+
+            function renderImageryCard(item, template) {
+                if (!template) return null;
+                const clone = template.content.cloneNode(true);
+                const card = clone.querySelector('.imagery-card');
+                if (!card) return null;
+
+                const formatEl = card.querySelector('.imagery-format');
+                if (formatEl && item.format) {
+                    formatEl.textContent = item.format.slice(0, 3).toUpperCase();
+                }
+
+                const nameEl = card.querySelector('.imagery-name');
+                if (nameEl) {
+                    nameEl.textContent = shortenFilename(item.original_name, 25);
+                }
+
+                const metaEl = card.querySelector('.imagery-meta');
+                if (metaEl) {
+                    const sizeText = (item.size / 1024 / 1024).toFixed(2);
+                    const dateText = new Date(item.uploaded_at).toLocaleDateString();
+                    const status = item.processing_status ?? 'unknown';
+                    const statusClass = status === 'done' ? 'text-success' : 'text-warning';
+                    metaEl.innerHTML = `${sizeText} MB • ${dateText} • <span class="imagery-status ${statusClass}">${status}</span>`;
+                }
+
+                const viewBtn = card.querySelector('.view-btn');
+                if (viewBtn) {
+                    viewBtn.addEventListener('click', () => viewImagery(item));
+                }
+
+                return clone;
             }
 
-            // === AUTO RESET ===
-            // Reset the form state a few seconds after a successful or failed upload.
-            function autoReset() {
-                setTimeout(() => {
-                    file = null;
-                    fileInput.value = "";
-                    fileInfo.classList.add("hidden");
-                    progressBar.style.width = "0%";
-                    progressText.textContent = "Ready for next upload.";
-                    setButtonState("idle");
-                }, 4000);
-            }
-
-            // === LOAD MY DATA ===
-            // Fetch the authenticated user imagery list and render each entry with the template card.
             async function loadMyData() {
-                myDataContainer.innerHTML = `
-                <div class="flex justify-center py-4">
-                    <p class="text-sm text-foreground/60 animate-pulse">Loading your imagery list...</p>
-                </div>
-            `;
+                if (!elements.myDataContainer) return;
+                elements.myDataContainer.innerHTML = `
+            <div class="flex justify-center py-4">
+                <p class="text-sm text-foreground/60 animate-pulse">Loading your imagery list...</p>
+            </div>
+        `;
 
                 try {
                     const res = await fetch('{{ route('imagery.list') }}');
                     const result = await res.json();
 
-                    if (!res.ok || !result.success) throw new Error(result.message || "Failed to fetch imagery data.");
-                    const data = result.data;
+                    if (!res.ok || !result.success) {
+                        throw new Error(result.message || 'Failed to fetch imagery data.');
+                    }
 
-                    myDataContainer.innerHTML = ''; // clear existing
+                    const data = Array.isArray(result.data) ? result.data : [];
+                    elements.myDataContainer.innerHTML = '';
 
-                    if (data.length === 0) {
-                        myDataContainer.innerHTML = `<p class="text-sm text-gray-400 text-center py-4">No imagery uploaded yet.</p>`;
+                    if (!data.length) {
+                        elements.myDataContainer.innerHTML = '<p class="text-sm text-gray-400 text-center py-4">No imagery uploaded yet.</p>';
                         return;
                     }
 
-                    const cardListDataImagery = document.getElementById('imageryCardTemplate');
-
-                    data.forEach(item => {
-                        const clone = cardListDataImagery.content.cloneNode(true);
-                        const card = clone.querySelector('.imagery-card');
-
-                        // populate data
-                        card.querySelector('.imagery-format').textContent = item.format.slice(0, 3).toUpperCase();
-                        card.querySelector('.imagery-name').textContent = shortenFilename(item.original_name, 25);
-                        const meta = `${(item.size / 1024 / 1024).toFixed(2)} MB • ${new Date(item.uploaded_at).toLocaleDateString()} • `;
-                        const statusEl = card.querySelector('.imagery-status');
-                        statusEl.textContent = item.processing_status;
-                        statusEl.classList.toggle('text-success', item.processing_status === 'done');
-                        statusEl.classList.toggle('text-warning', item.processing_status !== 'done');
-                        card.querySelector('.imagery-meta').innerHTML = `${meta}<span class="${statusEl.className}">${statusEl.textContent}</span>`;
-
-                        // handle view button
-                        const viewBtn = card.querySelector('.view-btn');
-                        viewBtn.addEventListener('click', () => viewImagery(item));
-
-                        // append to container
-                        myDataContainer.appendChild(clone);
+                    const template = document.getElementById('imageryCardTemplate');
+                    data.forEach((item) => {
+                        const fragment = renderImageryCard(item, template);
+                        if (fragment) {
+                            elements.myDataContainer.appendChild(fragment);
+                        }
                     });
-
                 } catch (err) {
-                    myDataContainer.innerHTML = `
-                        <div class="text-sm text-red-500 bg-red-50 border border-red-200 rounded p-3">
-                            ❌ ${err.message}
-                        </div>
-                    `;
+                    elements.myDataContainer.innerHTML = `
+                    <div class="text-sm text-red-500 bg-red-50 border border-red-200 rounded p-3">
+                        ❌ ${err.message}
+                    </div>
+                `;
                 }
             }
 
+            return {
+                init() {
+                    resetUploader();
+                    loadMyData();
+                    bindEvents();
+                },
+            };
+        }
+
+        function initTabFunctionality() {
+            const tabButtons = document.querySelectorAll('.tab-btn');
+            const tabContents = document.querySelectorAll('.tab-content');
+
+            tabButtons.forEach((button) => {
+                button.addEventListener('click', () => {
+                    tabButtons.forEach((btn) => btn.classList.remove('active'));
+                    tabContents.forEach((content) => content.classList.remove('active'));
+
+                    button.classList.add('active');
+
+                    const tabId = button.getAttribute('data-tab');
+                    const content = document.getElementById(tabId);
+                    if (content) {
+                        content.classList.add('active');
+                    }
+                });
+            });
+        }
+    </script>
+@endpush
+
+
+    
+@push('javascript')
+    <script>
+        (function () {
+            const defaults = {
+                cloudCover: 40,
+                latitude: -1.24536,
+                longitude: 114.54535,
+                productType: 'S2MSI2A',
+                scrollAmount: 150,
+            };
+
+            const sentinelCatalogEndpoint = 'https://catalogue.dataspace.copernicus.eu/resto/api/collections/Sentinel2/search.json';
+            const sentinelDownloadIgnoredKeywords = ['quicklook', 'thumbnail', 'thumb', 'overview', 'browse', 'allorigins'];
+            const sentinelPreviewIgnoredKeywords = ['thumbnail', 'thumb', 'legend', 'logo', 'browse', 'allorigins'];
+
+            const toast = window.MyZkToast ?? {};
+            const state = {
+                sentinelLoadedOnce: false,
+                sentinelDownloadToken: '',
+                sentinelTokenConfigured: false,
+                sentinelPreviewController: null,
+            };
+
+            const elements = {};
+            let isDragging = false;
+            let dragStartX = 0;
+            let dragScrollLeft = 0;
+
+            document.addEventListener('DOMContentLoaded', () => {
+                cacheDomReferences();
+                initializeSentinelToken();
+                bindEventListeners();
+                preparePreviewController();
+                openDefaultPanel();
+                if (!state.sentinelLoadedOnce) {
+                    loadSentinelCollections();
+                }
+            });
+
+            function cacheDomReferences() {
+                elements.panelWrapper = document.getElementById('panel-wrapper');
+                elements.panels = Array.from(document.querySelectorAll('#panel-wrapper section'));
+                elements.sidebarButtons = Array.from(document.querySelectorAll('.sidebar-btn'));
+                elements.scrollContainer = document.getElementById('scroll-container');
+                elements.scrollLeftBtn = document.getElementById('scroll-left');
+                elements.scrollRightBtn = document.getElementById('scroll-right');
+                elements.sentinelStatus = document.getElementById('sentinelCollectionStatus');
+                elements.sentinelList = document.getElementById('sentinelCollectionList');
+                elements.sentinelTemplate = document.getElementById('sentinelCollectionTemplate');
+                elements.sentinelLastUpdated = document.getElementById('sentinelLastUpdated');
+                elements.sentinelFilterForm = document.getElementById('sentinelFilterForm');
+                elements.sentinelFilterResetButton = document.getElementById('sentinelFilterResetButton');
+                elements.sentinelCloudInput = document.getElementById('sentinelCloudFilter');
+                elements.sentinelLatInput = document.getElementById('sentinelLatFilter');
+                elements.sentinelLonInput = document.getElementById('sentinelLonFilter');
+                elements.sentinelLevelInput = document.getElementById('sentinelProductLevel');
+                elements.sentinelPanel = document.getElementById('sentinel-panel');
+                elements.sentinelPreviewPanel = document.getElementById('sentinelPreviewPanel');
+                elements.sentinelPreviewTitle = elements.sentinelPreviewPanel?.querySelector('[data-sentinel-preview-title]');
+                elements.sentinelPreviewAcquired = elements.sentinelPreviewPanel?.querySelector('[data-sentinel-preview-acquired]');
+                elements.sentinelPreviewDetails = elements.sentinelPreviewPanel?.querySelector('[data-sentinel-preview-details]');
+                elements.sentinelPreviewStatus = elements.sentinelPreviewPanel?.querySelector('[data-sentinel-preview-status]');
+                elements.sentinelPreviewHideBtn = document.getElementById('sentinelPreviewHideBtn');
+                elements.sentinelPreviewShowBtn = document.getElementById('sentinelPreviewShowBtn');
+                elements.sentinelPreviewClearBtn = document.getElementById('sentinelPreviewClearBtn');
+                elements.sentinelPreviewDownloadBtn = document.getElementById('sentinelPreviewDownloadBtn');
+                elements.buySatelliteBtn = document.getElementById('buySatelliteBtn');
+                elements.buyingPanel = document.getElementById('buyingPanel');
+                elements.buyingPanelCloseBtn = document.getElementById('buyingPanelCloseBtn');
             }
 
-            // === TAB FUNCTIONALITY ===
-            // Basic tab switcher for the pricing calculator and upload helper sections.
-            function initTabFunctionality() {
-                const tabButtons = document.querySelectorAll('.tab-btn');
-                const tabContents = document.querySelectorAll('.tab-content');
+            function initializeSentinelToken() {
+                const panel = elements.sentinelPanel;
+                state.sentinelDownloadToken = sanitizeSentinelToken(panel?.dataset?.sentinelToken ?? '');
+                state.sentinelTokenConfigured = (panel?.dataset?.sentinelCredentials ?? '').toLowerCase() === 'true';
+            }
 
-                tabButtons.forEach(button => {
-                    button.addEventListener('click', () => {
-                        // Remove active class from all buttons and contents
-                        tabButtons.forEach(btn => btn.classList.remove('active'));
-                        tabContents.forEach(content => content.classList.remove('active'));
+            function bindEventListeners() {
+                setDefaultFilterValues();
+                bindFilterForm();
+                bindFilterReset();
+                bindScrollControls();
+                bindScrollDragging();
+                bindPanelResizeSync();
+                bindBuyingPanelControls();
+                bindPreviewButtons();
+            }
 
-                        // Add active class to clicked button
-                        button.classList.add('active');
+            function setDefaultFilterValues() {
+                if (elements.sentinelCloudInput && elements.sentinelCloudInput.value === '') {
+                    elements.sentinelCloudInput.value = defaults.cloudCover;
+                }
+                if (elements.sentinelLatInput && elements.sentinelLatInput.value === '') {
+                    elements.sentinelLatInput.value = defaults.latitude;
+                }
+                if (elements.sentinelLonInput && elements.sentinelLonInput.value === '') {
+                    elements.sentinelLonInput.value = defaults.longitude;
+                }
+                if (elements.sentinelLevelInput && elements.sentinelLevelInput.value === '') {
+                    elements.sentinelLevelInput.value = defaults.productType;
+                }
+            }
 
-                        // Show corresponding content
-                        const tabId = button.getAttribute('data-tab');
-                        const content = document.getElementById(tabId);
-                        if (content) {
-                            content.classList.add('active');
-                        }
-                    });
+            function bindFilterForm() {
+                if (!elements.sentinelFilterForm) return;
+                elements.sentinelFilterForm.addEventListener('submit', (event) => {
+                    event.preventDefault();
+                    loadSentinelCollections(true);
                 });
             }
 
-            // Initialize tab functionality when DOM is loaded
-            document.addEventListener('DOMContentLoaded', initTabFunctionality);
+            function bindFilterReset() {
+                if (!elements.sentinelFilterResetButton) return;
+                elements.sentinelFilterResetButton.addEventListener('click', () => {
+                    if (elements.sentinelCloudInput) elements.sentinelCloudInput.value = defaults.cloudCover;
+                    if (elements.sentinelLatInput) elements.sentinelLatInput.value = defaults.latitude;
+                    if (elements.sentinelLonInput) elements.sentinelLonInput.value = defaults.longitude;
+                    if (elements.sentinelLevelInput) elements.sentinelLevelInput.value = defaults.productType;
+                    loadSentinelCollections(true);
+                });
 
-            // === HELPER FUNCTIONS ===
-            // Centralised place to toggle the uploader button states for each lifecycle stage.
-            function setButtonState(state) {
-                if (!startBtn || !pauseBtn || !resumeBtn) {
-                    return;
+                elements.sentinelCloudInput?.addEventListener('blur', () => normalizeInputValue(elements.sentinelCloudInput, 0, 100));
+                elements.sentinelLatInput?.addEventListener('blur', () => normalizeInputValue(elements.sentinelLatInput, -90, 90));
+                elements.sentinelLonInput?.addEventListener('blur', () => normalizeInputValue(elements.sentinelLonInput, -180, 180));
+            }
+
+            function bindScrollControls() {
+                if (elements.scrollLeftBtn && elements.scrollContainer) {
+                    elements.scrollLeftBtn.addEventListener('click', () => {
+                        elements.scrollContainer.scrollBy({
+                            left: -defaults.scrollAmount,
+                            behavior: 'smooth',
+                        });
+                    });
                 }
-                switch (state) {
-                    case "idle":
-                        startBtn.disabled = true;
-                        pauseBtn.disabled = true;
-                        resumeBtn.disabled = true;
-                        break;
-                    case "ready": // file sudah dipilih
-                        startBtn.disabled = false;
-                        pauseBtn.disabled = true;
-                        resumeBtn.disabled = true;
-                        break;
-                    case "uploading":
-                        startBtn.disabled = true;
-                        pauseBtn.disabled = false;
-                        resumeBtn.disabled = true;
-                        break;
-                    case "paused":
-                        startBtn.disabled = true;
-                        pauseBtn.disabled = true;
-                        resumeBtn.disabled = false;
-                        break;
-                    case "merging":
-                        startBtn.disabled = true;
-                        pauseBtn.disabled = true;
-                        resumeBtn.disabled = true;
-                        break;
-                    case "done":
-                        startBtn.disabled = true;
-                        pauseBtn.disabled = true;
-                        resumeBtn.disabled = true;
-                        break;
-                    case "error":
-                        startBtn.disabled = false;
-                        pauseBtn.disabled = true;
-                        resumeBtn.disabled = true;
-                        break;
+
+                if (elements.scrollRightBtn && elements.scrollContainer) {
+                    elements.scrollRightBtn.addEventListener('click', () => {
+                        elements.scrollContainer.scrollBy({
+                            left: defaults.scrollAmount,
+                            behavior: 'smooth',
+                        });
+                    });
                 }
             }
-        </script>
-    @endpush
 
-    @push('javascript')
-        <script>
-            // === MAP PANEL & SENTINEL CATALOG CONTROLLER ===
-            // Everything below wires the sliding panels, Sentinel catalogue list and OpenLayers preview workflow.
-            const panelWrapper = document.getElementById("panel-wrapper");
-            const panels = document.querySelectorAll("#panel-wrapper section");
-            const sidebarButtons = document.querySelectorAll(".sidebar-btn");
-            const scrollContainer = document.getElementById('scroll-container');
-            const scrollLeftBtn = document.getElementById('scroll-left');
-            const scrollRightBtn = document.getElementById('scroll-right');
-            const sentinelStatus = document.getElementById('sentinelCollectionStatus');
-            const sentinelList = document.getElementById('sentinelCollectionList');
-            const sentinelTemplate = document.getElementById('sentinelCollectionTemplate');
-            const sentinelLastUpdated = document.getElementById('sentinelLastUpdated');
-            const sentinelFilterForm = document.getElementById('sentinelFilterForm');
-            const sentinelFilterResetButton = document.getElementById('sentinelFilterResetButton');
-            const sentinelCloudInput = document.getElementById('sentinelCloudFilter');
-            const sentinelLatInput = document.getElementById('sentinelLatFilter');
-            const sentinelLonInput = document.getElementById('sentinelLonFilter');
-            const sentinelLevelInput = document.getElementById('sentinelProductLevel');
-            const sentinelPanelEl = document.getElementById('sentinel-panel');
-            const sentinelPreviewPanel = document.getElementById('sentinelPreviewPanel');
-            const sentinelPreviewTitle = sentinelPreviewPanel?.querySelector('[data-sentinel-preview-title]');
-            const sentinelPreviewAcquired = sentinelPreviewPanel?.querySelector('[data-sentinel-preview-acquired]');
-            const sentinelPreviewDetails = sentinelPreviewPanel?.querySelector('[data-sentinel-preview-details]');
-            const sentinelPreviewStatus = sentinelPreviewPanel?.querySelector('[data-sentinel-preview-status]');
-            const sentinelPreviewHideBtn = document.getElementById('sentinelPreviewHideBtn');
-            const sentinelPreviewShowBtn = document.getElementById('sentinelPreviewShowBtn');
-            const sentinelPreviewClearBtn = document.getElementById('sentinelPreviewClearBtn');
-            const sentinelPreviewDownloadBtn = document.getElementById('sentinelPreviewDownloadBtn');
+            function bindScrollDragging() {
+                if (!elements.scrollContainer) return;
 
-            const sentinelCatalogEndpoint = 'https://catalogue.dataspace.copernicus.eu/resto/api/collections/Sentinel2/search.json';
-            let sentinelLoadedOnce = false;
-            const defaultCloudCoverMax = 40;
-            const defaultLatitude = -1.24536;
-            const defaultLongitude = 114.54535;
-            const defaultProductType = 'S2MSI2A';
+                elements.scrollContainer.addEventListener('mousedown', (event) => {
+                    isDragging = true;
+                    elements.scrollContainer.classList.add('cursor-grabbing');
+                    dragStartX = event.pageX - elements.scrollContainer.offsetLeft;
+                    dragScrollLeft = elements.scrollContainer.scrollLeft;
+                });
 
-            const scrollAmount = 150; // pixels per click
+                elements.scrollContainer.addEventListener('mouseleave', stopDragging);
+                elements.scrollContainer.addEventListener('mouseup', stopDragging);
+                elements.scrollContainer.addEventListener('mousemove', (event) => {
+                    if (!isDragging) return;
+                    event.preventDefault();
+                    const x = event.pageX - elements.scrollContainer.offsetLeft;
+                    const walk = (x - dragStartX) * 2;
+                    elements.scrollContainer.scrollLeft = dragScrollLeft - walk;
+                });
+            }
 
-            // Format helper so Sentinel catalogue requests align with the API expectation.
-            const formatISODate = (date) => {
+            function stopDragging() {
+                if (!elements.scrollContainer) return;
+                isDragging = false;
+                elements.scrollContainer.classList.remove('cursor-grabbing');
+            }
+
+            function bindPanelResizeSync() {
+                window.addEventListener('resize', handleResize);
+            }
+
+            function bindBuyingPanelControls() {
+                elements.buySatelliteBtn?.addEventListener('click', () => {
+                    elements.buyingPanel?.classList.remove('hidden');
+                });
+                elements.buyingPanelCloseBtn?.addEventListener('click', () => {
+                    elements.buyingPanel?.classList.add('hidden');
+                });
+            }
+
+            function bindPreviewButtons() {
+                elements.sentinelPreviewHideBtn?.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    createSentinelPreviewController()?.hideImage();
+                });
+                elements.sentinelPreviewShowBtn?.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    createSentinelPreviewController()?.showImage();
+                });
+                elements.sentinelPreviewClearBtn?.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    createSentinelPreviewController()?.clear();
+                });
+            }
+
+            function preparePreviewController() {
+                if (typeof window === 'undefined') {
+                    return;
+                }
+
+                if (window.map) {
+                    createSentinelPreviewController();
+                } else {
+                    window.addEventListener('map:ready', () => {
+                        createSentinelPreviewController();
+                    }, { once: true });
+                }
+
+                if (!createSentinelPreviewController()) {
+                    elements.sentinelPreviewHideBtn?.classList.add('hidden');
+                    elements.sentinelPreviewShowBtn?.classList.add('hidden');
+                }
+
+                window.showSentinelPreviewOnMap = triggerSentinelPreview;
+            }
+
+            function openDefaultPanel() {
+                const defaultPanel = 'data-panel';
+                const isMobile = window.innerWidth < 768;
+                const selector = isMobile
+                    ? `#scroll-container .sidebar-btn[onclick*='${defaultPanel}']`
+                    : `aside .sidebar-btn[onclick*='${defaultPanel}']`;
+                const defaultBtn = document.querySelector(selector);
+                showPanel(defaultPanel, defaultBtn);
+            }
+
+            async function loadSentinelCollections(forceRefresh = false) {
+                if (!elements.sentinelStatus || !elements.sentinelList) {
+                    return;
+                }
+
+                if (forceRefresh && toast.info) {
+                    toast.info('Refreshing Sentinel-2 catalogue...');
+                }
+
+                elements.sentinelStatus.classList.remove('hidden');
+                elements.sentinelStatus.textContent = 'Fetching latest Sentinel-2 collections...';
+                elements.sentinelList.innerHTML = '';
+
+                const endDate = new Date();
+                const startDate = new Date(endDate);
+                startDate.setMonth(startDate.getMonth() - 1);
+                startDate.setHours(0, 0, 0, 0);
+                const endDateAdjusted = new Date(endDate);
+                endDateAdjusted.setHours(23, 59, 59, 999);
+
+                const params = new URLSearchParams({
+                    startDate: formatISODate(startDate),
+                    completionDate: formatISODate(endDateAdjusted),
+                    maxRecords: '20',
+                    sortParam: 'startDate',
+                    sortOrder: 'descending',
+                });
+
+                const productTypeRaw = elements.sentinelLevelInput?.value?.trim();
+                const productType = ['S2MSI2A', 'S2MSI1C'].includes(productTypeRaw) ? productTypeRaw : defaults.productType;
+                params.set('productType', productType);
+
+                const cloudRaw = elements.sentinelCloudInput?.value?.trim();
+                const cloudNumber = cloudRaw === '' || cloudRaw === undefined ? null : Number(cloudRaw);
+                if (cloudNumber !== null && !Number.isNaN(cloudNumber)) {
+                    const normalized = clampNumber(cloudNumber, 0, 100);
+                    if (normalized !== null) {
+                        params.set('cloudCover', `[0,${Math.round(normalized)}]`);
+                    }
+                }
+
+                const latRaw = elements.sentinelLatInput?.value?.trim();
+                const lonRaw = elements.sentinelLonInput?.value?.trim();
+                const hasLat = latRaw !== undefined && latRaw !== '';
+                const hasLon = lonRaw !== undefined && lonRaw !== '';
+
+                if ((hasLat && !hasLon) || (!hasLat && hasLon)) {
+                    elements.sentinelStatus.classList.remove('hidden');
+                    elements.sentinelStatus.textContent = 'Please provide both latitude and longitude to filter by location.';
+                    elements.sentinelList.innerHTML = '';
+                    return;
+                }
+
+                if (hasLat && hasLon) {
+                    const latNumber = Number(latRaw);
+                    const lonNumber = Number(lonRaw);
+                    const normalizedLat = clampNumber(latNumber, -90, 90);
+                    const normalizedLon = clampNumber(lonNumber, -180, 180);
+
+                    if (normalizedLat === null || normalizedLon === null) {
+                        elements.sentinelStatus.classList.remove('hidden');
+                        elements.sentinelStatus.textContent = 'Latitude must be between -90 and 90 and longitude between -180 and 180.';
+                        elements.sentinelList.innerHTML = '';
+                        return;
+                    }
+
+                    params.set('lat', normalizedLat.toFixed(6));
+                    params.set('lon', normalizedLon.toFixed(6));
+                }
+
+                const requestUrl = `${sentinelCatalogEndpoint}?${params.toString()}`;
+
+                try {
+                    const response = await fetchSentinelCatalog(requestUrl);
+                    const features = Array.isArray(response?.features) ? response.features : [];
+
+                    if (!features.length) {
+                        elements.sentinelStatus.textContent = 'No Sentinel-2 collections found in the last 30 days.';
+                    } else {
+                        elements.sentinelStatus.classList.add('hidden');
+                        features.forEach((feature) => {
+                            const card = createSentinelCard(feature);
+                            if (card) {
+                                elements.sentinelList.appendChild(card);
+                            }
+                        });
+                    }
+
+                    state.sentinelLoadedOnce = true;
+
+                    if (elements.sentinelLastUpdated) {
+                        elements.sentinelLastUpdated.textContent = new Date().toLocaleString('id-ID');
+                    }
+
+                    if (features.length && forceRefresh && toast.success) {
+                        toast.success('Sentinel-2 collections updated.');
+                    }
+                } catch (error) {
+                    const message = error?.message ? ` (${error.message})` : '';
+                    elements.sentinelStatus.classList.remove('hidden');
+                    elements.sentinelStatus.textContent = `Unable to fetch Sentinel-2 collections${message}. Please try again later.`;
+
+                    if (elements.sentinelLastUpdated) {
+                        elements.sentinelLastUpdated.textContent = new Date().toLocaleString('id-ID');
+                    }
+
+                    if (toast.error) {
+                        toast.error('Failed to update Sentinel-2 collections.');
+                    }
+                }
+            }
+
+            async function fetchSentinelCatalog(url) {
+                const attemptFetch = async (targetUrl) => {
+                    const response = await fetch(targetUrl);
+                    if (!response.ok) {
+                        throw new Error(`Status ${response.status}`);
+                    }
+                    return response.json();
+                };
+
+                try {
+                    return await attemptFetch(url);
+                } catch (err) {
+                    const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+                    return attemptFetch(proxyUrl);
+                }
+            }
+
+            function createSentinelCard(feature) {
+                if (!elements.sentinelTemplate) return null;
+
+                const clone = elements.sentinelTemplate.content.cloneNode(true);
+                const card = clone.querySelector('[data-sentinel-card]');
+                if (!card) return null;
+
+                const props = feature?.properties ?? {};
+                const links = feature?.links ?? [];
+                const assets = feature?.assets ?? {};
+
+                const title = props.title || props.productIdentifier || props.productTitle || 'Sentinel-2 Scene';
+                const acquisitionDate = formatReadableDate(props.startDate || props.acquisitionDate || props.datetime);
+                const cloudCover = formatCloudCover(props.cloudCoverPercentage ?? props.cloudCover);
+
+                const badgeEl = card.querySelector('[data-sentinel-cloud]');
+                if (badgeEl) {
+                    badgeEl.textContent = cloudCover;
+                }
+
+                const titleEl = card.querySelector('[data-sentinel-title]');
+                if (titleEl) {
+                    titleEl.textContent = title;
+                }
+
+                const dateEl = card.querySelector('[data-sentinel-date]');
+                if (dateEl) {
+                    dateEl.textContent = acquisitionDate;
+                }
+
+                const locationEl = card.querySelector('[data-sentinel-location]');
+                if (locationEl) {
+                    locationEl.textContent = props.location || props.productRegion || props.origin || 'Location unavailable';
+                }
+
+                const previewBtn = card.querySelector('[data-sentinel-preview]');
+                const downloadBtn = card.querySelector('[data-sentinel-download]');
+
+                const downloadUrl = resolveSentinelDownloadUrl(feature);
+                const previewPayload = {
+                    productId: props.id || props.productIdentifier || props.productId || props.title,
+                    title: title,
+                    acquisitionDate: acquisitionDate,
+                    details: buildSentinelStatusMessage(`Cloud cover: ${cloudCover}`),
+                    feature,
+                    downloadUrl: applySentinelTokenToUrl(downloadUrl) || downloadUrl,
+                    downloadUrlBase: downloadUrl,
+                    downloadFilename: buildSentinelDownloadName(props.productIdentifier || props.id || title, title),
+                    quicklookUrl: Array.isArray(props.quicklook) ? props.quicklook.find((item) => typeof item === 'string') : props.quicklook,
+                };
+
+                if (previewBtn) {
+                    previewBtn.addEventListener('click', (event) => {
+                        event.preventDefault();
+                        triggerSentinelPreview(previewPayload);
+                    });
+                }
+
+                if (downloadBtn) {
+                    if (previewPayload.downloadUrl) {
+                        downloadBtn.href = previewPayload.downloadUrl;
+                        downloadBtn.download = previewPayload.downloadFilename;
+                        downloadBtn.textContent = 'Download';
+                        downloadBtn.classList.remove('hidden');
+                    } else {
+                        downloadBtn.classList.add('hidden');
+                    }
+                }
+
+                const quicklookEl = card.querySelector('[data-sentinel-quicklook]');
+                const quicklookUrl = previewPayload.quicklookUrl;
+                if (quicklookEl) {
+                    if (quicklookUrl) {
+                        quicklookEl.src = quicklookUrl;
+                        quicklookEl.alt = `${title} quicklook`;
+                    } else {
+                        quicklookEl.classList.add('hidden');
+                    }
+                }
+
+                return clone;
+            }
+
+            function triggerSentinelPreview(payload) {
+                if (!payload) return;
+                const controller = createSentinelPreviewController();
+                if (!controller) {
+                    console.warn('Sentinel preview controller is unavailable. Map is not ready yet.');
+                    return;
+                }
+                controller.showPreview(payload);
+            }
+
+            function showPanel(id, btn = null) {
+                const isMobile = window.innerWidth < 768;
+
+                elements.panels.forEach((panel) => panel.classList.add('hidden'));
+                const targetPanel = document.getElementById(id);
+                targetPanel?.classList.remove('hidden');
+
+                elements.sidebarButtons.forEach((button) => button.classList.remove('active'));
+                if (btn) {
+                    btn.classList.add('active');
+                } else {
+                    const matchedBtn = elements.sidebarButtons.find((button) => button.getAttribute('onclick')?.includes(id));
+                    matchedBtn?.classList.add('active');
+                }
+
+                if (!elements.panelWrapper) {
+                    return;
+                }
+
+                if (isMobile) {
+                    elements.panelWrapper.classList.remove('translate-y-full');
+                    elements.panelWrapper.classList.add('translate-y-0');
+                    elements.panelWrapper.classList.remove('slide-down');
+                    elements.panelWrapper.classList.add('slide-up');
+                } else {
+                    elements.panelWrapper.classList.remove('w-0', 'md:w-0');
+                    elements.panelWrapper.classList.add('w-80', 'md:w-80');
+                }
+
+                elements.panelWrapper.dataset.activePanel = id;
+
+                if (id === 'sentinel-panel' && !state.sentinelLoadedOnce) {
+                    loadSentinelCollections();
+                }
+            }
+
+            function closePanels() {
+                const isMobile = window.innerWidth < 768;
+
+                elements.panels.forEach((panel) => panel.classList.add('hidden'));
+                elements.sidebarButtons.forEach((button) => button.classList.remove('active'));
+
+                if (elements.panelWrapper) {
+                    delete elements.panelWrapper.dataset.activePanel;
+
+                    if (isMobile) {
+                        elements.panelWrapper.classList.add('translate-y-full');
+                        elements.panelWrapper.classList.remove('translate-y-0');
+                    } else {
+                        elements.panelWrapper.classList.remove('w-80', 'md:w-80');
+                        elements.panelWrapper.classList.add('w-0', 'md:w-0');
+                    }
+                }
+            }
+
+            function handleResize() {
+                if (!elements.panelWrapper) return;
+                const isMobile = window.innerWidth < 768;
+                const activePanel = elements.panelWrapper.dataset.activePanel;
+
+                if (!activePanel) {
+                    elements.panelWrapper.classList.add('translate-y-full');
+                    elements.panelWrapper.classList.remove('translate-y-0', 'w-80', 'md:w-80');
+                    return;
+                }
+
+                elements.panelWrapper.classList.remove('slide-up', 'slide-down');
+
+                if (isMobile) {
+                    elements.panelWrapper.classList.remove('w-0', 'md:w-0', 'w-80', 'md:w-80');
+                    elements.panelWrapper.classList.remove('translate-y-full');
+                    elements.panelWrapper.classList.add('translate-y-0', 'opacity-100');
+                } else {
+                    elements.panelWrapper.classList.remove('translate-y-full', 'translate-y-0');
+                    elements.panelWrapper.classList.add('w-80', 'md:w-80', 'opacity-100');
+                }
+
+                const selector = isMobile
+                    ? `#scroll-container .sidebar-btn[onclick*='${activePanel}']`
+                    : `aside .sidebar-btn[onclick*='${activePanel}']`;
+                const activeBtn = document.querySelector(selector);
+
+                elements.sidebarButtons.forEach((button) => button.classList.remove('active'));
+                activeBtn?.classList.add('active');
+            }
+
+            function normalizeInputValue(input, min, max) {
+                if (!input) return;
+                const parsed = Number(input.value);
+                if (Number.isNaN(parsed)) {
+                    input.value = '';
+                    return;
+                }
+                const normalized = clampNumber(parsed, min, max);
+                if (normalized !== null) {
+                    input.value = normalized.toString();
+                }
+            }
+
+            function formatISODate(date) {
                 if (!(date instanceof Date)) return '';
                 const copy = new Date(date.getTime());
                 copy.setMinutes(copy.getMinutes() - copy.getTimezoneOffset());
                 return copy.toISOString().split('T')[0];
-            };
+            }
 
-            // Convert Sentinel timestamps to a human friendly format for the card and preview overlays.
-            const formatReadableDate = (value) => {
+            function formatReadableDate(value) {
                 if (!value) return 'Unknown date';
                 const parsed = new Date(value);
                 if (Number.isNaN(parsed.getTime())) return value;
-                return parsed.toLocaleString('id-ID', {
+                return `${parsed.toLocaleString('id-ID', {
                     dateStyle: 'medium',
                     timeStyle: 'short',
-                    timeZone: 'UTC'
-                }) + ' UTC';
-            };
+                    timeZone: 'UTC',
+                })} UTC`;
+            }
 
-            // Sentinel responses store cloud cover as a float, ensure consistent text output.
-            const formatCloudCover = (value) => {
+            function formatCloudCover(value) {
                 if (typeof value === 'number' && !Number.isNaN(value)) {
                     return `${value.toFixed(1)}%`;
                 }
                 return 'N/A';
-            };
+            }
 
-            // Prevent filter inputs from sending invalid latitude/longitude or percentage values.
-            const clampNumber = (value, min, max) => {
+            function clampNumber(value, min, max) {
                 if (typeof value !== 'number' || Number.isNaN(value)) return null;
                 return Math.min(Math.max(value, min), max);
-            };
+            }
 
-            // Generate a filesystem safe filename for download actions.
-            const buildSentinelDownloadName = (primary, fallback) => {
+            function buildSentinelDownloadName(primary, fallback) {
                 const base = String(primary ?? fallback ?? 'sentinel-2-scene').trim();
                 const normalized = base.replace(/[\s]+/g, '_').replace(/[^A-Za-z0-9._-]+/g, '_');
                 return normalized || 'sentinel-2-scene';
-            };
+            }
 
-            const sentinelDownloadIgnoredKeywords = ['quicklook', 'thumbnail', 'thumb', 'overview', 'browse', 'preview', 'allorigins'];
-            const sentinelPreviewIgnoredKeywords = ['thumbnail', 'thumb', 'legend', 'logo', 'browse', 'allorigins'];
-
-            // Trim any whitespace from the access token resolved from the backend configuration.
-            const sanitizeSentinelToken = (value) => {
+            function sanitizeSentinelToken(value) {
                 if (typeof value !== 'string') return '';
                 return value.trim();
-            };
+            }
 
-            let sentinelDownloadToken = sanitizeSentinelToken(sentinelPanelEl?.dataset?.sentinelToken ?? '');
-            const sentinelTokenConfigured = (sentinelPanelEl?.dataset?.sentinelCredentials ?? '').toLowerCase() === 'true';
+            function hasSentinelToken() {
+                return sanitizeSentinelToken(state.sentinelDownloadToken).length > 0;
+            }
 
-            const hasSentinelToken = () => sanitizeSentinelToken(sentinelDownloadToken).length > 0;
-
-            const buildSentinelStatusMessage = (message) => {
+            function buildSentinelStatusMessage(message) {
                 const parts = [];
                 if (message) parts.push(message);
                 if (!hasSentinelToken()) {
                     parts.push(
-                        sentinelTokenConfigured
+                        state.sentinelTokenConfigured
                             ? 'Download unavailable: Copernicus access token could not be issued.'
-                            : 'Configure Copernicus credentials on the server to enable downloads.'
+                            : 'Configure Copernicus credentials on the server to enable downloads.',
                     );
                 }
                 return parts.join(' ');
-            };
+            }
 
-            // Append the active access token to Copernicus download or WMS URLs when required.
-            const applySentinelTokenToUrl = (url) => {
+            function applySentinelTokenToUrl(url) {
                 if (!url) return null;
-                const token = sanitizeSentinelToken(sentinelDownloadToken);
+                const token = sanitizeSentinelToken(state.sentinelDownloadToken);
                 if (!token) return null;
                 try {
                     const baseHref = typeof window !== 'undefined' && window.location ? window.location.href : 'https://example.com/';
@@ -1280,10 +1828,9 @@
                     const separator = url.includes('?') ? '&' : '?';
                     return `${url}${separator}token=${encodeURIComponent(token)}`;
                 }
-            };
+            }
 
-            // Lightweight heuristics that help filter out non-WMS entries from the metadata payload.
-            const isLikelyWmsUrl = (url) => {
+            function isLikelyWmsUrl(url) {
                 if (typeof url !== 'string') return false;
                 const trimmed = url.trim();
                 if (!trimmed) return false;
@@ -1302,10 +1849,9 @@
                     return false;
                 }
                 return mentionsWms;
-            };
+            }
 
-            // Remove volatile query parameters and capture relevant metadata for an OpenLayers WMS source.
-            const normalizeWmsCandidate = (url) => {
+            function normalizeWmsCandidate(url) {
                 if (!isLikelyWmsUrl(url)) return null;
                 try {
                     const baseHref = typeof window !== 'undefined' && window.location
@@ -1344,16 +1890,15 @@
                         url: baseUrl,
                         params,
                         version,
-                        originalUrl: url
+                        originalUrl: url,
                     };
                 } catch (error) {
                     console.warn('Unable to normalise WMS candidate', url, error);
                     return null;
                 }
-            };
+            }
 
-            // Recursively walk nested metadata objects and gather potential WMS endpoint strings.
-            const collectWmsServiceCandidates = (input, context = {}) => {
+            function collectWmsServiceCandidates(input, context = {}) {
                 const results = [];
                 const seen = new Set();
 
@@ -1366,7 +1911,7 @@
                         const normalizedContext = {
                             layers: ctx.layers ?? null,
                             styles: ctx.styles ?? null,
-                            version: ctx.version ?? null
+                            version: ctx.version ?? null,
                         };
 
                         const key = `${candidate}|${normalizedContext.layers ?? ''}|${normalizedContext.styles ?? ''}|${normalizedContext.version ?? ''}`;
@@ -1432,10 +1977,9 @@
                 visit(input, { ...context });
 
                 return results;
-            };
+            }
 
-            // Use the gathered candidates to determine the best scoring WMS configuration for a scene.
-            const resolveSentinelWmsConfig = (data) => {
+            function resolveSentinelWmsConfig(data) {
                 if (!data) return null;
 
                 const candidates = new Map();
@@ -1546,18 +2090,18 @@
                 }
 
                 return best;
-            };
+            }
 
-            const isValidSentinelDownloadUrl = (url) => {
+            function isValidSentinelDownloadUrl(url) {
                 if (typeof url !== 'string') return false;
                 const trimmed = url.trim();
                 if (!trimmed) return false;
                 if (!/^https?:\/\//i.test(trimmed)) return false;
                 const lowered = trimmed.toLowerCase();
                 return !sentinelDownloadIgnoredKeywords.some((keyword) => lowered.includes(keyword));
-            };
+            }
 
-            const extractServiceUrls = (service) => {
+            function extractServiceUrls(service) {
                 const results = [];
                 if (!service) return results;
                 if (typeof service === 'string') {
@@ -1579,10 +2123,9 @@
                     });
                 }
                 return results;
-            };
+            }
 
-            // Evaluate every link/asset reference and pick the most appropriate full scene download URL.
-            const resolveSentinelDownloadUrl = (feature) => {
+            function resolveSentinelDownloadUrl(feature) {
                 if (!feature) return null;
 
                 const props = feature.properties ?? {};
@@ -1610,7 +2153,7 @@
                     data: 90,
                     alternate: 75,
                     source: 70,
-                    self: 65
+                    self: 65,
                 };
 
                 links.forEach((link) => {
@@ -1702,14 +2245,11 @@
                 });
 
                 return bestUrl ?? null;
-            };
+            }
 
-            let sentinelPreviewController = null;
-
-            // Lazily create a preview controller that renders coverage + WMS previews on the shared map instance.
-            const createSentinelPreviewController = () => {
-                if (sentinelPreviewController) {
-                    return sentinelPreviewController;
+            function createSentinelPreviewController() {
+                if (state.sentinelPreviewController) {
+                    return state.sentinelPreviewController;
                 }
 
                 if (typeof window === 'undefined' || typeof ol === 'undefined') {
@@ -1732,108 +2272,103 @@
                         stroke: new ol.style.Stroke({
                             color: 'rgba(59,130,246,0.9)',
                             width: 2,
-                            lineDash: [6, 6]
+                            lineDash: [6, 6],
                         }),
                         fill: new ol.style.Fill({
-                            color: 'rgba(59,130,246,0.15)'
-                        })
+                            color: 'rgba(59,130,246,0.15)',
+                        }),
                     }),
                     visible: false,
-                    zIndex: 1200
+                    zIndex: 1200,
                 });
 
                 const previewLayer = new ol.layer.Image({
                     visible: false,
                     opacity: 0.8,
-                    zIndex: 1150
+                    zIndex: 1150,
                 });
 
                 mapInstance.addLayer(previewLayer);
                 mapInstance.addLayer(bboxLayer);
 
-                const state = {
+                const controllerState = {
                     current: null,
                     hasImage: false,
                     imageHidden: false,
-                    previewType: null
+                    previewType: null,
                 };
 
-                // Helper to keep the overlay metadata text in sync with the currently selected product.
                 const setPanelContent = ({ title, acquired, details, status }) => {
-                    if (title !== undefined && sentinelPreviewTitle) {
-                        sentinelPreviewTitle.textContent = title;
+                    if (title !== undefined && elements.sentinelPreviewTitle) {
+                        elements.sentinelPreviewTitle.textContent = title;
                     }
-                    if (acquired !== undefined && sentinelPreviewAcquired) {
-                        sentinelPreviewAcquired.textContent = acquired;
+                    if (acquired !== undefined && elements.sentinelPreviewAcquired) {
+                        elements.sentinelPreviewAcquired.textContent = acquired;
                     }
-                    if (details !== undefined && sentinelPreviewDetails) {
-                        sentinelPreviewDetails.textContent = details;
-                        sentinelPreviewDetails.classList.toggle('hidden', !details);
+                    if (details !== undefined && elements.sentinelPreviewDetails) {
+                        elements.sentinelPreviewDetails.textContent = details;
+                        elements.sentinelPreviewDetails.classList.toggle('hidden', !details);
                     }
-                    if (status !== undefined && sentinelPreviewStatus) {
-                        sentinelPreviewStatus.textContent = status;
+                    if (status !== undefined && elements.sentinelPreviewStatus) {
+                        elements.sentinelPreviewStatus.textContent = status;
                     }
                 };
 
-                // Toggle the preview overlay visibility without tearing down the DOM node.
                 const setPanelVisible = (visible) => {
-                    if (sentinelPreviewPanel) {
-                        sentinelPreviewPanel.classList.toggle('hidden', !visible);
+                    if (elements.sentinelPreviewPanel) {
+                        elements.sentinelPreviewPanel.classList.toggle('hidden', !visible);
                     }
                 };
 
-                // Update the preview control buttons based on the current selection and loading state.
                 const updateButtons = () => {
-                    const hasSelection = Boolean(state.current);
-                    const canToggleImage = hasSelection && state.hasImage;
+                    const hasSelection = Boolean(controllerState.current);
+                    const canToggleImage = hasSelection && controllerState.hasImage;
 
-                    if (sentinelPreviewHideBtn) {
-                        sentinelPreviewHideBtn.disabled = !canToggleImage || state.imageHidden;
-                        sentinelPreviewHideBtn.textContent = state.imageHidden ? 'Preview hidden' : 'Hide preview';
+                    if (elements.sentinelPreviewHideBtn) {
+                        elements.sentinelPreviewHideBtn.disabled = !canToggleImage || controllerState.imageHidden;
+                        elements.sentinelPreviewHideBtn.textContent = controllerState.imageHidden ? 'Preview hidden' : 'Hide preview';
                     }
 
-                    if (sentinelPreviewShowBtn) {
-                        sentinelPreviewShowBtn.disabled = !canToggleImage || !state.imageHidden;
-                        sentinelPreviewShowBtn.textContent = state.imageHidden ? 'Unhide Preview' : 'Preview Visible';
+                    if (elements.sentinelPreviewShowBtn) {
+                        elements.sentinelPreviewShowBtn.disabled = !canToggleImage || !controllerState.imageHidden;
+                        elements.sentinelPreviewShowBtn.textContent = controllerState.imageHidden ? 'Unhide Preview' : 'Preview Visible';
                     }
 
-                    if (sentinelPreviewClearBtn) {
-                        sentinelPreviewClearBtn.disabled = !hasSelection;
+                    if (elements.sentinelPreviewClearBtn) {
+                        elements.sentinelPreviewClearBtn.disabled = !hasSelection;
                     }
 
-                    if (sentinelPreviewDownloadBtn) {
-                        const downloadUrl = hasSelection ? state.current?.downloadUrl : null;
+                    if (elements.sentinelPreviewDownloadBtn) {
+                        const downloadUrl = hasSelection ? controllerState.current?.downloadUrl : null;
                         if (downloadUrl) {
-                            const label = state.current?.productId || state.current?.baseTitle || 'Sentinel-2 scene';
-                            const downloadName = state.current?.downloadFilename
-                                || buildSentinelDownloadName(state.current?.productId, state.current?.baseTitle);
+                            const label = controllerState.current?.productId || controllerState.current?.baseTitle || 'Sentinel-2 scene';
+                            const downloadName = controllerState.current?.downloadFilename
+                                || buildSentinelDownloadName(controllerState.current?.productId, controllerState.current?.baseTitle);
 
-                            sentinelPreviewDownloadBtn.classList.remove('hidden');
-                            sentinelPreviewDownloadBtn.setAttribute('href', downloadUrl);
-                            sentinelPreviewDownloadBtn.setAttribute('aria-disabled', 'false');
-                            sentinelPreviewDownloadBtn.setAttribute('title', `Download full scene for ${label}`);
-                            sentinelPreviewDownloadBtn.setAttribute('download', downloadName);
-                            sentinelPreviewDownloadBtn.dataset.downloadBase = state.current?.downloadUrlBase || '';
-                            sentinelPreviewDownloadBtn.tabIndex = 0;
+                            elements.sentinelPreviewDownloadBtn.classList.remove('hidden');
+                            elements.sentinelPreviewDownloadBtn.setAttribute('href', downloadUrl);
+                            elements.sentinelPreviewDownloadBtn.setAttribute('aria-disabled', 'false');
+                            elements.sentinelPreviewDownloadBtn.setAttribute('title', `Download full scene for ${label}`);
+                            elements.sentinelPreviewDownloadBtn.setAttribute('download', downloadName);
+                            elements.sentinelPreviewDownloadBtn.dataset.downloadBase = controllerState.current?.downloadUrlBase || '';
+                            elements.sentinelPreviewDownloadBtn.tabIndex = 0;
                         } else {
-                            sentinelPreviewDownloadBtn.classList.add('hidden');
-                            sentinelPreviewDownloadBtn.removeAttribute('href');
-                            sentinelPreviewDownloadBtn.removeAttribute('download');
-                            sentinelPreviewDownloadBtn.setAttribute('aria-disabled', 'true');
-                            delete sentinelPreviewDownloadBtn.dataset.downloadBase;
-                            sentinelPreviewDownloadBtn.tabIndex = -1;
+                            elements.sentinelPreviewDownloadBtn.classList.add('hidden');
+                            elements.sentinelPreviewDownloadBtn.removeAttribute('href');
+                            elements.sentinelPreviewDownloadBtn.removeAttribute('download');
+                            elements.sentinelPreviewDownloadBtn.setAttribute('aria-disabled', 'true');
+                            delete elements.sentinelPreviewDownloadBtn.dataset.downloadBase;
+                            elements.sentinelPreviewDownloadBtn.tabIndex = -1;
                         }
                     }
                 };
 
-                // Remove any raster source from the preview image layer.
                 const clearPreviewLayer = () => {
                     previewLayer.setSource(null);
                     previewLayer.setVisible(false);
-                    state.previewType = null;
+                    controllerState.previewType = null;
                 };
 
-                // Animate the map viewport to the selected scene coverage.
                 const focusExtent = (extent) => {
                     if (!extent) return;
                     try {
@@ -1842,170 +2377,91 @@
                             view.fit(extent, { padding: [50, 50, 50, 50], duration: 500, maxZoom: 14 });
                         }
                     } catch (error) {
-                        console.error('Failed to fit map to extent', error);
+                        console.warn('Unable to focus extent', error);
                     }
                 };
 
-                // Fallback renderer for quicklook JPEGs when no WMS is available.
                 const applyStaticPreview = (url, extent) => {
                     if (!url || !extent) return false;
                     try {
-                        const imageExtent = ol.proj.transformExtent(extent, mapProjection, mapProjection);
-                        previewLayer.setSource(new ol.source.ImageStatic({
+                        const imageSource = new ol.source.ImageStatic({
                             url,
-                            imageExtent,
+                            imageExtent: extent,
                             projection: mapProjection,
-                            crossOrigin: 'anonymous'
-                        }));
-                        state.previewType = 'static';
-                        previewLayer.setVisible(!state.imageHidden);
+                        });
+                        previewLayer.setSource(imageSource);
+                        previewLayer.setVisible(true);
+                        controllerState.previewType = 'static';
                         return true;
                     } catch (error) {
-                        console.error('Unable to create Sentinel preview source', error);
-                        clearPreviewLayer();
+                        console.warn('Failed to apply static preview', error);
                         return false;
                     }
                 };
 
-                // Configure an OpenLayers ImageWMS source for high resolution previews.
-                const applyWmsPreview = (config, callbacks = {}) => {
-                    if (!config || !config.url) return false;
+                const applyWmsPreview = (config, { onLoad, onError } = {}) => {
+                    if (!config || !config.url || !config.params?.LAYERS) return false;
                     try {
-                        let wmsUrl = config.url;
-                        const tokenised = applySentinelTokenToUrl(wmsUrl);
-                        if (tokenised) {
-                            wmsUrl = tokenised;
-                        }
-
-                        const params = { ...(config.params ?? {}) };
-                        if (!params.LAYERS) {
-                            return false;
-                        }
-
-                        const projectionCode = mapProjection?.getCode?.() ?? 'EPSG:3857';
-                        if (!params.CRS) params.CRS = projectionCode;
-                        if (!params.SRS) params.SRS = projectionCode;
-                        if (!params.FORMAT) params.FORMAT = 'image/png';
-                        if (!params.TRANSPARENT) params.TRANSPARENT = 'true';
-                        if (!params.VERSION && config.version) params.VERSION = config.version;
-
-                        const source = new ol.source.ImageWMS({
-                            url: wmsUrl,
-                            params,
-                            ratio: 1.0,
-                            crossOrigin: 'anonymous'
+                        const wmsSource = new ol.source.ImageWMS({
+                            url: config.url,
+                            params: config.params,
+                            ratio: 1,
+                            serverType: 'geoserver',
+                            crossOrigin: 'anonymous',
                         });
 
-                        const handleLoadEnd = () => {
-                            if (typeof source.un === 'function') {
-                                source.un('imageloadend', handleLoadEnd);
-                                source.un('imageloaderror', handleLoadError);
-                            }
-                            callbacks.onLoad?.();
-                        };
+                        wmsSource.on('imageloadend', () => {
+                            if (typeof onLoad === 'function') onLoad();
+                        });
+                        wmsSource.on('imageloaderror', () => {
+                            if (typeof onError === 'function') onError();
+                        });
 
-                        const handleLoadError = (event) => {
-                            if (typeof source.un === 'function') {
-                                source.un('imageloadend', handleLoadEnd);
-                                source.un('imageloaderror', handleLoadError);
-                            }
-                            callbacks.onError?.(event);
-                        };
-
-                        if (typeof source.on === 'function') {
-                            source.on('imageloadend', handleLoadEnd);
-                            source.on('imageloaderror', handleLoadError);
-                        }
-
-                        previewLayer.setSource(source);
-                        state.previewType = 'wms';
-                        previewLayer.setVisible(!state.imageHidden);
+                        previewLayer.setSource(wmsSource);
+                        previewLayer.setVisible(true);
+                        controllerState.previewType = 'wms';
                         return true;
                     } catch (error) {
-                        console.error('Unable to create Sentinel WMS preview', error);
-                        clearPreviewLayer();
+                        console.warn('Failed to apply WMS preview', error);
+                        if (typeof onError === 'function') onError();
                         return false;
                     }
-                };
-
-                // Convert GeoJSON footprint/bbox data into an OpenLayers feature for display.
-                const resolveFootprintFeature = (data) => {
-                    if (!data) return null;
-                    const { footprint, geometry, bbox } = data;
-                    try {
-                        if (footprint) {
-                            return geoJsonParser.readFeature(footprint, {
-                                featureProjection: mapProjection,
-                                dataProjection
-                            });
-                        }
-                        if (geometry) {
-                            return geoJsonParser.readFeature({
-                                type: 'Feature',
-                                geometry
-                            }, {
-                                featureProjection: mapProjection,
-                                dataProjection
-                            });
-                        }
-                        if (Array.isArray(bbox) && bbox.length === 4) {
-                            const transformed = ol.proj.transformExtent(bbox, dataProjection, mapProjection);
-                            return new ol.Feature({
-                                geometry: ol.geom.Polygon.fromExtent(transformed)
-                            });
-                        }
-                    } catch (error) {
-                        console.error('Unable to construct Sentinel footprint', error);
-                    }
-                    return null;
                 };
 
                 const controller = {
                     showPreview(data) {
                         if (!data) return;
-                        const title = data.title || data.productId || 'Sentinel-2 Preview';
-                        const acquiredText = data.acquiredText
-                            ?? (data.acquisitionDate
-                                ? `Acquired: ${formatReadableDate(data.acquisitionDate)}`
-                                : 'Acquisition date unavailable.');
-                        const detailParts = [];
-                        if (data.detailText) detailParts.push(data.detailText);
-                        const tileText = data.tileText || data.tileId;
-                        if (tileText) detailParts.push(tileText);
-                        if (typeof data.cloudCover === 'number' && !Number.isNaN(data.cloudCover)) {
-                            detailParts.push(`Cloud cover: ${formatCloudCover(Number(data.cloudCover))}`);
-                        }
-                        if (data.collection) detailParts.push(`Collection: ${data.collection}`);
-                        const detailText = detailParts.join(' • ');
 
-                        const downloadFilename = data.downloadFilename
-                            ?? buildSentinelDownloadName(data.productId, title);
-
-                        setPanelVisible(true);
-
-                        bboxSource.clear();
-                        clearPreviewLayer();
-                        state.current = null;
-                        state.hasImage = false;
-                        state.imageHidden = false;
-                        state.previewType = null;
-                        updateButtons();
-
-                        const footprint = resolveFootprintFeature(data);
+                        let featureGeoJson = null;
                         let extent = null;
-                        if (footprint) {
-                            bboxSource.addFeature(footprint);
-                            bboxLayer.setVisible(true);
-                            extent = footprint.getGeometry()?.getExtent() ?? null;
-                            focusExtent(extent);
-                        } else {
+                        try {
+                            featureGeoJson = data.feature?.geometry ?? data.geometry ?? null;
+                            if (featureGeoJson) {
+                                const feature = geoJsonParser.readFeature(featureGeoJson, {
+                                    dataProjection,
+                                    featureProjection: mapProjection,
+                                });
+                                bboxSource.clear();
+                                bboxSource.addFeature(feature);
+                                bboxLayer.setVisible(true);
+                                extent = feature.getGeometry()?.getExtent() ?? null;
+                                focusExtent(extent);
+                            } else {
+                                bboxLayer.setVisible(false);
+                            }
+                        } catch (error) {
+                            console.warn('Failed to parse Sentinel geometry', error);
                             bboxLayer.setVisible(false);
                         }
+
+                        const title = data.title || data.productId || 'Sentinel-2 Scene';
+                        const acquiredText = data.acquisitionDate || 'Unknown date';
+                        const detailText = data.details || '';
 
                         const baseDownloadUrl = data.downloadUrlBase || data.downloadUrl || null;
                         const resolvedDownloadUrl = applySentinelTokenToUrl(baseDownloadUrl);
 
-                        state.current = {
+                        controllerState.current = {
                             ...data,
                             extent,
                             baseTitle: title,
@@ -2013,11 +2469,11 @@
                             baseDetails: detailText,
                             downloadUrlBase: baseDownloadUrl,
                             downloadUrl: resolvedDownloadUrl,
-                            downloadFilename
+                            downloadFilename: data.downloadFilename,
                         };
 
-                        const wmsConfig = resolveSentinelWmsConfig(state.current);
-                        state.current.wmsConfig = wmsConfig;
+                        const wmsConfig = resolveSentinelWmsConfig(controllerState.current);
+                        controllerState.current.wmsConfig = wmsConfig;
 
                         const hasWmsCandidate = Boolean(wmsConfig);
                         const hasQuicklook = Boolean(data.quicklookUrl && extent);
@@ -2032,40 +2488,40 @@
                             title,
                             acquired: acquiredText,
                             details: detailText,
-                            status: buildSentinelStatusMessage(initialStatus)
+                            status: buildSentinelStatusMessage(initialStatus),
                         });
 
                         const renderQuicklookPreview = () => {
                             if (!hasQuicklook) return false;
                             setPanelContent({
-                                status: buildSentinelStatusMessage('Loading preview image...')
+                                status: buildSentinelStatusMessage('Loading preview image...'),
                             });
                             const loader = new Image();
                             loader.crossOrigin = 'anonymous';
                             loader.onload = () => {
-                                if (!state.current) return;
+                                if (!controllerState.current) return;
                                 const applied = applyStaticPreview(data.quicklookUrl, extent);
-                                state.hasImage = applied;
-                                state.imageHidden = false;
+                                controllerState.hasImage = applied;
+                                controllerState.imageHidden = false;
                                 updateButtons();
                                 setPanelContent({
                                     status: buildSentinelStatusMessage(
                                         applied
-                                            ? (state.imageHidden
+                                            ? (controllerState.imageHidden
                                                 ? 'Preview image loaded. Use "Unhide Preview" to display it.'
                                                 : 'Preview image displayed on the map.')
-                                            : 'Unable to load preview image. Showing coverage only.'
-                                    )
+                                            : 'Unable to load preview image. Showing coverage only.',
+                                    ),
                                 });
                             };
                             loader.onerror = () => {
                                 clearPreviewLayer();
-                                state.hasImage = false;
-                                state.imageHidden = false;
-                                state.previewType = null;
+                                controllerState.hasImage = false;
+                                controllerState.imageHidden = false;
+                                controllerState.previewType = null;
                                 updateButtons();
                                 setPanelContent({
-                                    status: buildSentinelStatusMessage('Unable to load preview image. Showing coverage only.')
+                                    status: buildSentinelStatusMessage('Unable to load preview image. Showing coverage only.'),
                                 });
                             };
                             loader.src = data.quicklookUrl;
@@ -2074,708 +2530,146 @@
 
                         if (!extent) {
                             setPanelContent({
-                                status: buildSentinelStatusMessage('Coverage area unavailable for this product.')
+                                status: buildSentinelStatusMessage('Coverage area unavailable for this product.'),
                             });
                         }
 
                         if (hasWmsCandidate) {
                             const applied = applyWmsPreview(wmsConfig, {
                                 onLoad: () => {
-                                    if (!state.current) return;
-                                    state.hasImage = true;
+                                    if (!controllerState.current) return;
+                                    controllerState.hasImage = true;
                                     updateButtons();
                                     setPanelContent({
                                         status: buildSentinelStatusMessage(
-                                            state.imageHidden
+                                            controllerState.imageHidden
                                                 ? 'Preview imagery loaded. Use "Unhide Preview" to display it.'
-                                                : 'Preview imagery displayed on the map.'
-                                        )
+                                                : 'Preview imagery displayed on the map.',
+                                        ),
                                     });
                                 },
                                 onError: () => {
                                     clearPreviewLayer();
-                                    state.hasImage = false;
-                                    state.previewType = null;
+                                    controllerState.hasImage = false;
+                                    controllerState.previewType = null;
                                     updateButtons();
                                     if (!renderQuicklookPreview()) {
                                         setPanelContent({
-                                            status: buildSentinelStatusMessage('Unable to load WMS preview imagery. Showing coverage only.')
+                                            status: buildSentinelStatusMessage('Unable to load WMS preview imagery. Showing coverage only.'),
                                         });
                                     }
-                                }
+                                },
                             });
 
                             if (applied) {
-                                state.hasImage = true;
-                                state.imageHidden = false;
+                                controllerState.hasImage = true;
+                                controllerState.imageHidden = false;
                                 updateButtons();
+                                setPanelVisible(true);
                                 return;
                             }
                         }
 
                         if (renderQuicklookPreview()) {
+                            setPanelVisible(true);
                             return;
                         }
 
                         clearPreviewLayer();
-                        state.hasImage = false;
-                        state.imageHidden = false;
-                        state.previewType = null;
+                        controllerState.hasImage = false;
+                        controllerState.imageHidden = false;
+                        controllerState.previewType = null;
                         updateButtons();
                         setPanelContent({
-                            status: buildSentinelStatusMessage('Preview image not available. Showing coverage.')
+                            status: buildSentinelStatusMessage('Preview image not available. Showing coverage.'),
                         });
+                        setPanelVisible(true);
                     },
                     hideImage() {
-                        if (!state.current || !state.hasImage) return;
-                        state.imageHidden = true;
+                        if (!controllerState.current || !controllerState.hasImage) return;
+                        controllerState.imageHidden = true;
                         previewLayer.setVisible(false);
                         updateButtons();
                         setPanelContent({
-                            status: buildSentinelStatusMessage('Preview hidden. Bounding box remains visible.')
+                            status: buildSentinelStatusMessage('Preview hidden. Bounding box remains visible.'),
                         });
                     },
                     showImage() {
-                        if (!state.current || !state.hasImage) return;
-                        state.imageHidden = false;
+                        if (!controllerState.current || !controllerState.hasImage) return;
+                        controllerState.imageHidden = false;
                         previewLayer.setVisible(true);
                         updateButtons();
                         setPanelContent({
-                            status: buildSentinelStatusMessage('Preview image visible.')
+                            status: buildSentinelStatusMessage('Preview image visible.'),
                         });
                     },
                     clear() {
-                        state.current = null;
-                        state.hasImage = false;
-                        state.imageHidden = false;
+                        controllerState.current = null;
+                        controllerState.hasImage = false;
+                        controllerState.imageHidden = false;
                         bboxSource.clear();
                         bboxLayer.setVisible(false);
                         clearPreviewLayer();
                         updateButtons();
                         setPanelVisible(false);
-                    }
+                    },
                 };
 
-                sentinelPreviewHideBtn?.classList.remove('hidden');
-                sentinelPreviewShowBtn?.classList.remove('hidden');
+                elements.sentinelPreviewHideBtn?.classList.remove('hidden');
+                elements.sentinelPreviewShowBtn?.classList.remove('hidden');
                 updateButtons();
 
-                sentinelPreviewController = controller;
+                state.sentinelPreviewController = controller;
                 return controller;
-            };
-
-            if (typeof window !== 'undefined') {
-                if (window.map) {
-                    createSentinelPreviewController();
-                } else {
-                    window.addEventListener('map:ready', () => {
-                        createSentinelPreviewController();
-                    }, { once: true });
-                }
             }
 
-            // Public entry point invoked by catalogue cards to render a scene on the map.
-            const triggerSentinelPreview = (payload) => {
-                if (!payload) return;
-                const controller = createSentinelPreviewController();
-                if (!controller) {
-                    console.warn('Sentinel preview controller is unavailable. Map is not ready yet.');
-                    return;
-                }
-                controller.showPreview(payload);
-            };
+            window.showPanel = showPanel;
+            window.closePanels = closePanels;
+            window.calculateTotalPrice = calculateTotalPrice;
 
-            if (sentinelPreviewHideBtn) {
-                sentinelPreviewHideBtn.addEventListener('click', (event) => {
-                    event.preventDefault();
-                    createSentinelPreviewController()?.hideImage();
-                });
-            }
-
-            if (sentinelPreviewShowBtn) {
-                sentinelPreviewShowBtn.addEventListener('click', (event) => {
-                    event.preventDefault();
-                    createSentinelPreviewController()?.showImage();
-                });
-            }
-
-            if (sentinelPreviewClearBtn) {
-                sentinelPreviewClearBtn.addEventListener('click', (event) => {
-                    event.preventDefault();
-                    createSentinelPreviewController()?.clear();
-                });
-            }
-
-            window.showSentinelPreviewOnMap = triggerSentinelPreview;
-
-            if (!createSentinelPreviewController()) {
-                sentinelPreviewHideBtn?.classList.add('hidden');
-                sentinelPreviewShowBtn?.classList.add('hidden');
-            }
-
-            // Wrapper around fetch that retries via AllOrigins when CORS rejects the primary request.
-            async function fetchSentinelCatalog(url) {
-                const attemptFetch = async (targetUrl) => {
-                    const response = await fetch(targetUrl);
-                    if (!response.ok) {
-                        throw new Error(`Status ${response.status}`);
-                    }
-                    return response.json();
-                };
-
-                try {
-                    return await attemptFetch(url);
-                } catch (err) {
-                    const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
-                    return await attemptFetch(proxyUrl);
-                }
-            }
-
-            // Render a Sentinel catalogue card using the HTML template and bind preview/download handlers.
-            function createSentinelCard(feature) {
-                if (!sentinelTemplate) return null;
-
-                const clone = sentinelTemplate.content.cloneNode(true);
-                const props = feature?.properties ?? {};
-                const links = feature?.links ?? [];
-                const assets = feature?.assets ?? {};
-
-                const titleEl = clone.querySelector('[data-sentinel-title]');
-                const productEl = clone.querySelector('[data-sentinel-product]');
-                const datetimeEl = clone.querySelector('[data-sentinel-datetime]');
-                const detailEl = clone.querySelector('[data-sentinel-details]');
-                const previewButton = clone.querySelector('[data-sentinel-preview]');
-                const downloadButton = clone.querySelector('[data-sentinel-download]');
-                const thumbnailImg = clone.querySelector('[data-sentinel-thumbnail]');
-                const thumbnailPlaceholder = clone.querySelector('[data-sentinel-placeholder]');
-
-                const shortenText = typeof window?.shortenFilename === 'function' ?
-                    (value, max = 40) => window.shortenFilename(String(value), max) :
-                    (value) => String(value ?? '');
-
-                const productId = props.productIdentifier || props.title || feature?.id || 'Sentinel-2 Product';
-                const acquisitionDate = props.completionDate || props.startDate || props.endPosition || props.beginPosition || props.startTimeFromAscendingNode;
-                const mgrsIdentifier = props.mgrsId || props.tileId || props.MGRS;
-                const tileText = mgrsIdentifier ? `Tile ${mgrsIdentifier}` : null;
-                const cloudCover = props.cloudCover ?? props['cloudcoverpercentage'] ?? props['cloudCoverageAssessment'];
-
-                const titleText = props.title || productId;
-                const productText = productId;
-
-                if (titleEl) {
-                    titleEl.textContent = shortenText(titleText, 48);
-                    titleEl.setAttribute('title', titleText);
-                }
-
-                if (productEl) {
-                    productEl.textContent = shortenText(productText, 44);
-                    productEl.setAttribute('title', productText);
-                }
-                if (datetimeEl) datetimeEl.textContent = `Acquired: ${formatReadableDate(acquisitionDate)}`;
-
-                const detailParts = [];
-                if (tileText) detailParts.push(tileText);
-                if (cloudCover !== undefined) detailParts.push(`Cloud cover: ${formatCloudCover(Number(cloudCover))}`);
-                if (props.collection) detailParts.push(`Collection: ${props.collection}`);
-                if (detailEl) {
-                    detailEl.textContent = detailParts.length ? detailParts.join(' • ') : 'No additional metadata available';
-                }
-
-                const quicklookUrl = props.thumbnail ||
-                    props.quicklook ||
-                    assets?.thumbnail?.href ||
-                    assets?.overview?.href ||
-                    links.find(link => link.rel === 'preview')?.href;
-
-                const downloadUrl = resolveSentinelDownloadUrl(feature);
-                const downloadUrlWithToken = applySentinelTokenToUrl(downloadUrl);
-                const downloadFilename = buildSentinelDownloadName(productId, titleText);
-                const tokenAvailable = hasSentinelToken();
-
-                if (downloadButton) {
-                    if (downloadUrl && downloadUrlWithToken && tokenAvailable) {
-                        const finalDownloadUrl = downloadUrlWithToken;
-                        downloadButton.classList.remove('hidden');
-                        downloadButton.setAttribute('href', finalDownloadUrl);
-                        downloadButton.setAttribute('aria-disabled', 'false');
-                        downloadButton.setAttribute('title', `Download full scene for ${productText}`);
-                        downloadButton.setAttribute('download', downloadFilename);
-                        downloadButton.dataset.downloadBase = downloadUrl;
-                        downloadButton.tabIndex = 0;
-                    } else {
-                        downloadButton.classList.add('hidden');
-                        downloadButton.setAttribute('href', '#');
-                        downloadButton.setAttribute('aria-disabled', 'true');
-                        downloadButton.removeAttribute('download');
-                        delete downloadButton.dataset.downloadBase;
-                        downloadButton.tabIndex = -1;
-                    }
-                }
-
-                if (thumbnailImg) {
-                    if (quicklookUrl) {
-                        const handleThumbnailError = () => {
-                            thumbnailImg.classList.add('hidden');
-                            thumbnailImg.removeAttribute('src');
-                            if (thumbnailPlaceholder) {
-                                thumbnailPlaceholder.classList.remove('hidden');
-                            }
-                        };
-
-                        const handleThumbnailLoad = () => {
-                            thumbnailImg.classList.remove('hidden');
-                            if (thumbnailPlaceholder) {
-                                thumbnailPlaceholder.classList.add('hidden');
-                            }
-                        };
-
-                        thumbnailImg.classList.add('hidden');
-                        if (thumbnailPlaceholder) {
-                            thumbnailPlaceholder.classList.remove('hidden');
-                        }
-
-                        thumbnailImg.addEventListener('error', handleThumbnailError, {
-                            once: true
-                        });
-                        thumbnailImg.addEventListener('load', handleThumbnailLoad, {
-                            once: true
-                        });
-                        thumbnailImg.src = quicklookUrl;
-                        thumbnailImg.alt = `Quicklook preview for ${productText}`;
-                    } else {
-                        thumbnailImg.classList.add('hidden');
-                        thumbnailImg.removeAttribute('src');
-                        if (thumbnailPlaceholder) {
-                            thumbnailPlaceholder.classList.remove('hidden');
-                        }
-                    }
-                }
-
-                const bboxArray = Array.isArray(feature?.bbox) ? feature.bbox :
-                    (Array.isArray(props?.bbox) ? props.bbox : null);
-                const hasCoverage = Boolean(feature?.geometry) || (Array.isArray(bboxArray) && bboxArray.length === 4);
-
-                if (previewButton) {
-                    if (hasCoverage || quicklookUrl) {
-                        previewButton.disabled = false;
-                        previewButton.title = 'Display preview on the map';
-                                previewButton.addEventListener('click', () => {
-                                    window.showSentinelPreviewOnMap?.({
-                                        title: titleText,
-                                        productId,
-                                        quicklookUrl,
-                                        downloadUrl: downloadUrlWithToken,
-                                        downloadUrlBase: downloadUrl,
-                                        downloadFilename,
-                                        geometry: feature?.geometry,
-                                        bbox: bboxArray,
-                                        acquisitionDate,
-                                        tileText,
-                                        cloudCover,
-                                        collection: props.collection || feature?.collection || null,
-                                        services: props?.services ?? null,
-                                        links,
-                                        assets,
-                                        featureProperties: props,
-                                        featureId: feature?.id ?? null
-                                    });
-                                });
-                            } else {
-                        previewButton.disabled = true;
-                        previewButton.title = 'Preview not available for this product';
-                    }
-                }
-
-                return clone;
-            }
-
-            // Pull the latest Sentinel results with optional filters and populate the panel list.
-            async function loadSentinelCollections(forceRefresh = false) {
-                if (!sentinelStatus || !sentinelList) return;
-
-                if (forceRefresh && window.MyZkToast?.info) {
-                    window.MyZkToast.info('Refreshing Sentinel-2 catalogue...');
-                }
-
-                sentinelStatus.classList.remove('hidden');
-                sentinelStatus.textContent = 'Fetching latest Sentinel-2 collections...';
-                sentinelList.innerHTML = '';
-
-                const endDate = new Date();
-                const startDate = new Date(endDate);
-                startDate.setMonth(startDate.getMonth() - 1);
-                startDate.setHours(0, 0, 0, 0);
-                const endDateAdjusted = new Date(endDate);
-                endDateAdjusted.setHours(23, 59, 59, 999);
-
-                const params = new URLSearchParams({
-                    startDate: formatISODate(startDate),
-                    completionDate: formatISODate(endDateAdjusted),
-                    maxRecords: '20',
-                    sortParam: 'startDate',
-                    sortOrder: 'descending'
-                });
-
-                const productTypeRaw = sentinelLevelInput?.value?.trim();
-                const productType = ['S2MSI2A', 'S2MSI1C'].includes(productTypeRaw) ? productTypeRaw : defaultProductType;
-                params.set('productType', productType);
-
-                const cloudRaw = sentinelCloudInput?.value?.trim();
-                const cloudNumber = cloudRaw === '' || cloudRaw === undefined ? null : Number(cloudRaw);
-                if (cloudNumber !== null && !Number.isNaN(cloudNumber)) {
-                    const normalized = clampNumber(cloudNumber, 0, 100);
-                    if (normalized !== null) {
-                        params.set('cloudCover', `[0,${Math.round(normalized)}]`);
-                    }
-                }
-
-                const latRaw = sentinelLatInput?.value?.trim();
-                const lonRaw = sentinelLonInput?.value?.trim();
-                const hasLat = latRaw !== undefined && latRaw !== '';
-                const hasLon = lonRaw !== undefined && lonRaw !== '';
-
-                if ((hasLat && !hasLon) || (!hasLat && hasLon)) {
-                    sentinelStatus.classList.remove('hidden');
-                    sentinelStatus.textContent = 'Please provide both latitude and longitude to filter by location.';
-                    sentinelList.innerHTML = '';
-                    return;
-                }
-
-                if (hasLat && hasLon) {
-                    const latNumber = Number(latRaw);
-                    const lonNumber = Number(lonRaw);
-                    const normalizedLat = clampNumber(latNumber, -90, 90);
-                    const normalizedLon = clampNumber(lonNumber, -180, 180);
-
-                    if (normalizedLat === null || normalizedLon === null) {
-                        sentinelStatus.classList.remove('hidden');
-                        sentinelStatus.textContent = 'Latitude must be between -90 and 90 and longitude between -180 and 180.';
-                        sentinelList.innerHTML = '';
-                        return;
-                    }
-
-                    params.set('lat', normalizedLat.toFixed(6));
-                    params.set('lon', normalizedLon.toFixed(6));
-                }
-
-                const requestUrl = `${sentinelCatalogEndpoint}?${params.toString()}`;
-
-                try {
-                    const response = await fetchSentinelCatalog(requestUrl);
-                    const features = Array.isArray(response?.features) ? response.features : [];
-
-                    if (!features.length) {
-                        sentinelStatus.textContent = 'No Sentinel-2 collections found in the last 30 days.';
-                    } else {
-                        sentinelStatus.classList.add('hidden');
-                        features.forEach(feature => {
-                            const card = createSentinelCard(feature);
-                            if (card) {
-                                sentinelList.appendChild(card);
-                            }
-                        });
-                    }
-
-                    sentinelLoadedOnce = true;
-
-                    if (sentinelLastUpdated) {
-                        sentinelLastUpdated.textContent = new Date().toLocaleString('id-ID');
-                    }
-
-                    if (features.length && forceRefresh && window.MyZkToast?.success) {
-                        window.MyZkToast.success('Sentinel-2 collections updated.');
-                    }
-                } catch (error) {
-                    const message = error?.message ? ` (${error.message})` : '';
-                    sentinelStatus.classList.remove('hidden');
-                    sentinelStatus.textContent = `Unable to fetch Sentinel-2 collections${message}. Please try again later.`;
-
-                    if (sentinelLastUpdated) {
-                        sentinelLastUpdated.textContent = new Date().toLocaleString('id-ID');
-                    }
-
-                    if (window.MyZkToast?.error) {
-                        window.MyZkToast.error('Failed to update Sentinel-2 collections.');
-                    }
-                }
-            }
-
-            if (sentinelCloudInput && sentinelCloudInput.value === '') {
-                sentinelCloudInput.value = defaultCloudCoverMax;
-            }
-
-            if (sentinelLatInput && sentinelLatInput.value === '') {
-                sentinelLatInput.value = defaultLatitude;
-            }
-
-            if (sentinelLonInput && sentinelLonInput.value === '') {
-                sentinelLonInput.value = defaultLongitude;
-            }
-
-            if (sentinelLevelInput && sentinelLevelInput.value === '') {
-                sentinelLevelInput.value = defaultProductType;
-            }
-
-            const normalizeInputValue = (input, min, max) => {
-                if (!input) return;
-                if (input.value === '') {
-                    input.value = '';
-                    return;
-                }
-                const parsed = Number(input.value);
-                if (Number.isNaN(parsed)) {
-                    input.value = '';
-                    return;
-                }
-                const normalized = clampNumber(parsed, min, max);
-                if (normalized !== null) {
-                    input.value = normalized.toString();
-                }
-            };
-
-            sentinelCloudInput?.addEventListener('blur', () => normalizeInputValue(sentinelCloudInput, 0, 100));
-            sentinelLatInput?.addEventListener('blur', () => normalizeInputValue(sentinelLatInput, -90, 90));
-            sentinelLonInput?.addEventListener('blur', () => normalizeInputValue(sentinelLonInput, -180, 180));
-
-            if (sentinelFilterForm) {
-                sentinelFilterForm.addEventListener('submit', (event) => {
-                    event.preventDefault();
-                    loadSentinelCollections(true);
-                });
-            }
-
-            if (sentinelFilterResetButton) {
-                sentinelFilterResetButton.addEventListener('click', () => {
-                    if (sentinelCloudInput) sentinelCloudInput.value = defaultCloudCoverMax;
-                    if (sentinelLatInput) sentinelLatInput.value = defaultLatitude;
-                    if (sentinelLonInput) sentinelLonInput.value = defaultLongitude;
-                    if (sentinelLevelInput) sentinelLevelInput.value = defaultProductType;
-                    loadSentinelCollections(true);
-                });
-            }
-
-            // Mobile nav arrows scroll the horizontal chip list into view.
-            scrollLeftBtn.addEventListener('click', () => {
-                scrollContainer.scrollBy({
-                    left: -scrollAmount,
-                    behavior: 'smooth'
-                });
-            });
-
-            scrollRightBtn.addEventListener('click', () => {
-                scrollContainer.scrollBy({
-                    left: scrollAmount,
-                    behavior: 'smooth'
-                });
-            });
-
-            // Optional: drag/grab to scroll
-            let isDown = false;
-            let startX;
-            let scrollLeft;
-
-            // Enable click-and-drag scrolling for a smoother touchpad-like experience on desktop.
-            scrollContainer.addEventListener('mousedown', (e) => {
-                isDown = true;
-                scrollContainer.classList.add('cursor-grabbing');
-                startX = e.pageX - scrollContainer.offsetLeft;
-                scrollLeft = scrollContainer.scrollLeft;
-            });
-
-            scrollContainer.addEventListener('mouseleave', () => {
-                isDown = false;
-                scrollContainer.classList.remove('cursor-grabbing');
-            });
-
-            scrollContainer.addEventListener('mouseup', () => {
-                isDown = false;
-                scrollContainer.classList.remove('cursor-grabbing');
-            });
-
-            scrollContainer.addEventListener('mousemove', (e) => {
-                if (!isDown) return;
-                e.preventDefault();
-                const x = e.pageX - scrollContainer.offsetLeft;
-                const walk = (x - startX) * 2; // scroll-fast
-                scrollContainer.scrollLeft = scrollLeft - walk;
-            });
-
-            // Toggle the requested panel and ensure the wrapper animates correctly for the viewport size.
-            function showPanel(id, btn = null) {
-                const isMobile = window.innerWidth < 768;
-
-                panels.forEach(p => p.classList.add("hidden"));
-                const targetPanel = document.getElementById(id);
-                targetPanel.classList.remove("hidden");
-
-                sidebarButtons.forEach(b => b.classList.remove("active"));
-                if (btn) btn.classList.add("active");
-                else {
-                    const matchedBtn = Array.from(sidebarButtons).find(b => b.getAttribute("onclick")?.includes(id));
-                    if (matchedBtn) matchedBtn.classList.add("active");
-                }
-
-                if (isMobile) {
-                    // reset posisi
-                    panelWrapper.classList.remove("translate-y-full");
-                    panelWrapper.classList.add("translate-y-0");
-
-                    // animasi slide-up
-                    panelWrapper.classList.remove("slide-down");
-                    panelWrapper.classList.add("slide-up");
-                } else {
-                    panelWrapper.classList.remove("w-0", "md:w-0");
-                    panelWrapper.classList.add("w-80", "md:w-80");
-                }
-
-                panelWrapper.dataset.activePanel = id;
-
-                if (id === 'sentinel-panel' && !sentinelLoadedOnce) {
-                    loadSentinelCollections();
-                }
-            }
-
-            // Collapse the panel wrapper and clear active states.
-            function closePanels() {
-                const isMobile = window.innerWidth < 768;
-
-                panels.forEach(p => p.classList.add("hidden"));
-                sidebarButtons.forEach(b => b.classList.remove("active"));
-                delete panelWrapper.dataset.activePanel;
-
-                if (isMobile) {
-                    // animasi slide-down
-                    panelWrapper.classList.remove("slide-up");
-                    panelWrapper.classList.add("slide-down");
-
-                    // setelah animasi selesai (500ms), sembunyikan sepenuhnya
-                    setTimeout(() => {
-                        panelWrapper.classList.remove("translate-y-0");
-                        panelWrapper.classList.add("translate-y-full");
-                    }, 480);
-                } else {
-                    panelWrapper.classList.remove("w-80", "md:w-80");
-                    panelWrapper.classList.add("w-0", "md:w-0");
-                }
-            }
-
-
-            // === DEFAULT STATE saat halaman load ===
-            // Open the default panel on load and fetch the initial Sentinel catalogue.
-            window.addEventListener("DOMContentLoaded", () => {
-                const defaultPanel = 'data-panel';
-                const isMobile = window.innerWidth < 768;
-
-                const defaultBtn = isMobile ?
-                    document.querySelector(`#scroll-container .sidebar-btn[onclick*='${defaultPanel}']`) :
-                    document.querySelector(`aside .sidebar-btn[onclick*='${defaultPanel}']`);
-
-                showPanel(defaultPanel, defaultBtn);
-
-                if (!sentinelLoadedOnce) {
-                    loadSentinelCollections();
-                }
-            });
-
-            // === RESPONSIVE HANDLER: SYNC STATE SAAT RESIZE ===
-            // Reconcile mobile/desktop panel classes whenever the viewport size changes.
-            window.addEventListener("resize", () => {
-                const isMobile = window.innerWidth < 768;
-                const activePanel = panelWrapper.dataset.activePanel;
-
-                // Jika tidak ada panel aktif (semua ditutup), keluar saja
-                if (!activePanel) {
-                    // Pastikan panel wrapper tertutup di semua mode
-                    panelWrapper.classList.add("translate-y-full");
-                    panelWrapper.classList.remove("translate-y-0", "w-80", "md:w-80");
-                    return;
-                }
-
-                // Hapus semua class transisi yang bisa bentrok
-                panelWrapper.classList.remove("slide-up", "slide-down");
-
-                if (isMobile) {
-                    // mobile mode: gunakan slide-up style
-                    panelWrapper.classList.remove("w-0", "md:w-0", "w-80", "md:w-80");
-                    panelWrapper.classList.remove("translate-y-full");
-                    panelWrapper.classList.add("translate-y-0", "opacity-100");
-                } else {
-                    // desktop mode: gunakan lebar tetap (sidebar style)
-                    panelWrapper.classList.remove("translate-y-full", "translate-y-0");
-                    panelWrapper.classList.add("w-80", "md:w-80", "opacity-100");
-                }
-
-                // perbarui tombol active sesuai mode baru
-                const activeBtn = isMobile ?
-                    document.querySelector(`#scroll-container .sidebar-btn[onclick*='${activePanel}']`) :
-                    document.querySelector(`aside .sidebar-btn[onclick*='${activePanel}']`);
-
-                sidebarButtons.forEach(b => b.classList.remove("active"));
-                if (activeBtn) activeBtn.classList.add("active");
-            });
-
-
-
-
-            // Buy Satellite Button Event
-            document.getElementById('buySatelliteBtn')?.addEventListener('click', function() {
-                const buyingPanel = document.getElementById('buyingPanel');
-                buyingPanel.classList.remove('hidden');
-            });
-            document.getElementById('buyingPanelCloseBtn')?.addEventListener('click', function() {
-                const buyingPanel = document.getElementById('buyingPanel');
-                buyingPanel.classList.add('hidden');
-            });
-
-            // Price calculation functions
-            // Translate the drawn polygon area into credit point estimates for the purchase panel.
             function calculateTotalPrice() {
-                // Get area from global variable (set when polygon is drawn)
                 const areaInSquareMeters = window.geojsonArea || 0;
-                const areaInHectares = areaInSquareMeters / 10000; // Convert m² to hectares
-
-                // Calculate credit points needed (using global constant rate)
+                const areaInHectares = areaInSquareMeters / 10000;
                 const creditPointsNeeded = areaInHectares * {{ config('app-constants.imagery_credit_cost_per_hectare') }};
 
-                // Update the display
                 const totalPriceElement = document.getElementById('total_price');
-                const priceContainer = totalPriceElement.parentElement;
+                const priceContainer = totalPriceElement?.parentElement;
+
+                if (!totalPriceElement || !priceContainer) {
+                    return;
+                }
 
                 if (areaInHectares > 0) {
                     totalPriceElement.innerHTML = `
-                        <div class="flex justify-between items-center">
-                            <span class="text-lg font-bold text-green-700">${formatNumber(creditPointsNeeded.toFixed(2))} Credit Points</span>
-                            <i class="ri-coins-line font-base text-success text-xl"></i>
-                        </div>
-                        <div class="text-xs text-foreground-70 mt-1">
-                            ${formatNumber(areaInHectares)} hectares × {{ Number::format(config('app-constants.imagery_credit_cost_per_hectare'), locale: app()->getLocale()) }} credit points/hectare
-                        </div>
-                    `;
+                    <div class="flex justify-between items-center">
+                        <span class="text-lg font-bold text-green-700">${formatNumber(creditPointsNeeded.toFixed(2))} Credit Points</span>
+                        <i class="ri-coins-line font-base text-success text-xl"></i>
+                    </div>
+                    <div class="text-xs text-foreground-70 mt-1">
+                        ${formatNumber(areaInHectares)} hectares × {{ Number::format(config('app-constants.imagery_credit_cost_per_hectare'), locale: app()->getLocale()) }} credit points/hectare
+                    </div>
+                `;
                     priceContainer.classList.remove('bg-muted/60', 'border-muted');
                     priceContainer.classList.add('bg-green-50', 'border-green-300', 'shadow-sm');
-
-                    // Add a subtle animation
                     priceContainer.style.transform = 'scale(1.02)';
-                    setTimeout(() => {
+                    window.setTimeout(() => {
                         priceContainer.style.transform = 'scale(1)';
                     }, 200);
                 } else {
                     totalPriceElement.innerHTML = `
-                        <div class="flex items-center text-foreground/50">
-                            <i class="ri-information-line mr-2"></i>
-                            Draw an area to calculate credit points
-                        </div>
-                    `;
+                    <div class="flex items-center text-foreground/50">
+                        <i class="ri-information-line mr-2"></i>
+                        Draw an area to calculate credit points
+                    </div>
+                `;
                     priceContainer.classList.remove('bg-green-50', 'border-green-300', 'shadow-sm', 'bg-amber-50', 'border-amber-300');
                     priceContainer.classList.add('bg-muted/60', 'border-muted');
                 }
 
-                // Add transition for smooth color changes
                 priceContainer.style.transition = 'all 0.3s ease-in-out';
             }
+        })();
+    </script>
+@endpush
 
-            // Make calculateTotalPrice available globally for map.js
-            window.calculateTotalPrice = calculateTotalPrice;
-        </script>
-    @endpush
 </x-app-front-map-layout>
