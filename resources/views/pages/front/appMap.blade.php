@@ -177,7 +177,7 @@
             </section>
 
             <!-- ========== SENTINEL COLLECTION PANEL ========== -->
-            <section class="flex hidden h-full flex-col shadow-xl" id="sentinel-panel" data-sentinel-token="{{ $copernicusAccessToken ?? '' }}" data-sentinel-credentials="{{ ($copernicusCredentialsConfigured ?? false) ? 'true' : 'false' }}">
+            <section class="flex hidden h-full flex-col shadow-xl" id="sentinel-panel" data-sentinel-token="{{ $copernicusAccessToken ?? '' }}" data-sentinel-credentials="{{ $copernicusCredentialsConfigured ?? false ? 'true' : 'false' }}">
                 <div class="bg-background border-foreground/10 sticky top-0 z-20 flex items-center justify-between border-b p-2">
                     <h2 class="text-lg font-bold">🛰️ Sentinel-2 Collections</h2>
                     <button class="hover:bg-foreground/20 bg-foreground/10 rounded px-2 py-1 text-sm" onclick="closePanels()">✖</button>
@@ -219,7 +219,7 @@
                             </button>
                         </div>
                     </form>
-                    <div class="mt-4 space-y-1.5 rounded-xl border border-foreground/10 bg-background/60 p-3 text-xs">
+                    <div class="border-foreground/10 bg-background/60 mt-4 space-y-1.5 rounded-xl border p-3 text-xs">
                         @if ($copernicusAccessToken)
                             <p class="text-foreground/70 text-[11px] leading-snug">
                                 Full-scene downloads use a Copernicus access token requested automatically from the configured client credentials. Tokens rotate roughly every hour; ensure the credentials remain active to keep downloads available.
@@ -270,14 +270,7 @@
                             </div>
                         </div>
                         <div class="mt-3 flex flex-wrap gap-2" data-sentinel-actions>
-                            <a
-                                class="bg-primary text-background hover:bg-primary/90 hidden inline-flex items-center space-x-1 rounded-lg px-2 py-1 text-xs font-semibold transition"
-                                data-sentinel-download
-                                href="#"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                aria-disabled="true"
-                            >
+                            <a class="bg-primary text-background hover:bg-primary/90 inline-flex hidden items-center space-x-1 rounded-lg px-2 py-1 text-xs font-semibold transition" data-sentinel-download href="#" aria-disabled="true" target="_blank" rel="noopener noreferrer">
                                 <i class="ri-download-cloud-2-line"></i>
                                 <span>Download Scene</span>
                             </a>
@@ -526,29 +519,22 @@
 
             <!-- Sentinel Preview Panel -->
             <div class="absolute left-2 right-2 top-[6.5rem] z-40 flex justify-end sm:left-auto sm:right-2 sm:w-80">
-                <div class="pointer-events-auto hidden w-full max-w-md rounded-xl border border-foreground/15 bg-background/95 p-3 text-xs shadow-lg backdrop-blur supports-[backdrop-filter]:bg-background/70" id="sentinelPreviewPanel">
+                <div class="border-foreground/15 bg-background/95 supports-[backdrop-filter]:bg-background/70 pointer-events-auto hidden w-full max-w-md rounded-xl border p-3 text-xs shadow-lg backdrop-blur" id="sentinelPreviewPanel">
                     <div class="flex items-start justify-between gap-2">
                         <div class="space-y-1">
-                            <p class="text-[10px] font-semibold uppercase tracking-wide text-primary">Sentinel-2 Preview</p>
+                            <p class="text-primary text-[10px] font-semibold uppercase tracking-wide">Sentinel-2 Preview</p>
                             <p class="text-foreground text-sm font-semibold leading-tight" data-sentinel-preview-title>–</p>
                             <p class="text-foreground/70 text-xs leading-tight" data-sentinel-preview-acquired>Select a collection to preview on the map.</p>
-                            <p class="text-foreground/60 text-xs leading-tight hidden" data-sentinel-preview-details></p>
+                            <p class="text-foreground/60 hidden text-xs leading-tight" data-sentinel-preview-details></p>
                         </div>
-                        <button class="text-foreground/50 transition hover:text-foreground" id="sentinelPreviewClearBtn" type="button">
+                        <button class="text-foreground/50 hover:text-foreground transition" id="sentinelPreviewClearBtn" type="button">
                             <i class="ri-close-line text-base"></i>
                             <span class="sr-only">Clear Sentinel preview</span>
                         </button>
                     </div>
                     <p class="text-foreground/70 mt-2 text-xs" data-sentinel-preview-status>Awaiting preview selection.</p>
                     <div class="mt-2 flex flex-wrap gap-1.5" id="sentinelPreviewActions">
-                        <a
-                            class="bg-primary text-background hover:bg-primary/90 hidden inline-flex items-center space-x-1 rounded-lg px-2 py-1 text-xs font-semibold transition"
-                            id="sentinelPreviewDownloadBtn"
-                            href="#"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            aria-disabled="true"
-                        >
+                        <a class="bg-primary text-background hover:bg-primary/90 inline-flex hidden items-center space-x-1 rounded-lg px-2 py-1 text-xs font-semibold transition" id="sentinelPreviewDownloadBtn" href="#" aria-disabled="true" target="_blank" rel="noopener noreferrer">
                             <i class="ri-download-cloud-2-line text-sm"></i>
                             <span>Download Scene</span>
                         </a>
@@ -556,7 +542,7 @@
                             <i class="ri-eye-off-line text-sm"></i>
                             <span>Hide Preview</span>
                         </button>
-                        <button class="bg-primary text-background hover:bg-primary/90 hidden inline-flex items-center space-x-1 rounded-lg px-2 py-1 text-xs font-semibold transition" id="sentinelPreviewShowBtn" type="button">
+                        <button class="bg-primary text-background hover:bg-primary/90 inline-flex hidden items-center space-x-1 rounded-lg px-2 py-1 text-xs font-semibold transition" id="sentinelPreviewShowBtn" type="button">
                             <i class="ri-eye-line text-sm"></i>
                             <span>Unhide Preview</span>
                         </button>
@@ -904,178 +890,178 @@
                 async function uploadNextChunk(retryCount = 0) {
                     if (paused || !file) return;
 
-                if (currentChunk >= totalChunks) {
-                    progressText.textContent = "🧩 Merging file on server...";
-                    return mergeChunks();
+                    if (currentChunk >= totalChunks) {
+                        progressText.textContent = "🧩 Merging file on server...";
+                        return mergeChunks();
+                    }
+
+                    const start = currentChunk * chunkSize;
+                    const end = Math.min(file.size, start + chunkSize);
+                    const chunk = file.slice(start, end);
+                    const chunkSizeBytes = end - start;
+
+                    const formData = new FormData();
+                    formData.append("upload_id", uploadId);
+                    formData.append("chunk_index", currentChunk);
+                    formData.append("chunk", chunk);
+
+                    try {
+                        const res = await fetch('{{ route('upload.chunk') }}', {
+                            method: "POST",
+                            headers: {
+                                "X-CSRF-TOKEN": "{{ csrf_token() }}"
+                            },
+                            body: formData,
+                        });
+
+                        const data = await res.json();
+                        if (!res.ok || !data.success) {
+                            throw new Error(data.message || `Chunk ${currentChunk} failed.`);
+                        }
+
+                        currentChunk++;
+                        uploadedBytes += chunkSizeBytes;
+
+                        const now = performance.now();
+                        const elapsedSec = (now - startTime) / 1000;
+                        const speedMBps = (uploadedBytes / 1024 / 1024 / elapsedSec).toFixed(2);
+                        const remainingBytes = file.size - uploadedBytes;
+                        const estRemainingSec = remainingBytes / (speedMBps * 1024 * 1024);
+                        const etaText = estRemainingSec > 0 ? formatTimeETA(estRemainingSec) : "-";
+
+                        const progress = Math.round((currentChunk / totalChunks) * 100);
+                        progressBar.style.width = `${progress}%`;
+                        progressText.textContent = `Uploading... ${progress}% | 🚀 ${speedMBps} MB/s | ⏳ ETA: ${etaText}`;
+
+                        if (progress === 100) {
+                            MyZkToast.info("Merging file on server...");
+                        }
+
+                        if (!paused) uploadNextChunk();
+
+                    } catch (err) {
+                        if (retryCount < 3) {
+                            setTimeout(() => uploadNextChunk(retryCount + 1), 2000 * (retryCount + 1));
+                        } else {
+                            progressText.textContent = `❌ Chunk ${currentChunk} failed after 3 retries. Upload paused.`;
+                            MyZkToast.error(`Chunk ${currentChunk} failed after 3 retries.`);
+                            paused = true;
+                            uploading = false;
+                            setButtonState("paused");
+                        }
+                    }
                 }
 
-                const start = currentChunk * chunkSize;
-                const end = Math.min(file.size, start + chunkSize);
-                const chunk = file.slice(start, end);
-                const chunkSizeBytes = end - start;
+                // === MERGE CHUNKS FUNCTION ===
+                // Ask the backend to merge all uploaded chunks and register the final file metadata.
+                async function mergeChunks() {
+                    setButtonState("merging");
 
-                const formData = new FormData();
-                formData.append("upload_id", uploadId);
-                formData.append("chunk_index", currentChunk);
-                formData.append("chunk", chunk);
+                    const sourceType = sourceInput.value;
+                    const formData = new FormData();
+                    formData.append("upload_id", uploadId);
+                    formData.append("filename", file.name);
+                    formData.append("total_chunks", totalChunks);
+                    formData.append("source_type", sourceType); // Add source type to form data
 
-                try {
-                    const res = await fetch('{{ route('upload.chunk') }}', {
-                        method: "POST",
-                        headers: {
-                            "X-CSRF-TOKEN": "{{ csrf_token() }}"
-                        },
-                        body: formData,
-                    });
+                    try {
+                        const res = await fetch('{{ route('upload.merge') }}', {
+                            method: "POST",
+                            headers: {
+                                "X-CSRF-TOKEN": "{{ csrf_token() }}"
+                            },
+                            body: formData,
+                        });
 
-                    const data = await res.json();
-                    if (!res.ok || !data.success) {
-                        throw new Error(data.message || `Chunk ${currentChunk} failed.`);
-                    }
+                        const result = await res.json();
 
-                    currentChunk++;
-                    uploadedBytes += chunkSizeBytes;
+                        if (res.ok && result.success) {
+                            progressBar.style.width = "100%";
+                            progressText.textContent = `✅ Upload complete! ${result.message || "Upload completed. Processing started in background."}`;
+                            MyZkToast.success(result.message || "Upload completed successfully!");
+                            setButtonState("done");
+                            await loadMyData();
+                            autoReset();
+                        } else {
+                            throw new Error(result.message || "Failed to merge file on server.");
+                        }
 
-                    const now = performance.now();
-                    const elapsedSec = (now - startTime) / 1000;
-                    const speedMBps = (uploadedBytes / 1024 / 1024 / elapsedSec).toFixed(2);
-                    const remainingBytes = file.size - uploadedBytes;
-                    const estRemainingSec = remainingBytes / (speedMBps * 1024 * 1024);
-                    const etaText = estRemainingSec > 0 ? formatTimeETA(estRemainingSec) : "-";
-
-                    const progress = Math.round((currentChunk / totalChunks) * 100);
-                    progressBar.style.width = `${progress}%`;
-                    progressText.textContent = `Uploading... ${progress}% | 🚀 ${speedMBps} MB/s | ⏳ ETA: ${etaText}`;
-
-                    if (progress === 100) {
-                        MyZkToast.info("Merging file on server...");
-                    }
-
-                    if (!paused) uploadNextChunk();
-
-                } catch (err) {
-                    if (retryCount < 3) {
-                        setTimeout(() => uploadNextChunk(retryCount + 1), 2000 * (retryCount + 1));
-                    } else {
-                        progressText.textContent = `❌ Chunk ${currentChunk} failed after 3 retries. Upload paused.`;
-                        MyZkToast.error(`Chunk ${currentChunk} failed after 3 retries.`);
-                        paused = true;
-                        uploading = false;
-                        setButtonState("paused");
-                    }
-                }
-            }
-
-            // === MERGE CHUNKS FUNCTION ===
-            // Ask the backend to merge all uploaded chunks and register the final file metadata.
-            async function mergeChunks() {
-                setButtonState("merging");
-
-                const sourceType = sourceInput.value;
-                const formData = new FormData();
-                formData.append("upload_id", uploadId);
-                formData.append("filename", file.name);
-                formData.append("total_chunks", totalChunks);
-                formData.append("source_type", sourceType); // Add source type to form data
-
-                try {
-                    const res = await fetch('{{ route('upload.merge') }}', {
-                        method: "POST",
-                        headers: {
-                            "X-CSRF-TOKEN": "{{ csrf_token() }}"
-                        },
-                        body: formData,
-                    });
-
-                    const result = await res.json();
-
-                    if (res.ok && result.success) {
-                        progressBar.style.width = "100%";
-                        progressText.textContent = `✅ Upload complete! ${result.message || "Upload completed. Processing started in background."}`;
-                        MyZkToast.success(result.message || "Upload completed successfully!");
-                        setButtonState("done");
-                        await loadMyData();
+                    } catch (err) {
+                        progressText.textContent = `❌ Error: ${err.message}`;
+                        MyZkToast.error(err.message || "Server error during merge.");
+                        setButtonState("error");
                         autoReset();
-                    } else {
-                        throw new Error(result.message || "Failed to merge file on server.");
                     }
-
-                } catch (err) {
-                    progressText.textContent = `❌ Error: ${err.message}`;
-                    MyZkToast.error(err.message || "Server error during merge.");
-                    setButtonState("error");
-                    autoReset();
                 }
-            }
 
-            // === AUTO RESET ===
-            // Reset the form state a few seconds after a successful or failed upload.
-            function autoReset() {
-                setTimeout(() => {
-                    file = null;
-                    fileInput.value = "";
-                    fileInfo.classList.add("hidden");
-                    progressBar.style.width = "0%";
-                    progressText.textContent = "Ready for next upload.";
-                    setButtonState("idle");
-                }, 4000);
-            }
+                // === AUTO RESET ===
+                // Reset the form state a few seconds after a successful or failed upload.
+                function autoReset() {
+                    setTimeout(() => {
+                        file = null;
+                        fileInput.value = "";
+                        fileInfo.classList.add("hidden");
+                        progressBar.style.width = "0%";
+                        progressText.textContent = "Ready for next upload.";
+                        setButtonState("idle");
+                    }, 4000);
+                }
 
-            // === LOAD MY DATA ===
-            // Fetch the authenticated user imagery list and render each entry with the template card.
-            async function loadMyData() {
-                myDataContainer.innerHTML = `
+                // === LOAD MY DATA ===
+                // Fetch the authenticated user imagery list and render each entry with the template card.
+                async function loadMyData() {
+                    myDataContainer.innerHTML = `
                 <div class="flex justify-center py-4">
                     <p class="text-sm text-foreground/60 animate-pulse">Loading your imagery list...</p>
                 </div>
             `;
 
-                try {
-                    const res = await fetch('{{ route('imagery.list') }}');
-                    const result = await res.json();
+                    try {
+                        const res = await fetch('{{ route('imagery.list') }}');
+                        const result = await res.json();
 
-                    if (!res.ok || !result.success) throw new Error(result.message || "Failed to fetch imagery data.");
-                    const data = result.data;
+                        if (!res.ok || !result.success) throw new Error(result.message || "Failed to fetch imagery data.");
+                        const data = result.data;
 
-                    myDataContainer.innerHTML = ''; // clear existing
+                        myDataContainer.innerHTML = ''; // clear existing
 
-                    if (data.length === 0) {
-                        myDataContainer.innerHTML = `<p class="text-sm text-gray-400 text-center py-4">No imagery uploaded yet.</p>`;
-                        return;
-                    }
+                        if (data.length === 0) {
+                            myDataContainer.innerHTML = `<p class="text-sm text-gray-400 text-center py-4">No imagery uploaded yet.</p>`;
+                            return;
+                        }
 
-                    const cardListDataImagery = document.getElementById('imageryCardTemplate');
+                        const cardListDataImagery = document.getElementById('imageryCardTemplate');
 
-                    data.forEach(item => {
-                        const clone = cardListDataImagery.content.cloneNode(true);
-                        const card = clone.querySelector('.imagery-card');
+                        data.forEach(item => {
+                            const clone = cardListDataImagery.content.cloneNode(true);
+                            const card = clone.querySelector('.imagery-card');
 
-                        // populate data
-                        card.querySelector('.imagery-format').textContent = item.format.slice(0, 3).toUpperCase();
-                        card.querySelector('.imagery-name').textContent = shortenFilename(item.original_name, 25);
-                        const meta = `${(item.size / 1024 / 1024).toFixed(2)} MB • ${new Date(item.uploaded_at).toLocaleDateString()} • `;
-                        const statusEl = card.querySelector('.imagery-status');
-                        statusEl.textContent = item.processing_status;
-                        statusEl.classList.toggle('text-success', item.processing_status === 'done');
-                        statusEl.classList.toggle('text-warning', item.processing_status !== 'done');
-                        card.querySelector('.imagery-meta').innerHTML = `${meta}<span class="${statusEl.className}">${statusEl.textContent}</span>`;
+                            // populate data
+                            card.querySelector('.imagery-format').textContent = item.format.slice(0, 3).toUpperCase();
+                            card.querySelector('.imagery-name').textContent = shortenFilename(item.original_name, 25);
+                            const meta = `${(item.size / 1024 / 1024).toFixed(2)} MB • ${new Date(item.uploaded_at).toLocaleDateString()} • `;
+                            const statusEl = card.querySelector('.imagery-status');
+                            statusEl.textContent = item.processing_status;
+                            statusEl.classList.toggle('text-success', item.processing_status === 'done');
+                            statusEl.classList.toggle('text-warning', item.processing_status !== 'done');
+                            card.querySelector('.imagery-meta').innerHTML = `${meta}<span class="${statusEl.className}">${statusEl.textContent}</span>`;
 
-                        // handle view button
-                        const viewBtn = card.querySelector('.view-btn');
-                        viewBtn.addEventListener('click', () => viewImagery(item));
+                            // handle view button
+                            const viewBtn = card.querySelector('.view-btn');
+                            viewBtn.addEventListener('click', () => viewImagery(item));
 
-                        // append to container
-                        myDataContainer.appendChild(clone);
-                    });
+                            // append to container
+                            myDataContainer.appendChild(clone);
+                        });
 
-                } catch (err) {
-                    myDataContainer.innerHTML = `
+                    } catch (err) {
+                        myDataContainer.innerHTML = `
                         <div class="text-sm text-red-500 bg-red-50 border border-red-200 rounded p-3">
                             ❌ ${err.message}
                         </div>
                     `;
+                    }
                 }
-            }
 
             }
 
@@ -1254,9 +1240,9 @@
                 if (message) parts.push(message);
                 if (!hasSentinelToken()) {
                     parts.push(
-                        sentinelTokenConfigured
-                            ? 'Download unavailable: Copernicus access token could not be issued.'
-                            : 'Configure Copernicus credentials on the server to enable downloads.'
+                        sentinelTokenConfigured ?
+                        'Download unavailable: Copernicus access token could not be issued.' :
+                        'Configure Copernicus credentials on the server to enable downloads.'
                     );
                 }
                 return parts.join(' ');
@@ -1293,11 +1279,11 @@
                 }
                 const hasProtocol = /^https?:\/\//i.test(trimmed);
                 const looksRelative = trimmed.startsWith('/') || trimmed.startsWith('./') || trimmed.startsWith('../');
-                const mentionsWms = lowered.includes('service=wms')
-                    || lowered.includes('request=getmap')
-                    || lowered.includes('/wms')
-                    || lowered.includes('ogc/wms')
-                    || lowered.includes('/ows');
+                const mentionsWms = lowered.includes('service=wms') ||
+                    lowered.includes('request=getmap') ||
+                    lowered.includes('/wms') ||
+                    lowered.includes('ogc/wms') ||
+                    lowered.includes('/ows');
                 if (!hasProtocol && !looksRelative && !mentionsWms) {
                     return false;
                 }
@@ -1308,9 +1294,9 @@
             const normalizeWmsCandidate = (url) => {
                 if (!isLikelyWmsUrl(url)) return null;
                 try {
-                    const baseHref = typeof window !== 'undefined' && window.location
-                        ? window.location.href
-                        : 'https://example.com/';
+                    const baseHref = typeof window !== 'undefined' && window.location ?
+                        window.location.href :
+                        'https://example.com/';
                     const parsed = new URL(url, baseHref);
                     const baseUrl = `${parsed.origin}${parsed.pathname}`;
                     const params = {};
@@ -1371,7 +1357,10 @@
 
                         const key = `${candidate}|${normalizedContext.layers ?? ''}|${normalizedContext.styles ?? ''}|${normalizedContext.version ?? ''}`;
                         if (seen.has(key)) return;
-                        results.push({ url: candidate, ...normalizedContext });
+                        results.push({
+                            url: candidate,
+                            ...normalizedContext
+                        });
                         seen.add(key);
                         return;
                     }
@@ -1421,15 +1410,25 @@
 
                         Object.entries(value).forEach(([rawKey, rawValue]) => {
                             if (typeof rawValue === 'string') {
-                                visit(rawValue, { layers, styles, version });
+                                visit(rawValue, {
+                                    layers,
+                                    styles,
+                                    version
+                                });
                             } else {
-                                visit(rawValue, { layers, styles, version });
+                                visit(rawValue, {
+                                    layers,
+                                    styles,
+                                    version
+                                });
                             }
                         });
                     }
                 };
 
-                visit(input, { ...context });
+                visit(input, {
+                    ...context
+                });
 
                 return results;
             };
@@ -1444,7 +1443,10 @@
                     const key = `${candidate.url}|${candidate.params?.LAYERS ?? ''}|${candidate.params?.STYLES ?? ''}`;
                     const existing = candidates.get(key);
                     if (!existing || score > existing.score) {
-                        candidates.set(key, { ...candidate, score });
+                        candidates.set(key, {
+                            ...candidate,
+                            score
+                        });
                     }
                 };
 
@@ -1453,7 +1455,9 @@
                     collectWmsServiceCandidates(value).forEach((entry) => {
                         const candidate = normalizeWmsCandidate(entry.url);
                         if (!candidate) return;
-                        const params = { ...(candidate.params ?? {}) };
+                        const params = {
+                            ...(candidate.params ?? {})
+                        };
                         if (!params.LAYERS && entry.layers) {
                             params.LAYERS = entry.layers;
                         }
@@ -1537,7 +1541,10 @@
                 if (!best.params?.LAYERS) {
                     const fallbackLayer = data.productId || data.tileId || props?.productIdentifier || props?.title || null;
                     if (fallbackLayer) {
-                        best.params = { ...(best.params ?? {}), LAYERS: fallbackLayer };
+                        best.params = {
+                            ...(best.params ?? {}),
+                            LAYERS: fallbackLayer
+                        };
                     }
                 }
 
@@ -1651,11 +1658,11 @@
                     if (sentinelDownloadIgnoredKeywords.some((keyword) => lowerKey.includes(keyword))) {
                         return;
                     }
-                    const href = typeof assetValue === 'string'
-                        ? assetValue
-                        : (typeof assetValue?.href === 'string'
-                            ? assetValue.href
-                            : (typeof assetValue?.url === 'string' ? assetValue.url : null));
+                    const href = typeof assetValue === 'string' ?
+                        assetValue :
+                        (typeof assetValue?.href === 'string' ?
+                            assetValue.href :
+                            (typeof assetValue?.url === 'string' ? assetValue.url : null));
                     if (!href) return;
                     let score = 68;
                     if (Array.isArray(assetValue?.roles)) {
@@ -1759,7 +1766,12 @@
                 };
 
                 // Helper to keep the overlay metadata text in sync with the currently selected product.
-                const setPanelContent = ({ title, acquired, details, status }) => {
+                const setPanelContent = ({
+                    title,
+                    acquired,
+                    details,
+                    status
+                }) => {
                     if (title !== undefined && sentinelPreviewTitle) {
                         sentinelPreviewTitle.textContent = title;
                     }
@@ -1805,8 +1817,8 @@
                         const downloadUrl = hasSelection ? state.current?.downloadUrl : null;
                         if (downloadUrl) {
                             const label = state.current?.productId || state.current?.baseTitle || 'Sentinel-2 scene';
-                            const downloadName = state.current?.downloadFilename
-                                || buildSentinelDownloadName(state.current?.productId, state.current?.baseTitle);
+                            const downloadName = state.current?.downloadFilename ||
+                                buildSentinelDownloadName(state.current?.productId, state.current?.baseTitle);
 
                             sentinelPreviewDownloadBtn.classList.remove('hidden');
                             sentinelPreviewDownloadBtn.setAttribute('href', downloadUrl);
@@ -1839,7 +1851,11 @@
                     try {
                         const view = mapInstance.getView();
                         if (view && typeof view.fit === 'function') {
-                            view.fit(extent, { padding: [50, 50, 50, 50], duration: 500, maxZoom: 14 });
+                            view.fit(extent, {
+                                padding: [50, 50, 50, 50],
+                                duration: 500,
+                                maxZoom: 14
+                            });
                         }
                     } catch (error) {
                         console.error('Failed to fit map to extent', error);
@@ -1877,7 +1893,9 @@
                             wmsUrl = tokenised;
                         }
 
-                        const params = { ...(config.params ?? {}) };
+                        const params = {
+                            ...(config.params ?? {})
+                        };
                         if (!params.LAYERS) {
                             return false;
                         }
@@ -1931,7 +1949,11 @@
                 // Convert GeoJSON footprint/bbox data into an OpenLayers feature for display.
                 const resolveFootprintFeature = (data) => {
                     if (!data) return null;
-                    const { footprint, geometry, bbox } = data;
+                    const {
+                        footprint,
+                        geometry,
+                        bbox
+                    } = data;
                     try {
                         if (footprint) {
                             return geoJsonParser.readFeature(footprint, {
@@ -1964,10 +1986,10 @@
                     showPreview(data) {
                         if (!data) return;
                         const title = data.title || data.productId || 'Sentinel-2 Preview';
-                        const acquiredText = data.acquiredText
-                            ?? (data.acquisitionDate
-                                ? `Acquired: ${formatReadableDate(data.acquisitionDate)}`
-                                : 'Acquisition date unavailable.');
+                        const acquiredText = data.acquiredText ??
+                            (data.acquisitionDate ?
+                                `Acquired: ${formatReadableDate(data.acquisitionDate)}` :
+                                'Acquisition date unavailable.');
                         const detailParts = [];
                         if (data.detailText) detailParts.push(data.detailText);
                         const tileText = data.tileText || data.tileId;
@@ -1978,8 +2000,8 @@
                         if (data.collection) detailParts.push(`Collection: ${data.collection}`);
                         const detailText = detailParts.join(' • ');
 
-                        const downloadFilename = data.downloadFilename
-                            ?? buildSentinelDownloadName(data.productId, title);
+                        const downloadFilename = data.downloadFilename ??
+                            buildSentinelDownloadName(data.productId, title);
 
                         setPanelVisible(true);
 
@@ -2022,11 +2044,11 @@
                         const hasWmsCandidate = Boolean(wmsConfig);
                         const hasQuicklook = Boolean(data.quicklookUrl && extent);
 
-                        const initialStatus = hasWmsCandidate
-                            ? 'Loading Sentinel-2 scene via WMS...'
-                            : (hasQuicklook
-                                ? 'Loading preview image...'
-                                : 'Preview image not available. Showing coverage.');
+                        const initialStatus = hasWmsCandidate ?
+                            'Loading Sentinel-2 scene via WMS...' :
+                            (hasQuicklook ?
+                                'Loading preview image...' :
+                                'Preview image not available. Showing coverage.');
 
                         setPanelContent({
                             title,
@@ -2050,11 +2072,11 @@
                                 updateButtons();
                                 setPanelContent({
                                     status: buildSentinelStatusMessage(
-                                        applied
-                                            ? (state.imageHidden
-                                                ? 'Preview image loaded. Use "Unhide Preview" to display it.'
-                                                : 'Preview image displayed on the map.')
-                                            : 'Unable to load preview image. Showing coverage only.'
+                                        applied ?
+                                        (state.imageHidden ?
+                                            'Preview image loaded. Use "Unhide Preview" to display it.' :
+                                            'Preview image displayed on the map.') :
+                                        'Unable to load preview image. Showing coverage only.'
                                     )
                                 });
                             };
@@ -2086,9 +2108,9 @@
                                     updateButtons();
                                     setPanelContent({
                                         status: buildSentinelStatusMessage(
-                                            state.imageHidden
-                                                ? 'Preview imagery loaded. Use "Unhide Preview" to display it.'
-                                                : 'Preview imagery displayed on the map.'
+                                            state.imageHidden ?
+                                            'Preview imagery loaded. Use "Unhide Preview" to display it.' :
+                                            'Preview imagery displayed on the map.'
                                         )
                                     });
                                 },
@@ -2170,7 +2192,9 @@
                 } else {
                     window.addEventListener('map:ready', () => {
                         createSentinelPreviewController();
-                    }, { once: true });
+                    }, {
+                        once: true
+                    });
                 }
             }
 
@@ -2359,28 +2383,28 @@
                     if (hasCoverage || quicklookUrl) {
                         previewButton.disabled = false;
                         previewButton.title = 'Display preview on the map';
-                                previewButton.addEventListener('click', () => {
-                                    window.showSentinelPreviewOnMap?.({
-                                        title: titleText,
-                                        productId,
-                                        quicklookUrl,
-                                        downloadUrl: downloadUrlWithToken,
-                                        downloadUrlBase: downloadUrl,
-                                        downloadFilename,
-                                        geometry: feature?.geometry,
-                                        bbox: bboxArray,
-                                        acquisitionDate,
-                                        tileText,
-                                        cloudCover,
-                                        collection: props.collection || feature?.collection || null,
-                                        services: props?.services ?? null,
-                                        links,
-                                        assets,
-                                        featureProperties: props,
-                                        featureId: feature?.id ?? null
-                                    });
-                                });
-                            } else {
+                        previewButton.addEventListener('click', () => {
+                            window.showSentinelPreviewOnMap?.({
+                                title: titleText,
+                                productId,
+                                quicklookUrl,
+                                downloadUrl: downloadUrlWithToken,
+                                downloadUrlBase: downloadUrl,
+                                downloadFilename,
+                                geometry: feature?.geometry,
+                                bbox: bboxArray,
+                                acquisitionDate,
+                                tileText,
+                                cloudCover,
+                                collection: props.collection || feature?.collection || null,
+                                services: props?.services ?? null,
+                                links,
+                                assets,
+                                featureProperties: props,
+                                featureId: feature?.id ?? null
+                            });
+                        });
+                    } else {
                         previewButton.disabled = true;
                         previewButton.title = 'Preview not available for this product';
                     }
