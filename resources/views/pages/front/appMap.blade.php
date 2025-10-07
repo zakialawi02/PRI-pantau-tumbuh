@@ -506,7 +506,7 @@
 
             <!-- Sentinel Preview Panel -->
             <div class="absolute left-2 right-2 top-[6.5rem] z-40 flex justify-end sm:left-auto sm:right-2 sm:w-80">
-                <div class="border-foreground/15 bg-background/95 supports-[backdrop-filter]:bg-background/70 pointer-events-auto hidden w-full max-w-md rounded-xl border p-3 text-xs shadow-lg backdrop-blur" id="sentinelPreviewPanel">
+                <div class="border-foreground/15 bg-background/95 supports-[backdrop-filter]:bg-background/70 pointer-events-auto hidden w-full max-w-md break-all rounded-xl border p-2 text-xs shadow-lg backdrop-blur" id="sentinelPreviewPanel">
                     <div class="flex items-start justify-between gap-2">
                         <div class="space-y-1">
                             <p class="text-primary text-[10px] font-semibold uppercase tracking-wide">Sentinel-2 Preview</p>
@@ -514,7 +514,7 @@
                             <p class="text-foreground/70 text-xs leading-tight" data-sentinel-preview-acquired>Select a collection to preview on the map.</p>
                             <p class="text-foreground/60 hidden text-xs leading-tight" data-sentinel-preview-details></p>
                         </div>
-                        <button class="text-foreground/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-transparent transition disabled:cursor-not-allowed disabled:opacity-40" id="sentinelPreviewClearBtn" type="button" title="Tutup panel preview">
+                        <button class="text-foreground/60 hover:text-foreground focus-visible:ring-primary/50 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-transparent transition focus-visible:outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-40" id="sentinelPreviewClearBtn" type="button" title="Tutup panel preview">
                             <i class="ri-close-line text-sm"></i>
                             <span class="sr-only">Tutup preview Sentinel</span>
                         </button>
