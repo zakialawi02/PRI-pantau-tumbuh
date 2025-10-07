@@ -777,6 +777,8 @@
 
     @push('javascript')
         <script>
+            // Cache references to all uploader related DOM elements so the bootstrap logic can short-circuit
+            // gracefully when the template is rendered without the upload form.
             const sourceInput = document.getElementById('sourceType');
             const fileInput = document.getElementById('fileInput');
             const fileInfo = document.getElementById('fileInfo');
@@ -799,6 +801,7 @@
                 myDataContainer
             };
 
+            // Quickly verify whether every required element exists before wiring up listeners.
             const uploaderReady = Object.values(uploaderElements).every((element) => Boolean(element));
 
             if (!uploaderReady) {
@@ -815,6 +818,7 @@
                 });
             } else {
                 // === STATE ===
+                // Track upload state locally so we can update the UI without querying the server.
                 let paused = false;
                 let uploading = false;
                 let file = null;
@@ -830,6 +834,7 @@
                 loadMyData();
 
                 // === FILE SELECT ===
+                // Respond to a new file selection by updating the summary row and enabling the CTA.
                 fileInput.addEventListener("change", (e) => {
                     file = e.target.files[0];
                     if (!file) return;
@@ -850,6 +855,7 @@
                 });
 
                 // === START UPLOAD ===
+                // Kick off a new chunked upload session with a pseudo-random upload id.
                 startBtn.addEventListener("click", () => {
                     if (!file) {
                         MyZkToast.warning("Please select a file first!");
@@ -871,6 +877,7 @@
                 });
 
                 // === PAUSE ===
+                // Pause simply flips the flags so the recursive chunk uploader stops itself.
                 pauseBtn.addEventListener("click", () => {
                     if (!uploading) return;
                     paused = true;
@@ -881,6 +888,7 @@
                 });
 
                 // === RESUME ===
+                // Resume restarts the chunk loop without reinitialising counters or the upload id.
                 resumeBtn.addEventListener("click", () => {
                     if (!file) return;
                     paused = false;
@@ -892,6 +900,7 @@
                 });
 
                 // === UPLOAD CHUNK FUNCTION ===
+                // Upload the next file segment, retrying transient failures with exponential back-off.
                 async function uploadNextChunk(retryCount = 0) {
                     if (paused || !file) return;
 
@@ -958,6 +967,7 @@
             }
 
             // === MERGE CHUNKS FUNCTION ===
+            // Ask the backend to merge all uploaded chunks and register the final file metadata.
             async function mergeChunks() {
                 setButtonState("merging");
 
@@ -999,6 +1009,7 @@
             }
 
             // === AUTO RESET ===
+            // Reset the form state a few seconds after a successful or failed upload.
             function autoReset() {
                 setTimeout(() => {
                     file = null;
@@ -1011,6 +1022,7 @@
             }
 
             // === LOAD MY DATA ===
+            // Fetch the authenticated user imagery list and render each entry with the template card.
             async function loadMyData() {
                 myDataContainer.innerHTML = `
                 <div class="flex justify-center py-4">
@@ -1068,6 +1080,7 @@
             }
 
             // === TAB FUNCTIONALITY ===
+            // Basic tab switcher for the pricing calculator and upload helper sections.
             function initTabFunctionality() {
                 const tabButtons = document.querySelectorAll('.tab-btn');
                 const tabContents = document.querySelectorAll('.tab-content');
@@ -1095,6 +1108,7 @@
             document.addEventListener('DOMContentLoaded', initTabFunctionality);
 
             // === HELPER FUNCTIONS ===
+            // Centralised place to toggle the uploader button states for each lifecycle stage.
             function setButtonState(state) {
                 if (!startBtn || !pauseBtn || !resumeBtn) {
                     return;
@@ -1142,6 +1156,8 @@
 
     @push('javascript')
         <script>
+            // === MAP PANEL & SENTINEL CATALOG CONTROLLER ===
+            // Everything below wires the sliding panels, Sentinel catalogue list and OpenLayers preview workflow.
             const panelWrapper = document.getElementById("panel-wrapper");
             const panels = document.querySelectorAll("#panel-wrapper section");
             const sidebarButtons = document.querySelectorAll(".sidebar-btn");
@@ -1178,6 +1194,7 @@
 
             const scrollAmount = 150; // pixels per click
 
+            // Format helper so Sentinel catalogue requests align with the API expectation.
             const formatISODate = (date) => {
                 if (!(date instanceof Date)) return '';
                 const copy = new Date(date.getTime());
@@ -1185,6 +1202,7 @@
                 return copy.toISOString().split('T')[0];
             };
 
+            // Convert Sentinel timestamps to a human friendly format for the card and preview overlays.
             const formatReadableDate = (value) => {
                 if (!value) return 'Unknown date';
                 const parsed = new Date(value);
@@ -1196,6 +1214,7 @@
                 }) + ' UTC';
             };
 
+            // Sentinel responses store cloud cover as a float, ensure consistent text output.
             const formatCloudCover = (value) => {
                 if (typeof value === 'number' && !Number.isNaN(value)) {
                     return `${value.toFixed(1)}%`;
@@ -1203,11 +1222,13 @@
                 return 'N/A';
             };
 
+            // Prevent filter inputs from sending invalid latitude/longitude or percentage values.
             const clampNumber = (value, min, max) => {
                 if (typeof value !== 'number' || Number.isNaN(value)) return null;
                 return Math.min(Math.max(value, min), max);
             };
 
+            // Generate a filesystem safe filename for download actions.
             const buildSentinelDownloadName = (primary, fallback) => {
                 const base = String(primary ?? fallback ?? 'sentinel-2-scene').trim();
                 const normalized = base.replace(/[\s]+/g, '_').replace(/[^A-Za-z0-9._-]+/g, '_');
@@ -1217,6 +1238,7 @@
             const sentinelDownloadIgnoredKeywords = ['quicklook', 'thumbnail', 'thumb', 'overview', 'browse', 'preview', 'allorigins'];
             const sentinelPreviewIgnoredKeywords = ['thumbnail', 'thumb', 'legend', 'logo', 'browse', 'allorigins'];
 
+            // Trim any whitespace from the access token resolved from the backend configuration.
             const sanitizeSentinelToken = (value) => {
                 if (typeof value !== 'string') return '';
                 return value.trim();
@@ -1240,6 +1262,7 @@
                 return parts.join(' ');
             };
 
+            // Append the active access token to Copernicus download or WMS URLs when required.
             const applySentinelTokenToUrl = (url) => {
                 if (!url) return null;
                 const token = sanitizeSentinelToken(sentinelDownloadToken);
@@ -1259,6 +1282,7 @@
                 }
             };
 
+            // Lightweight heuristics that help filter out non-WMS entries from the metadata payload.
             const isLikelyWmsUrl = (url) => {
                 if (typeof url !== 'string') return false;
                 const trimmed = url.trim();
@@ -1280,6 +1304,7 @@
                 return mentionsWms;
             };
 
+            // Remove volatile query parameters and capture relevant metadata for an OpenLayers WMS source.
             const normalizeWmsCandidate = (url) => {
                 if (!isLikelyWmsUrl(url)) return null;
                 try {
@@ -1327,6 +1352,7 @@
                 }
             };
 
+            // Recursively walk nested metadata objects and gather potential WMS endpoint strings.
             const collectWmsServiceCandidates = (input, context = {}) => {
                 const results = [];
                 const seen = new Set();
@@ -1408,6 +1434,7 @@
                 return results;
             };
 
+            // Use the gathered candidates to determine the best scoring WMS configuration for a scene.
             const resolveSentinelWmsConfig = (data) => {
                 if (!data) return null;
 
@@ -1554,6 +1581,7 @@
                 return results;
             };
 
+            // Evaluate every link/asset reference and pick the most appropriate full scene download URL.
             const resolveSentinelDownloadUrl = (feature) => {
                 if (!feature) return null;
 
@@ -1678,6 +1706,7 @@
 
             let sentinelPreviewController = null;
 
+            // Lazily create a preview controller that renders coverage + WMS previews on the shared map instance.
             const createSentinelPreviewController = () => {
                 if (sentinelPreviewController) {
                     return sentinelPreviewController;
@@ -1729,6 +1758,7 @@
                     previewType: null
                 };
 
+                // Helper to keep the overlay metadata text in sync with the currently selected product.
                 const setPanelContent = ({ title, acquired, details, status }) => {
                     if (title !== undefined && sentinelPreviewTitle) {
                         sentinelPreviewTitle.textContent = title;
@@ -1745,12 +1775,14 @@
                     }
                 };
 
+                // Toggle the preview overlay visibility without tearing down the DOM node.
                 const setPanelVisible = (visible) => {
                     if (sentinelPreviewPanel) {
                         sentinelPreviewPanel.classList.toggle('hidden', !visible);
                     }
                 };
 
+                // Update the preview control buttons based on the current selection and loading state.
                 const updateButtons = () => {
                     const hasSelection = Boolean(state.current);
                     const canToggleImage = hasSelection && state.hasImage;
@@ -1794,12 +1826,14 @@
                     }
                 };
 
+                // Remove any raster source from the preview image layer.
                 const clearPreviewLayer = () => {
                     previewLayer.setSource(null);
                     previewLayer.setVisible(false);
                     state.previewType = null;
                 };
 
+                // Animate the map viewport to the selected scene coverage.
                 const focusExtent = (extent) => {
                     if (!extent) return;
                     try {
@@ -1812,6 +1846,7 @@
                     }
                 };
 
+                // Fallback renderer for quicklook JPEGs when no WMS is available.
                 const applyStaticPreview = (url, extent) => {
                     if (!url || !extent) return false;
                     try {
@@ -1832,6 +1867,7 @@
                     }
                 };
 
+                // Configure an OpenLayers ImageWMS source for high resolution previews.
                 const applyWmsPreview = (config, callbacks = {}) => {
                     if (!config || !config.url) return false;
                     try {
@@ -1892,6 +1928,7 @@
                     }
                 };
 
+                // Convert GeoJSON footprint/bbox data into an OpenLayers feature for display.
                 const resolveFootprintFeature = (data) => {
                     if (!data) return null;
                     const { footprint, geometry, bbox } = data;
@@ -2137,6 +2174,7 @@
                 }
             }
 
+            // Public entry point invoked by catalogue cards to render a scene on the map.
             const triggerSentinelPreview = (payload) => {
                 if (!payload) return;
                 const controller = createSentinelPreviewController();
@@ -2175,6 +2213,7 @@
                 sentinelPreviewShowBtn?.classList.add('hidden');
             }
 
+            // Wrapper around fetch that retries via AllOrigins when CORS rejects the primary request.
             async function fetchSentinelCatalog(url) {
                 const attemptFetch = async (targetUrl) => {
                     const response = await fetch(targetUrl);
@@ -2192,6 +2231,7 @@
                 }
             }
 
+            // Render a Sentinel catalogue card using the HTML template and bind preview/download handlers.
             function createSentinelCard(feature) {
                 if (!sentinelTemplate) return null;
 
@@ -2349,6 +2389,7 @@
                 return clone;
             }
 
+            // Pull the latest Sentinel results with optional filters and populate the panel list.
             async function loadSentinelCollections(forceRefresh = false) {
                 if (!sentinelStatus || !sentinelList) return;
 
@@ -2513,6 +2554,7 @@
                 });
             }
 
+            // Mobile nav arrows scroll the horizontal chip list into view.
             scrollLeftBtn.addEventListener('click', () => {
                 scrollContainer.scrollBy({
                     left: -scrollAmount,
@@ -2532,6 +2574,7 @@
             let startX;
             let scrollLeft;
 
+            // Enable click-and-drag scrolling for a smoother touchpad-like experience on desktop.
             scrollContainer.addEventListener('mousedown', (e) => {
                 isDown = true;
                 scrollContainer.classList.add('cursor-grabbing');
@@ -2557,6 +2600,7 @@
                 scrollContainer.scrollLeft = scrollLeft - walk;
             });
 
+            // Toggle the requested panel and ensure the wrapper animates correctly for the viewport size.
             function showPanel(id, btn = null) {
                 const isMobile = window.innerWidth < 768;
 
@@ -2591,6 +2635,7 @@
                 }
             }
 
+            // Collapse the panel wrapper and clear active states.
             function closePanels() {
                 const isMobile = window.innerWidth < 768;
 
@@ -2616,6 +2661,7 @@
 
 
             // === DEFAULT STATE saat halaman load ===
+            // Open the default panel on load and fetch the initial Sentinel catalogue.
             window.addEventListener("DOMContentLoaded", () => {
                 const defaultPanel = 'data-panel';
                 const isMobile = window.innerWidth < 768;
@@ -2632,6 +2678,7 @@
             });
 
             // === RESPONSIVE HANDLER: SYNC STATE SAAT RESIZE ===
+            // Reconcile mobile/desktop panel classes whenever the viewport size changes.
             window.addEventListener("resize", () => {
                 const isMobile = window.innerWidth < 768;
                 const activePanel = panelWrapper.dataset.activePanel;
@@ -2681,6 +2728,7 @@
             });
 
             // Price calculation functions
+            // Translate the drawn polygon area into credit point estimates for the purchase panel.
             function calculateTotalPrice() {
                 // Get area from global variable (set when polygon is drawn)
                 const areaInSquareMeters = window.geojsonArea || 0;
