@@ -763,1752 +763,2043 @@
 
     @push('javascript')
         <script>
-                        document.addEventListener('DOMContentLoaded', () => {
-                            ImageryUploader.init();
-                            Tabs.init();
+            // Cache references to all uploader related DOM elements so the bootstrap logic can short-circuit
+            // gracefully when the template is rendered without the upload form.
+            const sourceInput = document.getElementById('sourceType');
+            const fileInput = document.getElementById('fileInput');
+            const fileInfo = document.getElementById('fileInfo');
+            const progressBar = document.getElementById('progressBar');
+            const progressText = document.getElementById('progressText');
+            const startBtn = document.getElementById('startBtn');
+            const pauseBtn = document.getElementById('pauseBtn');
+            const resumeBtn = document.getElementById('resumeBtn');
+            const myDataContainer = document.getElementById('myDataContainer');
+
+            const uploaderElements = {
+                sourceInput,
+                fileInput,
+                fileInfo,
+                progressBar,
+                progressText,
+                startBtn,
+                pauseBtn,
+                resumeBtn,
+                myDataContainer
+            };
+
+            // Quickly verify whether every required element exists before wiring up listeners.
+            const uploaderReady = Object.values(uploaderElements).every((element) => Boolean(element));
+
+            if (!uploaderReady) {
+                console.warn('Imagery uploader controls missing. Skipping uploader bootstrap.', {
+                    hasSourceInput: Boolean(sourceInput),
+                    hasFileInput: Boolean(fileInput),
+                    hasFileInfo: Boolean(fileInfo),
+                    hasProgressBar: Boolean(progressBar),
+                    hasProgressText: Boolean(progressText),
+                    hasStartBtn: Boolean(startBtn),
+                    hasPauseBtn: Boolean(pauseBtn),
+                    hasResumeBtn: Boolean(resumeBtn),
+                    hasMyDataContainer: Boolean(myDataContainer)
+                });
+            } else {
+                // === STATE ===
+                // Track upload state locally so we can update the UI without querying the server.
+                let paused = false;
+                let uploading = false;
+                let file = null;
+                let uploadId = null;
+                let currentChunk = 0;
+                let totalChunks = 0;
+                const chunkSize = 5 * 1024 * 1024; // 5 MB per chunk
+                let startTime = null;
+                let uploadedBytes = 0;
+
+                // === INIT ===
+                setButtonState("idle");
+                loadMyData();
+
+                // === FILE SELECT ===
+                // Respond to a new file selection by updating the summary row and enabling the CTA.
+                fileInput.addEventListener("change", (e) => {
+                    file = e.target.files[0];
+                    if (!file) return;
+
+                    const sizeMB = (file.size / 1024 / 1024).toFixed(2);
+                    const shortName = shortenFilename(file.name, 40);
+
+                    fileInfo.classList.remove("hidden");
+                    fileInfo.innerHTML = `
+                <strong>Name:</strong> ${shortName}<br>
+                <strong>Size:</strong> ${sizeMB} MB
+            `;
+
+                    progressText.textContent = "✅ File ready to upload. Click 'Start Upload' to begin.";
+                    progressBar.style.width = "0%";
+                    MyZkToast.info("File ready to upload, click Start to begin.");
+                    setButtonState("ready");
+                });
+
+                // === START UPLOAD ===
+                // Kick off a new chunked upload session with a pseudo-random upload id.
+                startBtn.addEventListener("click", () => {
+                    if (!file) {
+                        MyZkToast.warning("Please select a file first!");
+                        return;
+                    }
+
+                    uploadId = Math.random().toString(36).substring(2, 12);
+                    totalChunks = Math.ceil(file.size / chunkSize);
+                    currentChunk = 0;
+                    uploadedBytes = 0;
+                    paused = false;
+                    uploading = true;
+                    startTime = performance.now();
+
+                    MyZkToast.info("🚀 Upload started...");
+                    progressText.textContent = `🚀 Uploading ${file.name}...`;
+                    setButtonState("uploading");
+                    uploadNextChunk();
+                });
+
+                // === PAUSE ===
+                // Pause simply flips the flags so the recursive chunk uploader stops itself.
+                pauseBtn.addEventListener("click", () => {
+                    if (!uploading) return;
+                    paused = true;
+                    uploading = false;
+                    progressText.textContent = "⏸️ Upload paused.";
+                    MyZkToast.warning("Upload paused.");
+                    setButtonState("paused");
+                });
+
+                // === RESUME ===
+                // Resume restarts the chunk loop without reinitialising counters or the upload id.
+                resumeBtn.addEventListener("click", () => {
+                    if (!file) return;
+                    paused = false;
+                    uploading = true;
+                    progressText.textContent = "▶️ Upload resumed...";
+                    MyZkToast.info("Upload resumed...");
+                    setButtonState("uploading");
+                    uploadNextChunk();
+                });
+
+                // === UPLOAD CHUNK FUNCTION ===
+                // Upload the next file segment, retrying transient failures with exponential back-off.
+                async function uploadNextChunk(retryCount = 0) {
+                    if (paused || !file) return;
+
+                    if (currentChunk >= totalChunks) {
+                        progressText.textContent = "🧩 Merging file on server...";
+                        return mergeChunks();
+                    }
+
+                    const start = currentChunk * chunkSize;
+                    const end = Math.min(file.size, start + chunkSize);
+                    const chunk = file.slice(start, end);
+                    const chunkSizeBytes = end - start;
+
+                    const formData = new FormData();
+                    formData.append("upload_id", uploadId);
+                    formData.append("chunk_index", currentChunk);
+                    formData.append("chunk", chunk);
+
+                    try {
+                        const res = await fetch('{{ route('upload.chunk') }}', {
+                            method: "POST",
+                            headers: {
+                                "X-CSRF-TOKEN": "{{ csrf_token() }}"
+                            },
+                            body: formData,
                         });
 
-                        const ImageryUploader = (() => {
-                            const elements = {
-                                source: null,
-                                file: null,
-                                info: null,
-                                progressBar: null,
-                                progressText: null,
-                                start: null,
-                                pause: null,
-                                resume: null,
-                                list: null
-                            };
-
-                            const state = {
-                                file: null,
-                                uploadId: null,
-                                currentChunk: 0,
-                                totalChunks: 0,
-                                paused: false,
-                                uploading: false,
-                                startTime: 0,
-                                uploadedBytes: 0
-                            };
-
-                            const CHUNK_SIZE = 5 * 1024 * 1024; // 5 MB
-
-                            const toast = {
-                                info: (message) => window.MyZkToast?.info?.(message),
-                                success: (message) => window.MyZkToast?.success?.(message),
-                                warning: (message) => window.MyZkToast?.warning?.(message),
-                                error: (message) => window.MyZkToast?.error?.(message)
-                            };
-
-                            const selectors = {
-                                source: '#sourceType',
-                                file: '#fileInput',
-                                info: '#fileInfo',
-                                progressBar: '#progressBar',
-                                progressText: '#progressText',
-                                start: '#startBtn',
-                                pause: '#pauseBtn',
-                                resume: '#resumeBtn',
-                                list: '#myDataContainer'
-                            };
-
-                            function init() {
-                                cacheElements();
-                                if (!isReady()) {
-                                    logMissingElements();
-                                    return;
-                                }
-
-                                resetUi();
-                                bindEvents();
-                                loadImageryList();
-                            }
-
-                            function cacheElements() {
-                                Object.entries(selectors).forEach(([key, selector]) => {
-                                    elements[key] = document.querySelector(selector);
-                                });
-                            }
-
-                            function isReady() {
-                                return Object.values(elements).every(Boolean);
-                            }
-
-                            function logMissingElements() {
-                                const missing = Object.entries(elements)
-                                    .filter(([, value]) => !value)
-                                    .map(([key]) => key);
-
-                                console.warn('Imagery uploader controls missing. Skipping uploader bootstrap.', { missing });
-                            }
-
-                            function bindEvents() {
-                                elements.file.addEventListener('change', handleFileSelection);
-                                elements.start.addEventListener('click', startUpload);
-                                elements.pause.addEventListener('click', pauseUpload);
-                                elements.resume.addEventListener('click', resumeUpload);
-                            }
-
-                            function handleFileSelection(event) {
-                                state.file = event.target.files?.[0] ?? null;
-                                if (!state.file) {
-                                    resetUi();
-                                    return;
-                                }
-
-                                const sizeMB = (state.file.size / 1024 / 1024).toFixed(2);
-                                const displayName = shortenFilename(state.file.name, 40);
-
-                                elements.info.classList.remove('hidden');
-                                elements.info.innerHTML = `
-                                    <strong>Name:</strong> ${displayName}<br>
-                                    <strong>Size:</strong> ${sizeMB} MB
-                                `;
-
-                                setProgressMessage("✅ File ready to upload. Click 'Start Upload' to begin.");
-                                updateProgressBar(0);
-                                toast.info?.('File ready to upload, click Start to begin.');
-                                setButtonState('ready');
-                            }
-
-                            function startUpload() {
-                                if (!state.file) {
-                                    toast.warning?.('Please select a file first!');
-                                    return;
-                                }
-
-                                state.uploadId = Math.random().toString(36).slice(2, 12);
-                                state.totalChunks = Math.ceil(state.file.size / CHUNK_SIZE);
-                                state.currentChunk = 0;
-                                state.uploadedBytes = 0;
-                                state.paused = false;
-                                state.uploading = true;
-                                state.startTime = performance.now();
-
-                                toast.info?.('🚀 Upload started...');
-                                setProgressMessage(`🚀 Uploading ${state.file.name}...`);
-                                setButtonState('uploading');
-                                uploadNextChunk();
-                            }
-
-                            function pauseUpload() {
-                                if (!state.uploading) return;
-                                state.paused = true;
-                                state.uploading = false;
-                                setProgressMessage('⏸️ Upload paused.');
-                                toast.warning?.('Upload paused.');
-                                setButtonState('paused');
-                            }
-
-                            function resumeUpload() {
-                                if (!state.file) return;
-                                state.paused = false;
-                                state.uploading = true;
-                                setProgressMessage('▶️ Upload resumed...');
-                                toast.info?.('Upload resumed...');
-                                setButtonState('uploading');
-                                uploadNextChunk();
-                            }
-
-                            async function uploadNextChunk(retryCount = 0) {
-                                if (state.paused || !state.file) return;
-
-                                if (state.currentChunk >= state.totalChunks) {
-                                    setProgressMessage('🧩 Merging file on server...');
-                                    await mergeChunks();
-                                    return;
-                                }
-
-                                const start = state.currentChunk * CHUNK_SIZE;
-                                const end = Math.min(state.file.size, start + CHUNK_SIZE);
-                                const chunk = state.file.slice(start, end);
-                                const chunkSizeBytes = end - start;
-
-                                const payload = new FormData();
-                                payload.append('upload_id', state.uploadId);
-                                payload.append('chunk_index', state.currentChunk);
-                                payload.append('chunk', chunk);
-
-                                try {
-                                    const response = await fetch('{{ route('upload.chunk') }}', {
-                                        method: 'POST',
-                                        headers: {
-                                            'X-CSRF-TOKEN': '{{ csrf_token() }}'
-                                        },
-                                        body: payload
-                                    });
-
-                                    const result = await response.json();
-                                    if (!response.ok || !result.success) {
-                                        throw new Error(result.message || `Chunk ${state.currentChunk} failed.`);
-                                    }
-
-                                    state.currentChunk += 1;
-                                    state.uploadedBytes += chunkSizeBytes;
-
-                                    updateProgress();
-
-                                    if (!state.paused) {
-                                        uploadNextChunk();
-                                    }
-                                } catch (error) {
-                                    if (retryCount < 3) {
-                                        const retryDelay = 2000 * (retryCount + 1);
-                                        setTimeout(() => uploadNextChunk(retryCount + 1), retryDelay);
-                                        return;
-                                    }
-
-                                    setProgressMessage(`❌ Chunk ${state.currentChunk} failed after 3 retries. Upload paused.`);
-                                    toast.error?.(`Chunk ${state.currentChunk} failed after 3 retries.`);
-                                    state.paused = true;
-                                    state.uploading = false;
-                                    setButtonState('paused');
-                                }
-                            }
-
-                            function updateProgress() {
-                                const now = performance.now();
-                                const elapsedSeconds = (now - state.startTime) / 1000;
-                                const speedMBps = elapsedSeconds > 0
-                                    ? (state.uploadedBytes / 1024 / 1024 / elapsedSeconds).toFixed(2)
-                                    : '0.00';
-
-                                const remainingBytes = state.file.size - state.uploadedBytes;
-                                const etaSeconds = Number(speedMBps) > 0
-                                    ? remainingBytes / (Number(speedMBps) * 1024 * 1024)
-                                    : 0;
-                                const etaText = etaSeconds > 0 ? formatTimeETA(etaSeconds) : '-';
-
-                                const progress = Math.round((state.currentChunk / state.totalChunks) * 100);
-                                updateProgressBar(progress);
-                                setProgressMessage(`Uploading... ${progress}% | 🚀 ${speedMBps} MB/s | ⏳ ETA: ${etaText}`);
-
-                                if (progress === 100) {
-                                    toast.info?.('Merging file on server...');
-                                }
-                            }
-
-                            async function mergeChunks() {
-                                setButtonState('merging');
-
-                                const payload = new FormData();
-                                payload.append('upload_id', state.uploadId);
-                                payload.append('filename', state.file.name);
-                                payload.append('total_chunks', state.totalChunks);
-                                payload.append('source_type', elements.source.value);
-
-                                try {
-                                    const response = await fetch('{{ route('upload.merge') }}', {
-                                        method: 'POST',
-                                        headers: {
-                                            'X-CSRF-TOKEN': '{{ csrf_token() }}'
-                                        },
-                                        body: payload
-                                    });
-
-                                    const result = await response.json();
-                                    if (!response.ok || !result.success) {
-                                        throw new Error(result.message || 'Failed to merge file on server.');
-                                    }
-
-                                    updateProgressBar(100);
-                                    const message = result.message || 'Upload completed. Processing started in background.';
-                                    setProgressMessage(`✅ Upload complete! ${message}`);
-                                    toast.success?.(result.message || 'Upload completed successfully!');
-                                    setButtonState('done');
-
-                                    await loadImageryList();
-                                    scheduleReset();
-                                } catch (error) {
-                                    setProgressMessage(`❌ Error: ${error.message}`);
-                                    toast.error?.(error.message || 'Server error during merge.');
-                                    setButtonState('error');
-                                    scheduleReset();
-                                }
-                            }
-
-                            function scheduleReset() {
-                                setTimeout(resetUi, 4000);
-                            }
-
-                            function resetUi() {
-                                state.file = null;
-                                elements.file.value = '';
-                                elements.info?.classList.add('hidden');
-                                updateProgressBar(0);
-                                setProgressMessage('Ready for next upload.');
-                                setButtonState('idle');
-                            }
-
-                            async function loadImageryList() {
-                                if (!elements.list) return;
-
-                                elements.list.innerHTML = `
-                                    <div class="flex justify-center py-4">
-                                        <p class="text-sm text-foreground/60 animate-pulse">Loading your imagery list...</p>
-                                    </div>
-                                `;
-
-                                try {
-                                    const response = await fetch('{{ route('imagery.list') }}');
-                                    const result = await response.json();
-
-                                    if (!response.ok || !result.success) {
-                                        throw new Error(result.message || 'Failed to fetch imagery data.');
-                                    }
-
-                                    renderImageryCards(result.data ?? []);
-                                } catch (error) {
-                                    elements.list.innerHTML = `
-                                        <div class="text-sm text-red-500 bg-red-50 border border-red-200 rounded p-3">
-                                            ❌ ${error.message}
-                                        </div>
-                                    `;
-                                }
-                            }
-
-                            function renderImageryCards(items) {
-                                elements.list.innerHTML = '';
-
-                                if (!items.length) {
-                                    elements.list.innerHTML = '<p class="text-sm text-gray-400 text-center py-4">No imagery uploaded yet.</p>';
-                                    return;
-                                }
-
-                                const template = document.getElementById('imageryCardTemplate');
-                                if (!template) return;
-
-                                items.forEach((item) => {
-                                    const clone = template.content.cloneNode(true);
-                                    const card = clone.querySelector('.imagery-card');
-                                    if (!card) return;
-
-                                    const format = card.querySelector('.imagery-format');
-                                    const name = card.querySelector('.imagery-name');
-                                    const meta = card.querySelector('.imagery-meta');
-                                    const status = card.querySelector('.imagery-status');
-                                    const viewButton = card.querySelector('.view-btn');
-
-                                    if (format) format.textContent = (item.format || '').slice(0, 3).toUpperCase();
-                                    if (name) name.textContent = shortenFilename(item.original_name, 25);
-
-                                    const sizeText = (item.size / 1024 / 1024).toFixed(2);
-                                    const dateText = new Date(item.uploaded_at).toLocaleDateString();
-                                    const statusText = item.processing_status;
-
-                                    if (status) {
-                                        status.textContent = statusText;
-                                        status.classList.toggle('text-success', statusText === 'done');
-                                        status.classList.toggle('text-warning', statusText !== 'done');
-                                    }
-
-                                    if (meta && status) {
-                                        meta.innerHTML = `${sizeText} MB • ${dateText} • <span class="${status.className}">${status.textContent}</span>`;
-                                    }
-
-                                    viewButton?.addEventListener('click', () => viewImagery(item));
-
-                                    elements.list.appendChild(clone);
-                                });
-                            }
-
-                            function updateProgressBar(percent) {
-                                if (elements.progressBar) {
-                                    elements.progressBar.style.width = `${percent}%`;
-                                }
-                            }
-
-                            function setProgressMessage(message) {
-                                if (elements.progressText) {
-                                    elements.progressText.textContent = message;
-                                }
-                            }
-
-                            function setButtonState(stateName) {
-                                const buttonStates = {
-                                    idle: { start: true, pause: true, resume: true },
-                                    ready: { start: false, pause: true, resume: true },
-                                    uploading: { start: true, pause: false, resume: true },
-                                    paused: { start: true, pause: true, resume: false },
-                                    merging: { start: true, pause: true, resume: true },
-                                    done: { start: true, pause: true, resume: true },
-                                    error: { start: false, pause: true, resume: true }
-                                };
-
-                                const config = buttonStates[stateName] || buttonStates.idle;
-                                elements.start.disabled = config.start;
-                                elements.pause.disabled = config.pause;
-                                elements.resume.disabled = config.resume;
-                            }
-
-                            return { init };
-                        })();
-
-                        const Tabs = (() => {
-                            function init() {
-                                const buttons = document.querySelectorAll('.tab-btn');
-                                const contents = document.querySelectorAll('.tab-content');
-                                if (!buttons.length || !contents.length) return;
-
-                                buttons.forEach((button) => {
-                                    button.addEventListener('click', () => {
-                                        buttons.forEach((item) => item.classList.remove('active'));
-                                        contents.forEach((item) => item.classList.remove('active'));
-
-                                        button.classList.add('active');
-
-                                        const targetId = button.getAttribute('data-tab');
-                                        const target = document.getElementById(targetId);
-                                        target?.classList.add('active');
-                                    });
-                                });
-                            }
-
-                            return { init };
-                        })();
+                        const data = await res.json();
+                        if (!res.ok || !data.success) {
+                            throw new Error(data.message || `Chunk ${currentChunk} failed.`);
+                        }
+
+                        currentChunk++;
+                        uploadedBytes += chunkSizeBytes;
+
+                        const now = performance.now();
+                        const elapsedSec = (now - startTime) / 1000;
+                        const speedMBps = (uploadedBytes / 1024 / 1024 / elapsedSec).toFixed(2);
+                        const remainingBytes = file.size - uploadedBytes;
+                        const estRemainingSec = remainingBytes / (speedMBps * 1024 * 1024);
+                        const etaText = estRemainingSec > 0 ? formatTimeETA(estRemainingSec) : "-";
+
+                        const progress = Math.round((currentChunk / totalChunks) * 100);
+                        progressBar.style.width = `${progress}%`;
+                        progressText.textContent = `Uploading... ${progress}% | 🚀 ${speedMBps} MB/s | ⏳ ETA: ${etaText}`;
+
+                        if (progress === 100) {
+                            MyZkToast.info("Merging file on server...");
+                        }
+
+                        if (!paused) uploadNextChunk();
+
+                    } catch (err) {
+                        if (retryCount < 3) {
+                            setTimeout(() => uploadNextChunk(retryCount + 1), 2000 * (retryCount + 1));
+                        } else {
+                            progressText.textContent = `❌ Chunk ${currentChunk} failed after 3 retries. Upload paused.`;
+                            MyZkToast.error(`Chunk ${currentChunk} failed after 3 retries.`);
+                            paused = true;
+                            uploading = false;
+                            setButtonState("paused");
+                        }
+                    }
+                }
+
+                // === MERGE CHUNKS FUNCTION ===
+                // Ask the backend to merge all uploaded chunks and register the final file metadata.
+                async function mergeChunks() {
+                    setButtonState("merging");
+
+                    const sourceType = sourceInput.value;
+                    const formData = new FormData();
+                    formData.append("upload_id", uploadId);
+                    formData.append("filename", file.name);
+                    formData.append("total_chunks", totalChunks);
+                    formData.append("source_type", sourceType); // Add source type to form data
+
+                    try {
+                        const res = await fetch('{{ route('upload.merge') }}', {
+                            method: "POST",
+                            headers: {
+                                "X-CSRF-TOKEN": "{{ csrf_token() }}"
+                            },
+                            body: formData,
+                        });
+
+                        const result = await res.json();
+
+                        if (res.ok && result.success) {
+                            progressBar.style.width = "100%";
+                            progressText.textContent = `✅ Upload complete! ${result.message || "Upload completed. Processing started in background."}`;
+                            MyZkToast.success(result.message || "Upload completed successfully!");
+                            setButtonState("done");
+                            await loadMyData();
+                            autoReset();
+                        } else {
+                            throw new Error(result.message || "Failed to merge file on server.");
+                        }
+
+                    } catch (err) {
+                        progressText.textContent = `❌ Error: ${err.message}`;
+                        MyZkToast.error(err.message || "Server error during merge.");
+                        setButtonState("error");
+                        autoReset();
+                    }
+                }
+
+                // === AUTO RESET ===
+                // Reset the form state a few seconds after a successful or failed upload.
+                function autoReset() {
+                    setTimeout(() => {
+                        file = null;
+                        fileInput.value = "";
+                        fileInfo.classList.add("hidden");
+                        progressBar.style.width = "0%";
+                        progressText.textContent = "Ready for next upload.";
+                        setButtonState("idle");
+                    }, 4000);
+                }
+
+                // === LOAD MY DATA ===
+                // Fetch the authenticated user imagery list and render each entry with the template card.
+                async function loadMyData() {
+                    myDataContainer.innerHTML = `
+                <div class="flex justify-center py-4">
+                    <p class="text-sm text-foreground/60 animate-pulse">Loading your imagery list...</p>
+                </div>
+            `;
+
+                    try {
+                        const res = await fetch('{{ route('imagery.list') }}');
+                        const result = await res.json();
+
+                        if (!res.ok || !result.success) throw new Error(result.message || "Failed to fetch imagery data.");
+                        const data = result.data;
+
+                        myDataContainer.innerHTML = ''; // clear existing
+
+                        if (data.length === 0) {
+                            myDataContainer.innerHTML = `<p class="text-sm text-gray-400 text-center py-4">No imagery uploaded yet.</p>`;
+                            return;
+                        }
+
+                        const cardListDataImagery = document.getElementById('imageryCardTemplate');
+
+                        data.forEach(item => {
+                            const clone = cardListDataImagery.content.cloneNode(true);
+                            const card = clone.querySelector('.imagery-card');
+
+                            // populate data
+                            card.querySelector('.imagery-format').textContent = item.format.slice(0, 3).toUpperCase();
+                            card.querySelector('.imagery-name').textContent = shortenFilename(item.original_name, 25);
+                            const meta = `${(item.size / 1024 / 1024).toFixed(2)} MB • ${new Date(item.uploaded_at).toLocaleDateString()} • `;
+                            const statusEl = card.querySelector('.imagery-status');
+                            statusEl.textContent = item.processing_status;
+                            statusEl.classList.toggle('text-success', item.processing_status === 'done');
+                            statusEl.classList.toggle('text-warning', item.processing_status !== 'done');
+                            card.querySelector('.imagery-meta').innerHTML = `${meta}<span class="${statusEl.className}">${statusEl.textContent}</span>`;
+
+                            // handle view button
+                            const viewBtn = card.querySelector('.view-btn');
+                            viewBtn.addEventListener('click', () => viewImagery(item));
+
+                            // append to container
+                            myDataContainer.appendChild(clone);
+                        });
+
+                    } catch (err) {
+                        myDataContainer.innerHTML = `
+                        <div class="text-sm text-red-500 bg-red-50 border border-red-200 rounded p-3">
+                            ❌ ${err.message}
+                        </div>
+                    `;
+                    }
+                }
+
+            }
+
+            // === TAB FUNCTIONALITY ===
+            // Basic tab switcher for the pricing calculator and upload helper sections.
+            function initTabFunctionality() {
+                const tabButtons = document.querySelectorAll('.tab-btn');
+                const tabContents = document.querySelectorAll('.tab-content');
+
+                tabButtons.forEach(button => {
+                    button.addEventListener('click', () => {
+                        // Remove active class from all buttons and contents
+                        tabButtons.forEach(btn => btn.classList.remove('active'));
+                        tabContents.forEach(content => content.classList.remove('active'));
+
+                        // Add active class to clicked button
+                        button.classList.add('active');
+
+                        // Show corresponding content
+                        const tabId = button.getAttribute('data-tab');
+                        const content = document.getElementById(tabId);
+                        if (content) {
+                            content.classList.add('active');
+                        }
+                    });
+                });
+            }
+
+            // Initialize tab functionality when DOM is loaded
+            document.addEventListener('DOMContentLoaded', initTabFunctionality);
+
+            // === HELPER FUNCTIONS ===
+            // Centralised place to toggle the uploader button states for each lifecycle stage.
+            function setButtonState(state) {
+                if (!startBtn || !pauseBtn || !resumeBtn) {
+                    return;
+                }
+                switch (state) {
+                    case "idle":
+                        startBtn.disabled = true;
+                        pauseBtn.disabled = true;
+                        resumeBtn.disabled = true;
+                        break;
+                    case "ready": // file sudah dipilih
+                        startBtn.disabled = false;
+                        pauseBtn.disabled = true;
+                        resumeBtn.disabled = true;
+                        break;
+                    case "uploading":
+                        startBtn.disabled = true;
+                        pauseBtn.disabled = false;
+                        resumeBtn.disabled = true;
+                        break;
+                    case "paused":
+                        startBtn.disabled = true;
+                        pauseBtn.disabled = true;
+                        resumeBtn.disabled = false;
+                        break;
+                    case "merging":
+                        startBtn.disabled = true;
+                        pauseBtn.disabled = true;
+                        resumeBtn.disabled = true;
+                        break;
+                    case "done":
+                        startBtn.disabled = true;
+                        pauseBtn.disabled = true;
+                        resumeBtn.disabled = true;
+                        break;
+                    case "error":
+                        startBtn.disabled = false;
+                        pauseBtn.disabled = true;
+                        resumeBtn.disabled = true;
+                        break;
+                }
+            }
         </script>
     @endpush
 
-
     @push('javascript')
         <script>
-            document.addEventListener('DOMContentLoaded', () => {
-            MapInterface.init();
-        });
+            // === MAP PANEL & SENTINEL CATALOG CONTROLLER ===
+            // Everything below wires the sliding panels, Sentinel catalogue list and OpenLayers preview workflow.
+            const panelWrapper = document.getElementById("panel-wrapper");
+            const panels = document.querySelectorAll("#panel-wrapper section");
+            const sidebarButtons = document.querySelectorAll(".sidebar-btn");
+            const scrollContainer = document.getElementById('scroll-container');
+            const scrollLeftBtn = document.getElementById('scroll-left');
+            const scrollRightBtn = document.getElementById('scroll-right');
+            const sentinelStatus = document.getElementById('sentinelCollectionStatus');
+            const sentinelList = document.getElementById('sentinelCollectionList');
+            const sentinelTemplate = document.getElementById('sentinelCollectionTemplate');
+            const sentinelLastUpdated = document.getElementById('sentinelLastUpdated');
+            const sentinelFilterForm = document.getElementById('sentinelFilterForm');
+            const sentinelFilterResetButton = document.getElementById('sentinelFilterResetButton');
+            const sentinelCloudInput = document.getElementById('sentinelCloudFilter');
+            const sentinelLatInput = document.getElementById('sentinelLatFilter');
+            const sentinelLonInput = document.getElementById('sentinelLonFilter');
+            const sentinelLevelInput = document.getElementById('sentinelProductLevel');
+            const sentinelPanelEl = document.getElementById('sentinel-panel');
+            const sentinelPreviewPanel = document.getElementById('sentinelPreviewPanel');
+            const sentinelPreviewTitle = sentinelPreviewPanel?.querySelector('[data-sentinel-preview-title]');
+            const sentinelPreviewAcquired = sentinelPreviewPanel?.querySelector('[data-sentinel-preview-acquired]');
+            const sentinelPreviewDetails = sentinelPreviewPanel?.querySelector('[data-sentinel-preview-details]');
+            const sentinelPreviewStatus = sentinelPreviewPanel?.querySelector('[data-sentinel-preview-status]');
+            const sentinelPreviewHideBtn = document.getElementById('sentinelPreviewHideBtn');
+            const sentinelPreviewShowBtn = document.getElementById('sentinelPreviewShowBtn');
+            const sentinelPreviewClearBtn = document.getElementById('sentinelPreviewClearBtn');
+            const sentinelPreviewDownloadBtn = document.getElementById('sentinelPreviewDownloadBtn');
 
-        const MapInterface = (() => {
-            const dom = {
-                panelWrapper: null,
-                panels: [],
-                sidebarButtons: [],
-                scrollContainer: null,
-                scrollLeft: null,
-                scrollRight: null,
-                sentinel: {
-                    status: null,
-                    list: null,
-                    template: null,
-                    lastUpdated: null,
-                    filterForm: null,
-                    resetButton: null,
-                    cloudInput: null,
-                    latInput: null,
-                    lonInput: null,
-                    levelInput: null,
-                    panel: null,
-                    previewPanel: null,
-                    previewTitle: null,
-                    previewAcquired: null,
-                    previewDetails: null,
-                    previewStatus: null,
-                    hideBtn: null,
-                    showBtn: null,
-                    clearBtn: null,
-                    downloadBtn: null
+            const sentinelCatalogEndpoint = 'https://catalogue.dataspace.copernicus.eu/resto/api/collections/Sentinel2/search.json';
+            let sentinelLoadedOnce = false;
+            const defaultCloudCoverMax = 40;
+            const defaultLatitude = -1.24536;
+            const defaultLongitude = 114.54535;
+            const defaultProductType = 'S2MSI2A';
+
+            const scrollAmount = 150; // pixels per click
+
+            // Format helper so Sentinel catalogue requests align with the API expectation.
+            const formatISODate = (date) => {
+                if (!(date instanceof Date)) return '';
+                const copy = new Date(date.getTime());
+                copy.setMinutes(copy.getMinutes() - copy.getTimezoneOffset());
+                return copy.toISOString().split('T')[0];
+            };
+
+            // Convert Sentinel timestamps to a human friendly format for the card and preview overlays.
+            const formatReadableDate = (value) => {
+                if (!value) return 'Unknown date';
+                const parsed = new Date(value);
+                if (Number.isNaN(parsed.getTime())) return value;
+                return parsed.toLocaleString('id-ID', {
+                    dateStyle: 'medium',
+                    timeStyle: 'short',
+                    timeZone: 'UTC'
+                }) + ' UTC';
+            };
+
+            // Sentinel responses store cloud cover as a float, ensure consistent text output.
+            const formatCloudCover = (value) => {
+                if (typeof value === 'number' && !Number.isNaN(value)) {
+                    return `${value.toFixed(1)}%`;
+                }
+                return 'N/A';
+            };
+
+            // Prevent filter inputs from sending invalid latitude/longitude or percentage values.
+            const clampNumber = (value, min, max) => {
+                if (typeof value !== 'number' || Number.isNaN(value)) return null;
+                return Math.min(Math.max(value, min), max);
+            };
+
+            // Generate a filesystem safe filename for download actions.
+            const buildSentinelDownloadName = (primary, fallback) => {
+                const base = String(primary ?? fallback ?? 'sentinel-2-scene').trim();
+                const normalized = base.replace(/[\s]+/g, '_').replace(/[^A-Za-z0-9._-]+/g, '_');
+                return normalized || 'sentinel-2-scene';
+            };
+
+            const sentinelDownloadIgnoredKeywords = ['quicklook', 'thumbnail', 'thumb', 'overview', 'browse', 'preview', 'allorigins'];
+            const sentinelPreviewIgnoredKeywords = ['thumbnail', 'thumb', 'legend', 'logo', 'browse', 'allorigins'];
+
+            // Trim any whitespace from the access token resolved from the backend configuration.
+            const sanitizeSentinelToken = (value) => {
+                if (typeof value !== 'string') return '';
+                return value.trim();
+            };
+
+            let sentinelDownloadToken = sanitizeSentinelToken(sentinelPanelEl?.dataset?.sentinelToken ?? '');
+            const sentinelTokenConfigured = (sentinelPanelEl?.dataset?.sentinelCredentials ?? '').toLowerCase() === 'true';
+
+            const hasSentinelToken = () => sanitizeSentinelToken(sentinelDownloadToken).length > 0;
+
+            const buildSentinelStatusMessage = (message) => {
+                const parts = [];
+                if (message) parts.push(message);
+                if (!hasSentinelToken()) {
+                    parts.push(
+                        sentinelTokenConfigured ?
+                        'Download unavailable: Copernicus access token could not be issued.' :
+                        'Configure Copernicus credentials on the server to enable downloads.'
+                    );
+                }
+                return parts.join(' ');
+            };
+
+            // Append the active access token to Copernicus download or WMS URLs when required.
+            const applySentinelTokenToUrl = (url) => {
+                if (!url) return null;
+                const token = sanitizeSentinelToken(sentinelDownloadToken);
+                if (!token) return null;
+                try {
+                    const baseHref = typeof window !== 'undefined' && window.location ? window.location.href : 'https://example.com/';
+                    const parsed = new URL(url, baseHref);
+                    parsed.searchParams.set('token', token);
+                    return parsed.toString();
+                } catch (error) {
+                    const queryPattern = /([?&])token=[^&#]*/i;
+                    if (queryPattern.test(url)) {
+                        return url.replace(queryPattern, `$1token=${encodeURIComponent(token)}`);
+                    }
+                    const separator = url.includes('?') ? '&' : '?';
+                    return `${url}${separator}token=${encodeURIComponent(token)}`;
                 }
             };
 
-            const defaults = {
-                scrollAmount: 150,
-                cloudCover: 40,
-                latitude: -1.24536,
-                longitude: 114.54535,
-                productType: 'S2MSI2A'
+            // Lightweight heuristics that help filter out non-WMS entries from the metadata payload.
+            const isLikelyWmsUrl = (url) => {
+                if (typeof url !== 'string') return false;
+                const trimmed = url.trim();
+                if (!trimmed) return false;
+                const lowered = trimmed.toLowerCase();
+                if (sentinelPreviewIgnoredKeywords.some((keyword) => lowered.includes(keyword))) {
+                    return false;
+                }
+                const hasProtocol = /^https?:\/\//i.test(trimmed);
+                const looksRelative = trimmed.startsWith('/') || trimmed.startsWith('./') || trimmed.startsWith('../');
+                const mentionsWms = lowered.includes('service=wms') ||
+                    lowered.includes('request=getmap') ||
+                    lowered.includes('/wms') ||
+                    lowered.includes('ogc/wms') ||
+                    lowered.includes('/ows');
+                if (!hasProtocol && !looksRelative && !mentionsWms) {
+                    return false;
+                }
+                return mentionsWms;
             };
 
-            function init() {
-                cacheDom();
-                if (!dom.panelWrapper) return;
+            // Remove volatile query parameters and capture relevant metadata for an OpenLayers WMS source.
+            const normalizeWmsCandidate = (url) => {
+                if (!isLikelyWmsUrl(url)) return null;
+                try {
+                    const baseHref = typeof window !== 'undefined' && window.location ?
+                        window.location.href :
+                        'https://example.com/';
+                    const parsed = new URL(url, baseHref);
+                    const baseUrl = `${parsed.origin}${parsed.pathname}`;
+                    const params = {};
+                    parsed.searchParams.forEach((value, key) => {
+                        if (value === undefined || value === null || value === '') return;
+                        const lower = key.toLowerCase();
+                        if (lower === 'token') return;
+                        if (['bbox', 'width', 'height', 'x', 'y', 'lat', 'lon'].includes(lower)) return;
+                        if (lower === 'request' || lower === 'service') return;
+                        if (lower === 'layers' || lower === 'layer') {
+                            params.LAYERS = value;
+                            return;
+                        }
+                        if (lower === 'styles' || lower === 'style') {
+                            params.STYLES = value;
+                            return;
+                        }
+                        params[key.toUpperCase()] = value;
+                    });
 
-                Scrolling.init();
-                SentinelCatalog.init();
-                attachBuyPanelHandlers();
-                openDefaultPanel();
-                window.addEventListener('resize', handleResize);
+                    if (!params.LAYERS) {
+                        const fallbackLayer = parsed.searchParams.get('LAYERS') || parsed.searchParams.get('layers');
+                        if (fallbackLayer) {
+                            params.LAYERS = fallbackLayer;
+                        }
+                    }
+
+                    const version = parsed.searchParams.get('VERSION') || parsed.searchParams.get('version') || null;
+
+                    return {
+                        url: baseUrl,
+                        params,
+                        version,
+                        originalUrl: url
+                    };
+                } catch (error) {
+                    console.warn('Unable to normalise WMS candidate', url, error);
+                    return null;
+                }
+            };
+
+            // Recursively walk nested metadata objects and gather potential WMS endpoint strings.
+            const collectWmsServiceCandidates = (input, context = {}) => {
+                const results = [];
+                const seen = new Set();
+
+                const visit = (value, ctx) => {
+                    if (!value) return;
+
+                    if (typeof value === 'string') {
+                        const candidate = value.trim();
+                        if (!candidate || !isLikelyWmsUrl(candidate)) return;
+                        const normalizedContext = {
+                            layers: ctx.layers ?? null,
+                            styles: ctx.styles ?? null,
+                            version: ctx.version ?? null
+                        };
+
+                        const key = `${candidate}|${normalizedContext.layers ?? ''}|${normalizedContext.styles ?? ''}|${normalizedContext.version ?? ''}`;
+                        if (seen.has(key)) return;
+                        results.push({
+                            url: candidate,
+                            ...normalizedContext
+                        });
+                        seen.add(key);
+                        return;
+                    }
+
+                    if (Array.isArray(value)) {
+                        value.forEach((item) => visit(item, ctx));
+                        return;
+                    }
+
+                    if (typeof value === 'object') {
+                        let layers = ctx.layers ?? null;
+                        let styles = ctx.styles ?? null;
+                        let version = ctx.version ?? null;
+
+                        Object.entries(value).forEach(([rawKey, rawValue]) => {
+                            const key = String(rawKey).toLowerCase();
+                            if (key === 'layers' || key === 'layer' || key.includes('layer')) {
+                                if (typeof rawValue === 'string' && rawValue.trim()) {
+                                    layers = rawValue.trim();
+                                } else if (Array.isArray(rawValue)) {
+                                    const joined = rawValue
+                                        .map((item) => (typeof item === 'string' ? item.trim() : ''))
+                                        .filter(Boolean)
+                                        .join(',');
+                                    if (joined) {
+                                        layers = joined;
+                                    }
+                                }
+                            } else if (key === 'styles' || key === 'style' || key.includes('style')) {
+                                if (typeof rawValue === 'string' && rawValue.trim()) {
+                                    styles = rawValue.trim();
+                                } else if (Array.isArray(rawValue)) {
+                                    const joined = rawValue
+                                        .map((item) => (typeof item === 'string' ? item.trim() : ''))
+                                        .filter(Boolean)
+                                        .join(',');
+                                    if (joined) {
+                                        styles = joined;
+                                    }
+                                }
+                            } else if (key === 'version') {
+                                if (typeof rawValue === 'string' && rawValue.trim()) {
+                                    version = rawValue.trim();
+                                }
+                            }
+                        });
+
+                        Object.entries(value).forEach(([rawKey, rawValue]) => {
+                            if (typeof rawValue === 'string') {
+                                visit(rawValue, {
+                                    layers,
+                                    styles,
+                                    version
+                                });
+                            } else {
+                                visit(rawValue, {
+                                    layers,
+                                    styles,
+                                    version
+                                });
+                            }
+                        });
+                    }
+                };
+
+                visit(input, {
+                    ...context
+                });
+
+                return results;
+            };
+
+            // Use the gathered candidates to determine the best scoring WMS configuration for a scene.
+            const resolveSentinelWmsConfig = (data) => {
+                if (!data) return null;
+
+                const candidates = new Map();
+                const registerCandidate = (candidate, score = 0) => {
+                    if (!candidate || !candidate.url) return;
+                    const key = `${candidate.url}|${candidate.params?.LAYERS ?? ''}|${candidate.params?.STYLES ?? ''}`;
+                    const existing = candidates.get(key);
+                    if (!existing || score > existing.score) {
+                        candidates.set(key, {
+                            ...candidate,
+                            score
+                        });
+                    }
+                };
+
+                const registerFromValue = (value, score = 0) => {
+                    if (!value) return;
+                    collectWmsServiceCandidates(value).forEach((entry) => {
+                        const candidate = normalizeWmsCandidate(entry.url);
+                        if (!candidate) return;
+                        const params = {
+                            ...(candidate.params ?? {})
+                        };
+                        if (!params.LAYERS && entry.layers) {
+                            params.LAYERS = entry.layers;
+                        }
+                        if (!params.STYLES && entry.styles) {
+                            params.STYLES = entry.styles;
+                        }
+                        if (Object.keys(params).length) {
+                            candidate.params = params;
+                        }
+                        if (!candidate.version && entry.version) {
+                            candidate.version = entry.version;
+                        }
+                        registerCandidate(candidate, score);
+                    });
+                };
+
+                registerFromValue(data.wms, 96);
+                registerFromValue(data.previewWms, 94);
+                registerFromValue(data.wmts, 80);
+
+                const props = data.featureProperties ?? data.properties ?? {};
+                registerFromValue(props?.services, 92);
+
+                if (props && typeof props === 'object') {
+                    Object.entries(props).forEach(([key, value]) => {
+                        const lowered = String(key).toLowerCase();
+                        if (lowered.includes('wms') || lowered.includes('ogc') || lowered.includes('ows')) {
+                            registerFromValue(value, lowered.includes('wms') ? 95 : 85);
+                        }
+                    });
+                }
+
+                const services = data.services ?? props?.services;
+                if (services && typeof services === 'object') {
+                    Object.entries(services).forEach(([key, value]) => {
+                        const lowered = String(key).toLowerCase();
+                        let score = 84;
+                        if (lowered.includes('wms')) score = 98;
+                        else if (lowered.includes('ogc') || lowered.includes('ows')) score = 90;
+                        registerFromValue(value, score);
+                    });
+                } else {
+                    registerFromValue(services, 82);
+                }
+
+                const links = Array.isArray(data.links) ? data.links : props?.links;
+                if (Array.isArray(links)) {
+                    links.forEach((link) => {
+                        const href = typeof link?.href === 'string' ? link.href : null;
+                        if (!href) return;
+                        const rel = typeof link?.rel === 'string' ? link.rel.toLowerCase() : '';
+                        const type = typeof link?.type === 'string' ? link.type.toLowerCase() : '';
+                        let score = 70;
+                        if (rel.includes('wms') || rel.includes('ogc')) score += 20;
+                        if (type.includes('wms')) score += 18;
+                        registerFromValue(href, score);
+                    });
+                }
+
+                const assets = data.assets ?? props?.assets;
+                if (assets && typeof assets === 'object') {
+                    Object.entries(assets).forEach(([key, value]) => {
+                        const lowered = String(key).toLowerCase();
+                        if (sentinelPreviewIgnoredKeywords.some((keyword) => lowered.includes(keyword))) {
+                            return;
+                        }
+                        if (lowered.includes('wms') || lowered.includes('ogc') || lowered.includes('ows')) {
+                            registerFromValue(value, lowered.includes('wms') ? 90 : 78);
+                        }
+                    });
+                }
+
+                if (!candidates.size) {
+                    return null;
+                }
+
+                const sorted = Array.from(candidates.values()).sort((a, b) => b.score - a.score);
+                const best = sorted[0];
+                if (!best || !best.url) return null;
+
+                if (!best.params?.LAYERS) {
+                    const fallbackLayer = data.productId || data.tileId || props?.productIdentifier || props?.title || null;
+                    if (fallbackLayer) {
+                        best.params = {
+                            ...(best.params ?? {}),
+                            LAYERS: fallbackLayer
+                        };
+                    }
+                }
+
+                if (!best.params?.LAYERS) {
+                    return null;
+                }
+
+                return best;
+            };
+
+            const isValidSentinelDownloadUrl = (url) => {
+                if (typeof url !== 'string') return false;
+                const trimmed = url.trim();
+                if (!trimmed) return false;
+                if (!/^https?:\/\//i.test(trimmed)) return false;
+                const lowered = trimmed.toLowerCase();
+                return !sentinelDownloadIgnoredKeywords.some((keyword) => lowered.includes(keyword));
+            };
+
+            const extractServiceUrls = (service) => {
+                const results = [];
+                if (!service) return results;
+                if (typeof service === 'string') {
+                    results.push(service);
+                    return results;
+                }
+                if (Array.isArray(service)) {
+                    service.forEach((item) => {
+                        results.push(...extractServiceUrls(item));
+                    });
+                    return results;
+                }
+                if (typeof service === 'object') {
+                    ['url', 'href', 'https', 'http'].forEach((key) => {
+                        const value = service[key];
+                        if (typeof value === 'string') {
+                            results.push(value);
+                        }
+                    });
+                }
+                return results;
+            };
+
+            // Evaluate every link/asset reference and pick the most appropriate full scene download URL.
+            const resolveSentinelDownloadUrl = (feature) => {
+                if (!feature) return null;
+
+                const props = feature.properties ?? {};
+                const links = Array.isArray(feature.links) ? feature.links : [];
+                const assets = feature.assets ?? {};
+
+                const candidateScores = new Map();
+                const registerCandidate = (url, score = 0) => {
+                    if (!isValidSentinelDownloadUrl(url)) return;
+                    const existing = candidateScores.get(url);
+                    if (existing === undefined || score > existing) {
+                        candidateScores.set(url, score);
+                    }
+                };
+
+                const registerFromService = (service, score = 0) => {
+                    extractServiceUrls(service).forEach((url) => {
+                        registerCandidate(url, score);
+                    });
+                };
+
+                const linkScoreByRel = {
+                    enclosure: 100,
+                    download: 95,
+                    data: 90,
+                    alternate: 75,
+                    source: 70,
+                    self: 65
+                };
+
+                links.forEach((link) => {
+                    const href = typeof link?.href === 'string' ? link.href : null;
+                    if (!href) return;
+                    const rel = typeof link?.rel === 'string' ? link.rel.toLowerCase() : '';
+                    const type = typeof link?.type === 'string' ? link.type.toLowerCase() : '';
+                    let score = linkScoreByRel[rel] ?? 60;
+                    if (type.includes('zip') || type.includes('safe') || type.includes('application/octet-stream')) {
+                        score += 15;
+                    }
+                    registerCandidate(href, score);
+                });
+
+                ['downloadUrl', 'productDownloadUrl', 'productUrl', 'dataUrl', 'url', 'servicesDownloadUrl', 'resourceUrl'].forEach((key) => {
+                    const value = props[key];
+                    if (typeof value === 'string') {
+                        registerCandidate(value, 92);
+                    }
+                });
+
+                const services = props.services;
+                if (services && typeof services === 'object' && !Array.isArray(services)) {
+                    Object.entries(services).forEach(([key, serviceValue]) => {
+                        const lowerKey = String(key).toLowerCase();
+                        let score = 70;
+                        if (lowerKey.includes('download')) score = 95;
+                        else if (lowerKey.includes('data')) score = 88;
+                        else if (lowerKey.includes('s3') || lowerKey.includes('aws')) score = 82;
+                        registerFromService(serviceValue, score);
+                    });
+                } else {
+                    registerFromService(services, 80);
+                }
+
+                Object.entries(assets).forEach(([key, assetValue]) => {
+                    const lowerKey = String(key).toLowerCase();
+                    if (sentinelDownloadIgnoredKeywords.some((keyword) => lowerKey.includes(keyword))) {
+                        return;
+                    }
+                    const href = typeof assetValue === 'string' ?
+                        assetValue :
+                        (typeof assetValue?.href === 'string' ?
+                            assetValue.href :
+                            (typeof assetValue?.url === 'string' ? assetValue.url : null));
+                    if (!href) return;
+                    let score = 68;
+                    if (Array.isArray(assetValue?.roles)) {
+                        const roleScore = assetValue.roles.some((role) => ['data', 'download', 'product', 'analytic'].includes(String(role).toLowerCase()));
+                        if (roleScore) score += 20;
+                    }
+                    const type = typeof assetValue?.type === 'string' ? assetValue.type.toLowerCase() : '';
+                    if (type.includes('zip') || type.includes('safe') || type.includes('geotiff') || type.includes('jp2')) {
+                        score += 12;
+                    }
+                    if (/(data|product|tile|granule|image|scene)/.test(lowerKey)) {
+                        score += 6;
+                    }
+                    registerCandidate(href, score);
+                });
+
+                const propsAssets = props.assets;
+                if (propsAssets && typeof propsAssets === 'object' && !Array.isArray(propsAssets)) {
+                    Object.entries(propsAssets).forEach(([key, assetValue]) => {
+                        const lowerKey = String(key).toLowerCase();
+                        if (sentinelDownloadIgnoredKeywords.some((keyword) => lowerKey.includes(keyword))) {
+                            return;
+                        }
+                        if (typeof assetValue === 'string') {
+                            registerCandidate(assetValue, 66);
+                        } else if (assetValue && typeof assetValue === 'object') {
+                            if (typeof assetValue.href === 'string') {
+                                registerCandidate(assetValue.href, 66);
+                            }
+                            if (typeof assetValue.url === 'string') {
+                                registerCandidate(assetValue.url, 66);
+                            }
+                        }
+                    });
+                }
+
+                let bestUrl = null;
+                let bestScore = -Infinity;
+                candidateScores.forEach((score, url) => {
+                    if (score > bestScore) {
+                        bestScore = score;
+                        bestUrl = url;
+                    }
+                });
+
+                return bestUrl ?? null;
+            };
+
+            let sentinelPreviewController = null;
+
+            // Lazily create a preview controller that renders coverage + WMS previews on the shared map instance.
+            const createSentinelPreviewController = () => {
+                if (sentinelPreviewController) {
+                    return sentinelPreviewController;
+                }
+
+                if (typeof window === 'undefined' || typeof ol === 'undefined') {
+                    return null;
+                }
+
+                const mapInstance = window.map;
+                const mapProjection = mapInstance?.getView?.()?.getProjection?.();
+                if (!mapInstance || !mapProjection) {
+                    return null;
+                }
+
+                const dataProjection = 'EPSG:4326';
+                const geoJsonParser = new ol.format.GeoJSON();
+
+                const bboxSource = new ol.source.Vector();
+                const bboxLayer = new ol.layer.Vector({
+                    source: bboxSource,
+                    style: new ol.style.Style({
+                        stroke: new ol.style.Stroke({
+                            color: 'rgba(59,130,246,0.9)',
+                            width: 2,
+                            lineDash: [6, 6]
+                        }),
+                        fill: new ol.style.Fill({
+                            color: 'rgba(59,130,246,0.15)'
+                        })
+                    }),
+                    visible: false,
+                    zIndex: 1200
+                });
+
+                const previewLayer = new ol.layer.Image({
+                    visible: false,
+                    opacity: 0.8,
+                    zIndex: 1150
+                });
+
+                mapInstance.addLayer(previewLayer);
+                mapInstance.addLayer(bboxLayer);
+
+                const state = {
+                    current: null,
+                    hasImage: false,
+                    imageHidden: false,
+                    previewType: null
+                };
+
+                // Helper to keep the overlay metadata text in sync with the currently selected product.
+                const setPanelContent = ({
+                    title,
+                    acquired,
+                    details,
+                    status
+                }) => {
+                    if (title !== undefined && sentinelPreviewTitle) {
+                        sentinelPreviewTitle.textContent = title;
+                    }
+                    if (acquired !== undefined && sentinelPreviewAcquired) {
+                        sentinelPreviewAcquired.textContent = acquired;
+                    }
+                    if (details !== undefined && sentinelPreviewDetails) {
+                        sentinelPreviewDetails.textContent = details;
+                        sentinelPreviewDetails.classList.toggle('hidden', !details);
+                    }
+                    if (status !== undefined && sentinelPreviewStatus) {
+                        sentinelPreviewStatus.textContent = status;
+                    }
+                };
+
+                // Toggle the preview overlay visibility without tearing down the DOM node.
+                const setPanelVisible = (visible) => {
+                    if (sentinelPreviewPanel) {
+                        sentinelPreviewPanel.classList.toggle('hidden', !visible);
+                    }
+                };
+
+                // Update the preview control buttons based on the current selection and loading state.
+                const updateButtons = () => {
+                    const hasSelection = Boolean(state.current);
+                    const canToggleImage = hasSelection && state.hasImage;
+
+                    if (sentinelPreviewHideBtn) {
+                        sentinelPreviewHideBtn.disabled = !canToggleImage || state.imageHidden;
+                        sentinelPreviewHideBtn.textContent = state.imageHidden ? 'Preview hidden' : 'Hide preview';
+                    }
+
+                    if (sentinelPreviewShowBtn) {
+                        sentinelPreviewShowBtn.disabled = !canToggleImage || !state.imageHidden;
+                        sentinelPreviewShowBtn.textContent = state.imageHidden ? 'Unhide Preview' : 'Preview Visible';
+                    }
+
+                    if (sentinelPreviewClearBtn) {
+                        sentinelPreviewClearBtn.disabled = !hasSelection;
+                    }
+
+                    if (sentinelPreviewDownloadBtn) {
+                        const downloadUrl = hasSelection ? state.current?.downloadUrl : null;
+                        if (downloadUrl) {
+                            const label = state.current?.productId || state.current?.baseTitle || 'Sentinel-2 scene';
+                            const downloadName = state.current?.downloadFilename ||
+                                buildSentinelDownloadName(state.current?.productId, state.current?.baseTitle);
+
+                            sentinelPreviewDownloadBtn.classList.remove('hidden');
+                            sentinelPreviewDownloadBtn.setAttribute('href', downloadUrl);
+                            sentinelPreviewDownloadBtn.setAttribute('aria-disabled', 'false');
+                            sentinelPreviewDownloadBtn.setAttribute('title', `Download full scene for ${label}`);
+                            sentinelPreviewDownloadBtn.setAttribute('download', downloadName);
+                            sentinelPreviewDownloadBtn.dataset.downloadBase = state.current?.downloadUrlBase || '';
+                            sentinelPreviewDownloadBtn.tabIndex = 0;
+                        } else {
+                            sentinelPreviewDownloadBtn.classList.add('hidden');
+                            sentinelPreviewDownloadBtn.removeAttribute('href');
+                            sentinelPreviewDownloadBtn.removeAttribute('download');
+                            sentinelPreviewDownloadBtn.setAttribute('aria-disabled', 'true');
+                            delete sentinelPreviewDownloadBtn.dataset.downloadBase;
+                            sentinelPreviewDownloadBtn.tabIndex = -1;
+                        }
+                    }
+                };
+
+                // Remove any raster source from the preview image layer.
+                const clearPreviewLayer = () => {
+                    previewLayer.setSource(null);
+                    previewLayer.setVisible(false);
+                    state.previewType = null;
+                };
+
+                // Animate the map viewport to the selected scene coverage.
+                const focusExtent = (extent) => {
+                    if (!extent) return;
+                    try {
+                        const view = mapInstance.getView();
+                        if (view && typeof view.fit === 'function') {
+                            view.fit(extent, {
+                                padding: [50, 50, 50, 50],
+                                duration: 500,
+                                maxZoom: 14
+                            });
+                        }
+                    } catch (error) {
+                        console.error('Failed to fit map to extent', error);
+                    }
+                };
+
+                // Fallback renderer for quicklook JPEGs when no WMS is available.
+                const applyStaticPreview = (url, extent) => {
+                    if (!url || !extent) return false;
+                    try {
+                        const imageExtent = ol.proj.transformExtent(extent, mapProjection, mapProjection);
+                        previewLayer.setSource(new ol.source.ImageStatic({
+                            url,
+                            imageExtent,
+                            projection: mapProjection,
+                            crossOrigin: 'anonymous'
+                        }));
+                        state.previewType = 'static';
+                        previewLayer.setVisible(!state.imageHidden);
+                        return true;
+                    } catch (error) {
+                        console.error('Unable to create Sentinel preview source', error);
+                        clearPreviewLayer();
+                        return false;
+                    }
+                };
+
+                // Configure an OpenLayers ImageWMS source for high resolution previews.
+                const applyWmsPreview = (config, callbacks = {}) => {
+                    if (!config || !config.url) return false;
+                    try {
+                        let wmsUrl = config.url;
+                        const tokenised = applySentinelTokenToUrl(wmsUrl);
+                        if (tokenised) {
+                            wmsUrl = tokenised;
+                        }
+
+                        const params = {
+                            ...(config.params ?? {})
+                        };
+                        if (!params.LAYERS) {
+                            return false;
+                        }
+
+                        const projectionCode = mapProjection?.getCode?.() ?? 'EPSG:3857';
+                        if (!params.CRS) params.CRS = projectionCode;
+                        if (!params.SRS) params.SRS = projectionCode;
+                        if (!params.FORMAT) params.FORMAT = 'image/png';
+                        if (!params.TRANSPARENT) params.TRANSPARENT = 'true';
+                        if (!params.VERSION && config.version) params.VERSION = config.version;
+
+                        const source = new ol.source.ImageWMS({
+                            url: wmsUrl,
+                            params,
+                            ratio: 1.0,
+                            crossOrigin: 'anonymous'
+                        });
+
+                        const handleLoadEnd = () => {
+                            if (typeof source.un === 'function') {
+                                source.un('imageloadend', handleLoadEnd);
+                                source.un('imageloaderror', handleLoadError);
+                            }
+                            callbacks.onLoad?.();
+                        };
+
+                        const handleLoadError = (event) => {
+                            if (typeof source.un === 'function') {
+                                source.un('imageloadend', handleLoadEnd);
+                                source.un('imageloaderror', handleLoadError);
+                            }
+                            callbacks.onError?.(event);
+                        };
+
+                        if (typeof source.on === 'function') {
+                            source.on('imageloadend', handleLoadEnd);
+                            source.on('imageloaderror', handleLoadError);
+                        }
+
+                        previewLayer.setSource(source);
+                        state.previewType = 'wms';
+                        previewLayer.setVisible(!state.imageHidden);
+                        return true;
+                    } catch (error) {
+                        console.error('Unable to create Sentinel WMS preview', error);
+                        clearPreviewLayer();
+                        return false;
+                    }
+                };
+
+                // Convert GeoJSON footprint/bbox data into an OpenLayers feature for display.
+                const resolveFootprintFeature = (data) => {
+                    if (!data) return null;
+                    const {
+                        footprint,
+                        geometry,
+                        bbox
+                    } = data;
+                    try {
+                        if (footprint) {
+                            return geoJsonParser.readFeature(footprint, {
+                                featureProjection: mapProjection,
+                                dataProjection
+                            });
+                        }
+                        if (geometry) {
+                            return geoJsonParser.readFeature({
+                                type: 'Feature',
+                                geometry
+                            }, {
+                                featureProjection: mapProjection,
+                                dataProjection
+                            });
+                        }
+                        if (Array.isArray(bbox) && bbox.length === 4) {
+                            const transformed = ol.proj.transformExtent(bbox, dataProjection, mapProjection);
+                            return new ol.Feature({
+                                geometry: ol.geom.Polygon.fromExtent(transformed)
+                            });
+                        }
+                    } catch (error) {
+                        console.error('Unable to construct Sentinel footprint', error);
+                    }
+                    return null;
+                };
+
+                const controller = {
+                    showPreview(data) {
+                        if (!data) return;
+                        const title = data.title || data.productId || 'Sentinel-2 Preview';
+                        const acquiredText = data.acquiredText ??
+                            (data.acquisitionDate ?
+                                `Acquired: ${formatReadableDate(data.acquisitionDate)}` :
+                                'Acquisition date unavailable.');
+                        const detailParts = [];
+                        if (data.detailText) detailParts.push(data.detailText);
+                        const tileText = data.tileText || data.tileId;
+                        if (tileText) detailParts.push(tileText);
+                        if (typeof data.cloudCover === 'number' && !Number.isNaN(data.cloudCover)) {
+                            detailParts.push(`Cloud cover: ${formatCloudCover(Number(data.cloudCover))}`);
+                        }
+                        if (data.collection) detailParts.push(`Collection: ${data.collection}`);
+                        const detailText = detailParts.join(' • ');
+
+                        const downloadFilename = data.downloadFilename ??
+                            buildSentinelDownloadName(data.productId, title);
+
+                        setPanelVisible(true);
+
+                        bboxSource.clear();
+                        clearPreviewLayer();
+                        state.current = null;
+                        state.hasImage = false;
+                        state.imageHidden = false;
+                        state.previewType = null;
+                        updateButtons();
+
+                        const footprint = resolveFootprintFeature(data);
+                        let extent = null;
+                        if (footprint) {
+                            bboxSource.addFeature(footprint);
+                            bboxLayer.setVisible(true);
+                            extent = footprint.getGeometry()?.getExtent() ?? null;
+                            focusExtent(extent);
+                        } else {
+                            bboxLayer.setVisible(false);
+                        }
+
+                        const baseDownloadUrl = data.downloadUrlBase || data.downloadUrl || null;
+                        const resolvedDownloadUrl = applySentinelTokenToUrl(baseDownloadUrl);
+
+                        state.current = {
+                            ...data,
+                            extent,
+                            baseTitle: title,
+                            baseAcquired: acquiredText,
+                            baseDetails: detailText,
+                            downloadUrlBase: baseDownloadUrl,
+                            downloadUrl: resolvedDownloadUrl,
+                            downloadFilename
+                        };
+
+                        const wmsConfig = resolveSentinelWmsConfig(state.current);
+                        state.current.wmsConfig = wmsConfig;
+
+                        const hasWmsCandidate = Boolean(wmsConfig);
+                        const hasQuicklook = Boolean(data.quicklookUrl && extent);
+
+                        const initialStatus = hasWmsCandidate ?
+                            'Loading Sentinel-2 scene via WMS...' :
+                            (hasQuicklook ?
+                                'Loading preview image...' :
+                                'Preview image not available. Showing coverage.');
+
+                        setPanelContent({
+                            title,
+                            acquired: acquiredText,
+                            details: detailText,
+                            status: buildSentinelStatusMessage(initialStatus)
+                        });
+
+                        const renderQuicklookPreview = () => {
+                            if (!hasQuicklook) return false;
+                            setPanelContent({
+                                status: buildSentinelStatusMessage('Loading preview image...')
+                            });
+                            const loader = new Image();
+                            loader.crossOrigin = 'anonymous';
+                            loader.onload = () => {
+                                if (!state.current) return;
+                                const applied = applyStaticPreview(data.quicklookUrl, extent);
+                                state.hasImage = applied;
+                                state.imageHidden = false;
+                                updateButtons();
+                                setPanelContent({
+                                    status: buildSentinelStatusMessage(
+                                        applied ?
+                                        (state.imageHidden ?
+                                            'Preview image loaded. Use "Unhide Preview" to display it.' :
+                                            'Preview image displayed on the map.') :
+                                        'Unable to load preview image. Showing coverage only.'
+                                    )
+                                });
+                            };
+                            loader.onerror = () => {
+                                clearPreviewLayer();
+                                state.hasImage = false;
+                                state.imageHidden = false;
+                                state.previewType = null;
+                                updateButtons();
+                                setPanelContent({
+                                    status: buildSentinelStatusMessage('Unable to load preview image. Showing coverage only.')
+                                });
+                            };
+                            loader.src = data.quicklookUrl;
+                            return true;
+                        };
+
+                        if (!extent) {
+                            setPanelContent({
+                                status: buildSentinelStatusMessage('Coverage area unavailable for this product.')
+                            });
+                        }
+
+                        if (hasWmsCandidate) {
+                            const applied = applyWmsPreview(wmsConfig, {
+                                onLoad: () => {
+                                    if (!state.current) return;
+                                    state.hasImage = true;
+                                    updateButtons();
+                                    setPanelContent({
+                                        status: buildSentinelStatusMessage(
+                                            state.imageHidden ?
+                                            'Preview imagery loaded. Use "Unhide Preview" to display it.' :
+                                            'Preview imagery displayed on the map.'
+                                        )
+                                    });
+                                },
+                                onError: () => {
+                                    clearPreviewLayer();
+                                    state.hasImage = false;
+                                    state.previewType = null;
+                                    updateButtons();
+                                    if (!renderQuicklookPreview()) {
+                                        setPanelContent({
+                                            status: buildSentinelStatusMessage('Unable to load WMS preview imagery. Showing coverage only.')
+                                        });
+                                    }
+                                }
+                            });
+
+                            if (applied) {
+                                state.hasImage = true;
+                                state.imageHidden = false;
+                                updateButtons();
+                                return;
+                            }
+                        }
+
+                        if (renderQuicklookPreview()) {
+                            return;
+                        }
+
+                        clearPreviewLayer();
+                        state.hasImage = false;
+                        state.imageHidden = false;
+                        state.previewType = null;
+                        updateButtons();
+                        setPanelContent({
+                            status: buildSentinelStatusMessage('Preview image not available. Showing coverage.')
+                        });
+                    },
+                    hideImage() {
+                        if (!state.current || !state.hasImage) return;
+                        state.imageHidden = true;
+                        previewLayer.setVisible(false);
+                        updateButtons();
+                        setPanelContent({
+                            status: buildSentinelStatusMessage('Preview hidden. Bounding box remains visible.')
+                        });
+                    },
+                    showImage() {
+                        if (!state.current || !state.hasImage) return;
+                        state.imageHidden = false;
+                        previewLayer.setVisible(true);
+                        updateButtons();
+                        setPanelContent({
+                            status: buildSentinelStatusMessage('Preview image visible.')
+                        });
+                    },
+                    clear() {
+                        state.current = null;
+                        state.hasImage = false;
+                        state.imageHidden = false;
+                        bboxSource.clear();
+                        bboxLayer.setVisible(false);
+                        clearPreviewLayer();
+                        updateButtons();
+                        setPanelVisible(false);
+                    }
+                };
+
+                sentinelPreviewHideBtn?.classList.remove('hidden');
+                sentinelPreviewShowBtn?.classList.remove('hidden');
+                updateButtons();
+
+                sentinelPreviewController = controller;
+                return controller;
+            };
+
+            if (typeof window !== 'undefined') {
+                if (window.map) {
+                    createSentinelPreviewController();
+                } else {
+                    window.addEventListener('map:ready', () => {
+                        createSentinelPreviewController();
+                    }, {
+                        once: true
+                    });
+                }
             }
 
-            function cacheDom() {
-                dom.panelWrapper = document.getElementById('panel-wrapper');
-                dom.panels = Array.from(document.querySelectorAll('#panel-wrapper section'));
-                dom.sidebarButtons = Array.from(document.querySelectorAll('.sidebar-btn'));
-                dom.scrollContainer = document.getElementById('scroll-container');
-                dom.scrollLeft = document.getElementById('scroll-left');
-                dom.scrollRight = document.getElementById('scroll-right');
+            // Public entry point invoked by catalogue cards to render a scene on the map.
+            const triggerSentinelPreview = (payload) => {
+                if (!payload) return;
+                const controller = createSentinelPreviewController();
+                if (!controller) {
+                    console.warn('Sentinel preview controller is unavailable. Map is not ready yet.');
+                    return;
+                }
+                controller.showPreview(payload);
+            };
 
-                const sentinelPanel = document.getElementById('sentinel-panel');
-                dom.sentinel.panel = sentinelPanel;
-                dom.sentinel.status = document.getElementById('sentinelCollectionStatus');
-                dom.sentinel.list = document.getElementById('sentinelCollectionList');
-                dom.sentinel.template = document.getElementById('sentinelCollectionTemplate');
-                dom.sentinel.lastUpdated = document.getElementById('sentinelLastUpdated');
-                dom.sentinel.filterForm = document.getElementById('sentinelFilterForm');
-                dom.sentinel.resetButton = document.getElementById('sentinelFilterResetButton');
-                dom.sentinel.cloudInput = document.getElementById('sentinelCloudFilter');
-                dom.sentinel.latInput = document.getElementById('sentinelLatFilter');
-                dom.sentinel.lonInput = document.getElementById('sentinelLonFilter');
-                dom.sentinel.levelInput = document.getElementById('sentinelProductLevel');
-
-                const previewPanel = document.getElementById('sentinelPreviewPanel');
-                dom.sentinel.previewPanel = previewPanel;
-                dom.sentinel.previewTitle = previewPanel?.querySelector('[data-sentinel-preview-title]') ?? null;
-                dom.sentinel.previewAcquired = previewPanel?.querySelector('[data-sentinel-preview-acquired]') ?? null;
-                dom.sentinel.previewDetails = previewPanel?.querySelector('[data-sentinel-preview-details]') ?? null;
-                dom.sentinel.previewStatus = previewPanel?.querySelector('[data-sentinel-preview-status]') ?? null;
-                dom.sentinel.hideBtn = document.getElementById('sentinelPreviewHideBtn');
-                dom.sentinel.showBtn = document.getElementById('sentinelPreviewShowBtn');
-                dom.sentinel.clearBtn = document.getElementById('sentinelPreviewClearBtn');
-                dom.sentinel.downloadBtn = document.getElementById('sentinelPreviewDownloadBtn');
+            if (sentinelPreviewHideBtn) {
+                sentinelPreviewHideBtn.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    createSentinelPreviewController()?.hideImage();
+                });
             }
 
-            function handleResize() {
-                const { panelWrapper, sidebarButtons } = dom;
-                if (!panelWrapper) return;
+            if (sentinelPreviewShowBtn) {
+                sentinelPreviewShowBtn.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    createSentinelPreviewController()?.showImage();
+                });
+            }
 
-                const isMobile = window.innerWidth < 768;
-                const activePanel = panelWrapper.dataset.activePanel;
+            if (sentinelPreviewClearBtn) {
+                sentinelPreviewClearBtn.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    createSentinelPreviewController()?.clear();
+                });
+            }
 
-                if (!activePanel) {
-                    panelWrapper.classList.add('translate-y-full');
-                    panelWrapper.classList.remove('translate-y-0', 'w-80', 'md:w-80');
+            window.showSentinelPreviewOnMap = triggerSentinelPreview;
+
+            if (!createSentinelPreviewController()) {
+                sentinelPreviewHideBtn?.classList.add('hidden');
+                sentinelPreviewShowBtn?.classList.add('hidden');
+            }
+
+            // Wrapper around fetch that retries via AllOrigins when CORS rejects the primary request.
+            async function fetchSentinelCatalog(url) {
+                const attemptFetch = async (targetUrl) => {
+                    const response = await fetch(targetUrl);
+                    if (!response.ok) {
+                        throw new Error(`Status ${response.status}`);
+                    }
+                    return response.json();
+                };
+
+                try {
+                    return await attemptFetch(url);
+                } catch (err) {
+                    const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+                    return await attemptFetch(proxyUrl);
+                }
+            }
+
+            // Render a Sentinel catalogue card using the HTML template and bind preview/download handlers.
+            function createSentinelCard(feature) {
+                if (!sentinelTemplate) return null;
+
+                const clone = sentinelTemplate.content.cloneNode(true);
+                const props = feature?.properties ?? {};
+                const links = feature?.links ?? [];
+                const assets = feature?.assets ?? {};
+
+                const titleEl = clone.querySelector('[data-sentinel-title]');
+                const productEl = clone.querySelector('[data-sentinel-product]');
+                const datetimeEl = clone.querySelector('[data-sentinel-datetime]');
+                const detailEl = clone.querySelector('[data-sentinel-details]');
+                const previewButton = clone.querySelector('[data-sentinel-preview]');
+                const downloadButton = clone.querySelector('[data-sentinel-download]');
+                const thumbnailImg = clone.querySelector('[data-sentinel-thumbnail]');
+                const thumbnailPlaceholder = clone.querySelector('[data-sentinel-placeholder]');
+
+                const shortenText = typeof window?.shortenFilename === 'function' ?
+                    (value, max = 40) => window.shortenFilename(String(value), max) :
+                    (value) => String(value ?? '');
+
+                const productId = props.productIdentifier || props.title || feature?.id || 'Sentinel-2 Product';
+                const acquisitionDate = props.completionDate || props.startDate || props.endPosition || props.beginPosition || props.startTimeFromAscendingNode;
+                const mgrsIdentifier = props.mgrsId || props.tileId || props.MGRS;
+                const tileText = mgrsIdentifier ? `Tile ${mgrsIdentifier}` : null;
+                const cloudCover = props.cloudCover ?? props['cloudcoverpercentage'] ?? props['cloudCoverageAssessment'];
+
+                const titleText = props.title || productId;
+                const productText = productId;
+
+                if (titleEl) {
+                    titleEl.textContent = shortenText(titleText, 48);
+                    titleEl.setAttribute('title', titleText);
+                }
+
+                if (productEl) {
+                    productEl.textContent = shortenText(productText, 44);
+                    productEl.setAttribute('title', productText);
+                }
+                if (datetimeEl) datetimeEl.textContent = `Acquired: ${formatReadableDate(acquisitionDate)}`;
+
+                const detailParts = [];
+                if (tileText) detailParts.push(tileText);
+                if (cloudCover !== undefined) detailParts.push(`Cloud cover: ${formatCloudCover(Number(cloudCover))}`);
+                if (props.collection) detailParts.push(`Collection: ${props.collection}`);
+                if (detailEl) {
+                    detailEl.textContent = detailParts.length ? detailParts.join(' • ') : 'No additional metadata available';
+                }
+
+                const quicklookUrl = props.thumbnail ||
+                    props.quicklook ||
+                    assets?.thumbnail?.href ||
+                    assets?.overview?.href ||
+                    links.find(link => link.rel === 'preview')?.href;
+
+                const downloadUrl = resolveSentinelDownloadUrl(feature);
+                const downloadUrlWithToken = applySentinelTokenToUrl(downloadUrl);
+                const downloadFilename = buildSentinelDownloadName(productId, titleText);
+                const tokenAvailable = hasSentinelToken();
+
+                if (downloadButton) {
+                    if (downloadUrl && downloadUrlWithToken && tokenAvailable) {
+                        const finalDownloadUrl = downloadUrlWithToken;
+                        downloadButton.classList.remove('hidden');
+                        downloadButton.setAttribute('href', finalDownloadUrl);
+                        downloadButton.setAttribute('aria-disabled', 'false');
+                        downloadButton.setAttribute('title', `Download full scene for ${productText}`);
+                        downloadButton.setAttribute('download', downloadFilename);
+                        downloadButton.dataset.downloadBase = downloadUrl;
+                        downloadButton.tabIndex = 0;
+                    } else {
+                        downloadButton.classList.add('hidden');
+                        downloadButton.setAttribute('href', '#');
+                        downloadButton.setAttribute('aria-disabled', 'true');
+                        downloadButton.removeAttribute('download');
+                        delete downloadButton.dataset.downloadBase;
+                        downloadButton.tabIndex = -1;
+                    }
+                }
+
+                if (thumbnailImg) {
+                    if (quicklookUrl) {
+                        const handleThumbnailError = () => {
+                            thumbnailImg.classList.add('hidden');
+                            thumbnailImg.removeAttribute('src');
+                            if (thumbnailPlaceholder) {
+                                thumbnailPlaceholder.classList.remove('hidden');
+                            }
+                        };
+
+                        const handleThumbnailLoad = () => {
+                            thumbnailImg.classList.remove('hidden');
+                            if (thumbnailPlaceholder) {
+                                thumbnailPlaceholder.classList.add('hidden');
+                            }
+                        };
+
+                        thumbnailImg.classList.add('hidden');
+                        if (thumbnailPlaceholder) {
+                            thumbnailPlaceholder.classList.remove('hidden');
+                        }
+
+                        thumbnailImg.addEventListener('error', handleThumbnailError, {
+                            once: true
+                        });
+                        thumbnailImg.addEventListener('load', handleThumbnailLoad, {
+                            once: true
+                        });
+                        thumbnailImg.src = quicklookUrl;
+                        thumbnailImg.alt = `Quicklook preview for ${productText}`;
+                    } else {
+                        thumbnailImg.classList.add('hidden');
+                        thumbnailImg.removeAttribute('src');
+                        if (thumbnailPlaceholder) {
+                            thumbnailPlaceholder.classList.remove('hidden');
+                        }
+                    }
+                }
+
+                const bboxArray = Array.isArray(feature?.bbox) ? feature.bbox :
+                    (Array.isArray(props?.bbox) ? props.bbox : null);
+                const hasCoverage = Boolean(feature?.geometry) || (Array.isArray(bboxArray) && bboxArray.length === 4);
+
+                if (previewButton) {
+                    if (hasCoverage || quicklookUrl) {
+                        previewButton.disabled = false;
+                        previewButton.title = 'Display preview on the map';
+                        previewButton.addEventListener('click', () => {
+                            window.showSentinelPreviewOnMap?.({
+                                title: titleText,
+                                productId,
+                                quicklookUrl,
+                                downloadUrl: downloadUrlWithToken,
+                                downloadUrlBase: downloadUrl,
+                                downloadFilename,
+                                geometry: feature?.geometry,
+                                bbox: bboxArray,
+                                acquisitionDate,
+                                tileText,
+                                cloudCover,
+                                collection: props.collection || feature?.collection || null,
+                                services: props?.services ?? null,
+                                links,
+                                assets,
+                                featureProperties: props,
+                                featureId: feature?.id ?? null
+                            });
+                        });
+                    } else {
+                        previewButton.disabled = true;
+                        previewButton.title = 'Preview not available for this product';
+                    }
+                }
+
+                return clone;
+            }
+
+            // Pull the latest Sentinel results with optional filters and populate the panel list.
+            async function loadSentinelCollections(forceRefresh = false) {
+                if (!sentinelStatus || !sentinelList) return;
+
+                if (forceRefresh && window.MyZkToast?.info) {
+                    window.MyZkToast.info('Refreshing Sentinel-2 catalogue...');
+                }
+
+                sentinelStatus.classList.remove('hidden');
+                sentinelStatus.textContent = 'Fetching latest Sentinel-2 collections...';
+                sentinelList.innerHTML = '';
+
+                const endDate = new Date();
+                const startDate = new Date(endDate);
+                startDate.setMonth(startDate.getMonth() - 1);
+                startDate.setHours(0, 0, 0, 0);
+                const endDateAdjusted = new Date(endDate);
+                endDateAdjusted.setHours(23, 59, 59, 999);
+
+                const params = new URLSearchParams({
+                    startDate: formatISODate(startDate),
+                    completionDate: formatISODate(endDateAdjusted),
+                    maxRecords: '20',
+                    sortParam: 'startDate',
+                    sortOrder: 'descending'
+                });
+
+                const productTypeRaw = sentinelLevelInput?.value?.trim();
+                const productType = ['S2MSI2A', 'S2MSI1C'].includes(productTypeRaw) ? productTypeRaw : defaultProductType;
+                params.set('productType', productType);
+
+                const cloudRaw = sentinelCloudInput?.value?.trim();
+                const cloudNumber = cloudRaw === '' || cloudRaw === undefined ? null : Number(cloudRaw);
+                if (cloudNumber !== null && !Number.isNaN(cloudNumber)) {
+                    const normalized = clampNumber(cloudNumber, 0, 100);
+                    if (normalized !== null) {
+                        params.set('cloudCover', `[0,${Math.round(normalized)}]`);
+                    }
+                }
+
+                const latRaw = sentinelLatInput?.value?.trim();
+                const lonRaw = sentinelLonInput?.value?.trim();
+                const hasLat = latRaw !== undefined && latRaw !== '';
+                const hasLon = lonRaw !== undefined && lonRaw !== '';
+
+                if ((hasLat && !hasLon) || (!hasLat && hasLon)) {
+                    sentinelStatus.classList.remove('hidden');
+                    sentinelStatus.textContent = 'Please provide both latitude and longitude to filter by location.';
+                    sentinelList.innerHTML = '';
                     return;
                 }
 
-                panelWrapper.classList.remove('slide-up', 'slide-down');
+                if (hasLat && hasLon) {
+                    const latNumber = Number(latRaw);
+                    const lonNumber = Number(lonRaw);
+                    const normalizedLat = clampNumber(latNumber, -90, 90);
+                    const normalizedLon = clampNumber(lonNumber, -180, 180);
 
-                if (isMobile) {
-                    panelWrapper.classList.remove('w-0', 'md:w-0', 'w-80', 'md:w-80');
-                    panelWrapper.classList.remove('translate-y-full');
-                    panelWrapper.classList.add('translate-y-0', 'opacity-100');
-                } else {
-                    panelWrapper.classList.remove('translate-y-full', 'translate-y-0');
-                    panelWrapper.classList.add('w-80', 'md:w-80', 'opacity-100');
+                    if (normalizedLat === null || normalizedLon === null) {
+                        sentinelStatus.classList.remove('hidden');
+                        sentinelStatus.textContent = 'Latitude must be between -90 and 90 and longitude between -180 and 180.';
+                        sentinelList.innerHTML = '';
+                        return;
+                    }
+
+                    params.set('lat', normalizedLat.toFixed(6));
+                    params.set('lon', normalizedLon.toFixed(6));
                 }
 
-                const activeBtn = isMobile
-                    ? document.querySelector(`#scroll-container .sidebar-btn[onclick*='${activePanel}']`)
-                    : document.querySelector(`aside .sidebar-btn[onclick*='${activePanel}']`);
+                const requestUrl = `${sentinelCatalogEndpoint}?${params.toString()}`;
 
-                sidebarButtons.forEach((button) => button.classList.remove('active'));
-                activeBtn?.classList.add('active');
+                try {
+                    const response = await fetchSentinelCatalog(requestUrl);
+                    const features = Array.isArray(response?.features) ? response.features : [];
+
+                    if (!features.length) {
+                        sentinelStatus.textContent = 'No Sentinel-2 collections found in the last 30 days.';
+                    } else {
+                        sentinelStatus.classList.add('hidden');
+                        features.forEach(feature => {
+                            const card = createSentinelCard(feature);
+                            if (card) {
+                                sentinelList.appendChild(card);
+                            }
+                        });
+                    }
+
+                    sentinelLoadedOnce = true;
+
+                    if (sentinelLastUpdated) {
+                        sentinelLastUpdated.textContent = new Date().toLocaleString('id-ID');
+                    }
+
+                    if (features.length && forceRefresh && window.MyZkToast?.success) {
+                        window.MyZkToast.success('Sentinel-2 collections updated.');
+                    }
+                } catch (error) {
+                    const message = error?.message ? ` (${error.message})` : '';
+                    sentinelStatus.classList.remove('hidden');
+                    sentinelStatus.textContent = `Unable to fetch Sentinel-2 collections${message}. Please try again later.`;
+
+                    if (sentinelLastUpdated) {
+                        sentinelLastUpdated.textContent = new Date().toLocaleString('id-ID');
+                    }
+
+                    if (window.MyZkToast?.error) {
+                        window.MyZkToast.error('Failed to update Sentinel-2 collections.');
+                    }
+                }
             }
 
-            function openDefaultPanel() {
-                const defaultPanelId = 'data-panel';
-                const isMobile = window.innerWidth < 768;
-                const defaultButton = isMobile
-                    ? document.querySelector(`#scroll-container .sidebar-btn[onclick*='${defaultPanelId}']`)
-                    : document.querySelector(`aside .sidebar-btn[onclick*='${defaultPanelId}']`);
-
-                showPanel(defaultPanelId, defaultButton);
-                SentinelCatalog.loadCollections();
+            if (sentinelCloudInput && sentinelCloudInput.value === '') {
+                sentinelCloudInput.value = defaultCloudCoverMax;
             }
 
-            function showPanel(id, button = null) {
-                const { panelWrapper, panels, sidebarButtons } = dom;
-                if (!panelWrapper) return;
+            if (sentinelLatInput && sentinelLatInput.value === '') {
+                sentinelLatInput.value = defaultLatitude;
+            }
 
+            if (sentinelLonInput && sentinelLonInput.value === '') {
+                sentinelLonInput.value = defaultLongitude;
+            }
+
+            if (sentinelLevelInput && sentinelLevelInput.value === '') {
+                sentinelLevelInput.value = defaultProductType;
+            }
+
+            const normalizeInputValue = (input, min, max) => {
+                if (!input) return;
+                if (input.value === '') {
+                    input.value = '';
+                    return;
+                }
+                const parsed = Number(input.value);
+                if (Number.isNaN(parsed)) {
+                    input.value = '';
+                    return;
+                }
+                const normalized = clampNumber(parsed, min, max);
+                if (normalized !== null) {
+                    input.value = normalized.toString();
+                }
+            };
+
+            sentinelCloudInput?.addEventListener('blur', () => normalizeInputValue(sentinelCloudInput, 0, 100));
+            sentinelLatInput?.addEventListener('blur', () => normalizeInputValue(sentinelLatInput, -90, 90));
+            sentinelLonInput?.addEventListener('blur', () => normalizeInputValue(sentinelLonInput, -180, 180));
+
+            if (sentinelFilterForm) {
+                sentinelFilterForm.addEventListener('submit', (event) => {
+                    event.preventDefault();
+                    loadSentinelCollections(true);
+                });
+            }
+
+            if (sentinelFilterResetButton) {
+                sentinelFilterResetButton.addEventListener('click', () => {
+                    if (sentinelCloudInput) sentinelCloudInput.value = defaultCloudCoverMax;
+                    if (sentinelLatInput) sentinelLatInput.value = defaultLatitude;
+                    if (sentinelLonInput) sentinelLonInput.value = defaultLongitude;
+                    if (sentinelLevelInput) sentinelLevelInput.value = defaultProductType;
+                    loadSentinelCollections(true);
+                });
+            }
+
+            // Mobile nav arrows scroll the horizontal chip list into view.
+            scrollLeftBtn.addEventListener('click', () => {
+                scrollContainer.scrollBy({
+                    left: -scrollAmount,
+                    behavior: 'smooth'
+                });
+            });
+
+            scrollRightBtn.addEventListener('click', () => {
+                scrollContainer.scrollBy({
+                    left: scrollAmount,
+                    behavior: 'smooth'
+                });
+            });
+
+            // Optional: drag/grab to scroll
+            let isDown = false;
+            let startX;
+            let scrollLeft;
+
+            // Enable click-and-drag scrolling for a smoother touchpad-like experience on desktop.
+            scrollContainer.addEventListener('mousedown', (e) => {
+                isDown = true;
+                scrollContainer.classList.add('cursor-grabbing');
+                startX = e.pageX - scrollContainer.offsetLeft;
+                scrollLeft = scrollContainer.scrollLeft;
+            });
+
+            scrollContainer.addEventListener('mouseleave', () => {
+                isDown = false;
+                scrollContainer.classList.remove('cursor-grabbing');
+            });
+
+            scrollContainer.addEventListener('mouseup', () => {
+                isDown = false;
+                scrollContainer.classList.remove('cursor-grabbing');
+            });
+
+            scrollContainer.addEventListener('mousemove', (e) => {
+                if (!isDown) return;
+                e.preventDefault();
+                const x = e.pageX - scrollContainer.offsetLeft;
+                const walk = (x - startX) * 2; // scroll-fast
+                scrollContainer.scrollLeft = scrollLeft - walk;
+            });
+
+            // Toggle the requested panel and ensure the wrapper animates correctly for the viewport size.
+            function showPanel(id, btn = null) {
                 const isMobile = window.innerWidth < 768;
 
-                panels.forEach((panel) => panel.classList.add('hidden'));
+                panels.forEach(p => p.classList.add("hidden"));
                 const targetPanel = document.getElementById(id);
-                targetPanel?.classList.remove('hidden');
+                targetPanel.classList.remove("hidden");
 
-                sidebarButtons.forEach((btn) => btn.classList.remove('active'));
-                if (button) {
-                    button.classList.add('active');
-                } else {
-                    const matchedBtn = sidebarButtons.find((btn) => btn.getAttribute('onclick')?.includes(id));
-                    matchedBtn?.classList.add('active');
+                sidebarButtons.forEach(b => b.classList.remove("active"));
+                if (btn) btn.classList.add("active");
+                else {
+                    const matchedBtn = Array.from(sidebarButtons).find(b => b.getAttribute("onclick")?.includes(id));
+                    if (matchedBtn) matchedBtn.classList.add("active");
                 }
 
                 if (isMobile) {
-                    panelWrapper.classList.remove('translate-y-full', 'slide-down');
-                    panelWrapper.classList.add('translate-y-0', 'slide-up');
+                    // reset posisi
+                    panelWrapper.classList.remove("translate-y-full");
+                    panelWrapper.classList.add("translate-y-0");
+
+                    // animasi slide-up
+                    panelWrapper.classList.remove("slide-down");
+                    panelWrapper.classList.add("slide-up");
                 } else {
-                    panelWrapper.classList.remove('w-0', 'md:w-0');
-                    panelWrapper.classList.add('w-80', 'md:w-80');
+                    panelWrapper.classList.remove("w-0", "md:w-0");
+                    panelWrapper.classList.add("w-80", "md:w-80");
                 }
 
                 panelWrapper.dataset.activePanel = id;
 
-                if (id === 'sentinel-panel') {
-                    SentinelCatalog.loadCollections();
+                if (id === 'sentinel-panel' && !sentinelLoadedOnce) {
+                    loadSentinelCollections();
                 }
             }
 
+            // Collapse the panel wrapper and clear active states.
             function closePanels() {
-                const { panelWrapper, panels, sidebarButtons } = dom;
-                if (!panelWrapper) return;
-
                 const isMobile = window.innerWidth < 768;
 
-                panels.forEach((panel) => panel.classList.add('hidden'));
-                sidebarButtons.forEach((btn) => btn.classList.remove('active'));
+                panels.forEach(p => p.classList.add("hidden"));
+                sidebarButtons.forEach(b => b.classList.remove("active"));
                 delete panelWrapper.dataset.activePanel;
 
                 if (isMobile) {
-                    panelWrapper.classList.remove('slide-up');
-                    panelWrapper.classList.add('slide-down');
+                    // animasi slide-down
+                    panelWrapper.classList.remove("slide-up");
+                    panelWrapper.classList.add("slide-down");
+
+                    // setelah animasi selesai (500ms), sembunyikan sepenuhnya
                     setTimeout(() => {
-                        panelWrapper.classList.remove('translate-y-0');
-                        panelWrapper.classList.add('translate-y-full');
+                        panelWrapper.classList.remove("translate-y-0");
+                        panelWrapper.classList.add("translate-y-full");
                     }, 480);
                 } else {
-                    panelWrapper.classList.remove('w-80', 'md:w-80');
-                    panelWrapper.classList.add('w-0', 'md:w-0');
+                    panelWrapper.classList.remove("w-80", "md:w-80");
+                    panelWrapper.classList.add("w-0", "md:w-0");
                 }
             }
 
-            function attachBuyPanelHandlers() {
-                const buyButton = document.getElementById('buySatelliteBtn');
-                const closeButton = document.getElementById('buyingPanelCloseBtn');
-                const panel = document.getElementById('buyingPanel');
 
-                buyButton?.addEventListener('click', () => panel?.classList.remove('hidden'));
-                closeButton?.addEventListener('click', () => panel?.classList.add('hidden'));
-            }
+            // === DEFAULT STATE saat halaman load ===
+            // Open the default panel on load and fetch the initial Sentinel catalogue.
+            window.addEventListener("DOMContentLoaded", () => {
+                const defaultPanel = 'data-panel';
+                const isMobile = window.innerWidth < 768;
 
+                const defaultBtn = isMobile ?
+                    document.querySelector(`#scroll-container .sidebar-btn[onclick*='${defaultPanel}']`) :
+                    document.querySelector(`aside .sidebar-btn[onclick*='${defaultPanel}']`);
+
+                showPanel(defaultPanel, defaultBtn);
+
+                if (!sentinelLoadedOnce) {
+                    loadSentinelCollections();
+                }
+            });
+
+            // === RESPONSIVE HANDLER: SYNC STATE SAAT RESIZE ===
+            // Reconcile mobile/desktop panel classes whenever the viewport size changes.
+            window.addEventListener("resize", () => {
+                const isMobile = window.innerWidth < 768;
+                const activePanel = panelWrapper.dataset.activePanel;
+
+                // Jika tidak ada panel aktif (semua ditutup), keluar saja
+                if (!activePanel) {
+                    // Pastikan panel wrapper tertutup di semua mode
+                    panelWrapper.classList.add("translate-y-full");
+                    panelWrapper.classList.remove("translate-y-0", "w-80", "md:w-80");
+                    return;
+                }
+
+                // Hapus semua class transisi yang bisa bentrok
+                panelWrapper.classList.remove("slide-up", "slide-down");
+
+                if (isMobile) {
+                    // mobile mode: gunakan slide-up style
+                    panelWrapper.classList.remove("w-0", "md:w-0", "w-80", "md:w-80");
+                    panelWrapper.classList.remove("translate-y-full");
+                    panelWrapper.classList.add("translate-y-0", "opacity-100");
+                } else {
+                    // desktop mode: gunakan lebar tetap (sidebar style)
+                    panelWrapper.classList.remove("translate-y-full", "translate-y-0");
+                    panelWrapper.classList.add("w-80", "md:w-80", "opacity-100");
+                }
+
+                // perbarui tombol active sesuai mode baru
+                const activeBtn = isMobile ?
+                    document.querySelector(`#scroll-container .sidebar-btn[onclick*='${activePanel}']`) :
+                    document.querySelector(`aside .sidebar-btn[onclick*='${activePanel}']`);
+
+                sidebarButtons.forEach(b => b.classList.remove("active"));
+                if (activeBtn) activeBtn.classList.add("active");
+            });
+
+
+
+
+            // Buy Satellite Button Event
+            document.getElementById('buySatelliteBtn')?.addEventListener('click', function() {
+                const buyingPanel = document.getElementById('buyingPanel');
+                buyingPanel.classList.remove('hidden');
+            });
+            document.getElementById('buyingPanelCloseBtn')?.addEventListener('click', function() {
+                const buyingPanel = document.getElementById('buyingPanel');
+                buyingPanel.classList.add('hidden');
+            });
+
+            // Price calculation functions
+            // Translate the drawn polygon area into credit point estimates for the purchase panel.
             function calculateTotalPrice() {
+                // Get area from global variable (set when polygon is drawn)
                 const areaInSquareMeters = window.geojsonArea || 0;
-                const areaInHectares = areaInSquareMeters / 10000;
+                const areaInHectares = areaInSquareMeters / 10000; // Convert m² to hectares
+
+                // Calculate credit points needed (using global constant rate)
                 const creditPointsNeeded = areaInHectares * {{ config('app-constants.imagery_credit_cost_per_hectare') }};
 
+                // Update the display
                 const totalPriceElement = document.getElementById('total_price');
-                if (!totalPriceElement) return;
                 const priceContainer = totalPriceElement.parentElement;
 
                 if (areaInHectares > 0) {
                     totalPriceElement.innerHTML = `
-                    <div class="flex justify-between items-center">
-                        <span class="text-lg font-bold text-green-700">${formatNumber(creditPointsNeeded.toFixed(2))} Credit Points</span>
-                        <i class="ri-coins-line font-base text-success text-xl"></i>
-                    </div>
-                    <div class="text-xs text-foreground-70 mt-1">
-                        ${formatNumber(areaInHectares)} hectares × {{ Number::format(config('app-constants.imagery_credit_cost_per_hectare'), locale: app()->getLocale()) }} credit points/hectare
-                    </div>
-                `;
-                    priceContainer?.classList.remove('bg-muted/60', 'border-muted');
-                    priceContainer?.classList.add('bg-green-50', 'border-green-300', 'shadow-sm');
-                    if (priceContainer) {
-                        priceContainer.style.transform = 'scale(1.02)';
-                        setTimeout(() => {
-                            priceContainer.style.transform = 'scale(1)';
-                        }, 200);
-                    }
+                        <div class="flex justify-between items-center">
+                            <span class="text-lg font-bold text-green-700">${formatNumber(creditPointsNeeded.toFixed(2))} Credit Points</span>
+                            <i class="ri-coins-line font-base text-success text-xl"></i>
+                        </div>
+                        <div class="text-xs text-foreground-70 mt-1">
+                            ${formatNumber(areaInHectares)} hectares × {{ Number::format(config('app-constants.imagery_credit_cost_per_hectare'), locale: app()->getLocale()) }} credit points/hectare
+                        </div>
+                    `;
+                    priceContainer.classList.remove('bg-muted/60', 'border-muted');
+                    priceContainer.classList.add('bg-green-50', 'border-green-300', 'shadow-sm');
+
+                    // Add a subtle animation
+                    priceContainer.style.transform = 'scale(1.02)';
+                    setTimeout(() => {
+                        priceContainer.style.transform = 'scale(1)';
+                    }, 200);
                 } else {
                     totalPriceElement.innerHTML = `
-                    <div class="flex items-center text-foreground/50">
-                        <i class="ri-information-line mr-2"></i>
-                        Draw an area to calculate credit points
-                    </div>
-                `;
-                    priceContainer?.classList.remove('bg-green-50', 'border-green-300', 'shadow-sm', 'bg-amber-50', 'border-amber-300');
-                    priceContainer?.classList.add('bg-muted/60', 'border-muted');
+                        <div class="flex items-center text-foreground/50">
+                            <i class="ri-information-line mr-2"></i>
+                            Draw an area to calculate credit points
+                        </div>
+                    `;
+                    priceContainer.classList.remove('bg-green-50', 'border-green-300', 'shadow-sm', 'bg-amber-50', 'border-amber-300');
+                    priceContainer.classList.add('bg-muted/60', 'border-muted');
                 }
 
-                if (priceContainer) {
-                    priceContainer.style.transition = 'all 0.3s ease-in-out';
-                }
+                // Add transition for smooth color changes
+                priceContainer.style.transition = 'all 0.3s ease-in-out';
             }
 
-            const Scrolling = (() => {
-                function init() {
-                    const { scrollContainer, scrollLeft, scrollRight } = dom;
-                    if (!scrollContainer) return;
-
-                    scrollLeft?.addEventListener('click', () => {
-                        scrollContainer.scrollBy({ left: -defaults.scrollAmount, behavior: 'smooth' });
-                    });
-
-                    scrollRight?.addEventListener('click', () => {
-                        scrollContainer.scrollBy({ left: defaults.scrollAmount, behavior: 'smooth' });
-                    });
-
-                    enableDragScrolling(scrollContainer);
-                }
-
-                function enableDragScrolling(container) {
-                    let isMouseDown = false;
-                    let startX = 0;
-                    let scrollLeftStart = 0;
-
-                    container.addEventListener('mousedown', (event) => {
-                        isMouseDown = true;
-                        container.classList.add('cursor-grabbing');
-                        startX = event.pageX - container.offsetLeft;
-                        scrollLeftStart = container.scrollLeft;
-                    });
-
-                    container.addEventListener('mouseleave', () => {
-                        isMouseDown = false;
-                        container.classList.remove('cursor-grabbing');
-                    });
-
-                    container.addEventListener('mouseup', () => {
-                        isMouseDown = false;
-                        container.classList.remove('cursor-grabbing');
-                    });
-
-                    container.addEventListener('mousemove', (event) => {
-                        if (!isMouseDown) return;
-                        event.preventDefault();
-                        const x = event.pageX - container.offsetLeft;
-                        const walk = (x - startX) * 2;
-                        container.scrollLeft = scrollLeftStart - walk;
-                    });
-                }
-
-                return { init };
-            })();
-
-            const SentinelCatalog = (() => {
-                const config = {
-                    endpoint: 'https://catalogue.dataspace.copernicus.eu/resto/api/collections/Sentinel2/search.json'
-                };
-
-                const state = {
-                    loadedOnce: false,
-                    downloadToken: '',
-                    tokenConfigured: false
-                };
-
-                function init() {
-                    const sentinel = dom.sentinel;
-                    if (!sentinel.panel) return;
-
-                    state.downloadToken = sanitizeToken(sentinel.panel.dataset.sentinelToken ?? '');
-                    state.tokenConfigured = (sentinel.panel.dataset.sentinelCredentials ?? '').toLowerCase() === 'true';
-
-                    setDefaultFilterValues();
-                    bindFilterEvents();
-                    setupPreviewControls();
-                    loadCollections();
-                }
-
-                function setDefaultFilterValues() {
-                    const { cloudInput, latInput, lonInput, levelInput } = dom.sentinel;
-                    if (cloudInput && cloudInput.value === '') cloudInput.value = defaults.cloudCover;
-                    if (latInput && latInput.value === '') latInput.value = defaults.latitude;
-                    if (lonInput && lonInput.value === '') lonInput.value = defaults.longitude;
-                    if (levelInput && levelInput.value === '') levelInput.value = defaults.productType;
-                }
-
-                function bindFilterEvents() {
-                    const sentinel = dom.sentinel;
-
-                    const normalizeInput = (input, min, max) => {
-                        if (!input) return;
-                        if (input.value === '') return;
-                        const parsed = Number(input.value);
-                        if (Number.isNaN(parsed)) {
-                            input.value = '';
-                            return;
-                        }
-                        const clamped = clampNumber(parsed, min, max);
-                        if (clamped !== null) {
-                            input.value = clamped.toString();
-                        }
-                    };
-
-                    sentinel.cloudInput?.addEventListener('blur', () => normalizeInput(sentinel.cloudInput, 0, 100));
-                    sentinel.latInput?.addEventListener('blur', () => normalizeInput(sentinel.latInput, -90, 90));
-                    sentinel.lonInput?.addEventListener('blur', () => normalizeInput(sentinel.lonInput, -180, 180));
-
-                    sentinel.filterForm?.addEventListener('submit', (event) => {
-                        event.preventDefault();
-                        loadCollections(true);
-                    });
-
-                    sentinel.resetButton?.addEventListener('click', () => {
-                        if (sentinel.cloudInput) sentinel.cloudInput.value = defaults.cloudCover;
-                        if (sentinel.latInput) sentinel.latInput.value = defaults.latitude;
-                        if (sentinel.lonInput) sentinel.lonInput.value = defaults.longitude;
-                        if (sentinel.levelInput) sentinel.levelInput.value = defaults.productType;
-                        loadCollections(true);
-                    });
-                }
-
-                function setupPreviewControls() {
-                    const sentinel = dom.sentinel;
-
-                    sentinel.hideBtn?.addEventListener('click', (event) => {
-                        event.preventDefault();
-                        getPreviewController()?.setImageVisibility(true);
-                    });
-
-                    sentinel.showBtn?.addEventListener('click', (event) => {
-                        event.preventDefault();
-                        getPreviewController()?.setImageVisibility(false);
-                    });
-
-                    sentinel.clearBtn?.addEventListener('click', (event) => {
-                        event.preventDefault();
-                        getPreviewController()?.clear();
-                    });
-
-                    if (!getPreviewController()) {
-                        sentinel.hideBtn?.classList.add('hidden');
-                        sentinel.showBtn?.classList.add('hidden');
-                    }
-
-                    window.showSentinelPreviewOnMap = (feature) => {
-                        if (feature) {
-                            getPreviewController(feature)?.selectFeature(feature);
-                        } else {
-                            getPreviewController()?.clear();
-                        }
-                    };
-                }
-
-                function loadCollections(forceRefresh = false) {
-                    const sentinel = dom.sentinel;
-                    if (!sentinel.list || !sentinel.template) return;
-
-                    sentinel.status?.classList.remove('hidden');
-                    if (sentinel.status) sentinel.status.textContent = 'Fetching Sentinel-2 collections...';
-                    sentinel.list.innerHTML = '';
-
-                    fetch(buildQueryUrl())
-                        .then((response) => response.ok ? response.json() : Promise.reject(new Error(`Status ${response.status}`)))
-                        .catch(() => fetchViaProxy(buildQueryUrl()))
-                        .then((data) => {
-                            const features = data?.features ?? [];
-                            renderCollections(features, forceRefresh);
-                        })
-                        .catch((error) => {
-                            showErrorState(error);
-                        });
-                }
-
-                function loadCollectionsIfNeeded() {
-                    if (!state.loadedOnce) {
-                        loadCollections();
-                    }
-                }
-
-                function fetchViaProxy(url) {
-                    const proxied = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
-                    return fetch(proxied).then((response) => {
-                        if (!response.ok) throw new Error(`Status ${response.status}`);
-                        return response.json();
-                    });
-                }
-
-                function renderCollections(features, forceRefresh) {
-                    const sentinel = dom.sentinel;
-                    sentinel.list.innerHTML = '';
-
-                    if (!features.length) {
-                        sentinel.status?.classList.remove('hidden');
-                        if (sentinel.status) {
-                            sentinel.status.textContent = buildStatusMessage('No Sentinel-2 collections found for the selected filters.');
-                        }
-                    } else {
-                        sentinel.status?.classList.add('hidden');
-                        features.forEach((feature) => {
-                            const card = buildCard(feature);
-                            if (card) sentinel.list.appendChild(card);
-                        });
-                    }
-
-                    if (sentinel.lastUpdated) {
-                        sentinel.lastUpdated.textContent = new Date().toLocaleString('id-ID');
-                    }
-
-                    if (features.length && forceRefresh) {
-                        window.MyZkToast?.success?.('Sentinel-2 collections updated.');
-                    }
-
-                    state.loadedOnce = true;
-                }
-
-                function showErrorState(error) {
-                    const sentinel = dom.sentinel;
-                    const message = error?.message ? ` (${error.message})` : '';
-                    sentinel.status?.classList.remove('hidden');
-                    if (sentinel.status) {
-                        sentinel.status.textContent = `Unable to fetch Sentinel-2 collections${message}. Please try again later.`;
-                    }
-                    if (sentinel.lastUpdated) {
-                        sentinel.lastUpdated.textContent = new Date().toLocaleString('id-ID');
-                    }
-                    window.MyZkToast?.error?.('Failed to update Sentinel-2 collections.');
-                }
-
-                function buildQueryUrl() {
-                    const sentinel = dom.sentinel;
-                    const params = new URLSearchParams();
-
-                    const cloudMax = Number(sentinel.cloudInput?.value ?? defaults.cloudCover);
-                    const latitude = Number(sentinel.latInput?.value ?? defaults.latitude);
-                    const longitude = Number(sentinel.lonInput?.value ?? defaults.longitude);
-                    const productType = sentinel.levelInput?.value || defaults.productType;
-
-                    if (!Number.isNaN(cloudMax)) params.set('maxCloudCover', cloudMax.toString());
-                    if (!Number.isNaN(latitude) && !Number.isNaN(longitude)) {
-                        params.set('lat', latitude.toString());
-                        params.set('lon', longitude.toString());
-                    }
-                    if (productType) params.set('productType', productType);
-
-                    const today = new Date();
-                    const startDate = new Date();
-                    startDate.setMonth(today.getMonth() - 3);
-
-                    params.set('startDate', formatISODate(startDate));
-                    params.set('completionDate', formatISODate(today));
-                    params.set('dataset', 'S2');
-                    params.set('processingLevel', productType);
-                    params.set('maxRecords', '50');
-
-                    return `${config.endpoint}?${params.toString()}`;
-                }
-
-                function buildCard(feature) {
-                    const sentinel = dom.sentinel;
-                    if (!sentinel.template) return null;
-
-                    const clone = sentinel.template.content.cloneNode(true);
-                    const props = feature?.properties ?? {};
-                    const links = feature?.links ?? [];
-                    const assets = feature?.assets ?? {};
-
-                    const titleEl = clone.querySelector('[data-sentinel-title]');
-                    const productEl = clone.querySelector('[data-sentinel-product]');
-                    const datetimeEl = clone.querySelector('[data-sentinel-datetime]');
-                    const detailEl = clone.querySelector('[data-sentinel-details]');
-                    const previewButton = clone.querySelector('[data-sentinel-preview]');
-                    const downloadButton = clone.querySelector('[data-sentinel-download]');
-                    const thumbnailImg = clone.querySelector('[data-sentinel-thumbnail]');
-                    const thumbnailPlaceholder = clone.querySelector('[data-sentinel-placeholder]');
-
-                    const shortenText = typeof window?.shortenFilename === 'function'
-                        ? (value, max = 40) => window.shortenFilename(String(value), max)
-                        : (value) => String(value ?? '');
-
-                    const productId = props.productIdentifier || props.title || feature?.id || 'Sentinel-2 Product';
-                    const acquisitionDate = props.completionDate || props.startDate || props.endPosition || props.beginPosition || props.startTimeFromAscendingNode;
-                    const mgrsIdentifier = props.mgrsId || props.tileId || props.MGRS;
-                    const tileText = mgrsIdentifier ? `Tile ${mgrsIdentifier}` : null;
-                    const cloudCover = props.cloudCover ?? props['cloudcoverpercentage'] ?? props['cloudCoverageAssessment'];
-
-                    const titleText = props.title || productId;
-                    const productText = productId;
-
-                    titleEl?.setAttribute('title', titleText);
-                    productEl?.setAttribute('title', productText);
-                    if (titleEl) titleEl.textContent = shortenText(titleText, 48);
-                    if (productEl) productEl.textContent = shortenText(productText, 44);
-                    if (datetimeEl) datetimeEl.textContent = `Acquired: ${formatReadableDate(acquisitionDate)}`;
-
-                    const detailParts = [];
-                    if (tileText) detailParts.push(tileText);
-                    if (cloudCover !== undefined) detailParts.push(`Cloud cover: ${formatCloudCover(Number(cloudCover))}`);
-                    if (props.collection) detailParts.push(`Collection: ${props.collection}`);
-                    if (detailEl) {
-                        detailEl.textContent = detailParts.length ? detailParts.join(' • ') : 'No additional metadata available';
-                    }
-
-                    const quicklookUrl = props.thumbnail
-                        || props.quicklook
-                        || assets?.thumbnail?.href
-                        || assets?.overview?.href
-                        || links.find((link) => link.rel === 'preview')?.href;
-
-                    const downloadUrl = resolveDownloadUrl(feature);
-                    const downloadUrlWithToken = applyToken(downloadUrl);
-                    const downloadFilename = buildDownloadName(productId, titleText);
-                    const tokenAvailable = hasToken();
-
-                    if (downloadButton) {
-                        if (downloadUrl && downloadUrlWithToken && tokenAvailable) {
-                            downloadButton.classList.remove('hidden');
-                            downloadButton.setAttribute('href', downloadUrlWithToken);
-                            downloadButton.setAttribute('aria-disabled', 'false');
-                            downloadButton.setAttribute('title', `Download full scene for ${productText}`);
-                            downloadButton.setAttribute('download', downloadFilename);
-                            downloadButton.dataset.downloadBase = downloadUrl;
-                            downloadButton.tabIndex = 0;
-                        } else {
-                            downloadButton.classList.add('hidden');
-                            downloadButton.setAttribute('href', '#');
-                            downloadButton.setAttribute('aria-disabled', 'true');
-                            downloadButton.removeAttribute('download');
-                            delete downloadButton.dataset.downloadBase;
-                            downloadButton.tabIndex = -1;
-                        }
-
-                        downloadButton.addEventListener('click', (event) => {
-                            if (!hasToken()) {
-                                event.preventDefault();
-                                event.stopPropagation();
-                                window.MyZkToast?.warning?.('Copernicus access token is required before downloading.');
-                            }
-                        });
-                    }
-
-                    if (thumbnailImg) {
-                        if (quicklookUrl) {
-                            thumbnailImg.addEventListener('error', () => {
-                                thumbnailImg.classList.add('hidden');
-                                thumbnailImg.removeAttribute('src');
-                                thumbnailPlaceholder?.classList.remove('hidden');
-                            });
-                            thumbnailImg.src = quicklookUrl;
-                            thumbnailImg.classList.remove('hidden');
-                            thumbnailPlaceholder?.classList.add('hidden');
-                        } else {
-                            thumbnailImg.classList.add('hidden');
-                            thumbnailPlaceholder?.classList.remove('hidden');
-                        }
-                    }
-
-                    previewButton?.addEventListener('click', (event) => {
-                        event.preventDefault();
-                        getPreviewController(feature)?.selectFeature(feature);
-                    });
-
-                    return clone;
-                }
-
-                function getPreviewController(key = 'default') {
-                    if (!window.createSentinelPreviewController) {
-                        window.createSentinelPreviewController = createPreviewController;
-                    }
-                    return createPreviewController(key);
-                }
-
-                const previewControllers = new Map();
-
-                function createPreviewController(key = 'default') {
-                    if (previewControllers.has(key)) {
-                        return previewControllers.get(key);
-                    }
-
-                    if (!window.mapInstance || !window.mapProjection || !window.previewLayer) {
-                        return null;
-                    }
-
-                    const controller = buildPreviewController(window.mapInstance, window.mapProjection, window.previewLayer);
-                    previewControllers.set(key, controller);
-                    return controller;
-                }
-
-                function buildPreviewController(mapInstance, mapProjection, previewLayer) {
-                    const sentinel = dom.sentinel;
-                    const state = {
-                        current: null,
-                        hasImage: false,
-                        imageHidden: false,
-                        previewType: null
-                    };
-
-                    const api = {
-                        selectFeature(feature) {
-                            if (!feature) {
-                                api.clear();
-                                return;
-                            }
-
-                            const props = feature.properties ?? {};
-                            const title = props.title || props.productIdentifier || feature.id || 'Sentinel-2 Product';
-                            const acquired = formatReadableDate(
-                                props.completionDate || props.startDate || props.endPosition || props.beginPosition || props.startTimeFromAscendingNode
-                            );
-
-                            const mgrsIdentifier = props.mgrsId || props.tileId || props.MGRS;
-                            const cloudCover = props.cloudCover ?? props['cloudcoverpercentage'] ?? props['cloudCoverageAssessment'];
-                            const detailParts = [];
-                            if (mgrsIdentifier) detailParts.push(`Tile ${mgrsIdentifier}`);
-                            if (cloudCover !== undefined) detailParts.push(`Cloud cover: ${formatCloudCover(Number(cloudCover))}`);
-                            if (props.collection) detailParts.push(`Collection: ${props.collection}`);
-
-                        state.current = {
-                            feature,
-                            previewUrl: resolvePreviewUrl(feature),
-                            downloadUrl: resolveDownloadUrl(feature),
-                                wmsConfig: resolveWmsConfig({
-                                    wms: props.wms,
-                                    previewWms: props.preview,
-                                    wmts: props.wmts,
-                                    featureProperties: props,
-                                    services: props.services,
-                                    links: feature.links,
-                                    assets: feature.assets,
-                                    productId: props.productIdentifier,
-                                    tileId: props.tileId,
-                                    properties: props
-                                }),
-                                extent: resolveExtent(feature),
-                                productId: props.productIdentifier,
-                                baseTitle: title,
-                                downloadFilename: buildDownloadName(props.productIdentifier, title)
-                            };
-
-                        setPreviewPanel({
-                            title,
-                            acquired,
-                            details: detailParts.join(' • ') || null,
-                            status: buildStatusMessage('')
-                        });
-
-                        setPreviewVisible(true);
-                        updateButtons();
-
-                        refreshPreview();
-                    },
-                        clear() {
-                            state.current = null;
-                            state.hasImage = false;
-                            state.imageHidden = false;
-                            previewLayer.setSource(null);
-                            previewLayer.setVisible(false);
-                            setPreviewPanel({
-                                title: 'Sentinel-2 Preview',
-                                acquired: 'Select a product to preview',
-                                details: null,
-                                status: buildStatusMessage('No product selected.')
-                            });
-                            setPreviewVisible(false);
-                            updateButtons();
-                        },
-                        setImageVisibility(hidden) {
-                            state.imageHidden = hidden;
-                            previewLayer.setVisible(!hidden);
-                            updateButtons();
-                        },
-                        refreshPreview: refreshPreview
-                    };
-
-                    function refreshPreview() {
-                        const current = state.current;
-                        if (!current) {
-                            api.clear();
-                            return;
-                        }
-
-                        const extent = current.extent;
-                        const previewUrl = current.previewUrl;
-                        const wmsConfig = current.wmsConfig;
-                        const downloadUrl = current.downloadUrl;
-                        const tokenisedDownload = applyToken(downloadUrl);
-
-                        if (downloadUrl && tokenisedDownload) {
-                            current.downloadUrl = tokenisedDownload;
-                            current.downloadUrlBase = downloadUrl;
-                        }
-
-                        state.hasImage = false;
-
-                        const onSuccess = () => {
-                            state.hasImage = true;
-                            api.setImageVisibility(false);
-                        };
-
-                        const onError = () => {
-                            state.hasImage = false;
-                            previewLayer.setSource(null);
-                            previewLayer.setVisible(false);
-                            updateButtons();
-                        };
-
-                        if (wmsConfig && applyWmsPreview(wmsConfig, { onLoad: onSuccess, onError })) {
-                            focusExtent(extent);
-                            updateButtons();
-                            return;
-                        }
-
-                        if (previewUrl && applyStaticPreview(previewUrl, extent)) {
-                            state.hasImage = true;
-                            api.setImageVisibility(false);
-                            focusExtent(extent);
-                            updateButtons();
-                            return;
-                        }
-
-                        onError();
-                    }
-
-                    function applyStaticPreview(url, extent) {
-                        if (!url || !extent) return false;
-                        try {
-                            const imageExtent = ol.proj.transformExtent(extent, mapProjection, mapProjection);
-                            previewLayer.setSource(new ol.source.ImageStatic({
-                                url,
-                                imageExtent,
-                                projection: mapProjection,
-                                crossOrigin: 'anonymous'
-                            }));
-                            previewLayer.setVisible(!state.imageHidden);
-                            return true;
-                        } catch (error) {
-                            console.error('Unable to create Sentinel preview source', error);
-                            previewLayer.setSource(null);
-                            previewLayer.setVisible(false);
-                            return false;
-                        }
-                    }
-
-                    function applyWmsPreview(config, callbacks = {}) {
-                        if (!config || !config.url) return false;
-                        try {
-                            let wmsUrl = config.url;
-                            const tokenised = applyToken(wmsUrl);
-                            if (tokenised) wmsUrl = tokenised;
-
-                            const params = { ...(config.params ?? {}) };
-                            if (!params.LAYERS) params.LAYERS = config.layer ?? config.layers ?? '';
-                            if (!params.LAYERS) return false;
-
-                            previewLayer.setSource(new ol.source.ImageWMS({
-                                url: wmsUrl,
-                                params,
-                                ratio: 1,
-                                serverType: 'geoserver',
-                                crossOrigin: 'anonymous'
-                            }));
-
-                            const source = previewLayer.getSource();
-                            if (callbacks.onLoad) source.once('imageloadend', callbacks.onLoad);
-                            if (callbacks.onError) source.once('imageloaderror', callbacks.onError);
-
-                            previewLayer.setVisible(!state.imageHidden);
-                            return true;
-                        } catch (error) {
-                            console.error('Unable to configure Sentinel WMS preview', error);
-                            previewLayer.setSource(null);
-                            previewLayer.setVisible(false);
-                            return false;
-                        }
-                    }
-
-                    function focusExtent(extent) {
-                        if (!extent) return;
-                        try {
-                            const view = mapInstance.getView();
-                            view?.fit(extent, { padding: [50, 50, 50, 50], duration: 500, maxZoom: 14 });
-                        } catch (error) {
-                            console.error('Failed to fit map to extent', error);
-                        }
-                    }
-
-                    function setPreviewPanel({ title, acquired, details, status }) {
-                        const sentinel = dom.sentinel;
-                        if (title !== undefined && sentinel.previewTitle) sentinel.previewTitle.textContent = title;
-                        if (acquired !== undefined && sentinel.previewAcquired) sentinel.previewAcquired.textContent = acquired;
-                        if (details !== undefined && sentinel.previewDetails) {
-                            sentinel.previewDetails.textContent = details;
-                            sentinel.previewDetails.classList.toggle('hidden', !details);
-                        }
-                        if (status !== undefined && sentinel.previewStatus) sentinel.previewStatus.textContent = status;
-                    }
-
-                    function setPreviewVisible(visible) {
-                        dom.sentinel.previewPanel?.classList.toggle('hidden', !visible);
-                    }
-
-                    function updateButtons() {
-                        const sentinel = dom.sentinel;
-                        const hasSelection = Boolean(state.current);
-                        const canToggleImage = hasSelection && state.hasImage;
-
-                        if (sentinel.hideBtn) {
-                            sentinel.hideBtn.disabled = !canToggleImage || state.imageHidden;
-                            sentinel.hideBtn.textContent = state.imageHidden ? 'Preview hidden' : 'Hide preview';
-                        }
-
-                        if (sentinel.showBtn) {
-                            sentinel.showBtn.disabled = !canToggleImage || !state.imageHidden;
-                            sentinel.showBtn.textContent = state.imageHidden ? 'Unhide Preview' : 'Preview Visible';
-                        }
-
-                        if (sentinel.clearBtn) {
-                            sentinel.clearBtn.disabled = !hasSelection;
-                        }
-
-                        if (sentinel.downloadBtn) {
-                            const downloadUrl = hasSelection ? state.current?.downloadUrl : null;
-                            if (downloadUrl) {
-                                const label = state.current?.productId || state.current?.baseTitle || 'Sentinel-2 scene';
-                                const downloadName = state.current?.downloadFilename
-                                    || buildDownloadName(state.current?.productId, state.current?.baseTitle);
-
-                                sentinel.downloadBtn.classList.remove('hidden');
-                                sentinel.downloadBtn.setAttribute('href', downloadUrl);
-                                sentinel.downloadBtn.setAttribute('aria-disabled', 'false');
-                                sentinel.downloadBtn.setAttribute('title', `Download full scene for ${label}`);
-                                sentinel.downloadBtn.setAttribute('download', downloadName);
-                                sentinel.downloadBtn.dataset.downloadBase = state.current?.downloadUrlBase || '';
-                                sentinel.downloadBtn.tabIndex = 0;
-                            } else {
-                                sentinel.downloadBtn.classList.add('hidden');
-                                sentinel.downloadBtn.removeAttribute('href');
-                                sentinel.downloadBtn.removeAttribute('download');
-                                sentinel.downloadBtn.setAttribute('aria-disabled', 'true');
-                                delete sentinel.downloadBtn.dataset.downloadBase;
-                                sentinel.downloadBtn.tabIndex = -1;
-                            }
-                        }
-                    }
-
-                    return api;
-                }
-
-                function sanitizeToken(value) {
-                    return typeof value === 'string' ? value.trim() : '';
-                }
-
-                function hasToken() {
-                    return sanitizeToken(state.downloadToken).length > 0;
-                }
-
-                function applyToken(url) {
-                    if (!url) return null;
-                    const token = sanitizeToken(state.downloadToken);
-                    if (!token) return null;
-                    try {
-                        const baseHref = typeof window !== 'undefined' && window.location ? window.location.href : 'https://example.com/';
-                        const parsed = new URL(url, baseHref);
-                        parsed.searchParams.set('token', token);
-                        return parsed.toString();
-                    } catch (error) {
-                        const queryPattern = /([?&])token=[^&#]*/i;
-                        if (queryPattern.test(url)) {
-                            return url.replace(queryPattern, `$1token=${encodeURIComponent(token)}`);
-                        }
-                        return url.includes('?')
-                            ? `${url}&token=${encodeURIComponent(token)}`
-                            : `${url}?token=${encodeURIComponent(token)}`;
-                    }
-                }
-
-                function buildStatusMessage(message) {
-                    const parts = [];
-                    if (message) parts.push(message);
-                    if (!hasToken()) {
-                        parts.push(
-                            state.tokenConfigured
-                                ? 'Download unavailable: Copernicus access token could not be issued.'
-                                : 'Configure Copernicus credentials on the server to enable downloads.'
-                        );
-                    }
-                    return parts.join(' ');
-                }
-
-                function buildDownloadName(primary, fallback) {
-                    const base = String(primary ?? fallback ?? 'sentinel-2-scene').trim();
-                    const normalized = base.replace(/[\s]+/g, '_').replace(/[^A-Za-z0-9._-]+/g, '_');
-                    return normalized || 'sentinel-2-scene';
-                }
-
-                function formatISODate(date) {
-                    if (!(date instanceof Date)) return '';
-                    const copy = new Date(date.getTime());
-                    copy.setMinutes(copy.getMinutes() - copy.getTimezoneOffset());
-                    return copy.toISOString().split('T')[0];
-                }
-
-                function formatReadableDate(value) {
-                    if (!value) return 'Unknown date';
-                    const parsed = new Date(value);
-                    if (Number.isNaN(parsed.getTime())) return value;
-                    return `${parsed.toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' })} UTC`;
-                }
-
-                function formatCloudCover(value) {
-                    if (typeof value === 'number' && !Number.isNaN(value)) {
-                        return `${value.toFixed(1)}%`;
-                    }
-                    return 'N/A';
-                }
-
-                function clampNumber(value, min, max) {
-                    if (typeof value !== 'number' || Number.isNaN(value)) return null;
-                    return Math.min(Math.max(value, min), max);
-                }
-
-                const downloadIgnoredKeywords = ['quicklook', 'thumbnail', 'thumb', 'overview', 'browse', 'preview', 'allorigins'];
-                const previewIgnoredKeywords = ['thumbnail', 'thumb', 'legend', 'logo', 'browse', 'allorigins'];
-
-                function resolveDownloadUrl(feature) {
-                    if (!feature) return null;
-
-                    const props = feature.properties ?? {};
-                    const links = Array.isArray(feature.links) ? feature.links : [];
-                    const assets = feature.assets ?? {};
-
-                    const candidateScores = new Map();
-                    const registerCandidate = (url, score = 0) => {
-                        if (!isValidDownloadUrl(url)) return;
-                        const existing = candidateScores.get(url);
-                        if (existing === undefined || score > existing) {
-                            candidateScores.set(url, score);
-                        }
-                    };
-
-                    const registerFromService = (service, score = 0) => {
-                        extractServiceUrls(service).forEach((url) => registerCandidate(url, score));
-                    };
-
-                    const linkScoreByRel = {
-                        enclosure: 100,
-                        download: 95,
-                        data: 90,
-                        alternate: 75,
-                        source: 70,
-                        self: 65
-                    };
-
-                    links.forEach((link) => {
-                        const href = typeof link?.href === 'string' ? link.href : null;
-                        if (!href) return;
-                        const rel = typeof link?.rel === 'string' ? link.rel.toLowerCase() : '';
-                        const type = typeof link?.type === 'string' ? link.type.toLowerCase() : '';
-                        let score = linkScoreByRel[rel] ?? 60;
-                        if (type.includes('zip') || type.includes('safe') || type.includes('application/octet-stream')) {
-                            score += 25;
-                        } else if (type.includes('xml')) {
-                            score -= 10;
-                        }
-                        registerCandidate(href, score);
-                    });
-
-                    if (assets && typeof assets === 'object') {
-                        Object.values(assets).forEach((asset) => {
-                            const href = typeof asset?.href === 'string' ? asset.href : null;
-                            if (href) registerCandidate(href, 70);
-                            if (asset?.service) registerFromService(asset.service, 80);
-                        });
-                    }
-
-                    registerFromService(props.services, 85);
-                    registerFromService(props.download, 88);
-                    registerFromService(props.data, 86);
-                    registerFromService(props.links, 70);
-
-                    const best = Array.from(candidateScores.entries())
-                        .sort((a, b) => b[1] - a[1])
-                        .map(([url]) => url)[0];
-
-                    return best || null;
-                }
-
-                function isValidDownloadUrl(url) {
-                    if (typeof url !== 'string') return false;
-                    const trimmed = url.trim();
-                    if (!trimmed) return false;
-                    if (!/^https?:\/\//i.test(trimmed)) return false;
-                    const lowered = trimmed.toLowerCase();
-                    return !downloadIgnoredKeywords.some((keyword) => lowered.includes(keyword));
-                }
-
-                function extractServiceUrls(service) {
-                    const results = [];
-                    if (!service) return results;
-                    if (typeof service === 'string') {
-                        results.push(service);
-                    } else if (Array.isArray(service)) {
-                        service.forEach((item) => results.push(...extractServiceUrls(item)));
-                    } else if (typeof service === 'object') {
-                        ['url', 'href', 'https', 'http'].forEach((key) => {
-                            const value = service[key];
-                            if (typeof value === 'string') {
-                                results.push(value);
-                            }
-                        });
-                    }
-                    return results;
-                }
-
-                function resolvePreviewUrl(feature) {
-                    if (!feature) return null;
-
-                    const props = feature.properties ?? {};
-                    const links = Array.isArray(feature.links) ? feature.links : [];
-                    const assets = feature.assets ?? {};
-
-                    const prioritizedKeys = ['preview', 'quicklook', 'thumbnail', 'overview', 'image', 'browse'];
-
-                    const candidateUrls = new Map();
-                    const register = (url, score) => {
-                        if (!url || typeof url !== 'string') return;
-                        const trimmed = url.trim();
-                        if (!trimmed) return;
-                        const lowered = trimmed.toLowerCase();
-                        if (previewIgnoredKeywords.some((keyword) => lowered.includes(keyword))) return;
-                        const existing = candidateUrls.get(trimmed);
-                        if (existing === undefined || score > existing) {
-                            candidateUrls.set(trimmed, score);
-                        }
-                    };
-
-                    prioritizedKeys.forEach((key, index) => {
-                        const value = props[key];
-                        if (typeof value === 'string') {
-                            register(value, 100 - index * 5);
-                        }
-                    });
-
-                    if (assets && typeof assets === 'object') {
-                        Object.entries(assets).forEach(([key, asset]) => {
-                            const href = typeof asset?.href === 'string' ? asset.href : null;
-                            if (!href) return;
-                            const lowered = key.toLowerCase();
-                            let score = 70;
-                            if (lowered.includes('preview')) score = 98;
-                            else if (lowered.includes('quicklook')) score = 96;
-                            else if (lowered.includes('overview')) score = 90;
-                            else if (lowered.includes('thumbnail')) score = 85;
-                            register(href, score);
-                        });
-                    }
-
-                    links.forEach((link) => {
-                        const href = typeof link?.href === 'string' ? link.href : null;
-                        if (!href) return;
-                        const rel = typeof link?.rel === 'string' ? link.rel.toLowerCase() : '';
-                        const type = typeof link?.type === 'string' ? link.type.toLowerCase() : '';
-                        let score = 60;
-                        if (rel.includes('preview')) score += 30;
-                        if (type.includes('jpeg') || type.includes('png')) score += 10;
-                        register(href, score);
-                    });
-
-                    const best = Array.from(candidateUrls.entries())
-                        .sort((a, b) => b[1] - a[1])
-                        .map(([url]) => url)[0];
-
-                    return best || null;
-                }
-
-                function resolveExtent(feature) {
-                    if (!feature) return null;
-                    const geometry = feature.geometry || feature.features?.[0]?.geometry;
-                    if (!geometry) return null;
-                    try {
-                        const format = new ol.format.GeoJSON();
-                        const geoJson = format.readGeometry(geometry);
-                        return geoJson?.getExtent() ?? null;
-                    } catch (error) {
-                        console.error('Failed to parse Sentinel geometry', error);
-                        return null;
-                    }
-                }
-
-                function resolveWmsConfig(data) {
-                    if (!data) return null;
-
-                    const candidates = new Map();
-                    const registerCandidate = (candidate, score = 0) => {
-                        if (!candidate || !candidate.url) return;
-                        const key = `${candidate.url}|${candidate.params?.LAYERS ?? ''}|${candidate.params?.STYLES ?? ''}`;
-                        const existing = candidates.get(key);
-                        if (!existing || score > existing.score) {
-                            candidates.set(key, { ...candidate, score });
-                        }
-                    };
-
-                    const registerFromValue = (value, score = 0) => {
-                        if (!value) return;
-                        collectWmsServiceCandidates(value).forEach((entry) => {
-                            const candidate = normalizeWmsCandidate(entry.url);
-                            if (!candidate) return;
-                            const params = { ...(candidate.params ?? {}) };
-                            if (!params.LAYERS && entry.layers) params.LAYERS = entry.layers;
-                            if (!params.STYLES && entry.styles) params.STYLES = entry.styles;
-                            if (Object.keys(params).length) candidate.params = params;
-                            if (!candidate.version && entry.version) candidate.version = entry.version;
-                            registerCandidate(candidate, score);
-                        });
-                    };
-
-                    registerFromValue(data.wms, 96);
-                    registerFromValue(data.previewWms, 94);
-                    registerFromValue(data.wmts, 80);
-
-                    const props = data.featureProperties ?? data.properties ?? {};
-                    registerFromValue(props?.services, 92);
-
-                    if (props && typeof props === 'object') {
-                        Object.entries(props).forEach(([key, value]) => {
-                            const lowered = String(key).toLowerCase();
-                            if (lowered.includes('wms') || lowered.includes('ogc') || lowered.includes('ows')) {
-                                registerFromValue(value, lowered.includes('wms') ? 95 : 85);
-                            }
-                        });
-                    }
-
-                    const services = data.services ?? props?.services;
-                    if (services && typeof services === 'object') {
-                        Object.entries(services).forEach(([key, value]) => {
-                            const lowered = String(key).toLowerCase();
-                            let score = 84;
-                            if (lowered.includes('wms')) score = 98;
-                            else if (lowered.includes('ogc') || lowered.includes('ows')) score = 90;
-                            registerFromValue(value, score);
-                        });
-                    } else {
-                        registerFromValue(services, 82);
-                    }
-
-                    const links = Array.isArray(data.links) ? data.links : props?.links;
-                    if (Array.isArray(links)) {
-                        links.forEach((link) => {
-                            const href = typeof link?.href === 'string' ? link.href : null;
-                            if (!href) return;
-                            const rel = typeof link?.rel === 'string' ? link.rel.toLowerCase() : '';
-                            const type = typeof link?.type === 'string' ? link.type.toLowerCase() : '';
-                            let score = 70;
-                            if (rel.includes('wms') || rel.includes('ogc')) score += 20;
-                            if (type.includes('wms')) score += 18;
-                            registerFromValue(href, score);
-                        });
-                    }
-
-                    const assets = data.assets ?? props?.assets;
-                    if (assets && typeof assets === 'object') {
-                        Object.entries(assets).forEach(([key, value]) => {
-                            const lowered = String(key).toLowerCase();
-                            if (previewIgnoredKeywords.some((keyword) => lowered.includes(keyword))) return;
-                            if (lowered.includes('wms') || lowered.includes('ogc') || lowered.includes('ows')) {
-                                registerFromValue(value, lowered.includes('wms') ? 90 : 78);
-                            }
-                        });
-                    }
-
-                    if (!candidates.size) {
-                        return null;
-                    }
-
-                    const sorted = Array.from(candidates.values()).sort((a, b) => b.score - a.score);
-                    const best = sorted[0];
-                    if (!best || !best.url) return null;
-
-                    if (!best.params?.LAYERS) {
-                        const fallbackLayer = data.productId || data.tileId || props?.productIdentifier || props?.title || null;
-                        if (fallbackLayer) {
-                            best.params = { ...(best.params ?? {}), LAYERS: fallbackLayer };
-                        }
-                    }
-
-                    return best.params?.LAYERS ? best : null;
-                }
-
-                function normalizeWmsCandidate(value) {
-                    if (!value) return null;
-                    if (typeof value === 'string') {
-                        return { url: value };
-                    }
-                    if (typeof value === 'object') {
-                        const url = value.url || value.href || value.link || value.URI || value.uri;
-                        if (!url) return null;
-                        const params = value.params || value.Parameters || value.PARAMS;
-                        const layers = value.layers || value.LAYERS || value.layer || value.Layer;
-                        const styles = value.styles || value.STYLES || value.style || value.Style;
-                        const version = value.version || value.VERSION;
-                        const result = { url };
-                        if (params && typeof params === 'object') {
-                            result.params = params;
-                        } else {
-                            result.params = {};
-                        }
-                        if (layers && typeof layers === 'string') {
-                            result.params.LAYERS = layers;
-                        }
-                        if (styles && typeof styles === 'string') {
-                            result.params.STYLES = styles;
-                        }
-                        if (version && typeof version === 'string') {
-                            result.version = version;
-                        }
-                        return result;
-                    }
-                    return null;
-                }
-
-                function collectWmsServiceCandidates(input, context = {}) {
-                    const results = [];
-                    if (!input) return results;
-
-                    const visit = (value, ctx = {}) => {
-                        if (!value) return;
-                        if (typeof value === 'string') {
-                            const trimmed = value.trim();
-                            if (trimmed) {
-                                results.push({ url: trimmed, ...ctx });
-                            }
-                            return;
-                        }
-
-                        if (Array.isArray(value)) {
-                            value.forEach((item) => visit(item, ctx));
-                            return;
-                        }
-
-                        if (typeof value === 'object') {
-                            let layers = ctx.layers ?? null;
-                            let styles = ctx.styles ?? null;
-                            let version = ctx.version ?? null;
-
-                            Object.entries(value).forEach(([rawKey, rawValue]) => {
-                                const key = String(rawKey).toLowerCase();
-                                if (key === 'layers' || key === 'layer' || key.includes('layer')) {
-                                    if (typeof rawValue === 'string' && rawValue.trim()) {
-                                        layers = rawValue.trim();
-                                    } else if (Array.isArray(rawValue)) {
-                                        const joined = rawValue
-                                            .map((item) => (typeof item === 'string' ? item.trim() : ''))
-                                            .filter(Boolean)
-                                            .join(',');
-                                        if (joined) layers = joined;
-                                    }
-                                } else if (key === 'styles' || key === 'style' || key.includes('style')) {
-                                    if (typeof rawValue === 'string' && rawValue.trim()) {
-                                        styles = rawValue.trim();
-                                    } else if (Array.isArray(rawValue)) {
-                                        const joined = rawValue
-                                            .map((item) => (typeof item === 'string' ? item.trim() : ''))
-                                            .filter(Boolean)
-                                            .join(',');
-                                        if (joined) styles = joined;
-                                    }
-                                } else if (key === 'version') {
-                                    if (typeof rawValue === 'string' && rawValue.trim()) {
-                                        version = rawValue.trim();
-                                    }
-                                }
-                            });
-
-                            Object.entries(value).forEach(([rawKey, rawValue]) => {
-                                visit(rawValue, { layers, styles, version });
-                            });
-                        }
-                    };
-
-                    visit(input, { ...context });
-
-                    return results;
-                }
-
-                return {
-                    init,
-                    loadCollections: loadCollectionsIfNeeded
-                };
-            })();
-
-            return {
-                init,
-                showPanel,
-                closePanels,
-                calculateTotalPrice,
-                loadSentinelCollections: () => SentinelCatalog.loadCollections()
-            };
-        })();
-
-            window.showPanel = (id, btn) => MapInterface.showPanel(id, btn);
-            window.closePanels = () => MapInterface.closePanels();
-            window.calculateTotalPrice = () => MapInterface.calculateTotalPrice();
+            // Make calculateTotalPrice available globally for map.js
+            window.calculateTotalPrice = calculateTotalPrice;
         </script>
     @endpush
 </x-app-front-map-layout>
