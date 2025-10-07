@@ -1362,40 +1362,28 @@
             const defaultProductType = 'S2MSI2A';
             const sentinelDefaultMonthsBack = 1;
 
-            const getDateRangeHelper = typeof window.getDefaultDateRange === 'function'
-                ? window.getDefaultDateRange
-                : (monthsBack = 1) => {
+            const getDateRangeHelper = typeof window.getDefaultDateRange === 'function' ?
+                window.getDefaultDateRange :
+                (monthsBack = 1) => {
                     const months = Number.isFinite(monthsBack) && monthsBack > 0 ? monthsBack : 1;
                     const end = new Date();
                     end.setHours(23, 59, 59, 999);
                     const start = new Date(end.getTime());
                     start.setMonth(start.getMonth() - months);
                     start.setHours(0, 0, 0, 0);
-                    return { start, end };
-                };
-
-            const parseDateHelper = typeof window.parseDateInput === 'function'
-                ? window.parseDateInput
-                : (value) => {
-                    if (value instanceof Date && !Number.isNaN(value.getTime())) {
-                        return new Date(value.getTime());
-                    }
-                    if (typeof value === 'string' && value.trim() !== '') {
-                        const parsed = new Date(value);
-                        if (!Number.isNaN(parsed.getTime())) {
-                            return parsed;
-                        }
-                    }
-                    return null;
+                    return {
+                        start,
+                        end
+                    };
                 };
 
             const ensureIsoDateString = (date) => {
                 if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
                     return '';
                 }
-                return typeof window.formatISODate === 'function'
-                    ? window.formatISODate(date)
-                    : date.toISOString().split('T')[0];
+                return typeof window.formatISODate === 'function' ?
+                    window.formatISODate(date) :
+                    date.toISOString().split('T')[0];
             };
 
             const syncSentinelDateConstraints = () => {
@@ -1409,9 +1397,9 @@
 
             const applySentinelDefaultDates = (force = false) => {
                 const sentinelDefaultRange = getDateRangeHelper(sentinelDefaultMonthsBack) || {};
-                const sentinelDefaultStartDate = parseDateHelper(sentinelDefaultRange.start) ?? new Date();
+                const sentinelDefaultStartDate = parseDateInput(sentinelDefaultRange.start) ?? new Date();
                 sentinelDefaultStartDate.setHours(0, 0, 0, 0);
-                const sentinelDefaultEndDate = parseDateHelper(sentinelDefaultRange.end) ?? new Date();
+                const sentinelDefaultEndDate = parseDateInput(sentinelDefaultRange.end) ?? new Date();
                 sentinelDefaultEndDate.setHours(23, 59, 59, 999);
 
                 sentinelDefaultStartValue = ensureIsoDateString(sentinelDefaultStartDate);
@@ -2448,14 +2436,14 @@
 
                 const sentinelRangeFallback = getDateRangeHelper(sentinelDefaultMonthsBack) || {};
 
-                let startDate = parseDateHelper(startDateRaw)
-                    ?? parseDateHelper(sentinelDefaultStartValue)
-                    ?? parseDateHelper(sentinelRangeFallback.start)
-                    ?? parseDateHelper(new Date());
-                let endDate = parseDateHelper(endDateRaw)
-                    ?? parseDateHelper(sentinelDefaultEndValue)
-                    ?? parseDateHelper(sentinelRangeFallback.end)
-                    ?? parseDateHelper(new Date());
+                let startDate = parseDateInput(startDateRaw) ??
+                    parseDateInput(sentinelDefaultStartValue) ??
+                    parseDateInput(sentinelRangeFallback.start) ??
+                    parseDateInput(new Date());
+                let endDate = parseDateInput(endDateRaw) ??
+                    parseDateInput(sentinelDefaultEndValue) ??
+                    parseDateInput(sentinelRangeFallback.end) ??
+                    parseDateInput(new Date());
 
                 if (!startDate || !endDate) {
                     sentinelStatus.textContent = 'Please provide a valid start and end date to filter collections.';
