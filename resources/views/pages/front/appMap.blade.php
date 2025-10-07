@@ -2422,6 +2422,11 @@
             // Pull the latest Sentinel results with optional filters and populate the panel list.
             async function loadSentinelCollections(forceRefresh = false) {
                 if (!sentinelStatus || !sentinelList) return;
+                // Ensure the default date cache is refreshed before we inspect any inputs.
+                // This prevents the initial load from falling back to "today" for both start
+                // and end values when the inputs are still empty and the defaults have not
+                // been materialised yet.
+                applySentinelDefaultDates(false);
                 syncSentinelDateConstraints();
 
                 if (forceRefresh && window.MyZkToast?.info) {
