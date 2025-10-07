@@ -751,6 +751,7 @@
 
 
             const scrollAmount = 150; // pixels per click
+            let sentinelLoadedOnce = false;
 
             // Mobile nav arrows scroll the horizontal chip list into view.
             scrollLeftBtn.addEventListener('click', () => {
@@ -1338,7 +1339,6 @@
             const sentinelPreviewDownloadBtn = document.getElementById('sentinelPreviewDownloadBtn');
 
             const sentinelCatalogEndpoint = 'https://catalogue.dataspace.copernicus.eu/resto/api/collections/Sentinel2/search.json';
-            let sentinelLoadedOnce = false;
             const defaultCloudCoverMax = 40;
             const defaultLatitude = -1.24536;
             const defaultLongitude = 114.54535;
