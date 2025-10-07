@@ -940,7 +940,7 @@
                 if (areaInHectares > 0) {
                     totalPriceElement.innerHTML = `
                         <div class="flex justify-between items-center">
-                            <span class="text-lg font-bold text-green-700">${formatNumber(creditPointsNeeded.toFixed(2))} Credit Points</span>
+                            <span class="text-lg font-bold text-green-700">${formatNumber(creditPointsNeeded.toFixed(2),2)} Credit Points</span>
                             <i class="ri-coins-line font-base text-success text-xl"></i>
                         </div>
                         <div class="text-xs text-foreground-70 mt-1">
