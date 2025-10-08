@@ -1890,7 +1890,7 @@
                     const dataProjection = 'EPSG:4326';
                     const wmsDefaults = {
                         baseUrl: 'https://sh.dataspace.copernicus.eu/ogc/wms/1bd0fec1-0e52-427a-8e83-6e0dcd29a03a',
-                        layerCandidates: ['NATURAL-COLOR', 'TRUE-COLOR-S2L2A'],
+                        layerName: 'NATURAL-COLOR',
                         baseParams: {
                             FORMAT: 'image/png',
                             TRANSPARENT: true,
@@ -1922,7 +1922,7 @@
                             if (imageLayerSupported) {
                                 const params = {
                                     ...wmsDefaults.baseParams,
-                                    LAYERS: wmsDefaults.layerCandidates.find((candidate) => typeof candidate === 'string' && candidate.trim()) || 'NATURAL-COLOR'
+                                    LAYERS: wmsDefaults.layerName
                                 };
                                 localState.imagerySource = new ol.source.ImageWMS({
                                     url: wmsDefaults.baseUrl,
@@ -2101,10 +2101,9 @@
                         }
 
                         const uniqueUrls = Array.from(new Set(accumulator.urls));
-                        const uniqueLayers = Array.from(new Set(accumulator.layers));
                         const fallbackUrl = wmsDefaults.baseUrl;
                         const resolvedUrl = uniqueUrls.find((url) => /\/wms\//i.test(url)) || uniqueUrls[0] || fallbackUrl;
-                        const resolvedLayers = uniqueLayers.length ? uniqueLayers : wmsDefaults.layerCandidates;
+                        const resolvedLayers = [wmsDefaults.layerName];
                         const time = resolveWmsTimeParam(payload);
                         return {
                             url: resolvedUrl,
@@ -2137,10 +2136,7 @@
                         }
                         const options = resolveImageryOptions(payload);
                         const url = ensureAbsoluteUrl(options?.url) || wmsDefaults.baseUrl;
-                        const layerName = (Array.isArray(options?.layers) ? options.layers : [])
-                            .find((layer) => typeof layer === 'string' && layer.trim()) ||
-                            wmsDefaults.layerCandidates.find((layer) => typeof layer === 'string' && layer.trim()) ||
-                            'NATURAL-COLOR';
+                        const layerName = wmsDefaults.layerName;
 
                         if (!url || !layerName) {
                             localState.imageryLayer.setVisible(false);
