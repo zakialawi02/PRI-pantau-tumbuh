@@ -752,6 +752,7 @@
 @push('javascript')
     <script>
         (() => {
+            // Centralized DOM references used by the panel controller.
             const selectors = {
                 panelWrapper: document.getElementById('panel-wrapper'),
                 panels: Array.from(document.querySelectorAll('#panel-wrapper section')),
@@ -769,6 +770,7 @@
 
             window.AppMap = window.AppMap || {};
 
+            // Track the currently visible panel via a getter/setter for clarity.
             const state = {
                 get activePanelId() {
                     return selectors.panelWrapper.dataset.activePanel || null;
@@ -782,8 +784,10 @@
                 }
             };
 
+            // Quick helper that checks the viewport width to decide layout mode.
             const isMobileView = () => window.innerWidth < 768;
 
+            // Resolve a sidebar button that points to the given panel id.
             const getButtonByPanel = (panelId) => {
                 if (!panelId) return null;
                 return selectors.sidebarButtons.find((button) => {
@@ -799,6 +803,7 @@
                 }) || null;
             };
 
+            // Ask the Sentinel module to load its catalogue as soon as it is ready.
             const requestSentinelCatalogue = () => {
                 const sentinelModule = window.AppMap?.sentinel;
                 if (sentinelModule?.loadCollections && !sentinelModule.loadedOnce) {
@@ -816,10 +821,12 @@
                 }
             };
 
+            // Hide every panel element before showing the newly selected one.
             const hideAllPanels = () => {
                 selectors.panels.forEach((panel) => panel.classList.add('hidden'));
             };
 
+            // Apply the active state on the button that triggered the panel change.
             const setActiveButton = (panelId, triggerButton) => {
                 selectors.sidebarButtons.forEach((button) => button.classList.remove('active'));
                 if (triggerButton) {
@@ -832,6 +839,7 @@
                 fallbackButton?.classList.add('active');
             };
 
+            // Toggle classes that animate the panel opening for mobile and desktop.
             const animatePanelOpen = () => {
                 if (isMobileView()) {
                     selectors.panelWrapper.classList.remove('translate-y-full', 'slide-down');
@@ -843,6 +851,7 @@
                 selectors.panelWrapper.classList.add('w-80', 'md:w-80');
             };
 
+            // Revert the open animation by hiding or collapsing the panel wrapper.
             const animatePanelClose = () => {
                 if (isMobileView()) {
                     selectors.panelWrapper.classList.remove('slide-up');
@@ -858,6 +867,7 @@
                 selectors.panelWrapper.classList.add('w-0', 'md:w-0');
             };
 
+            // Display a specific panel while making sure supporting UI stays in sync.
             const showPanel = (panelId, triggerButton = null) => {
                 const targetPanel = document.getElementById(panelId);
                 if (!targetPanel) {
@@ -878,6 +888,7 @@
                 }
             };
 
+            // Close the active panel and reset the wrapper back to its hidden state.
             const closePanels = () => {
                 hideAllPanels();
                 selectors.sidebarButtons.forEach((button) => button.classList.remove('active'));
@@ -885,6 +896,7 @@
                 state.activePanelId = null;
             };
 
+            // Ensure the panel layout matches the current viewport (mobile vs. desktop).
             const syncPanelLayoutWithViewport = () => {
                 const activePanel = state.activePanelId;
 
@@ -910,12 +922,14 @@
                 activeButton?.classList.add('active');
             };
 
+            // Setup horizontal scrolling interaction for the mobile navigation pills.
             const initialiseHorizontalScroll = () => {
                 const { container, left, right } = selectors.scroll;
                 if (!container || !left || !right) {
                     return;
                 }
 
+                // Scroll the button container by the provided amount with smooth motion.
                 const scrollByAmount = (amount) => {
                     container.scrollBy({
                         left: amount,
@@ -930,6 +944,7 @@
                 let dragStartX = 0;
                 let scrollStartLeft = 0;
 
+                // Allow mouse dragging to scroll the mobile navigation list.
                 container.addEventListener('mousedown', (event) => {
                     isDragging = true;
                     container.classList.add('cursor-grabbing');
@@ -937,6 +952,7 @@
                     scrollStartLeft = container.scrollLeft;
                 });
 
+                // Reset dragging flags when the pointer leaves or releases the container.
                 const stopDragging = () => {
                     isDragging = false;
                     container.classList.remove('cursor-grabbing');
@@ -954,6 +970,7 @@
                 });
             };
 
+            // Automatically open the data panel on initial load.
             const initialiseDefaultPanel = () => {
                 const defaultPanelId = 'data-panel';
                 const button = isMobileView()
@@ -963,6 +980,7 @@
                 showPanel(defaultPanelId, button);
             };
 
+            // Connect resize handlers and modal toggles relevant to the dashboard.
             const registerEventListeners = () => {
                 window.addEventListener('resize', syncPanelLayoutWithViewport);
 
@@ -976,7 +994,9 @@
             };
 
             const initialisePriceCalculator = () => {
+                // Convert area from square meters to hectares.
                 const toHectares = (squareMeters) => squareMeters / 10000;
+                // Provide a subtle animation whenever the price updates.
                 const highlightContainer = (container) => {
                     container.style.transform = 'scale(1.02)';
                     setTimeout(() => {
@@ -984,6 +1004,7 @@
                     }, 200);
                 };
 
+                // Compute total credit points needed and update the display widget.
                 const calculateTotalPrice = () => {
                     const areaInSquareMeters = window.geojsonArea || 0;
                     const areaInHectares = toHectares(areaInSquareMeters);
@@ -1026,6 +1047,7 @@
                 window.calculateTotalPrice = calculateTotalPrice;
             };
 
+            // Bootstrap the panel experience once the DOM has finished loading.
             document.addEventListener('DOMContentLoaded', () => {
                 window.showPanel = showPanel;
                 window.closePanels = closePanels;
@@ -1047,6 +1069,7 @@
 @push('javascript')
     <script>
         (() => {
+            // Cache frequently used DOM references for the uploader workflow.
             const elements = {
                 sourceInput: document.getElementById('sourceType'),
                 fileInput: document.getElementById('fileInput'),
@@ -1078,18 +1101,21 @@
                 return;
             }
 
+            // Configuration values that control chunking and retry behaviour.
             const config = {
                 chunkSize: 5 * 1024 * 1024,
                 maxRetries: 3,
                 autoResetDelay: 4000
             };
 
+            // Endpoints required throughout the upload process.
             const endpoints = {
                 chunk: '{{ route('upload.chunk') }}',
                 merge: '{{ route('upload.merge') }}',
                 list: '{{ route('imagery.list') }}'
             };
 
+            // Mutable state object tracking progress and timings.
             const state = {
                 paused: false,
                 uploading: false,
@@ -1101,11 +1127,13 @@
                 uploadedBytes: 0
             };
 
+            // Ensure the uploader exposes hooks on the global AppMap namespace.
             const ensureAppNamespace = () => {
                 window.AppMap = window.AppMap || {};
                 window.AppMap.uploader = window.AppMap.uploader || {};
             };
 
+            // Toggle button states based on the current upload lifecycle stage.
             const setButtonState = (mode) => {
                 const { startBtn, pauseBtn, resumeBtn } = elements;
 
@@ -1146,6 +1174,7 @@
                 }
             };
 
+            // Clear all runtime bookkeeping for a fresh upload session.
             const resetState = () => {
                 state.paused = false;
                 state.uploading = false;
@@ -1157,6 +1186,7 @@
                 state.uploadedBytes = 0;
             };
 
+            // Restore the UI to an idle appearance without progress.
             const resetUI = () => {
                 const { fileInput, fileInfo, progressBar, progressText } = elements;
                 fileInput.value = '';
@@ -1166,6 +1196,7 @@
                 progressText.textContent = 'Ready for next upload.';
             };
 
+            // Present the selected file name and size before uploading.
             const showFileSummary = (file) => {
                 const { fileInfo, progressBar, progressText } = elements;
                 const sizeMB = (file.size / 1024 / 1024).toFixed(2);
@@ -1181,6 +1212,7 @@
                 progressBar.style.width = '0%';
             };
 
+            // Update progress bar width and accompanying status text.
             const updateProgressDisplay = (percentage, speedMBps, etaText) => {
                 const { progressBar, progressText } = elements;
                 progressBar.style.width = `${percentage}%`;
@@ -1188,6 +1220,7 @@
                 progressText.textContent = `Uploading... ${percentage}% | 🚀 ${speedText} MB/s | ⏳ ETA: ${etaText}`;
             };
 
+            // React to new file input selections and prime the uploader.
             const handleFileChange = (event) => {
                 state.file = event.target.files?.[0] || null;
 
@@ -1203,8 +1236,10 @@
                 setButtonState('ready');
             };
 
+            // Generate a lightweight identifier for coordinating chunk requests.
             const generateUploadId = () => Math.random().toString(36).substring(2, 12);
 
+            // Convert bytes remaining and elapsed seconds into a readable ETA.
             const formatEta = (remainingBytes, elapsedSeconds) => {
                 if (!Number.isFinite(elapsedSeconds) || elapsedSeconds <= 0) {
                     return '-';
@@ -1217,6 +1252,7 @@
                 return remainingSeconds > 0 ? formatTimeETA(remainingSeconds) : '-';
             };
 
+            // Upload the next chunk and retry if transient errors occur.
             const uploadNextChunk = async (retryCount = 0) => {
                 if (state.paused || !state.file) return;
 
@@ -1282,6 +1318,7 @@
                 }
             };
 
+            // Ask the backend to merge all uploaded chunks into a single file.
             const mergeChunks = async () => {
                 setButtonState('merging');
 
@@ -1319,6 +1356,7 @@
                 }
             };
 
+            // After finishing, reset the UI back to idle after a short delay.
             const scheduleAutoReset = () => {
                 setTimeout(() => {
                     resetState();
@@ -1327,6 +1365,7 @@
                 }, config.autoResetDelay);
             };
 
+            // Validate prerequisites and kick off the chunk upload loop.
             const startUpload = () => {
                 if (!state.file) {
                     MyZkToast.warning('Please select a file first!');
@@ -1347,6 +1386,7 @@
                 uploadNextChunk();
             };
 
+            // Suspend ongoing uploads without losing progress state.
             const pauseUpload = () => {
                 if (!state.uploading) {
                     return;
@@ -1358,6 +1398,7 @@
                 setButtonState('paused');
             };
 
+            // Resume uploads after a pause by continuing from the current chunk.
             const resumeUpload = () => {
                 if (!state.file) {
                     return;
@@ -1370,6 +1411,7 @@
                 uploadNextChunk();
             };
 
+            // Create a DOM fragment describing a single imagery record.
             const renderImageryCard = (item) => {
                 const template = elements.cardTemplate;
                 if (!template?.content) {
@@ -1402,6 +1444,7 @@
                 return fragment;
             };
 
+            // Retrieve the user's imagery list and render it into the panel.
             const loadMyData = async () => {
                 const container = elements.myDataContainer;
                 container.innerHTML = `
@@ -1440,6 +1483,7 @@
                 }
             };
 
+            // Attach DOM event listeners for file and control buttons.
             const bindEventListeners = () => {
                 elements.fileInput.addEventListener('change', handleFileChange);
                 elements.startBtn.addEventListener('click', startUpload);
@@ -1447,6 +1491,7 @@
                 elements.resumeBtn.addEventListener('click', resumeUpload);
             };
 
+            // Bootstrap the uploader module and fetch initial server data.
             const initialise = () => {
                 ensureAppNamespace();
                 window.setButtonState = setButtonState;
@@ -1518,11 +1563,13 @@
 
             const ignoredDownloadKeywords = ['quicklook', 'thumbnail', 'thumb', 'overview', 'browse', 'preview', 'allorigins'];
 
+            // Ensure sentinel helpers are available under the shared AppMap namespace.
             const ensureAppNamespace = () => {
                 window.AppMap = window.AppMap || {};
                 window.AppMap.sentinel = window.AppMap.sentinel || {};
             };
 
+            // Safely convert incoming values into Date objects when possible.
             const parseDate = (value) => {
                 if (typeof window.parseDateInput === 'function') {
                     return window.parseDateInput(value);
@@ -1537,6 +1584,7 @@
                 return null;
             };
 
+            // Determine the default date window used for catalogue searches.
             const getDefaultDateRange = (monthsBack = config.defaultMonthsBack) => {
                 const months = Number.isFinite(monthsBack) && monthsBack > 0 ? monthsBack : config.defaultMonthsBack;
                 const end = new Date();
@@ -1547,6 +1595,7 @@
                 return { start, end };
             };
 
+            // Normalize a Date into a YYYY-MM-DD formatted string.
             const ensureIsoDateString = (date) => {
                 if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
                     return '';
@@ -1557,12 +1606,14 @@
                 return date.toISOString().split('T')[0];
             };
 
+            // Keep start and end date fields within mutually valid ranges.
             const syncDateConstraints = () => {
                 if (!startDateInputEl || !endDateInputEl) return;
                 endDateInputEl.min = startDateInputEl.value || '';
                 startDateInputEl.max = endDateInputEl.value || '';
             };
 
+            // Populate filters with default dates when empty or forced.
             const applyDefaultDates = (force = false) => {
                 const range = getDefaultDateRange(config.defaultMonthsBack);
                 const start = parseDate(range.start) ?? new Date();
@@ -1583,6 +1634,7 @@
                 syncDateConstraints();
             };
 
+            // Retry until the global formatter exists before running the callback.
             const waitForFormatIso = (callback, attempts = 10, delayMs = 50) => {
                 if (typeof window.formatISODate === 'function' || attempts <= 0) {
                     callback();
@@ -1591,6 +1643,7 @@
                 setTimeout(() => waitForFormatIso(callback, attempts - 1, delayMs), delayMs);
             };
 
+            // Present cloud cover percentages with graceful fallbacks.
             const formatCloudCover = (value) => {
                 if (typeof value === 'number' && !Number.isNaN(value)) {
                     return `${value.toFixed(1)}%`;
@@ -1598,6 +1651,7 @@
                 return 'N/A';
             };
 
+            // Clamp numeric inputs and return null when value is invalid.
             const clampNumber = (value, min, max) => {
                 if (typeof value !== 'number' || Number.isNaN(value)) return null;
                 return Math.min(Math.max(value, min), max);
@@ -1609,6 +1663,7 @@
 
             const hasToken = () => sanitizeToken(state.token).length > 0;
 
+            // Craft a status message that explains token requirements when missing.
             const buildStatusMessage = (message) => {
                 const parts = [];
                 if (message) parts.push(message);
@@ -1620,6 +1675,7 @@
                 return parts.join(' ');
             };
 
+            // Add the Copernicus token query parameter to download URLs when possible.
             const applyTokenToUrl = (url) => {
                 if (!url) return null;
                 const token = sanitizeToken(state.token);
@@ -1632,6 +1688,7 @@
                 return `${url}${separator}token=${encodeURIComponent(token)}`;
             };
 
+            // Validate that a URL appears to be a downloadable resource link.
             const isValidDownloadUrl = (url) => {
                 if (typeof url !== 'string') return false;
                 const trimmed = url.trim();
@@ -1641,6 +1698,7 @@
                 return !ignoredDownloadKeywords.some((keyword) => lowered.includes(keyword));
             };
 
+            // Recursively gather URLs from the various service response formats.
             const extractServiceUrls = (service) => {
                 const results = [];
                 if (!service) return results;
@@ -1665,6 +1723,7 @@
                 return results;
             };
 
+            // Determine the best download URL candidate from a feature payload.
             const resolveDownloadUrl = (feature) => {
                 if (!feature) return null;
 
@@ -1785,12 +1844,14 @@
                 return bestUrl ?? null;
             };
 
+            // Generate a filesystem-friendly filename for Sentinel downloads.
             const buildDownloadName = (primary, fallback) => {
                 const base = String(primary ?? fallback ?? 'sentinel-2-scene').trim();
                 const normalized = base.replace(/[\s]+/g, '_').replace(/[^A-Za-z0-9._-]+/g, '_');
                 return normalized || 'sentinel-2-scene';
             };
 
+            // Encapsulate preview map rendering, metadata display, and downloads.
             const createPreviewModule = () => {
                 const defaultContent = {
                     title: previewElements.title?.textContent ?? '–',
@@ -1809,6 +1870,7 @@
                     selection: null
                 };
 
+                // Lazily initialize OpenLayers resources used to draw footprints.
                 const ensureContext = () => {
                     if (typeof window === 'undefined' || typeof ol === 'undefined') return null;
                     const mapInstance = window.map;
@@ -1841,12 +1903,14 @@
                     return localState;
                 };
 
+                // Show or hide the preview panel container.
                 const setPanelVisible = (visible) => {
                     if (!previewElements.panel) return;
                     previewElements.panel.classList.toggle('hidden', !visible);
                     previewElements.panel.setAttribute('aria-hidden', visible ? 'false' : 'true');
                 };
 
+                // Replace preview title and metadata labels with provided values.
                 const setPanelContent = (content = {}) => {
                     const next = { ...defaultContent, ...content };
                     if (previewElements.title) previewElements.title.textContent = next.title;
@@ -1858,6 +1922,7 @@
                     if (previewElements.status) previewElements.status.textContent = next.status;
                 };
 
+                // Animate the main map to zoom onto the preview geometry.
                 const focusExtent = (extent) => {
                     if (!extent || !localState.map) return;
                     const view = localState.map.getView?.();
@@ -1869,6 +1934,7 @@
                     });
                 };
 
+                // Convert footprint/geometry payloads into OpenLayers features.
                 const buildFeature = (payload) => {
                     if (!localState.geoJson || !localState.projection || !payload) return null;
                     const { footprint, geometry, bbox } = payload;
@@ -1900,6 +1966,7 @@
                     return null;
                 };
 
+                // Sync button states (clear/download) with the current selection.
                 const updateActions = () => {
                     const hasSelection = Boolean(localState.selection);
                     if (previewElements.clearButton) {
@@ -1926,6 +1993,7 @@
                     }
                 };
 
+                // Render preview metadata and geometry for the chosen catalogue entry.
                 const show = (payload) => {
                     const context = ensureContext();
                     if (!context) return;
@@ -1979,6 +2047,7 @@
                     updateActions();
                 };
 
+                // Remove any preview selection and restore default messaging.
                 const clear = () => {
                     localState.selection = null;
                     localState.source?.clear();
@@ -2018,6 +2087,7 @@
                 previewModule.show(payload);
             };
 
+            // Fetch catalogue data, retrying through AllOrigins if needed.
             const fetchCatalog = async (url) => {
                 const attempt = async (targetUrl) => {
                     const response = await fetch(targetUrl);
@@ -2034,6 +2104,7 @@
                 }
             };
 
+            // Create a UI card summarizing a single Sentinel catalogue feature.
             const renderCard = (feature) => {
                 if (!templateEl?.content) return null;
                 const clone = templateEl.content.cloneNode(true);
@@ -2173,12 +2244,14 @@
                 return clone;
             };
 
+            // Display a loading message while clearing previous catalogue entries.
             const setLoadingState = () => {
                 statusEl.classList.remove('hidden');
                 statusEl.textContent = 'Fetching latest Sentinel-2 collections...';
                 listEl.innerHTML = '';
             };
 
+            // Ensure numeric filter inputs stay within sensible limits.
             const normalizeInputValue = (input, min, max) => {
                 if (!input) return;
                 if (input.value === '') {
@@ -2196,12 +2269,14 @@
                 }
             };
 
+            // Stamp the timestamp of the most recent successful fetch.
             const updateLastUpdated = () => {
                 if (lastUpdatedEl) {
                     lastUpdatedEl.textContent = new Date().toLocaleString('id-ID');
                 }
             };
 
+            // Reset all filter fields back to their default configuration.
             const resetFilters = () => {
                 if (cloudInputEl) cloudInputEl.value = config.defaultCloudCover;
                 applyDefaultDates(true);
@@ -2210,6 +2285,7 @@
                 if (levelInputEl) levelInputEl.value = config.defaultProductType;
             };
 
+            // Construct the query string parameters for the Sentinel catalogue API.
             const buildQueryParams = () => {
                 const params = new URLSearchParams({
                     maxRecords: '20',
@@ -2281,6 +2357,7 @@
                 return params;
             };
 
+            // Fetch Sentinel collections based on current filters and render them.
             const loadCollections = async (forceRefresh = false) => {
                 applyDefaultDates(false);
                 syncDateConstraints();
@@ -2326,6 +2403,7 @@
                 }
             };
 
+            // Attach listeners to filter inputs and actions to keep data fresh.
             const bindEvents = () => {
                 startDateInputEl?.addEventListener('change', () => {
                     if (endDateInputEl && startDateInputEl.value && endDateInputEl.value && endDateInputEl.value < startDateInputEl.value) {
@@ -2356,6 +2434,7 @@
                 });
             };
 
+            // Bootstrap sentinel catalogue helpers and trigger the initial load.
             const initialise = () => {
                 ensureAppNamespace();
                 window.AppMap.sentinel.loadedOnce = state.loadedOnce;
