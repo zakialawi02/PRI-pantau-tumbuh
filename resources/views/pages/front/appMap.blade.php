@@ -1891,6 +1891,8 @@
                     const wmsDefaults = {
                         baseUrl: 'https://sh.dataspace.copernicus.eu/ogc/wms/1bd0fec1-0e52-427a-8e83-6e0dcd29a03a',
                         layerName: 'NATURAL-COLOR',
+                        version: '1.3.0',
+                        service: 'WMS',
                         baseParams: {
                             FORMAT: 'image/png',
                             TRANSPARENT: true,
@@ -2103,13 +2105,49 @@
                         const uniqueUrls = Array.from(new Set(accumulator.urls));
                         const fallbackUrl = wmsDefaults.baseUrl;
                         const resolvedUrl = uniqueUrls.find((url) => /\/wms\//i.test(url)) || uniqueUrls[0] || fallbackUrl;
-                        const resolvedLayers = [wmsDefaults.layerName];
+                        const resolvedLayers = accumulator.layers.length > 0 ? accumulator.layers : [wmsDefaults.layerName];
                         const time = resolveWmsTimeParam(payload);
                         return {
                             url: resolvedUrl,
                             layers: resolvedLayers,
                             time
                         };
+                    };
+
+                    const buildGeographicExtent = (payload, geometryExtent) => {
+                        if (Array.isArray(payload?.bbox) && payload.bbox.length === 4) {
+                            return payload.bbox;
+                        }
+                        if (!geometryExtent || !Array.isArray(geometryExtent) || geometryExtent.length !== 4) {
+                            return null;
+                        }
+                        if (!localState.projection || !ol?.proj?.transformExtent) {
+                            return null;
+                        }
+                        try {
+                            return ol.proj.transformExtent(geometryExtent, localState.projection, dataProjection);
+                        } catch (error) {
+                            console.warn('Unable to transform geometry extent to geographic coordinates.', error);
+                            return null;
+                        }
+                    };
+
+                    const buildStaticWmsUrl = (url, params, geographicExtent) => {
+                        try {
+                            const base = new URL(url);
+                            const search = base.searchParams;
+                            Object.entries(params).forEach(([key, value]) => {
+                                if (value === undefined || value === null || value === '') return;
+                                search.set(key, String(value));
+                            });
+                            if (Array.isArray(geographicExtent) && geographicExtent.length === 4) {
+                                search.set('BBOX', geographicExtent.join(','));
+                            }
+                            return base.toString();
+                        } catch (error) {
+                            console.warn('Unable to construct WMS preview URL', error);
+                            return null;
+                        }
                     };
 
                     const buildLayerExtent = (payload, geometryExtent) => {
@@ -2131,43 +2169,93 @@
                     };
 
                     const applyImageryPreview = (payload, geometryExtent) => {
-                        if (!localState.imageryLayer || !ol?.source?.ImageWMS) {
+                        if (!localState.imageryLayer || !ol?.source) {
                             return false;
                         }
                         const options = resolveImageryOptions(payload);
                         const url = ensureAbsoluteUrl(options?.url) || wmsDefaults.baseUrl;
-                        const layerName = wmsDefaults.layerName;
+                        const layerName = options?.layers?.[0] || wmsDefaults.layerName;
 
                         if (!url || !layerName) {
                             localState.imageryLayer.setVisible(false);
                             return false;
                         }
 
-                        const params = {
+                        const baseParams = {
                             ...wmsDefaults.baseParams,
                             LAYERS: layerName
                         };
 
                         if (options?.time) {
-                            params.TIME = options.time;
+                            baseParams.TIME = options.time;
                         }
 
                         const token = sanitizeToken(state.token);
                         if (token) {
-                            params.token = token;
+                            baseParams.token = token;
                         }
 
-                        const source = new ol.source.ImageWMS({
-                            url,
-                            params,
-                            ratio: 1,
-                            crossOrigin: 'anonymous',
-                            attributions: wmsDefaults.attribution
-                        });
+                        const extent = buildLayerExtent(payload, geometryExtent);
+                        const geographicExtent = buildGeographicExtent(payload, geometryExtent);
+
+                        let source = null;
+
+                        if (extent && geographicExtent && ol?.source?.ImageStatic) {
+                            const [minX, minY, maxX, maxY] = extent;
+                            const widthMeters = Math.max(0, maxX - minX);
+                            const heightMeters = Math.max(0, maxY - minY);
+                            const defaultWidth = 1024;
+                            let width = defaultWidth;
+                            let height = defaultWidth;
+                            if (widthMeters > 0 && heightMeters > 0) {
+                                height = Math.max(1, Math.round(defaultWidth * (heightMeters / widthMeters)));
+                                if (!Number.isFinite(height) || height <= 0) {
+                                    height = defaultWidth;
+                                }
+                            }
+
+                            const staticParams = {
+                                SERVICE: wmsDefaults.service,
+                                REQUEST: 'GetMap',
+                                VERSION: wmsDefaults.version,
+                                STYLES: '',
+                                CRS: dataProjection,
+                                SRS: dataProjection,
+                                WIDTH: width,
+                                HEIGHT: height,
+                                ...baseParams
+                            };
+
+                            const staticUrl = buildStaticWmsUrl(url, staticParams, geographicExtent);
+
+                            if (staticUrl) {
+                                source = new ol.source.ImageStatic({
+                                    url: staticUrl,
+                                    imageExtent: extent,
+                                    attributions: wmsDefaults.attribution,
+                                    crossOrigin: 'anonymous'
+                                });
+                            }
+                        }
+
+                        if (!source && ol?.source?.ImageWMS) {
+                            source = new ol.source.ImageWMS({
+                                url,
+                                params: baseParams,
+                                ratio: 1,
+                                crossOrigin: 'anonymous',
+                                attributions: wmsDefaults.attribution
+                            });
+                        }
+
+                        if (!source) {
+                            localState.imageryLayer.setVisible(false);
+                            return false;
+                        }
+
                         localState.imagerySource = source;
                         localState.imageryLayer.setSource(source);
 
-                        const extent = buildLayerExtent(payload, geometryExtent);
                         if (extent) {
                             localState.imageryLayer.setExtent(extent);
                         } else {
@@ -2208,7 +2296,9 @@
                         view.fit(extent, {
                             padding: [32, 32, 32, 32],
                             duration: 400,
-                            maxZoom: 14
+                            maxZoom: 14,
+                            constrainResolution: false,
+                            nearest: false
                         });
                     };
 
