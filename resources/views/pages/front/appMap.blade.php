@@ -2167,12 +2167,18 @@
                         widthPx = clampNumber(widthPx || 0, 256, 2048) ?? 256;
                         heightPx = clampNumber(heightPx || 0, 256, 2048) ?? 256;
 
+                        const targetCrs = params?.CRS || params?.SRS || dataProjection;
+                        const isLatLonAxis = targetCrs === 'EPSG:4326';
+                        const bboxValues = isLatLonAxis
+                            ? [minY, minX, maxY, maxX]
+                            : [minX, minY, maxX, maxY];
+
                         const query = {
                             SERVICE: 'WMS',
                             REQUEST: 'GetMap',
                             VERSION: '1.3.0',
-                            CRS: dataProjection,
-                            BBOX: [minX, minY, maxX, maxY].join(','),
+                            CRS: targetCrs,
+                            BBOX: bboxValues.join(','),
                             WIDTH: Math.max(1, Math.round(widthPx)),
                             HEIGHT: Math.max(1, Math.round(heightPx)),
                             ...params
