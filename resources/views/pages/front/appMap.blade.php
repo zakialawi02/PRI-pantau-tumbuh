@@ -1907,7 +1907,8 @@
                         geoJson: null,
                         selection: null,
                         imageryLayer: null,
-                        imagerySource: null
+                        imagerySource: null,
+                        wktFormatter: null
                     };
 
                     // Lazily initialize OpenLayers resources used to draw footprints.
@@ -2145,7 +2146,7 @@
                         }
                     };
 
-                    const buildFootprintAwareWmsUrl = (baseUrl, params, geographicExtent) => {
+                    const buildFootprintAwareWmsUrl = (baseUrl, params, geographicExtent, geometryWkt) => {
                         if (!baseUrl || !Array.isArray(geographicExtent) || geographicExtent.length !== 4) {
                             return null;
                         }
@@ -2167,21 +2168,30 @@
                         widthPx = clampNumber(widthPx || 0, 256, 2048) ?? 256;
                         heightPx = clampNumber(heightPx || 0, 256, 2048) ?? 256;
 
-                        const targetCrs = params?.CRS || params?.SRS || dataProjection;
+                        const sanitizedParams = {
+                            ...params
+                        };
+                        delete sanitizedParams.BBOX;
+
+                        const targetCrs = sanitizedParams?.CRS || sanitizedParams?.SRS || dataProjection;
                         const isLatLonAxis = targetCrs === 'EPSG:4326';
-                        const bboxValues = isLatLonAxis
-                            ? [minY, minX, maxY, maxX]
-                            : [minX, minY, maxX, maxY];
+                        if (geometryWkt) {
+                            sanitizedParams.GEOMETRY = geometryWkt;
+                        } else {
+                            const bboxValues = isLatLonAxis
+                                ? [minY, minX, maxY, maxX]
+                                : [minX, minY, maxX, maxY];
+                            sanitizedParams.BBOX = bboxValues.join(',');
+                        }
 
                         const query = {
                             SERVICE: 'WMS',
                             REQUEST: 'GetMap',
                             VERSION: '1.3.0',
                             CRS: targetCrs,
-                            BBOX: bboxValues.join(','),
                             WIDTH: Math.max(1, Math.round(widthPx)),
                             HEIGHT: Math.max(1, Math.round(heightPx)),
-                            ...params
+                            ...sanitizedParams
                         };
 
                         try {
@@ -2199,6 +2209,51 @@
                                 .join('&');
                             const separator = baseUrl.includes('?') ? '&' : '?';
                             return `${baseUrl}${separator}${serialized}`;
+                        }
+                    };
+
+                    const buildFootprintGeometryWkt = (payload) => {
+                        if (!payload || !localState.geoJson || !ol?.format?.WKT) {
+                            return null;
+                        }
+                        if (!localState.wktFormatter) {
+                            try {
+                                localState.wktFormatter = new ol.format.WKT();
+                            } catch (error) {
+                                console.warn('Unable to initialise WKT formatter for Sentinel previews.', error);
+                                return null;
+                            }
+                        }
+
+                        try {
+                            let feature = null;
+                            if (payload.footprint) {
+                                feature = localState.geoJson.readFeature(payload.footprint, {
+                                    dataProjection,
+                                    featureProjection: dataProjection
+                                });
+                            } else if (payload.geometry) {
+                                feature = localState.geoJson.readFeature({
+                                    type: 'Feature',
+                                    geometry: payload.geometry
+                                }, {
+                                    dataProjection,
+                                    featureProjection: dataProjection
+                                });
+                            } else if (Array.isArray(payload.bbox) && payload.bbox.length === 4 && ol?.geom?.Polygon) {
+                                const polygon = ol.geom.Polygon.fromExtent(payload.bbox);
+                                return localState.wktFormatter.writeGeometry(polygon);
+                            }
+
+                            const geometry = feature?.getGeometry?.();
+                            if (!geometry) {
+                                return null;
+                            }
+
+                            return localState.wktFormatter.writeGeometry(geometry);
+                        } catch (error) {
+                            console.warn('Unable to derive footprint geometry for WMS request.', error);
+                            return null;
                         }
                     };
 
@@ -2229,11 +2284,17 @@
                             params.token = token;
                         }
 
+                        const geometryWkt = buildFootprintGeometryWkt(payload);
+                        if (geometryWkt) {
+                            params.GEOMETRY = geometryWkt;
+                            delete params.BBOX;
+                        }
+
                         const extent = buildLayerExtent(payload, geometryExtent);
                         const geographicExtent = buildGeographicExtent(payload, extent ?? geometryExtent);
 
                         let source = null;
-                        const footprintUrl = buildFootprintAwareWmsUrl(url, params, geographicExtent);
+                        const footprintUrl = buildFootprintAwareWmsUrl(url, params, geographicExtent, geometryWkt);
                         if (footprintUrl && extent && ol?.source?.ImageStatic) {
                             source = new ol.source.ImageStatic({
                                 url: footprintUrl,
