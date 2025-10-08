@@ -1861,13 +1861,26 @@
                 };
 
                 const dataProjection = 'EPSG:4326';
+                const wmsDefaults = {
+                    baseUrl: 'https://sh.dataspace.copernicus.eu/ogc/wms/1bd0fec1-0e52-427a-8e83-6e0dcd29a03a',
+                    layerCandidates: ['TRUE-COLOR', 'TRUE_COLOR', 'TRUE_COLOR-S2L2A'],
+                    baseParams: {
+                        FORMAT: 'image/png',
+                        TRANSPARENT: true,
+                        SHOWLOGO: false
+                    },
+                    attribution: 'Sentinel Hub / Copernicus Data Space Ecosystem'
+                };
+
                 const localState = {
                     map: null,
                     projection: null,
                     layer: null,
                     source: null,
                     geoJson: null,
-                    selection: null
+                    selection: null,
+                    imageryLayer: null,
+                    imagerySource: null
                 };
 
                 // Lazily initialize OpenLayers resources used to draw footprints.
@@ -1876,6 +1889,30 @@
                     const mapInstance = window.map;
                     const projection = mapInstance?.getView?.()?.getProjection?.();
                     if (!mapInstance || !projection) return null;
+
+                    if (!localState.imageryLayer) {
+                        const imageLayerSupported = Boolean(ol?.source?.ImageWMS) && typeof ol?.layer?.Image === 'function';
+                        if (imageLayerSupported) {
+                            const params = {
+                                ...wmsDefaults.baseParams,
+                                LAYERS: wmsDefaults.layerCandidates.find((candidate) => typeof candidate === 'string' && candidate.trim()) || 'TRUE-COLOR'
+                            };
+                            localState.imagerySource = new ol.source.ImageWMS({
+                                url: wmsDefaults.baseUrl,
+                                params,
+                                ratio: 1,
+                                crossOrigin: 'anonymous',
+                                attributions: wmsDefaults.attribution
+                            });
+                            localState.imageryLayer = new ol.layer.Image({
+                                source: localState.imagerySource,
+                                visible: false,
+                                opacity: 0.85,
+                                zIndex: 1190
+                            });
+                            mapInstance.addLayer(localState.imageryLayer);
+                        }
+                    }
 
                     if (!localState.layer) {
                         localState.source = new ol.source.Vector();
@@ -1901,6 +1938,218 @@
                     localState.map = mapInstance;
                     localState.projection = projection;
                     return localState;
+                };
+
+                const ensureAbsoluteUrl = (value) => {
+                    if (typeof value !== 'string') return '';
+                    const trimmed = value.trim();
+                    if (!trimmed || !/^https?:\/\//i.test(trimmed)) return '';
+                    return trimmed;
+                };
+
+                const toLayerArray = (value) => {
+                    if (Array.isArray(value)) {
+                        return value
+                            .map((item) => (typeof item === 'string' ? item.trim() : ''))
+                            .filter((item) => item.length > 0);
+                    }
+                    if (typeof value === 'string') {
+                        const trimmed = value.trim();
+                        return trimmed ? [trimmed] : [];
+                    }
+                    return [];
+                };
+
+                const resolveWmsTimeParam = (payload) => {
+                    const candidates = [
+                        payload?.acquisitionDate,
+                        payload?.featureProperties?.acquisitionDate,
+                        payload?.featureProperties?.completionDate,
+                        payload?.featureProperties?.beginPosition,
+                        payload?.featureProperties?.endPosition,
+                        payload?.featureProperties?.startDate,
+                        payload?.featureProperties?.endDate,
+                        payload?.featureProperties?.startTimeFromAscendingNode,
+                        payload?.featureProperties?.datatakeTime
+                    ];
+                    for (const candidate of candidates) {
+                        const parsed = parseDate(candidate);
+                        if (parsed instanceof Date && !Number.isNaN(parsed.getTime())) {
+                            const iso = parsed.toISOString();
+                            return iso.includes('.') ? `${iso.split('.')[0]}Z` : iso;
+                        }
+                    }
+                    return null;
+                };
+
+                const inspectServiceEntry = (entry, accumulator) => {
+                    if (!entry) return;
+                    if (Array.isArray(entry)) {
+                        entry.forEach((value) => inspectServiceEntry(value, accumulator));
+                        return;
+                    }
+                    if (typeof entry === 'string') {
+                        const url = ensureAbsoluteUrl(entry);
+                        if (url && /wms|ogc/i.test(entry)) {
+                            accumulator.urls.push(url);
+                        }
+                        return;
+                    }
+                    if (typeof entry !== 'object') return;
+
+                    const urlKeys = ['wms', 'ogc', 'ogcWms', 'ogcUrl', 'wmsUrl', 'url', 'href', 'endpoint'];
+                    urlKeys.forEach((key) => {
+                        const value = entry[key];
+                        if (typeof value === 'string') {
+                            const url = ensureAbsoluteUrl(value);
+                            if (url && (/wms/i.test(key) || /ogc/i.test(key) || /wms|ogc/i.test(url))) {
+                                accumulator.urls.push(url);
+                            }
+                        } else if (value && typeof value === 'object') {
+                            inspectServiceEntry(value, accumulator);
+                        }
+                    });
+
+                    const layerKeys = ['layer', 'layers', 'layerId', 'layerIds', 'layerName', 'defaultLayer'];
+                    layerKeys.forEach((key) => {
+                        const value = entry[key];
+                        toLayerArray(value).forEach((layer) => accumulator.layers.push(layer));
+                    });
+
+                    Object.entries(entry).forEach(([, value]) => {
+                        if (value && typeof value === 'object' && !Array.isArray(value)) {
+                            inspectServiceEntry(value, accumulator);
+                        }
+                    });
+                };
+
+                const resolveImageryOptions = (payload) => {
+                    const accumulator = { urls: [], layers: [] };
+                    if (payload?.services && typeof payload.services === 'object') {
+                        Object.values(payload.services).forEach((service) => {
+                            inspectServiceEntry(service, accumulator);
+                        });
+                    }
+                    if (Array.isArray(payload?.links)) {
+                        payload.links.forEach((link) => {
+                            const rel = String(link?.rel ?? '');
+                            const type = String(link?.type ?? '');
+                            const title = String(link?.title ?? '');
+                            if (/wms|ogc/i.test(rel) || /wms|ogc/i.test(type) || /wms|ogc/i.test(title)) {
+                                const url = ensureAbsoluteUrl(link?.href);
+                                if (url) {
+                                    accumulator.urls.push(url);
+                                }
+                            }
+                        });
+                    }
+                    if (payload?.assets && typeof payload.assets === 'object') {
+                        Object.values(payload.assets).forEach((asset) => {
+                            if (typeof asset === 'string') {
+                                const url = ensureAbsoluteUrl(asset);
+                                if (url && /wms|ogc/i.test(url)) {
+                                    accumulator.urls.push(url);
+                                }
+                                return;
+                            }
+                            if (asset && typeof asset === 'object') {
+                                ['href', 'url', 'wms', 'ogc'].forEach((key) => {
+                                    const value = asset[key];
+                                    if (typeof value === 'string') {
+                                        const url = ensureAbsoluteUrl(value);
+                                        if (url && (/wms/i.test(key) || /ogc/i.test(key) || /wms|ogc/i.test(url))) {
+                                            accumulator.urls.push(url);
+                                        }
+                                    }
+                                });
+                                ['layer', 'layers', 'layerId', 'layerIds'].forEach((key) => {
+                                    const value = asset[key];
+                                    toLayerArray(value).forEach((layer) => accumulator.layers.push(layer));
+                                });
+                            }
+                        });
+                    }
+
+                    const uniqueUrls = Array.from(new Set(accumulator.urls));
+                    const uniqueLayers = Array.from(new Set(accumulator.layers));
+                    const fallbackUrl = wmsDefaults.baseUrl;
+                    const resolvedUrl = uniqueUrls.find((url) => /\/wms\//i.test(url)) || uniqueUrls[0] || fallbackUrl;
+                    const resolvedLayers = uniqueLayers.length ? uniqueLayers : wmsDefaults.layerCandidates;
+                    const time = resolveWmsTimeParam(payload);
+                    return {
+                        url: resolvedUrl,
+                        layers: resolvedLayers,
+                        time
+                    };
+                };
+
+                const buildLayerExtent = (payload, geometryExtent) => {
+                    if (geometryExtent && Array.isArray(geometryExtent) && geometryExtent.length === 4) {
+                        return geometryExtent;
+                    }
+                    if (!Array.isArray(payload?.bbox) || payload.bbox.length !== 4) {
+                        return null;
+                    }
+                    if (!localState.projection || !ol?.proj?.transformExtent) {
+                        return null;
+                    }
+                    try {
+                        return ol.proj.transformExtent(payload.bbox, dataProjection, localState.projection);
+                    } catch (error) {
+                        console.warn('Unable to transform bbox extent for imagery preview.', error);
+                        return null;
+                    }
+                };
+
+                const applyImageryPreview = (payload, geometryExtent) => {
+                    if (!localState.imageryLayer || !ol?.source?.ImageWMS) {
+                        return false;
+                    }
+                    const options = resolveImageryOptions(payload);
+                    const url = ensureAbsoluteUrl(options?.url) || wmsDefaults.baseUrl;
+                    const layerName = (Array.isArray(options?.layers) ? options.layers : [])
+                        .find((layer) => typeof layer === 'string' && layer.trim())
+                        || wmsDefaults.layerCandidates.find((layer) => typeof layer === 'string' && layer.trim())
+                        || 'TRUE-COLOR';
+
+                    if (!url || !layerName) {
+                        localState.imageryLayer.setVisible(false);
+                        return false;
+                    }
+
+                    const params = {
+                        ...wmsDefaults.baseParams,
+                        LAYERS: layerName
+                    };
+
+                    if (options?.time) {
+                        params.TIME = options.time;
+                    }
+
+                    const token = sanitizeToken(state.token);
+                    if (token) {
+                        params.token = token;
+                    }
+
+                    const source = new ol.source.ImageWMS({
+                        url,
+                        params,
+                        ratio: 1,
+                        crossOrigin: 'anonymous',
+                        attributions: wmsDefaults.attribution
+                    });
+                    localState.imagerySource = source;
+                    localState.imageryLayer.setSource(source);
+
+                    const extent = buildLayerExtent(payload, geometryExtent);
+                    if (extent) {
+                        localState.imageryLayer.setExtent(extent);
+                    } else {
+                        localState.imageryLayer.setExtent(undefined);
+                    }
+
+                    localState.imageryLayer.setVisible(true);
+                    return true;
                 };
 
                 // Show or hide the preview panel container.
@@ -1999,11 +2248,21 @@
                     if (!context) return;
                     context.source?.clear();
                     context.layer?.setVisible(false);
+                    if (localState.imageryLayer) {
+                        localState.imageryLayer.setVisible(false);
+                        localState.imageryLayer.setExtent(undefined);
+                    }
+                    localState.imagerySource = null;
                     localState.selection = null;
                     updateActions();
                     if (!payload) {
                         setPanelContent();
                         setPanelVisible(false);
+                        if (localState.imageryLayer) {
+                            localState.imageryLayer.setVisible(false);
+                            localState.imageryLayer.setExtent(undefined);
+                        }
+                        localState.imagerySource = null;
                         return;
                     }
                     const title = payload.title || payload.productId || 'Sentinel-2 Preview';
@@ -2017,19 +2276,23 @@
                     if (payload.collection) detailParts.push(`Collection: ${payload.collection}`);
                     const details = detailParts.join(' • ');
                     const feature = buildFeature(payload);
+                    let featureExtent = null;
                     if (feature) {
                         context.source.addFeature(feature);
                         context.layer.setVisible(true);
-                        const extent = feature.getGeometry()?.getExtent?.();
-                        if (extent) {
-                            focusExtent(extent);
+                        featureExtent = feature.getGeometry()?.getExtent?.() ?? null;
+                        if (featureExtent) {
+                            focusExtent(featureExtent);
                         }
                     }
+                    const imageryShown = applyImageryPreview(payload, featureExtent);
                     const downloadBase = payload.downloadUrlBase || payload.downloadUrl || null;
                     const downloadUrl = applyTokenToUrl(downloadBase);
                     const downloadFilename = payload.downloadFilename ?? buildDownloadName(payload.productId, title);
                     const statusMessage = feature
-                        ? 'Coverage footprint displayed on the map. Imagery preview is disabled.'
+                        ? (imageryShown
+                            ? 'Coverage footprint and true color scene displayed on the map.'
+                            : 'Coverage footprint displayed on the map. Imagery preview unavailable.')
                         : 'Coverage area unavailable for this product.';
                     localState.selection = {
                         downloadUrl,
@@ -2052,6 +2315,11 @@
                     localState.selection = null;
                     localState.source?.clear();
                     localState.layer?.setVisible(false);
+                    if (localState.imageryLayer) {
+                        localState.imageryLayer.setVisible(false);
+                        localState.imageryLayer.setExtent(undefined);
+                    }
+                    localState.imagerySource = null;
                     setPanelContent(defaultContent);
                     setPanelVisible(false);
                     updateActions();
