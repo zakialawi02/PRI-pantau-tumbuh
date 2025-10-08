@@ -18,11 +18,16 @@
              </div>
 
              <div class="flex flex-row items-center justify-end gap-1">
-                 <!-- Credit Display for Authenticated Users -->
                  @auth
+                     <!-- Credit Display for Authenticated Users -->
                      <div class="bg-primary/10 text-primary flex items-center space-x-1 rounded-full px-3 py-1 text-xs font-medium">
-                         <i class="ri-coins-line mr-2"></i>
-                         <span>{{ Number::format(Auth::user()->current_credits, 2, locale: app()->getLocale()) }} Credit Points</span>
+                         <i class="ri-coins-line mr-1"></i>
+                         <p><span id="current-myCredits">{{ Number::format(Auth::user()->current_credits, 2, locale: app()->getLocale()) }}</span> <span>Credit Points</span></p>
+                     </div>
+                 @else
+                     <div class="bg-primary/10 text-primary flex items-center space-x-1 rounded-full px-3 py-1 text-xs font-medium">
+                         <i class="ri-coins-line mr-1"></i>
+                         <p><span id="current-myCredits">-</span> <span>Credit Points</span></p>
                      </div>
                  @endauth
 

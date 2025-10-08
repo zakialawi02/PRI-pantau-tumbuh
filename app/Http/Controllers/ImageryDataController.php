@@ -16,6 +16,7 @@ use Illuminate\Support\Facades\Cache;
 use App\Mail\OrderImageryConfirmation;
 use Illuminate\Support\Facades\Storage;
 use Yajra\DataTables\Facades\DataTables;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 class ImageryDataController extends Controller
@@ -43,7 +44,7 @@ class ImageryDataController extends Controller
                 ->addColumn('action', function ($data) {
                     $actions = '<div class="flex flex-col gap-1">';
                     // Show retry button only if processing_status is 'error'
-                    if ($data->processing_status === 'error') {
+                    if (in_array($data->processing_status, ['skip', 'canceled', 'error'])) {
                         $actions .= '<button class="btn-retry-imagery bg-primary hover:bg-primary/80 inline-flex w-fit items-center rounded-full px-2 py-1 text-xs font-medium" data-id="' . $data->id . '" type="button" title="Retry Processing">';
                         $actions .= '<i class="ri-repeat-2-line mr-1"></i> Retry Processing';
                         $actions .= '</button>';
@@ -336,6 +337,9 @@ class ImageryDataController extends Controller
             $filename = $validated['filename'];
             $sourceType = $validated['source_type'];
 
+            // Check if processing should be skipped
+            $skipProcessing = $request->has('skip_processing') && $request->skip_processing === 'true';
+
             $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
             $allowed = ['tif', 'tiff', 'ecw', 'jp2', 'zip'];
 
@@ -389,29 +393,75 @@ class ImageryDataController extends Controller
                 throw new \Exception("Failed to get file size.");
             }
 
-            $imagery = ImageryData::create([
-                'user_id' => $user->id,
-                'source_type' => $sourceType,
-                'original_name' => $filename,
-                'stored_name' => $storedName,
-                'size' => $fileSize,
-                'format' => $ext,
-                'path' => "storage/citra/{$storedName}",
-                'upload_status' => 'done',
-                'processing_status' => 'waiting',
-                'uploaded_at' => now(),
-            ]);
+            // Determine processing status based on whether processing should be skipped
+            $processingStatus = $skipProcessing ? 'skip' : 'waiting';
+
+            // Use database transaction with locking to prevent race conditions when deducting credits
+            $imagery = null;
+            if (!$skipProcessing) {
+                DB::transaction(function () use (&$imagery, $user, $sourceType, $filename, $storedName, $fileSize, $ext, $processingStatus) {
+                    // Lock the user credit record to prevent race conditions
+                    $userCredit = $user->credits()->lockForUpdate()->first();
+
+                    if (!$userCredit) {
+                        throw new \Exception('User credit record not found.');
+                    }
+
+                    // Get required credits for processing
+                    $requiredCredits = config('app-constants.imagery_processing_cost', 10);
+
+                    // Deduct credits
+                    $userCredit->credits -= $requiredCredits;
+                    $userCredit->save();
+
+                    // Create imagery record
+                    $imagery = ImageryData::create([
+                        'user_id' => $user->id,
+                        'source_type' => $sourceType,
+                        'original_name' => $filename,
+                        'stored_name' => $storedName,
+                        'size' => $fileSize,
+                        'format' => $ext,
+                        'path' => "storage/citra/{$storedName}",
+                        'upload_status' => 'done',
+                        'processing_status' => $processingStatus,
+                        'uploaded_at' => now(),
+                    ]);
+                });
+            } else {
+                // If skipping processing, just create the imagery record without deducting credits
+                $imagery = ImageryData::create([
+                    'user_id' => $user->id,
+                    'source_type' => $sourceType,
+                    'original_name' => $filename,
+                    'stored_name' => $storedName,
+                    'size' => $fileSize,
+                    'format' => $ext,
+                    'path' => "storage/citra/{$storedName}",
+                    'upload_status' => 'done',
+                    'processing_status' => $processingStatus,
+                    'uploaded_at' => now(),
+                ]);
+            }
 
             // === Dispatch background job for Python processing ===
-            ProcessImageryJob::dispatch($imagery->id);
+            // Only dispatch if processing is not skipped
+            if (!$skipProcessing) {
+                ProcessImageryJob::dispatch($imagery->id);
+            }
+
+            $message = $skipProcessing ?
+                'Upload completed. Processing skipped due to insufficient credits.' :
+                'Upload completed. Processing started in background.';
 
             return response()->json([
                 'success' => true,
-                'message' => 'Upload completed. Processing started in background.',
+                'message' => $message,
                 'data' => [
                     'id' => $imagery->id,
                     'path' => "storage/citra/{$storedName}",
-                    'processing_status' => 'waiting',
+                    'processing_status' => $processingStatus,
+                    'currentCredits' => (float) $user->credits->credits,
                 ],
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
@@ -533,23 +583,59 @@ class ImageryDataController extends Controller
     public function retryProcessing(ImageryData $imagery)
     {
         try {
-            $imagery->update([
-                'processing_status' => 'waiting',
-            ]);
+            // Check if user has sufficient credits for processing
+            $user = Auth::user();
+            $userCredit = $user->credits;
+            $currentCredits = $userCredit ? $userCredit->credits : 0;
 
-            Log::info("Retrying processing for imagery {$imagery->id}.");
+            $requiredCredits = config('app-constants.imagery_processing_cost', 10);
 
-            ProcessImageryJob::dispatch($imagery->id);
+            if ($currentCredits < $requiredCredits) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Insufficient credit points. You need ' . $requiredCredits . ' credits but you only have ' . $currentCredits . ' credits. Please purchase more credits to continue processing.',
+                ], 400);
+            }
+
+            // Use database transaction with locking to prevent race conditions
+            DB::transaction(function () use ($imagery, $userCredit, $requiredCredits, $user) {
+                // Lock the user credit record to prevent race conditions
+                $lockedUserCredit = $user->credits()->lockForUpdate()->first();
+
+                // If we couldn't lock the record, throw an exception
+                if (!$lockedUserCredit) {
+                    throw new \Exception('Unable to lock user credit record for update.');
+                }
+
+                // Double-check credits after locking
+                if ($lockedUserCredit->credits < $requiredCredits) {
+                    throw new \Exception('Insufficient credit points. You need ' . $requiredCredits . ' credits but you only have ' . $lockedUserCredit->credits . ' credits.');
+                }
+
+                // Deduct credits
+                $lockedUserCredit->credits -= $requiredCredits;
+                $lockedUserCredit->save();
+
+                // Update imagery status to waiting
+                $imagery->update([
+                    'processing_status' => 'waiting',
+                    'scheduled_deletion_at' => now()->addDays(7)
+                ]);
+
+                Log::info("Retrying processing for imagery {$imagery->id}. Credits deducted: {$requiredCredits}");
+
+                // Dispatch processing job
+                ProcessImageryJob::dispatch($imagery->id);
+            });
 
             return response()->json([
                 'success' => true,
-                'message' => 'Re-processing started, queued for background processing.',
+                'message' => 'Credits deducted successfully. Re-processing started, queued for background processing.',
             ], 200);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to retry processing: ' . $e->getMessage(),
-                'error' => $e->getMessage(),
             ], 500);
         }
     }

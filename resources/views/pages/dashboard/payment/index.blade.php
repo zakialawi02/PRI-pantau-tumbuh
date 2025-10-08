@@ -552,7 +552,7 @@
                                 getPaymentStatus(paymentId);
 
                                 // Refresh DataTable
-                                $('#myTable').DataTable().ajax.reload();
+                                $('#myTable').DataTable().ajax.reload(null, false);
                             } else {
                                 if (MyZkToast) {
                                     MyZkToast.error(response.message || 'Failed to update payment status');

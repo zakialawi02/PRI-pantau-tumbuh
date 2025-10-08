@@ -13,6 +13,7 @@ return [
 
     // Cost of imagery credit points per hectare for get imagery/buy imagery collection
     'imagery_credit_cost_per_hectare' => 0.8,
+    'imagery_processing_cost' => 10,
     // System email addresses
     'support_email' => 'support@pantautumbuh.id',
     'info_email' => 'info@pantautumbuh.id',

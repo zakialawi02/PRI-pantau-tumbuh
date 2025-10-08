@@ -173,24 +173,64 @@
                     window.history.replaceState({}, '', newUrl);
                 });
 
+                // Function to check user credits
+                const checkUserCredits = async () => {
+                    const response = await fetch('{{ route('user.credits.check') }}');
+                    const result = await response.json();
+
+                    if (!result.success) {
+                        MyZkToast.error(result.message || 'Failed to check credit balance.');
+                        return false;
+                    }
+
+                    const currentCredits = parseFloat(formatNumber(result.credits, 2));
+                    const requiredCredits = {{ config('app-constants.imagery_processing_cost', 10) }};
+
+                    return new Promise((resolve) => {
+                        resolve(data = {
+                            hasCredits: currentCredits >= requiredCredits,
+                            currentCredits: currentCredits,
+                            requiredCredits: requiredCredits
+                        });
+                    });
+                };
+
                 // Retry imagery processing
                 $('body').on('click', '.btn-retry-imagery', function() {
+                    $(this).attr('disabled', true);
                     const imageryId = $(this).data('id');
 
-                    $.ajax({
-                        url: "{{ route('admin.imagery.retry', ':id') }}".replace(':id', imageryId),
-                        method: "POST",
-                        success: function(response) {
-                            MyZkToast.success(response.message);
-                        },
-                        error: function(error) {
-                            console.log(error);
-                            MyZkToast.error(error.responseJSON.message)
-                        },
-                        complete: function() {
-                            $('#myTable').DataTable().ajax.reload();
+                    checkUserCredits().then(res => {
+                        if (!res.hasCredits) {
+                            MyZkToast.error(`You do not have enough credits to retry this imagery processing. ${res.requiredCredits} credits are required.`);
+                            $('#myTable').DataTable().ajax.reload(null, false);
+                            return;
                         }
-                    })
+
+                        $.ajax({
+                            url: "{{ route('admin.imagery.retry', ':id') }}".replace(':id', imageryId),
+                            method: "POST",
+                            success: function(response) {
+                                MyZkToast.success(response.message);
+                            },
+                            error: function(error) {
+                                console.log(error);
+                                MyZkToast.error(error.responseJSON.message)
+                            },
+                            complete: function() {
+                                $('#myTable').DataTable().ajax.reload(null, false);
+                                checkUserCredits().then(res => {
+                                    $('#current-myCredits').text(formatNumber(res.currentCredits, 2));
+                                }).catch(error => {
+                                    console.log(error);
+                                    MyZkToast.error(error.responseJSON.message || 'Failed to update credits view')
+                                });
+                            }
+                        })
+                    }).catch(error => {
+                        MyZkToast.error('Failed to check credit balance: ' + error.message);
+                    });
+
                 });
 
                 // Download imagery source
@@ -225,7 +265,7 @@
                 });
 
                 $('body').on('click', '#btn-refresh', function(e) {
-                    $('#myTable').DataTable().ajax.reload();
+                    $('#myTable').DataTable().ajax.reload(null, false);
                 })
 
                 function deleteImagery(imageryId) {
