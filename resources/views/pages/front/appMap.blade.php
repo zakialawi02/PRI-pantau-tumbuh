@@ -2130,8 +2130,74 @@
                         }
                     };
 
+                    const buildGeographicExtent = (payload, geometryExtent) => {
+                        if (Array.isArray(payload?.bbox) && payload.bbox.length === 4) {
+                            return payload.bbox;
+                        }
+                        if (!geometryExtent || !localState.projection || !ol?.proj?.transformExtent) {
+                            return null;
+                        }
+                        try {
+                            return ol.proj.transformExtent(geometryExtent, localState.projection, dataProjection);
+                        } catch (error) {
+                            console.warn('Unable to derive geographic extent for imagery preview.', error);
+                            return null;
+                        }
+                    };
+
+                    const buildFootprintAwareWmsUrl = (baseUrl, params, geographicExtent) => {
+                        if (!baseUrl || !Array.isArray(geographicExtent) || geographicExtent.length !== 4) {
+                            return null;
+                        }
+
+                        const [minX, minY, maxX, maxY] = geographicExtent.map((value) => Number(value));
+                        const widthSpan = Math.abs(maxX - minX);
+                        const heightSpan = Math.abs(maxY - minY);
+                        if (!widthSpan || !heightSpan) {
+                            return null;
+                        }
+
+                        const maxDimension = 1024;
+                        let widthPx = maxDimension;
+                        let heightPx = Math.round(maxDimension * (heightSpan / widthSpan));
+                        if (heightPx > maxDimension) {
+                            heightPx = maxDimension;
+                            widthPx = Math.round(maxDimension * (widthSpan / heightSpan));
+                        }
+                        widthPx = clampNumber(widthPx || 0, 256, 2048) ?? 256;
+                        heightPx = clampNumber(heightPx || 0, 256, 2048) ?? 256;
+
+                        const query = {
+                            SERVICE: 'WMS',
+                            REQUEST: 'GetMap',
+                            VERSION: '1.3.0',
+                            CRS: dataProjection,
+                            BBOX: [minX, minY, maxX, maxY].join(','),
+                            WIDTH: Math.max(1, Math.round(widthPx)),
+                            HEIGHT: Math.max(1, Math.round(heightPx)),
+                            ...params
+                        };
+
+                        try {
+                            const urlObject = new URL(baseUrl);
+                            Object.entries(query).forEach(([key, value]) => {
+                                if (value !== undefined && value !== null) {
+                                    urlObject.searchParams.set(key, String(value));
+                                }
+                            });
+                            return urlObject.toString();
+                        } catch (error) {
+                            const serialized = Object.entries(query)
+                                .filter(([, value]) => value !== undefined && value !== null)
+                                .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
+                                .join('&');
+                            const separator = baseUrl.includes('?') ? '&' : '?';
+                            return `${baseUrl}${separator}${serialized}`;
+                        }
+                    };
+
                     const applyImageryPreview = (payload, geometryExtent) => {
-                        if (!localState.imageryLayer || !ol?.source?.ImageWMS) {
+                        if (!localState.imageryLayer) {
                             return false;
                         }
                         const options = resolveImageryOptions(payload);
@@ -2157,17 +2223,36 @@
                             params.token = token;
                         }
 
-                        const source = new ol.source.ImageWMS({
-                            url,
-                            params,
-                            ratio: 1,
-                            crossOrigin: 'anonymous',
-                            attributions: wmsDefaults.attribution
-                        });
+                        const extent = buildLayerExtent(payload, geometryExtent);
+                        const geographicExtent = buildGeographicExtent(payload, extent ?? geometryExtent);
+
+                        let source = null;
+                        const footprintUrl = buildFootprintAwareWmsUrl(url, params, geographicExtent);
+                        if (footprintUrl && extent && ol?.source?.ImageStatic) {
+                            source = new ol.source.ImageStatic({
+                                url: footprintUrl,
+                                imageExtent: extent,
+                                crossOrigin: 'anonymous',
+                                attributions: wmsDefaults.attribution
+                            });
+                        } else if (ol?.source?.ImageWMS) {
+                            source = new ol.source.ImageWMS({
+                                url,
+                                params,
+                                ratio: 1,
+                                crossOrigin: 'anonymous',
+                                attributions: wmsDefaults.attribution
+                            });
+                        }
+
+                        if (!source) {
+                            localState.imageryLayer.setVisible(false);
+                            return false;
+                        }
+
                         localState.imagerySource = source;
                         localState.imageryLayer.setSource(source);
 
-                        const extent = buildLayerExtent(payload, geometryExtent);
                         if (extent) {
                             localState.imageryLayer.setExtent(extent);
                         } else {
