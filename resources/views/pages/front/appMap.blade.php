@@ -749,699 +749,901 @@
             </div>
         </div>
     </div>
-
-    @push('javascript')
-        <script>
-            const panelWrapper = document.getElementById("panel-wrapper");
-            const panels = document.querySelectorAll("#panel-wrapper section");
-            const sidebarButtons = document.querySelectorAll(".sidebar-btn");
-            const scrollContainer = document.getElementById('scroll-container');
-            const scrollLeftBtn = document.getElementById('scroll-left');
-            const scrollRightBtn = document.getElementById('scroll-right');
-
-
-            const scrollAmount = 150; // pixels per click
-
-            // Mobile nav arrows scroll the horizontal chip list into view.
-            scrollLeftBtn.addEventListener('click', () => {
-                scrollContainer.scrollBy({
-                    left: -scrollAmount,
-                    behavior: 'smooth'
-                });
-            });
-
-            scrollRightBtn.addEventListener('click', () => {
-                scrollContainer.scrollBy({
-                    left: scrollAmount,
-                    behavior: 'smooth'
-                });
-            });
-
-            // Optional: drag/grab to scroll
-            let isDown = false;
-            let startX;
-            let scrollLeft;
-
-            // Enable click-and-drag scrolling for a smoother touchpad-like experience on desktop.
-            scrollContainer.addEventListener('mousedown', (e) => {
-                isDown = true;
-                scrollContainer.classList.add('cursor-grabbing');
-                startX = e.pageX - scrollContainer.offsetLeft;
-                scrollLeft = scrollContainer.scrollLeft;
-            });
-
-            scrollContainer.addEventListener('mouseleave', () => {
-                isDown = false;
-                scrollContainer.classList.remove('cursor-grabbing');
-            });
-
-            scrollContainer.addEventListener('mouseup', () => {
-                isDown = false;
-                scrollContainer.classList.remove('cursor-grabbing');
-            });
-
-            scrollContainer.addEventListener('mousemove', (e) => {
-                if (!isDown) return;
-                e.preventDefault();
-                const x = e.pageX - scrollContainer.offsetLeft;
-                const walk = (x - startX) * 2; // scroll-fast
-                scrollContainer.scrollLeft = scrollLeft - walk;
-            });
-
-            // Toggle the requested panel and ensure the wrapper animates correctly for the viewport size.
-            function showPanel(id, btn = null) {
-                const isMobile = window.innerWidth < 768;
-
-                panels.forEach(p => p.classList.add("hidden"));
-                const targetPanel = document.getElementById(id);
-                targetPanel.classList.remove("hidden");
-
-                sidebarButtons.forEach(b => b.classList.remove("active"));
-                if (btn) btn.classList.add("active");
-                else {
-                    const matchedBtn = Array.from(sidebarButtons).find(b => b.getAttribute("onclick")?.includes(id));
-                    if (matchedBtn) matchedBtn.classList.add("active");
+@push('javascript')
+    <script>
+        (() => {
+            // Centralized DOM references used by the panel controller.
+            const selectors = {
+                panelWrapper: document.getElementById('panel-wrapper'),
+                panels: Array.from(document.querySelectorAll('#panel-wrapper section')),
+                sidebarButtons: Array.from(document.querySelectorAll('.sidebar-btn')),
+                scroll: {
+                    container: document.getElementById('scroll-container'),
+                    left: document.getElementById('scroll-left'),
+                    right: document.getElementById('scroll-right')
                 }
+            };
 
-                if (isMobile) {
-                    // reset posisi
-                    panelWrapper.classList.remove("translate-y-full");
-                    panelWrapper.classList.add("translate-y-0");
-
-                    // animasi slide-up
-                    panelWrapper.classList.remove("slide-down");
-                    panelWrapper.classList.add("slide-up");
-                } else {
-                    panelWrapper.classList.remove("w-0", "md:w-0");
-                    panelWrapper.classList.add("w-80", "md:w-80");
-                }
-
-                panelWrapper.dataset.activePanel = id;
-
-                if (id === 'sentinel-panel' && !sentinelLoadedOnce) {
-                    loadSentinelCollections();
-                }
+            if (!selectors.panelWrapper) {
+                return;
             }
 
-            // Collapse the panel wrapper and clear active states.
-            function closePanels() {
-                const isMobile = window.innerWidth < 768;
+            window.AppMap = window.AppMap || {};
 
-                panels.forEach(p => p.classList.add("hidden"));
-                sidebarButtons.forEach(b => b.classList.remove("active"));
-                delete panelWrapper.dataset.activePanel;
-
-                if (isMobile) {
-                    // animasi slide-down
-                    panelWrapper.classList.remove("slide-up");
-                    panelWrapper.classList.add("slide-down");
-
-                    // setelah animasi selesai (500ms), sembunyikan sepenuhnya
-                    setTimeout(() => {
-                        panelWrapper.classList.remove("translate-y-0");
-                        panelWrapper.classList.add("translate-y-full");
-                    }, 480);
-                } else {
-                    panelWrapper.classList.remove("w-80", "md:w-80");
-                    panelWrapper.classList.add("w-0", "md:w-0");
+            // Track the currently visible panel via a getter/setter for clarity.
+            const state = {
+                get activePanelId() {
+                    return selectors.panelWrapper.dataset.activePanel || null;
+                },
+                set activePanelId(value) {
+                    if (!value) {
+                        delete selectors.panelWrapper.dataset.activePanel;
+                        return;
+                    }
+                    selectors.panelWrapper.dataset.activePanel = value;
                 }
-            }
+            };
 
+            // Quick helper that checks the viewport width to decide layout mode.
+            const isMobileView = () => window.innerWidth < 768;
 
-            // === DEFAULT STATE saat halaman load ===
-            // Open the default panel on load and fetch the initial Sentinel catalogue.
-            window.addEventListener("DOMContentLoaded", () => {
-                const defaultPanel = 'data-panel';
-                const isMobile = window.innerWidth < 768;
+            // Resolve a sidebar button that points to the given panel id.
+            const getButtonByPanel = (panelId) => {
+                if (!panelId) return null;
+                return selectors.sidebarButtons.find((button) => {
+                    if (!button) return false;
+                    if (!button.dataset.panelTarget) {
+                        const inline = button.getAttribute('onclick') || '';
+                        const match = inline.match(/showPanel\('([^']+)'/);
+                        if (match) {
+                            button.dataset.panelTarget = match[1];
+                        }
+                    }
+                    return button.dataset.panelTarget === panelId;
+                }) || null;
+            };
 
-                const defaultBtn = isMobile ?
-                    document.querySelector(`#scroll-container .sidebar-btn[onclick*='${defaultPanel}']`) :
-                    document.querySelector(`aside .sidebar-btn[onclick*='${defaultPanel}']`);
-
-                showPanel(defaultPanel, defaultBtn);
-
-                if (!sentinelLoadedOnce) {
-                    loadSentinelCollections();
-                }
-            });
-
-            // === RESPONSIVE HANDLER: SYNC STATE SAAT RESIZE ===
-            // Reconcile mobile/desktop panel classes whenever the viewport size changes.
-            window.addEventListener("resize", () => {
-                const isMobile = window.innerWidth < 768;
-                const activePanel = panelWrapper.dataset.activePanel;
-
-                // Jika tidak ada panel aktif (semua ditutup), keluar saja
-                if (!activePanel) {
-                    // Pastikan panel wrapper tertutup di semua mode
-                    panelWrapper.classList.add("translate-y-full");
-                    panelWrapper.classList.remove("translate-y-0", "w-80", "md:w-80");
+            // Ask the Sentinel module to load its catalogue as soon as it is ready.
+            const requestSentinelCatalogue = () => {
+                const sentinelModule = window.AppMap?.sentinel;
+                if (sentinelModule?.loadCollections && !sentinelModule.loadedOnce) {
+                    sentinelModule.loadCollections();
                     return;
                 }
 
-                // Hapus semua class transisi yang bisa bentrok
-                panelWrapper.classList.remove("slide-up", "slide-down");
-
-                if (isMobile) {
-                    // mobile mode: gunakan slide-up style
-                    panelWrapper.classList.remove("w-0", "md:w-0", "w-80", "md:w-80");
-                    panelWrapper.classList.remove("translate-y-full");
-                    panelWrapper.classList.add("translate-y-0", "opacity-100");
-                } else {
-                    // desktop mode: gunakan lebar tetap (sidebar style)
-                    panelWrapper.classList.remove("translate-y-full", "translate-y-0");
-                    panelWrapper.classList.add("w-80", "md:w-80", "opacity-100");
+                if (!sentinelModule) {
+                    document.addEventListener('app:sentinel:ready', (event) => {
+                        const module = event.detail;
+                        if (module?.loadCollections && !module.loadedOnce) {
+                            module.loadCollections();
+                        }
+                    }, { once: true });
                 }
-
-                // perbarui tombol active sesuai mode baru
-                const activeBtn = isMobile ?
-                    document.querySelector(`#scroll-container .sidebar-btn[onclick*='${activePanel}']`) :
-                    document.querySelector(`aside .sidebar-btn[onclick*='${activePanel}']`);
-
-                sidebarButtons.forEach(b => b.classList.remove("active"));
-                if (activeBtn) activeBtn.classList.add("active");
-            });
-
-
-            // Buy Satellite Button Event
-            document.getElementById('buySatelliteBtn')?.addEventListener('click', function() {
-                const buyingPanel = document.getElementById('buyingPanel');
-                buyingPanel.classList.remove('hidden');
-            });
-            document.getElementById('buyingPanelCloseBtn')?.addEventListener('click', function() {
-                const buyingPanel = document.getElementById('buyingPanel');
-                buyingPanel.classList.add('hidden');
-            });
-
-
-            // Price calculation functions, estimates for the purchase panel.
-            function calculateTotalPrice() {
-                // Get area from global variable (set when polygon is drawn)
-                const areaInSquareMeters = window.geojsonArea || 0;
-                const areaInHectares = areaInSquareMeters / 10000; // Convert m² to hectares
-
-                // Calculate credit points needed (using global constant rate)
-                const creditPointsNeeded = areaInHectares * {{ config('app-constants.imagery_credit_cost_per_hectare') }};
-
-                // Update the display
-                const totalPriceElement = document.getElementById('total_price');
-                const priceContainer = totalPriceElement.parentElement;
-
-                if (areaInHectares > 0) {
-                    totalPriceElement.innerHTML = `
-                        <div class="flex justify-between items-center">
-                            <span class="text-lg font-bold text-green-700">${formatNumber(creditPointsNeeded.toFixed(2),2)} Credit Points</span>
-                            <i class="ri-coins-line font-base text-success text-xl"></i>
-                        </div>
-                        <div class="text-xs text-foreground-70 mt-1">
-                            ${formatNumber(areaInHectares)} hectares × {{ Number::format(config('app-constants.imagery_credit_cost_per_hectare'), locale: app()->getLocale()) }} credit points/hectare
-                        </div>
-                    `;
-                    priceContainer.classList.remove('bg-muted/60', 'border-muted');
-                    priceContainer.classList.add('bg-green-50', 'border-green-300', 'shadow-sm');
-
-                    // Add a subtle animation
-                    priceContainer.style.transform = 'scale(1.02)';
-                    setTimeout(() => {
-                        priceContainer.style.transform = 'scale(1)';
-                    }, 200);
-                } else {
-                    totalPriceElement.innerHTML = `
-                        <div class="flex items-center text-foreground/50">
-                            <i class="ri-information-line mr-2"></i>
-                            Draw an area to calculate credit points
-                        </div>
-                    `;
-                    priceContainer.classList.remove('bg-green-50', 'border-green-300', 'shadow-sm', 'bg-amber-50', 'border-amber-300');
-                    priceContainer.classList.add('bg-muted/60', 'border-muted');
-                }
-
-                // Add transition for smooth color changes
-                priceContainer.style.transition = 'all 0.3s ease-in-out';
-            }
-
-            // Make calculateTotalPrice available globally for map.js
-            window.calculateTotalPrice = calculateTotalPrice;
-        </script>
-    @endpush
-
-    @push('javascript')
-        <script>
-            // All uploader related DOM elements
-            const sourceInput = document.getElementById('sourceType');
-            const fileInput = document.getElementById('fileInput');
-            const fileInfo = document.getElementById('fileInfo');
-            const progressBar = document.getElementById('progressBar');
-            const progressText = document.getElementById('progressText');
-            const startBtn = document.getElementById('startBtn');
-            const pauseBtn = document.getElementById('pauseBtn');
-            const resumeBtn = document.getElementById('resumeBtn');
-            const myDataContainer = document.getElementById('myDataContainer');
-
-            const uploaderElements = {
-                sourceInput,
-                fileInput,
-                fileInfo,
-                progressBar,
-                progressText,
-                startBtn,
-                pauseBtn,
-                resumeBtn,
-                myDataContainer
             };
 
-            // Quickly verify whether every required element exists before wiring up listeners.
-            const uploaderReady = Object.values(uploaderElements).every((element) => Boolean(element));
-            if (!uploaderReady) {
-                console.warn('Imagery uploader controls missing. Skipping uploader bootstrap.', {
-                    hasSourceInput: Boolean(sourceInput),
-                    hasFileInput: Boolean(fileInput),
-                    hasFileInfo: Boolean(fileInfo),
-                    hasProgressBar: Boolean(progressBar),
-                    hasProgressText: Boolean(progressText),
-                    hasStartBtn: Boolean(startBtn),
-                    hasPauseBtn: Boolean(pauseBtn),
-                    hasResumeBtn: Boolean(resumeBtn),
-                    hasMyDataContainer: Boolean(myDataContainer)
+            // Hide every panel element before showing the newly selected one.
+            const hideAllPanels = () => {
+                selectors.panels.forEach((panel) => panel.classList.add('hidden'));
+            };
+
+            // Apply the active state on the button that triggered the panel change.
+            const setActiveButton = (panelId, triggerButton) => {
+                selectors.sidebarButtons.forEach((button) => button.classList.remove('active'));
+                if (triggerButton) {
+                    triggerButton.classList.add('active');
+                    triggerButton.dataset.panelTarget = panelId;
+                    return;
+                }
+
+                const fallbackButton = getButtonByPanel(panelId);
+                fallbackButton?.classList.add('active');
+            };
+
+            // Toggle classes that animate the panel opening for mobile and desktop.
+            const animatePanelOpen = () => {
+                if (isMobileView()) {
+                    selectors.panelWrapper.classList.remove('translate-y-full', 'slide-down');
+                    selectors.panelWrapper.classList.add('translate-y-0', 'slide-up');
+                    return;
+                }
+
+                selectors.panelWrapper.classList.remove('w-0', 'md:w-0');
+                selectors.panelWrapper.classList.add('w-80', 'md:w-80');
+            };
+
+            // Revert the open animation by hiding or collapsing the panel wrapper.
+            const animatePanelClose = () => {
+                if (isMobileView()) {
+                    selectors.panelWrapper.classList.remove('slide-up');
+                    selectors.panelWrapper.classList.add('slide-down');
+                    setTimeout(() => {
+                        selectors.panelWrapper.classList.remove('translate-y-0');
+                        selectors.panelWrapper.classList.add('translate-y-full');
+                    }, 480);
+                    return;
+                }
+
+                selectors.panelWrapper.classList.remove('w-80', 'md:w-80');
+                selectors.panelWrapper.classList.add('w-0', 'md:w-0');
+            };
+
+            // Display a specific panel while making sure supporting UI stays in sync.
+            const showPanel = (panelId, triggerButton = null) => {
+                const targetPanel = document.getElementById(panelId);
+                if (!targetPanel) {
+                    console.warn(`Panel with id "${panelId}" not found.`);
+                    return;
+                }
+
+                hideAllPanels();
+                targetPanel.classList.remove('hidden');
+
+                setActiveButton(panelId, triggerButton);
+                animatePanelOpen();
+
+                state.activePanelId = panelId;
+
+                if (panelId === 'sentinel-panel') {
+                    requestSentinelCatalogue();
+                }
+            };
+
+            // Close the active panel and reset the wrapper back to its hidden state.
+            const closePanels = () => {
+                hideAllPanels();
+                selectors.sidebarButtons.forEach((button) => button.classList.remove('active'));
+                animatePanelClose();
+                state.activePanelId = null;
+            };
+
+            // Ensure the panel layout matches the current viewport (mobile vs. desktop).
+            const syncPanelLayoutWithViewport = () => {
+                const activePanel = state.activePanelId;
+
+                selectors.panelWrapper.classList.remove('slide-up', 'slide-down');
+
+                if (!activePanel) {
+                    selectors.panelWrapper.classList.add('translate-y-full');
+                    selectors.panelWrapper.classList.remove('translate-y-0', 'w-80', 'md:w-80');
+                    return;
+                }
+
+                if (isMobileView()) {
+                    selectors.panelWrapper.classList.remove('w-0', 'md:w-0', 'w-80', 'md:w-80');
+                    selectors.panelWrapper.classList.remove('translate-y-full');
+                    selectors.panelWrapper.classList.add('translate-y-0', 'opacity-100');
+                } else {
+                    selectors.panelWrapper.classList.remove('translate-y-full', 'translate-y-0');
+                    selectors.panelWrapper.classList.add('w-80', 'md:w-80', 'opacity-100');
+                }
+
+                const activeButton = getButtonByPanel(activePanel);
+                selectors.sidebarButtons.forEach((button) => button.classList.remove('active'));
+                activeButton?.classList.add('active');
+            };
+
+            // Setup horizontal scrolling interaction for the mobile navigation pills.
+            const initialiseHorizontalScroll = () => {
+                const { container, left, right } = selectors.scroll;
+                if (!container || !left || !right) {
+                    return;
+                }
+
+                // Scroll the button container by the provided amount with smooth motion.
+                const scrollByAmount = (amount) => {
+                    container.scrollBy({
+                        left: amount,
+                        behavior: 'smooth'
+                    });
+                };
+
+                left.addEventListener('click', () => scrollByAmount(-150));
+                right.addEventListener('click', () => scrollByAmount(150));
+
+                let isDragging = false;
+                let dragStartX = 0;
+                let scrollStartLeft = 0;
+
+                // Allow mouse dragging to scroll the mobile navigation list.
+                container.addEventListener('mousedown', (event) => {
+                    isDragging = true;
+                    container.classList.add('cursor-grabbing');
+                    dragStartX = event.pageX - container.offsetLeft;
+                    scrollStartLeft = container.scrollLeft;
                 });
-            } else {
-                // Track upload state locally so we can update the UI without querying the server.
-                let paused = false;
-                let uploading = false;
-                let file = null;
-                let uploadId = null;
-                let currentChunk = 0;
-                let totalChunks = 0;
-                const chunkSize = 5 * 1024 * 1024; // 5 MB per chunk
-                let startTime = null;
-                let uploadedBytes = 0;
 
-                // === INIT ===
-                setButtonState("idle");
-                loadMyData();
+                // Reset dragging flags when the pointer leaves or releases the container.
+                const stopDragging = () => {
+                    isDragging = false;
+                    container.classList.remove('cursor-grabbing');
+                };
 
-                // On input imagery file, updating the summary row and element.
-                fileInput.addEventListener("change", (e) => {
-                    file = e.target.files[0];
-                    if (!file) return;
+                container.addEventListener('mouseleave', stopDragging);
+                container.addEventListener('mouseup', stopDragging);
 
-                    const sizeMB = (file.size / 1024 / 1024).toFixed(2);
-                    const shortName = shortenFilename(file.name, 40);
+                container.addEventListener('mousemove', (event) => {
+                    if (!isDragging) return;
+                    event.preventDefault();
+                    const currentX = event.pageX - container.offsetLeft;
+                    const delta = (currentX - dragStartX) * 2;
+                    container.scrollLeft = scrollStartLeft - delta;
+                });
+            };
 
-                    fileInfo.classList.remove("hidden");
-                    fileInfo.innerHTML = `
-                        <strong>Name:</strong> ${shortName}<br>
-                        <strong>Size:</strong> ${sizeMB} MB
-                    `;
+            // Automatically open the data panel on initial load.
+            const initialiseDefaultPanel = () => {
+                const defaultPanelId = 'data-panel';
+                const button = isMobileView()
+                    ? document.querySelector(`#scroll-container .sidebar-btn[onclick*='${defaultPanelId}']`)
+                    : document.querySelector(`aside .sidebar-btn[onclick*='${defaultPanelId}']`);
 
-                    progressText.textContent = "✅ File ready to upload. Click 'Start Upload' to begin.";
-                    progressBar.style.width = "0%";
-                    MyZkToast.info("File ready to upload, click Start to begin.");
-                    setButtonState("ready");
+                showPanel(defaultPanelId, button);
+            };
+
+            // Connect resize handlers and modal toggles relevant to the dashboard.
+            const registerEventListeners = () => {
+                window.addEventListener('resize', syncPanelLayoutWithViewport);
+
+                document.getElementById('buySatelliteBtn')?.addEventListener('click', () => {
+                    document.getElementById('buyingPanel')?.classList.remove('hidden');
                 });
 
-                //  Start upload session with a pseudo-random upload id.
-                startBtn.addEventListener("click", () => {
-                    if (!file) {
-                        MyZkToast.warning("Please select a file first!");
+                document.getElementById('buyingPanelCloseBtn')?.addEventListener('click', () => {
+                    document.getElementById('buyingPanel')?.classList.add('hidden');
+                });
+            };
+
+            const initialisePriceCalculator = () => {
+                // Convert area from square meters to hectares.
+                const toHectares = (squareMeters) => squareMeters / 10000;
+                // Provide a subtle animation whenever the price updates.
+                const highlightContainer = (container) => {
+                    container.style.transform = 'scale(1.02)';
+                    setTimeout(() => {
+                        container.style.transform = 'scale(1)';
+                    }, 200);
+                };
+
+                // Compute total credit points needed and update the display widget.
+                const calculateTotalPrice = () => {
+                    const areaInSquareMeters = window.geojsonArea || 0;
+                    const areaInHectares = toHectares(areaInSquareMeters);
+                    const totalPriceElement = document.getElementById('total_price');
+
+                    if (!totalPriceElement) {
                         return;
                     }
 
-                    uploadId = Math.random().toString(36).substring(2, 12);
-                    totalChunks = Math.ceil(file.size / chunkSize);
-                    currentChunk = 0;
-                    uploadedBytes = 0;
-                    paused = false;
-                    uploading = true;
-                    startTime = performance.now();
+                    const priceContainer = totalPriceElement.parentElement;
+                    const creditPointsNeeded = areaInHectares * {{ config('app-constants.imagery_credit_cost_per_hectare') }};
 
-                    MyZkToast.info("🚀 Upload started...");
-                    progressText.textContent = `🚀 Uploading ${file.name}...`;
-                    setButtonState("uploading");
-                    uploadNextChunk();
-                });
-
-                // Pause upload, flips the flags so the recursive chunk uploader stops itself.
-                pauseBtn.addEventListener("click", () => {
-                    if (!uploading) return;
-                    paused = true;
-                    uploading = false;
-                    progressText.textContent = "⏸️ Upload paused.";
-                    MyZkToast.warning("Upload paused.");
-                    setButtonState("paused");
-                });
-
-                // Resume upload without reinitialising counters or the upload id.
-                resumeBtn.addEventListener("click", () => {
-                    if (!file) return;
-                    paused = false;
-                    uploading = true;
-                    progressText.textContent = "▶️ Upload resumed...";
-                    MyZkToast.info("Upload resumed...");
-                    setButtonState("uploading");
-                    uploadNextChunk();
-                });
-
-                // Upload the next chunk of the file, retrying transient failures with exponential back-off.
-                async function uploadNextChunk(retryCount = 0) {
-                    if (paused || !file) return;
-
-                    if (currentChunk >= totalChunks) {
-                        progressText.textContent = "🧩 Merging file on server...";
-                        return mergeChunks();
+                    if (areaInHectares > 0) {
+                        totalPriceElement.innerHTML = `
+                            <div class="flex justify-between items-center">
+                                <span class="text-lg font-bold text-green-700">${formatNumber(creditPointsNeeded.toFixed(2), 2)} Credit Points</span>
+                                <i class="ri-coins-line font-base text-success text-xl"></i>
+                            </div>
+                            <div class="text-xs text-foreground-70 mt-1">
+                                ${formatNumber(areaInHectares)} hectares × {{ Number::format(config('app-constants.imagery_credit_cost_per_hectare'), locale: app()->getLocale()) }} credit points/hectare
+                            </div>
+                        `;
+                        priceContainer.classList.remove('bg-muted/60', 'border-muted', 'bg-amber-50', 'border-amber-300');
+                        priceContainer.classList.add('bg-green-50', 'border-green-300', 'shadow-sm');
+                        highlightContainer(priceContainer);
+                    } else {
+                        totalPriceElement.innerHTML = `
+                            <div class="flex items-center text-foreground/50">
+                                <i class="ri-information-line mr-2"></i>
+                                Draw an area to calculate credit points
+                            </div>
+                        `;
+                        priceContainer.classList.remove('bg-green-50', 'border-green-300', 'shadow-sm');
+                        priceContainer.classList.add('bg-muted/60', 'border-muted');
                     }
 
-                    const start = currentChunk * chunkSize;
-                    const end = Math.min(file.size, start + chunkSize);
-                    const chunk = file.slice(start, end);
-                    const chunkSizeBytes = end - start;
+                    priceContainer.style.transition = 'all 0.3s ease-in-out';
+                };
 
-                    const formData = new FormData();
-                    formData.append("upload_id", uploadId);
-                    formData.append("chunk_index", currentChunk);
-                    formData.append("chunk", chunk);
+                window.calculateTotalPrice = calculateTotalPrice;
+            };
 
-                    try {
-                        const res = await fetch('{{ route('upload.chunk') }}', {
-                            method: "POST",
-                            headers: {
-                                "X-CSRF-TOKEN": "{{ csrf_token() }}"
-                            },
-                            body: formData,
-                        });
+            // Bootstrap the panel experience once the DOM has finished loading.
+            document.addEventListener('DOMContentLoaded', () => {
+                window.showPanel = showPanel;
+                window.closePanels = closePanels;
 
-                        const data = await res.json();
-                        if (!res.ok || !data.success) {
-                            throw new Error(data.message || `Chunk ${currentChunk} failed.`);
+                initialiseHorizontalScroll();
+                initialiseDefaultPanel();
+                registerEventListeners();
+                initialisePriceCalculator();
+                syncPanelLayoutWithViewport();
+
+                const sentinelModule = window.AppMap?.sentinel;
+                if (sentinelModule?.loadCollections && !sentinelModule.loadedOnce) {
+                    sentinelModule.loadCollections();
+                }
+            });
+        })();
+    </script>
+@endpush
+@push('javascript')
+    <script>
+        (() => {
+            // Cache frequently used DOM references for the uploader workflow.
+            const elements = {
+                sourceInput: document.getElementById('sourceType'),
+                fileInput: document.getElementById('fileInput'),
+                fileInfo: document.getElementById('fileInfo'),
+                progressBar: document.getElementById('progressBar'),
+                progressText: document.getElementById('progressText'),
+                startBtn: document.getElementById('startBtn'),
+                pauseBtn: document.getElementById('pauseBtn'),
+                resumeBtn: document.getElementById('resumeBtn'),
+                myDataContainer: document.getElementById('myDataContainer'),
+                cardTemplate: document.getElementById('imageryCardTemplate')
+            };
+
+            const allElementsReady = Object.values(elements).every(Boolean);
+
+            if (!allElementsReady) {
+                console.warn('Imagery uploader controls missing. Skipping uploader bootstrap.', {
+                    hasSourceInput: Boolean(elements.sourceInput),
+                    hasFileInput: Boolean(elements.fileInput),
+                    hasFileInfo: Boolean(elements.fileInfo),
+                    hasProgressBar: Boolean(elements.progressBar),
+                    hasProgressText: Boolean(elements.progressText),
+                    hasStartBtn: Boolean(elements.startBtn),
+                    hasPauseBtn: Boolean(elements.pauseBtn),
+                    hasResumeBtn: Boolean(elements.resumeBtn),
+                    hasMyDataContainer: Boolean(elements.myDataContainer),
+                    hasTemplate: Boolean(elements.cardTemplate)
+                });
+                return;
+            }
+
+            // Configuration values that control chunking and retry behaviour.
+            const config = {
+                chunkSize: 5 * 1024 * 1024,
+                maxRetries: 3,
+                autoResetDelay: 4000
+            };
+
+            // Endpoints required throughout the upload process.
+            const endpoints = {
+                chunk: '{{ route('upload.chunk') }}',
+                merge: '{{ route('upload.merge') }}',
+                list: '{{ route('imagery.list') }}'
+            };
+
+            // Mutable state object tracking progress and timings.
+            const state = {
+                paused: false,
+                uploading: false,
+                file: null,
+                uploadId: null,
+                currentChunk: 0,
+                totalChunks: 0,
+                startTime: 0,
+                uploadedBytes: 0
+            };
+
+            // Ensure the uploader exposes hooks on the global AppMap namespace.
+            const ensureAppNamespace = () => {
+                window.AppMap = window.AppMap || {};
+                window.AppMap.uploader = window.AppMap.uploader || {};
+            };
+
+            // Toggle button states based on the current upload lifecycle stage.
+            const setButtonState = (mode) => {
+                const { startBtn, pauseBtn, resumeBtn } = elements;
+
+                const disableAll = () => {
+                    startBtn.disabled = true;
+                    pauseBtn.disabled = true;
+                    resumeBtn.disabled = true;
+                };
+
+                switch (mode) {
+                    case 'ready':
+                        startBtn.disabled = false;
+                        pauseBtn.disabled = true;
+                        resumeBtn.disabled = true;
+                        break;
+                    case 'uploading':
+                        startBtn.disabled = true;
+                        pauseBtn.disabled = false;
+                        resumeBtn.disabled = true;
+                        break;
+                    case 'paused':
+                        startBtn.disabled = true;
+                        pauseBtn.disabled = true;
+                        resumeBtn.disabled = false;
+                        break;
+                    case 'merging':
+                    case 'done':
+                    case 'error':
+                        disableAll();
+                        if (mode === 'error') {
+                            startBtn.disabled = false;
                         }
+                        break;
+                    case 'idle':
+                    default:
+                        disableAll();
+                        break;
+                }
+            };
 
-                        currentChunk++;
-                        uploadedBytes += chunkSizeBytes;
+            // Clear all runtime bookkeeping for a fresh upload session.
+            const resetState = () => {
+                state.paused = false;
+                state.uploading = false;
+                state.file = null;
+                state.uploadId = null;
+                state.currentChunk = 0;
+                state.totalChunks = 0;
+                state.startTime = 0;
+                state.uploadedBytes = 0;
+            };
 
-                        const now = performance.now();
-                        const elapsedSec = (now - startTime) / 1000;
-                        const speedMBps = (uploadedBytes / 1024 / 1024 / elapsedSec).toFixed(2);
-                        const remainingBytes = file.size - uploadedBytes;
-                        const estRemainingSec = remainingBytes / (speedMBps * 1024 * 1024);
-                        const etaText = estRemainingSec > 0 ? formatTimeETA(estRemainingSec) : "-";
+            // Restore the UI to an idle appearance without progress.
+            const resetUI = () => {
+                const { fileInput, fileInfo, progressBar, progressText } = elements;
+                fileInput.value = '';
+                fileInfo.classList.add('hidden');
+                fileInfo.innerHTML = '';
+                progressBar.style.width = '0%';
+                progressText.textContent = 'Ready for next upload.';
+            };
 
-                        const progress = Math.round((currentChunk / totalChunks) * 100);
-                        progressBar.style.width = `${progress}%`;
-                        progressText.textContent = `Uploading... ${progress}% | 🚀 ${speedMBps} MB/s | ⏳ ETA: ${etaText}`;
+            // Present the selected file name and size before uploading.
+            const showFileSummary = (file) => {
+                const { fileInfo, progressBar, progressText } = elements;
+                const sizeMB = (file.size / 1024 / 1024).toFixed(2);
+                const shortName = shortenFilename(file.name, 40);
 
-                        if (progress === 100) {
-                            MyZkToast.info("Merging file on server...");
-                        }
+                fileInfo.classList.remove('hidden');
+                fileInfo.innerHTML = `
+                    <strong>Name:</strong> ${shortName}<br>
+                    <strong>Size:</strong> ${sizeMB} MB
+                `;
 
-                        if (!paused) uploadNextChunk();
+                progressText.textContent = "✅ File ready to upload. Click 'Start Upload' to begin.";
+                progressBar.style.width = '0%';
+            };
 
-                    } catch (err) {
-                        if (retryCount < 3) {
-                            setTimeout(() => uploadNextChunk(retryCount + 1), 2000 * (retryCount + 1));
-                        } else {
-                            progressText.textContent = `❌ Chunk ${currentChunk} failed after 3 retries. Upload paused.`;
-                            MyZkToast.error(`Chunk ${currentChunk} failed after 3 retries.`);
-                            paused = true;
-                            uploading = false;
-                            setButtonState("paused");
-                        }
+            // Update progress bar width and accompanying status text.
+            const updateProgressDisplay = (percentage, speedMBps, etaText) => {
+                const { progressBar, progressText } = elements;
+                progressBar.style.width = `${percentage}%`;
+                const speedText = Number.isFinite(speedMBps) ? speedMBps.toFixed(2) : '0.00';
+                progressText.textContent = `Uploading... ${percentage}% | 🚀 ${speedText} MB/s | ⏳ ETA: ${etaText}`;
+            };
+
+            // React to new file input selections and prime the uploader.
+            const handleFileChange = (event) => {
+                state.file = event.target.files?.[0] || null;
+
+                if (!state.file) {
+                    resetState();
+                    resetUI();
+                    setButtonState('idle');
+                    return;
+                }
+
+                showFileSummary(state.file);
+                MyZkToast.info('File ready to upload, click Start to begin.');
+                setButtonState('ready');
+            };
+
+            // Generate a lightweight identifier for coordinating chunk requests.
+            const generateUploadId = () => Math.random().toString(36).substring(2, 12);
+
+            // Convert bytes remaining and elapsed seconds into a readable ETA.
+            const formatEta = (remainingBytes, elapsedSeconds) => {
+                if (!Number.isFinite(elapsedSeconds) || elapsedSeconds <= 0) {
+                    return '-';
+                }
+                const speedBytesPerSecond = state.uploadedBytes / elapsedSeconds;
+                if (speedBytesPerSecond <= 0) {
+                    return '-';
+                }
+                const remainingSeconds = remainingBytes / speedBytesPerSecond;
+                return remainingSeconds > 0 ? formatTimeETA(remainingSeconds) : '-';
+            };
+
+            // Upload the next chunk and retry if transient errors occur.
+            const uploadNextChunk = async (retryCount = 0) => {
+                if (state.paused || !state.file) return;
+
+                if (state.currentChunk >= state.totalChunks) {
+                    elements.progressText.textContent = '🧩 Merging file on server...';
+                    await mergeChunks();
+                    return;
+                }
+
+                const start = state.currentChunk * config.chunkSize;
+                const end = Math.min(state.file.size, start + config.chunkSize);
+                const chunk = state.file.slice(start, end);
+
+                const formData = new FormData();
+                formData.append('upload_id', state.uploadId);
+                formData.append('chunk_index', state.currentChunk);
+                formData.append('chunk', chunk);
+
+                try {
+                    const response = await fetch(endpoints.chunk, {
+                        method: 'POST',
+                        headers: {
+                            'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                        },
+                        body: formData
+                    });
+
+                    const payload = await response.json();
+                    if (!response.ok || !payload.success) {
+                        throw new Error(payload.message || `Chunk ${state.currentChunk} failed.`);
                     }
-                }
 
-                // Ask the backend to merge all uploaded chunks and register the final file metadata.
-                async function mergeChunks() {
-                    setButtonState("merging");
+                    state.currentChunk += 1;
+                    state.uploadedBytes += chunk.size;
 
-                    const sourceType = sourceInput.value;
-                    const formData = new FormData();
-                    formData.append("upload_id", uploadId);
-                    formData.append("filename", file.name);
-                    formData.append("total_chunks", totalChunks);
-                    formData.append("source_type", sourceType);
+                    const elapsedSeconds = Math.max((performance.now() - state.startTime) / 1000, 0.001);
+                    const speedMBps = state.uploadedBytes / 1024 / 1024 / elapsedSeconds;
+                    const remainingBytes = state.file.size - state.uploadedBytes;
+                    const etaText = formatEta(remainingBytes, elapsedSeconds);
+                    const progress = Math.round((state.currentChunk / state.totalChunks) * 100);
 
-                    try {
-                        const res = await fetch('{{ route('upload.merge') }}', {
-                            method: "POST",
-                            headers: {
-                                "X-CSRF-TOKEN": "{{ csrf_token() }}"
-                            },
-                            body: formData,
-                        });
+                    updateProgressDisplay(progress, speedMBps, etaText);
 
-                        const result = await res.json();
-
-                        if (res.ok && result.success) {
-                            progressBar.style.width = "100%";
-                            progressText.textContent = `✅ Upload complete! ${result.message || "Upload completed. Processing started in background."}`;
-                            MyZkToast.success(result.message || "Upload completed successfully!");
-                            setButtonState("done");
-                            await loadMyData();
-                            autoReset();
-                        } else {
-                            throw new Error(result.message || "Failed to merge file on server.");
-                        }
-
-                    } catch (err) {
-                        progressText.textContent = `❌ Error: ${err.message}`;
-                        MyZkToast.error(err.message || "Server error during merge.");
-                        setButtonState("error");
-                        autoReset();
+                    if (progress === 100) {
+                        MyZkToast.info('Merging file on server...');
                     }
+
+                    if (!state.paused) {
+                        await uploadNextChunk();
+                    }
+                } catch (error) {
+                    if (retryCount < config.maxRetries) {
+                        const delay = 2000 * (retryCount + 1);
+                        setTimeout(() => uploadNextChunk(retryCount + 1), delay);
+                        return;
+                    }
+
+                    elements.progressText.textContent = `❌ Chunk ${state.currentChunk} failed after ${config.maxRetries} retries. Upload paused.`;
+                    MyZkToast.error(`Chunk ${state.currentChunk} failed after ${config.maxRetries} retries.`);
+                    state.paused = true;
+                    state.uploading = false;
+                    setButtonState('paused');
+                }
+            };
+
+            // Ask the backend to merge all uploaded chunks into a single file.
+            const mergeChunks = async () => {
+                setButtonState('merging');
+
+                const formData = new FormData();
+                formData.append('upload_id', state.uploadId);
+                formData.append('filename', state.file.name);
+                formData.append('total_chunks', state.totalChunks);
+                formData.append('source_type', elements.sourceInput.value);
+
+                try {
+                    const response = await fetch(endpoints.merge, {
+                        method: 'POST',
+                        headers: {
+                            'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                        },
+                        body: formData
+                    });
+
+                    const result = await response.json();
+                    if (!response.ok || !result.success) {
+                        throw new Error(result.message || 'Failed to merge file on server.');
+                    }
+
+                    elements.progressBar.style.width = '100%';
+                    elements.progressText.textContent = `✅ Upload complete! ${result.message || 'Upload completed. Processing started in background.'}`;
+                    MyZkToast.success(result.message || 'Upload completed successfully!');
+                    setButtonState('done');
+                    await loadMyData();
+                    scheduleAutoReset();
+                } catch (error) {
+                    elements.progressText.textContent = `❌ Error: ${error.message}`;
+                    MyZkToast.error(error.message || 'Server error during merge.');
+                    setButtonState('error');
+                    scheduleAutoReset();
+                }
+            };
+
+            // After finishing, reset the UI back to idle after a short delay.
+            const scheduleAutoReset = () => {
+                setTimeout(() => {
+                    resetState();
+                    resetUI();
+                    setButtonState('idle');
+                }, config.autoResetDelay);
+            };
+
+            // Validate prerequisites and kick off the chunk upload loop.
+            const startUpload = () => {
+                if (!state.file) {
+                    MyZkToast.warning('Please select a file first!');
+                    return;
                 }
 
-                // Reset the form state a few seconds after a successful or failed upload.
-                function autoReset() {
-                    setTimeout(() => {
-                        file = null;
-                        fileInput.value = "";
-                        fileInfo.classList.add("hidden");
-                        progressBar.style.width = "0%";
-                        progressText.textContent = "Ready for next upload.";
-                        setButtonState("idle");
-                    }, 4000);
+                state.uploadId = generateUploadId();
+                state.totalChunks = Math.ceil(state.file.size / config.chunkSize);
+                state.currentChunk = 0;
+                state.uploadedBytes = 0;
+                state.paused = false;
+                state.uploading = true;
+                state.startTime = performance.now();
+
+                MyZkToast.info('🚀 Upload started...');
+                elements.progressText.textContent = `🚀 Uploading ${state.file.name}...`;
+                setButtonState('uploading');
+                uploadNextChunk();
+            };
+
+            // Suspend ongoing uploads without losing progress state.
+            const pauseUpload = () => {
+                if (!state.uploading) {
+                    return;
+                }
+                state.paused = true;
+                state.uploading = false;
+                elements.progressText.textContent = '⏸️ Upload paused.';
+                MyZkToast.warning('Upload paused.');
+                setButtonState('paused');
+            };
+
+            // Resume uploads after a pause by continuing from the current chunk.
+            const resumeUpload = () => {
+                if (!state.file) {
+                    return;
+                }
+                state.paused = false;
+                state.uploading = true;
+                elements.progressText.textContent = '▶️ Upload resumed...';
+                MyZkToast.info('Upload resumed...');
+                setButtonState('uploading');
+                uploadNextChunk();
+            };
+
+            // Create a DOM fragment describing a single imagery record.
+            const renderImageryCard = (item) => {
+                const template = elements.cardTemplate;
+                if (!template?.content) {
+                    return null;
                 }
 
-                // LOAD MY DATA, Fetch the authenticated user imagery list and render each entry with the template card.
-                async function loadMyData() {
-                    myDataContainer.innerHTML = `
+                const fragment = template.content.cloneNode(true);
+                const card = fragment.querySelector('.imagery-card');
+                if (!card) {
+                    return null;
+                }
+
+                const formatLabel = item.format.slice(0, 3).toUpperCase();
+                card.querySelector('.imagery-format').textContent = formatLabel;
+                card.querySelector('.imagery-name').textContent = shortenFilename(item.original_name, 25);
+
+                const sizeMb = (item.size / 1024 / 1024).toFixed(2);
+                const uploadDate = new Date(item.uploaded_at).toLocaleDateString();
+                const statusEl = card.querySelector('.imagery-status');
+                statusEl.textContent = item.processing_status;
+                statusEl.classList.toggle('text-success', item.processing_status === 'done');
+                statusEl.classList.toggle('text-warning', item.processing_status !== 'done');
+
+                const meta = `${sizeMb} MB • ${uploadDate} • <span class="${statusEl.className}">${statusEl.textContent}</span>`;
+                card.querySelector('.imagery-meta').innerHTML = meta;
+
+                const viewBtn = card.querySelector('.view-btn');
+                viewBtn?.addEventListener('click', () => viewImagery(item));
+
+                return fragment;
+            };
+
+            // Retrieve the user's imagery list and render it into the panel.
+            const loadMyData = async () => {
+                const container = elements.myDataContainer;
+                container.innerHTML = `
                     <div class="flex justify-center py-4">
                         <p class="text-sm text-foreground/60 animate-pulse">Loading your imagery list...</p>
                     </div>
                 `;
 
-                    try {
-                        const res = await fetch('{{ route('imagery.list') }}');
-                        const result = await res.json();
-
-                        if (!res.ok || !result.success) throw new Error(result.message || "Failed to fetch imagery data.");
-                        const data = result.data;
-
-                        myDataContainer.innerHTML = ''; // clear existing
-
-                        if (data.length === 0) {
-                            myDataContainer.innerHTML = `<p class="text-sm text-gray-400 text-center py-4">No imagery uploaded yet.</p>`;
-                            return;
-                        }
-
-                        const cardListDataImagery = document.getElementById('imageryCardTemplate');
-
-                        data.forEach(item => {
-                            const clone = cardListDataImagery.content.cloneNode(true);
-                            const card = clone.querySelector('.imagery-card');
-
-                            // populate data
-                            card.querySelector('.imagery-format').textContent = item.format.slice(0, 3).toUpperCase();
-                            card.querySelector('.imagery-name').textContent = shortenFilename(item.original_name, 25);
-                            const meta = `${(item.size / 1024 / 1024).toFixed(2)} MB • ${new Date(item.uploaded_at).toLocaleDateString()} • `;
-                            const statusEl = card.querySelector('.imagery-status');
-                            statusEl.textContent = item.processing_status;
-                            statusEl.classList.toggle('text-success', item.processing_status === 'done');
-                            statusEl.classList.toggle('text-warning', item.processing_status !== 'done');
-                            card.querySelector('.imagery-meta').innerHTML = `${meta}<span class="${statusEl.className}">${statusEl.textContent}</span>`;
-
-                            // handle view button
-                            const viewBtn = card.querySelector('.view-btn');
-                            viewBtn.addEventListener('click', () => viewImagery(item));
-
-                            // append to container
-                            myDataContainer.appendChild(clone);
-                        });
-
-                    } catch (err) {
-                        myDataContainer.innerHTML = `
-                        <div class="text-sm text-red-500 bg-red-50 border border-red-200 rounded p-3">
-                            ❌ ${err.message}
-                        </div>
-                        `;
+                try {
+                    const response = await fetch(endpoints.list);
+                    const payload = await response.json();
+                    if (!response.ok || !payload.success) {
+                        throw new Error(payload.message || 'Failed to fetch imagery data.');
                     }
-                }
 
+                    const data = payload.data || [];
+                    container.innerHTML = '';
+
+                    if (data.length === 0) {
+                        container.innerHTML = '<p class="text-sm text-gray-400 text-center py-4">No imagery uploaded yet.</p>';
+                        return;
+                    }
+
+                    data.forEach((item) => {
+                        const fragment = renderImageryCard(item);
+                        if (fragment) {
+                            container.appendChild(fragment);
+                        }
+                    });
+                } catch (error) {
+                    container.innerHTML = `
+                        <div class="text-sm text-red-500 bg-red-50 border border-red-200 rounded p-3">
+                            ❌ ${error.message}
+                        </div>
+                    `;
+                }
+            };
+
+            // Attach DOM event listeners for file and control buttons.
+            const bindEventListeners = () => {
+                elements.fileInput.addEventListener('change', handleFileChange);
+                elements.startBtn.addEventListener('click', startUpload);
+                elements.pauseBtn.addEventListener('click', pauseUpload);
+                elements.resumeBtn.addEventListener('click', resumeUpload);
+            };
+
+            // Bootstrap the uploader module and fetch initial server data.
+            const initialise = () => {
+                ensureAppNamespace();
+                window.setButtonState = setButtonState;
+                window.AppMap.uploader.reload = loadMyData;
+
+                resetState();
+                resetUI();
+                setButtonState('idle');
+                bindEventListeners();
+                loadMyData();
+            };
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', initialise, { once: true });
+            } else {
+                initialise();
+            }
+        })();
+    </script>
+@endpush
+@push('javascript')
+    <script>
+        (() => {
+            const statusEl = document.getElementById('sentinelCollectionStatus');
+            const listEl = document.getElementById('sentinelCollectionList');
+            const templateEl = document.getElementById('sentinelCollectionTemplate');
+            const lastUpdatedEl = document.getElementById('sentinelLastUpdated');
+            const formEl = document.getElementById('sentinelFilterForm');
+            const resetButtonEl = document.getElementById('sentinelFilterResetButton');
+            const cloudInputEl = document.getElementById('sentinelCloudFilter');
+            const startDateInputEl = document.getElementById('sentinelStartDate');
+            const endDateInputEl = document.getElementById('sentinelEndDate');
+            const latInputEl = document.getElementById('sentinelLatFilter');
+            const lonInputEl = document.getElementById('sentinelLonFilter');
+            const levelInputEl = document.getElementById('sentinelProductLevel');
+            const panelEl = document.getElementById('sentinel-panel');
+
+            const previewPanelEl = document.getElementById('sentinelPreviewPanel');
+            const previewElements = {
+                panel: previewPanelEl,
+                title: previewPanelEl?.querySelector('[data-sentinel-preview-title]') ?? null,
+                acquired: previewPanelEl?.querySelector('[data-sentinel-preview-acquired]') ?? null,
+                details: previewPanelEl?.querySelector('[data-sentinel-preview-details]') ?? null,
+                status: previewPanelEl?.querySelector('[data-sentinel-preview-status]') ?? null,
+                clearButton: document.getElementById('sentinelPreviewClearBtn'),
+                downloadButton: document.getElementById('sentinelPreviewDownloadBtn')
+            };
+
+            if (!statusEl || !listEl || !templateEl) {
+                return;
             }
 
-            // === HELPER FUNCTIONS ===
-            // Centralised place to toggle the uploader button states for each lifecycle stage.
-            function setButtonState(state) {
-                if (!startBtn || !pauseBtn || !resumeBtn) {
-                    return;
+            const config = {
+                endpoint: 'https://catalogue.dataspace.copernicus.eu/resto/api/collections/Sentinel2/search.json',
+                defaultMonthsBack: 1,
+                defaultCloudCover: 40,
+                defaultLatitude: -1.24536,
+                defaultLongitude: 114.54535,
+                defaultProductType: 'S2MSI2A'
+            };
+
+            const state = {
+                loadedOnce: false,
+                defaultStartIso: '',
+                defaultEndIso: '',
+                token: sanitizeToken(panelEl?.dataset?.sentinelToken ?? ''),
+                tokenConfigured: (panelEl?.dataset?.sentinelCredentials ?? '').toLowerCase() === 'true'
+            };
+
+            const ignoredDownloadKeywords = ['quicklook', 'thumbnail', 'thumb', 'overview', 'browse', 'preview', 'allorigins'];
+
+            // Ensure sentinel helpers are available under the shared AppMap namespace.
+            const ensureAppNamespace = () => {
+                window.AppMap = window.AppMap || {};
+                window.AppMap.sentinel = window.AppMap.sentinel || {};
+            };
+
+            // Safely convert incoming values into Date objects when possible.
+            const parseDate = (value) => {
+                if (typeof window.parseDateInput === 'function') {
+                    return window.parseDateInput(value);
                 }
-                switch (state) {
-                    case "idle":
-                        startBtn.disabled = true;
-                        pauseBtn.disabled = true;
-                        resumeBtn.disabled = true;
-                        break;
-                    case "ready": // file sudah dipilih
-                        startBtn.disabled = false;
-                        pauseBtn.disabled = true;
-                        resumeBtn.disabled = true;
-                        break;
-                    case "uploading":
-                        startBtn.disabled = true;
-                        pauseBtn.disabled = false;
-                        resumeBtn.disabled = true;
-                        break;
-                    case "paused":
-                        startBtn.disabled = true;
-                        pauseBtn.disabled = true;
-                        resumeBtn.disabled = false;
-                        break;
-                    case "merging":
-                        startBtn.disabled = true;
-                        pauseBtn.disabled = true;
-                        resumeBtn.disabled = true;
-                        break;
-                    case "done":
-                        startBtn.disabled = true;
-                        pauseBtn.disabled = true;
-                        resumeBtn.disabled = true;
-                        break;
-                    case "error":
-                        startBtn.disabled = false;
-                        pauseBtn.disabled = true;
-                        resumeBtn.disabled = true;
-                        break;
+                if (value instanceof Date) {
+                    return new Date(value);
                 }
-            }
-        </script>
-    @endpush
+                if (typeof value === 'string' && value.trim()) {
+                    const parsed = new Date(value);
+                    return Number.isNaN(parsed.getTime()) ? null : parsed;
+                }
+                return null;
+            };
 
-    @push('javascript')
-        <script>
-            // All sentinel related DOM elements and default variables
-            const sentinelStatus = document.getElementById('sentinelCollectionStatus');
-            const sentinelList = document.getElementById('sentinelCollectionList');
-            const sentinelTemplate = document.getElementById('sentinelCollectionTemplate');
-            const sentinelLastUpdated = document.getElementById('sentinelLastUpdated');
-            const sentinelFilterForm = document.getElementById('sentinelFilterForm');
-            const sentinelFilterResetButton = document.getElementById('sentinelFilterResetButton');
-            const sentinelCloudInput = document.getElementById('sentinelCloudFilter');
-            const sentinelStartDateInput = document.getElementById('sentinelStartDate');
-            const sentinelEndDateInput = document.getElementById('sentinelEndDate');
-            const sentinelLatInput = document.getElementById('sentinelLatFilter');
-            const sentinelLonInput = document.getElementById('sentinelLonFilter');
-            const sentinelLevelInput = document.getElementById('sentinelProductLevel');
-            const sentinelPanelEl = document.getElementById('sentinel-panel');
-            const sentinelPreviewPanel = document.getElementById('sentinelPreviewPanel');
-            const sentinelPreviewTitle = sentinelPreviewPanel?.querySelector('[data-sentinel-preview-title]');
-            const sentinelPreviewAcquired = sentinelPreviewPanel?.querySelector('[data-sentinel-preview-acquired]');
-            const sentinelPreviewDetails = sentinelPreviewPanel?.querySelector('[data-sentinel-preview-details]');
-            const sentinelPreviewStatus = sentinelPreviewPanel?.querySelector('[data-sentinel-preview-status]');
-            const sentinelPreviewClearBtn = document.getElementById('sentinelPreviewClearBtn');
-            const sentinelPreviewDownloadBtn = document.getElementById('sentinelPreviewDownloadBtn');
+            // Determine the default date window used for catalogue searches.
+            const getDefaultDateRange = (monthsBack = config.defaultMonthsBack) => {
+                const months = Number.isFinite(monthsBack) && monthsBack > 0 ? monthsBack : config.defaultMonthsBack;
+                const end = new Date();
+                end.setHours(23, 59, 59, 999);
+                const start = new Date(end.getTime());
+                start.setMonth(start.getMonth() - months);
+                start.setHours(0, 0, 0, 0);
+                return { start, end };
+            };
 
-            const sentinelPreviewDefaultTitle = sentinelPreviewTitle?.textContent ?? '–';
-            const sentinelPreviewDefaultAcquired = sentinelPreviewAcquired?.textContent ?? '';
-            const sentinelPreviewDefaultDetails = sentinelPreviewDetails?.textContent ?? '';
-            const sentinelPreviewDefaultStatus = sentinelPreviewStatus?.textContent ?? '';
-
-            const sentinelCatalogEndpoint = 'https://catalogue.dataspace.copernicus.eu/resto/api/collections/Sentinel2/search.json';
-            let sentinelLoadedOnce = false;
-            const defaultCloudCoverMax = 40;
-            const defaultLatitude = -1.24536;
-            const defaultLongitude = 114.54535;
-            const defaultProductType = 'S2MSI2A';
-            const sentinelDefaultMonthsBack = 1;
-
-            const getDateRangeHelper = typeof window.getDefaultDateRange === 'function' ?
-                window.getDefaultDateRange :
-                (monthsBack = 1) => {
-                    const months = Number.isFinite(monthsBack) && monthsBack > 0 ? monthsBack : 1;
-                    const end = new Date();
-                    end.setHours(23, 59, 59, 999);
-                    const start = new Date(end.getTime());
-                    start.setMonth(start.getMonth() - months);
-                    start.setHours(0, 0, 0, 0);
-                    return {
-                        start,
-                        end
-                    };
-                };
-
+            // Normalize a Date into a YYYY-MM-DD formatted string.
             const ensureIsoDateString = (date) => {
                 if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
                     return '';
                 }
-                return typeof window.formatISODate === 'function' ?
-                    window.formatISODate(date) :
-                    date.toISOString().split('T')[0];
-            };
-
-            const syncSentinelDateConstraints = () => {
-                if (!sentinelStartDateInput || !sentinelEndDateInput) return;
-                sentinelEndDateInput.min = sentinelStartDateInput.value || '';
-                sentinelStartDateInput.max = sentinelEndDateInput.value || '';
-            };
-
-            let sentinelDefaultStartValue = '';
-            let sentinelDefaultEndValue = '';
-
-            const applySentinelDefaultDates = (force = false) => {
-                const sentinelDefaultRange = getDateRangeHelper(sentinelDefaultMonthsBack) || {};
-                const sentinelDefaultStartDate = parseDateInput(sentinelDefaultRange.start) ?? new Date();
-                sentinelDefaultStartDate.setHours(0, 0, 0, 0);
-                const sentinelDefaultEndDate = parseDateInput(sentinelDefaultRange.end) ?? new Date();
-                sentinelDefaultEndDate.setHours(23, 59, 59, 999);
-
-                sentinelDefaultStartValue = ensureIsoDateString(sentinelDefaultStartDate);
-                sentinelDefaultEndValue = ensureIsoDateString(sentinelDefaultEndDate);
-
-                if (sentinelStartDateInput && (force || !sentinelStartDateInput.value)) {
-                    sentinelStartDateInput.value = sentinelDefaultStartValue;
+                if (typeof window.formatISODate === 'function') {
+                    return window.formatISODate(date);
                 }
-                if (sentinelEndDateInput && (force || !sentinelEndDateInput.value)) {
-                    sentinelEndDateInput.value = sentinelDefaultEndValue;
-                }
-
-                syncSentinelDateConstraints();
+                return date.toISOString().split('T')[0];
             };
 
-            const waitForFormatISODate = (callback, attempts = 10, delayMs = 50) => {
+            // Keep start and end date fields within mutually valid ranges.
+            const syncDateConstraints = () => {
+                if (!startDateInputEl || !endDateInputEl) return;
+                endDateInputEl.min = startDateInputEl.value || '';
+                startDateInputEl.max = endDateInputEl.value || '';
+            };
+
+            // Populate filters with default dates when empty or forced.
+            const applyDefaultDates = (force = false) => {
+                const range = getDefaultDateRange(config.defaultMonthsBack);
+                const start = parseDate(range.start) ?? new Date();
+                start.setHours(0, 0, 0, 0);
+                const end = parseDate(range.end) ?? new Date();
+                end.setHours(23, 59, 59, 999);
+
+                state.defaultStartIso = ensureIsoDateString(start);
+                state.defaultEndIso = ensureIsoDateString(end);
+
+                if (startDateInputEl && (force || !startDateInputEl.value)) {
+                    startDateInputEl.value = state.defaultStartIso;
+                }
+                if (endDateInputEl && (force || !endDateInputEl.value)) {
+                    endDateInputEl.value = state.defaultEndIso;
+                }
+
+                syncDateConstraints();
+            };
+
+            // Retry until the global formatter exists before running the callback.
+            const waitForFormatIso = (callback, attempts = 10, delayMs = 50) => {
                 if (typeof window.formatISODate === 'function' || attempts <= 0) {
                     callback();
                     return;
                 }
-                setTimeout(() => {
-                    waitForFormatISODate(callback, attempts - 1, delayMs);
-                }, delayMs);
+                setTimeout(() => waitForFormatIso(callback, attempts - 1, delayMs), delayMs);
             };
 
-            waitForFormatISODate(() => applySentinelDefaultDates(false));
-
-            sentinelStartDateInput?.addEventListener('change', () => {
-                if (sentinelEndDateInput && sentinelStartDateInput.value && sentinelEndDateInput.value && sentinelEndDateInput.value < sentinelStartDateInput.value) {
-                    sentinelEndDateInput.value = sentinelStartDateInput.value;
-                }
-                syncSentinelDateConstraints();
-            });
-
-            sentinelEndDateInput?.addEventListener('change', () => {
-                if (sentinelStartDateInput && sentinelEndDateInput.value && sentinelStartDateInput.value && sentinelStartDateInput.value > sentinelEndDateInput.value) {
-                    sentinelStartDateInput.value = sentinelEndDateInput.value;
-                }
-                syncSentinelDateConstraints();
-            });
-
-            // Sentinel responses store cloud cover as a float, ensure consistent text output.
+            // Present cloud cover percentages with graceful fallbacks.
             const formatCloudCover = (value) => {
                 if (typeof value === 'number' && !Number.isNaN(value)) {
                     return `${value.toFixed(1)}%`;
@@ -1449,50 +1651,34 @@
                 return 'N/A';
             };
 
-            // Prevent filter inputs from sending invalid latitude/longitude or percentage values.
+            // Clamp numeric inputs and return null when value is invalid.
             const clampNumber = (value, min, max) => {
                 if (typeof value !== 'number' || Number.isNaN(value)) return null;
                 return Math.min(Math.max(value, min), max);
             };
 
-            // Generate a filesystem safe filename for download actions.
-            const buildSentinelDownloadName = (primary, fallback) => {
-                const base = String(primary ?? fallback ?? 'sentinel-2-scene').trim();
-                const normalized = base.replace(/[\s]+/g, '_').replace(/[^A-Za-z0-9._-]+/g, '_');
-                return normalized || 'sentinel-2-scene';
-            };
+            function sanitizeToken(value) {
+                return typeof value === 'string' ? value.trim() : '';
+            }
 
-            const sentinelDownloadIgnoredKeywords = ['quicklook', 'thumbnail', 'thumb', 'overview', 'browse', 'preview', 'allorigins'];
-            const sentinelPreviewIgnoredKeywords = ['thumbnail', 'thumb', 'legend', 'logo', 'browse', 'allorigins'];
+            const hasToken = () => sanitizeToken(state.token).length > 0;
 
-            // Trim any whitespace from the access token resolved from the backend configuration.
-            const sanitizeSentinelToken = (value) => {
-                if (typeof value !== 'string') return '';
-                return value.trim();
-            };
-
-            let sentinelDownloadToken = sanitizeSentinelToken(sentinelPanelEl?.dataset?.sentinelToken ?? '');
-            const sentinelTokenConfigured = (sentinelPanelEl?.dataset?.sentinelCredentials ?? '').toLowerCase() === 'true';
-
-            const hasSentinelToken = () => sanitizeSentinelToken(sentinelDownloadToken).length > 0;
-
-            const buildSentinelStatusMessage = (message) => {
+            // Craft a status message that explains token requirements when missing.
+            const buildStatusMessage = (message) => {
                 const parts = [];
                 if (message) parts.push(message);
-                if (!hasSentinelToken()) {
-                    parts.push(
-                        sentinelTokenConfigured ?
-                        'Download unavailable: Copernicus access token could not be issued.' :
-                        'Configure Copernicus credentials on the server to enable downloads.'
-                    );
+                if (!hasToken()) {
+                    parts.push(state.tokenConfigured
+                        ? 'Download unavailable: Copernicus access token could not be issued.'
+                        : 'Configure Copernicus credentials on the server to enable downloads.');
                 }
                 return parts.join(' ');
             };
 
-            // Append the active access token to Copernicus download when required.
-            const applySentinelTokenToUrl = (url) => {
+            // Add the Copernicus token query parameter to download URLs when possible.
+            const applyTokenToUrl = (url) => {
                 if (!url) return null;
-                const token = sanitizeSentinelToken(sentinelDownloadToken);
+                const token = sanitizeToken(state.token);
                 if (!token) return null;
                 const queryPattern = /([?&])token=[^&#]*/i;
                 if (queryPattern.test(url)) {
@@ -1502,15 +1688,17 @@
                 return `${url}${separator}token=${encodeURIComponent(token)}`;
             };
 
-            const isValidSentinelDownloadUrl = (url) => {
+            // Validate that a URL appears to be a downloadable resource link.
+            const isValidDownloadUrl = (url) => {
                 if (typeof url !== 'string') return false;
                 const trimmed = url.trim();
                 if (!trimmed) return false;
                 if (!/^https?:\/\//i.test(trimmed)) return false;
                 const lowered = trimmed.toLowerCase();
-                return !sentinelDownloadIgnoredKeywords.some((keyword) => lowered.includes(keyword));
+                return !ignoredDownloadKeywords.some((keyword) => lowered.includes(keyword));
             };
 
+            // Recursively gather URLs from the various service response formats.
             const extractServiceUrls = (service) => {
                 const results = [];
                 if (!service) return results;
@@ -1535,8 +1723,8 @@
                 return results;
             };
 
-            // Evaluate every link/asset reference and pick the most appropriate full scene download URL.
-            const resolveSentinelDownloadUrl = (feature) => {
+            // Determine the best download URL candidate from a feature payload.
+            const resolveDownloadUrl = (feature) => {
                 if (!feature) return null;
 
                 const props = feature.properties ?? {};
@@ -1545,7 +1733,7 @@
 
                 const candidateScores = new Map();
                 const registerCandidate = (url, score = 0) => {
-                    if (!isValidSentinelDownloadUrl(url)) return;
+                    if (!isValidDownloadUrl(url)) return;
                     const existing = candidateScores.get(url);
                     if (existing === undefined || score > existing) {
                         candidateScores.set(url, score);
@@ -1553,9 +1741,7 @@
                 };
 
                 const registerFromService = (service, score = 0) => {
-                    extractServiceUrls(service).forEach((url) => {
-                        registerCandidate(url, score);
-                    });
+                    extractServiceUrls(service).forEach((url) => registerCandidate(url, score));
                 };
 
                 const linkScoreByRel = {
@@ -1602,14 +1788,14 @@
 
                 Object.entries(assets).forEach(([key, assetValue]) => {
                     const lowerKey = String(key).toLowerCase();
-                    if (sentinelDownloadIgnoredKeywords.some((keyword) => lowerKey.includes(keyword))) {
+                    if (ignoredDownloadKeywords.some((keyword) => lowerKey.includes(keyword))) {
                         return;
                     }
-                    const href = typeof assetValue === 'string' ?
-                        assetValue :
-                        (typeof assetValue?.href === 'string' ?
-                            assetValue.href :
-                            (typeof assetValue?.url === 'string' ? assetValue.url : null));
+                    const href = typeof assetValue === 'string'
+                        ? assetValue
+                        : (typeof assetValue?.href === 'string'
+                            ? assetValue.href
+                            : (typeof assetValue?.url === 'string' ? assetValue.url : null));
                     if (!href) return;
                     let score = 68;
                     if (Array.isArray(assetValue?.roles)) {
@@ -1630,7 +1816,7 @@
                 if (propsAssets && typeof propsAssets === 'object' && !Array.isArray(propsAssets)) {
                     Object.entries(propsAssets).forEach(([key, assetValue]) => {
                         const lowerKey = String(key).toLowerCase();
-                        if (sentinelDownloadIgnoredKeywords.some((keyword) => lowerKey.includes(keyword))) {
+                        if (ignoredDownloadKeywords.some((keyword) => lowerKey.includes(keyword))) {
                             return;
                         }
                         if (typeof assetValue === 'string') {
@@ -1658,157 +1844,118 @@
                 return bestUrl ?? null;
             };
 
-            let sentinelPreviewController = null;
+            // Generate a filesystem-friendly filename for Sentinel downloads.
+            const buildDownloadName = (primary, fallback) => {
+                const base = String(primary ?? fallback ?? 'sentinel-2-scene').trim();
+                const normalized = base.replace(/[\s]+/g, '_').replace(/[^A-Za-z0-9._-]+/g, '_');
+                return normalized || 'sentinel-2-scene';
+            };
 
-            // Lazily create a preview controller that renders coverage.
-            const createSentinelPreviewController = () => {
-                if (sentinelPreviewController) {
-                    return sentinelPreviewController;
-                }
-
-                if (typeof window === 'undefined' || typeof ol === 'undefined') {
-                    return null;
-                }
-
-                const mapInstance = window.map;
-                const mapProjection = mapInstance?.getView?.()?.getProjection?.();
-                if (!mapInstance || !mapProjection) {
-                    return null;
-                }
+            // Encapsulate preview map rendering, metadata display, and downloads.
+            const createPreviewModule = () => {
+                const defaultContent = {
+                    title: previewElements.title?.textContent ?? '–',
+                    acquired: previewElements.acquired?.textContent ?? '',
+                    details: previewElements.details?.textContent ?? '',
+                    status: previewElements.status?.textContent ?? ''
+                };
 
                 const dataProjection = 'EPSG:4326';
-                const geoJsonParser = new ol.format.GeoJSON();
-
-                const bboxSource = new ol.source.Vector();
-                const bboxLayer = new ol.layer.Vector({
-                    source: bboxSource,
-                    style: new ol.style.Style({
-                        stroke: new ol.style.Stroke({
-                            color: 'rgba(59,130,246,0.9)',
-                            width: 2,
-                            lineDash: [6, 6]
-                        }),
-                        fill: new ol.style.Fill({
-                            color: 'rgba(59,130,246,0.15)'
-                        })
-                    }),
-                    visible: false,
-                    zIndex: 1200
-                });
-
-                mapInstance.addLayer(bboxLayer);
-
-                const state = {
-                    current: null
+                const localState = {
+                    map: null,
+                    projection: null,
+                    layer: null,
+                    source: null,
+                    geoJson: null,
+                    selection: null
                 };
 
-                // Helper to keep the overlay metadata text in sync with the currently selected product.
-                const setPanelContent = ({
-                    title,
-                    acquired,
-                    details,
-                    status
-                }) => {
-                    if (title !== undefined && sentinelPreviewTitle) {
-                        sentinelPreviewTitle.textContent = title;
+                // Lazily initialize OpenLayers resources used to draw footprints.
+                const ensureContext = () => {
+                    if (typeof window === 'undefined' || typeof ol === 'undefined') return null;
+                    const mapInstance = window.map;
+                    const projection = mapInstance?.getView?.()?.getProjection?.();
+                    if (!mapInstance || !projection) return null;
+
+                    if (!localState.layer) {
+                        localState.source = new ol.source.Vector();
+                        localState.layer = new ol.layer.Vector({
+                            source: localState.source,
+                            style: new ol.style.Style({
+                                stroke: new ol.style.Stroke({
+                                    color: 'rgba(59,130,246,0.9)',
+                                    width: 2,
+                                    lineDash: [6, 6]
+                                }),
+                                fill: new ol.style.Fill({
+                                    color: 'rgba(59,130,246,0.15)'
+                                })
+                            }),
+                            visible: false,
+                            zIndex: 1200
+                        });
+                        mapInstance.addLayer(localState.layer);
                     }
-                    if (acquired !== undefined && sentinelPreviewAcquired) {
-                        sentinelPreviewAcquired.textContent = acquired;
-                    }
-                    if (details !== undefined && sentinelPreviewDetails) {
-                        sentinelPreviewDetails.textContent = details;
-                        sentinelPreviewDetails.classList.toggle('hidden', !details);
-                    }
-                    if (status !== undefined && sentinelPreviewStatus) {
-                        sentinelPreviewStatus.textContent = status;
-                    }
+
+                    localState.geoJson = localState.geoJson ?? new ol.format.GeoJSON();
+                    localState.map = mapInstance;
+                    localState.projection = projection;
+                    return localState;
                 };
 
-                // Toggle the preview overlay visibility without tearing down the DOM node.
+                // Show or hide the preview panel container.
                 const setPanelVisible = (visible) => {
-                    if (sentinelPreviewPanel) {
-                        sentinelPreviewPanel.classList.toggle('hidden', !visible);
-                        sentinelPreviewPanel.setAttribute('aria-hidden', visible ? 'false' : 'true');
-                    }
+                    if (!previewElements.panel) return;
+                    previewElements.panel.classList.toggle('hidden', !visible);
+                    previewElements.panel.setAttribute('aria-hidden', visible ? 'false' : 'true');
                 };
 
-                // Update the preview control buttons based on the current selection and loading state.
-                const updateButtons = () => {
-                    const hasSelection = Boolean(state.current);
-
-                    if (sentinelPreviewClearBtn) {
-                        sentinelPreviewClearBtn.disabled = !hasSelection;
-                        sentinelPreviewClearBtn.setAttribute('aria-disabled', hasSelection ? 'false' : 'true');
+                // Replace preview title and metadata labels with provided values.
+                const setPanelContent = (content = {}) => {
+                    const next = { ...defaultContent, ...content };
+                    if (previewElements.title) previewElements.title.textContent = next.title;
+                    if (previewElements.acquired) previewElements.acquired.textContent = next.acquired;
+                    if (previewElements.details) {
+                        previewElements.details.textContent = next.details;
+                        previewElements.details.classList.toggle('hidden', !next.details);
                     }
-
-                    if (sentinelPreviewDownloadBtn) {
-                        const downloadUrl = hasSelection ? state.current?.downloadUrl : null;
-                        if (downloadUrl) {
-                            const label = state.current?.productId || state.current?.baseTitle || 'Sentinel-2 scene';
-                            const downloadName = state.current?.downloadFilename ||
-                                buildSentinelDownloadName(state.current?.productId, state.current?.baseTitle);
-
-                            sentinelPreviewDownloadBtn.classList.remove('hidden');
-                            sentinelPreviewDownloadBtn.setAttribute('href', downloadUrl);
-                            sentinelPreviewDownloadBtn.setAttribute('aria-disabled', 'false');
-                            sentinelPreviewDownloadBtn.setAttribute('title', `Download full scene for ${label}`);
-                            sentinelPreviewDownloadBtn.setAttribute('download', downloadName);
-                            sentinelPreviewDownloadBtn.dataset.downloadBase = state.current?.downloadUrlBase || '';
-                            sentinelPreviewDownloadBtn.tabIndex = 0;
-                        } else {
-                            sentinelPreviewDownloadBtn.classList.add('hidden');
-                            sentinelPreviewDownloadBtn.removeAttribute('href');
-                            sentinelPreviewDownloadBtn.removeAttribute('download');
-                            sentinelPreviewDownloadBtn.setAttribute('aria-disabled', 'true');
-                            delete sentinelPreviewDownloadBtn.dataset.downloadBase;
-                            sentinelPreviewDownloadBtn.tabIndex = -1;
-                        }
-                    }
+                    if (previewElements.status) previewElements.status.textContent = next.status;
                 };
 
-                // Animate the map viewport to the selected scene coverage.
+                // Animate the main map to zoom onto the preview geometry.
                 const focusExtent = (extent) => {
-                    if (!extent) return;
-                    try {
-                        const view = mapInstance.getView();
-                        if (view && typeof view.fit === 'function') {
-                            view.fit(extent, {
-                                padding: [50, 50, 50, 50],
-                                duration: 500,
-                                maxZoom: 14
-                            });
-                        }
-                    } catch (error) {
-                        console.error('Failed to fit map to extent', error);
-                    }
+                    if (!extent || !localState.map) return;
+                    const view = localState.map.getView?.();
+                    if (!view?.fit) return;
+                    view.fit(extent, {
+                        padding: [32, 32, 32, 32],
+                        duration: 400,
+                        maxZoom: 14
+                    });
                 };
 
-                // Convert GeoJSON footprint/bbox data into an OpenLayers feature for display.
-                const resolveFootprintFeature = (data) => {
-                    if (!data) return null;
-                    const {
-                        footprint,
-                        geometry,
-                        bbox
-                    } = data;
+                // Convert footprint/geometry payloads into OpenLayers features.
+                const buildFeature = (payload) => {
+                    if (!localState.geoJson || !localState.projection || !payload) return null;
+                    const { footprint, geometry, bbox } = payload;
                     try {
                         if (footprint) {
-                            return geoJsonParser.readFeature(footprint, {
-                                featureProjection: mapProjection,
+                            return localState.geoJson.readFeature(footprint, {
+                                featureProjection: localState.projection,
                                 dataProjection
                             });
                         }
                         if (geometry) {
-                            return geoJsonParser.readFeature({
+                            return localState.geoJson.readFeature({
                                 type: 'Feature',
                                 geometry
                             }, {
-                                featureProjection: mapProjection,
+                                featureProjection: localState.projection,
                                 dataProjection
                             });
                         }
                         if (Array.isArray(bbox) && bbox.length === 4) {
-                            const transformed = ol.proj.transformExtent(bbox, dataProjection, mapProjection);
+                            const transformed = ol.proj.transformExtent(bbox, dataProjection, localState.projection);
                             return new ol.Feature({
                                 geometry: ol.geom.Polygon.fromExtent(transformed)
                             });
@@ -1819,147 +1966,148 @@
                     return null;
                 };
 
-                const controller = {
-                    showPreview(data) {
-                        if (!data) return;
-                        const title = data.title || data.productId || 'Sentinel-2 Preview';
-                        const acquiredText = data.acquiredText ??
-                            (data.acquisitionDate ?
-                                `Acquired: ${formatReadableDate(data.acquisitionDate)}` :
-                                'Acquisition date unavailable.');
-                        const detailParts = [];
-                        if (data.detailText) detailParts.push(data.detailText);
-                        const tileText = data.tileText || data.tileId;
-                        if (tileText) detailParts.push(tileText);
-                        if (typeof data.cloudCover === 'number' && !Number.isNaN(data.cloudCover)) {
-                            detailParts.push(`Cloud cover: ${formatCloudCover(Number(data.cloudCover))}`);
-                        }
-                        if (data.collection) detailParts.push(`Collection: ${data.collection}`);
-                        const detailText = detailParts.join(' • ');
-
-                        const downloadFilename = data.downloadFilename ??
-                            buildSentinelDownloadName(data.productId, title);
-
-                        setPanelVisible(true);
-
-                        bboxSource.clear();
-                        state.current = null;
-                        updateButtons();
-
-                        const footprint = resolveFootprintFeature(data);
-                        let extent = null;
-                        if (footprint) {
-                            bboxSource.addFeature(footprint);
-                            bboxLayer.setVisible(true);
-                            extent = footprint.getGeometry()?.getExtent() ?? null;
-                            focusExtent(extent);
-                        } else {
-                            bboxLayer.setVisible(false);
-                        }
-
-                        const baseDownloadUrl = data.downloadUrlBase || data.downloadUrl || null;
-                        const resolvedDownloadUrl = applySentinelTokenToUrl(baseDownloadUrl);
-                        const statusMessage = footprint ?
-                            'Coverage footprint displayed on the map. Imagery preview is disabled.' :
-                            'Coverage area unavailable for this product.';
-
-                        state.current = {
-                            ...data,
-                            extent,
-                            baseTitle: title,
-                            baseAcquired: acquiredText,
-                            baseDetails: detailText,
-                            downloadUrlBase: baseDownloadUrl,
-                            downloadUrl: resolvedDownloadUrl,
-                            downloadFilename
-                        };
-
-                        setPanelContent({
-                            title,
-                            acquired: acquiredText,
-                            details: detailText,
-                            status: buildSentinelStatusMessage(statusMessage)
-                        });
-
-                        updateButtons();
-                    },
-                    clear() {
-                        state.current = null;
-                        bboxSource.clear();
-                        bboxLayer.setVisible(false);
-                        updateButtons();
-                        setPanelContent({
-                            title: sentinelPreviewDefaultTitle,
-                            acquired: sentinelPreviewDefaultAcquired,
-                            details: sentinelPreviewDefaultDetails,
-                            status: sentinelPreviewDefaultStatus
-                        });
-                        setPanelVisible(false);
+                // Sync button states (clear/download) with the current selection.
+                const updateActions = () => {
+                    const hasSelection = Boolean(localState.selection);
+                    if (previewElements.clearButton) {
+                        previewElements.clearButton.disabled = !hasSelection;
+                        previewElements.clearButton.setAttribute('aria-disabled', hasSelection ? 'false' : 'true');
+                    }
+                    if (!previewElements.downloadButton) return;
+                    if (hasSelection && localState.selection.downloadUrl && hasToken()) {
+                        previewElements.downloadButton.classList.remove('hidden');
+                        previewElements.downloadButton.setAttribute('href', localState.selection.downloadUrl);
+                        previewElements.downloadButton.setAttribute('aria-disabled', 'false');
+                        previewElements.downloadButton.setAttribute('title', `Download full scene for ${localState.selection.label}`);
+                        previewElements.downloadButton.setAttribute('download', localState.selection.downloadFilename);
+                        previewElements.downloadButton.dataset.downloadBase = localState.selection.downloadBase ?? '';
+                        previewElements.downloadButton.tabIndex = 0;
+                    } else {
+                        previewElements.downloadButton.classList.add('hidden');
+                        previewElements.downloadButton.removeAttribute('href');
+                        previewElements.downloadButton.removeAttribute('download');
+                        previewElements.downloadButton.removeAttribute('title');
+                        previewElements.downloadButton.setAttribute('aria-disabled', 'true');
+                        delete previewElements.downloadButton.dataset.downloadBase;
+                        previewElements.downloadButton.tabIndex = -1;
                     }
                 };
 
-                setPanelVisible(false);
-                updateButtons();
+                // Render preview metadata and geometry for the chosen catalogue entry.
+                const show = (payload) => {
+                    const context = ensureContext();
+                    if (!context) return;
+                    context.source?.clear();
+                    context.layer?.setVisible(false);
+                    localState.selection = null;
+                    updateActions();
+                    if (!payload) {
+                        setPanelContent();
+                        setPanelVisible(false);
+                        return;
+                    }
+                    const title = payload.title || payload.productId || 'Sentinel-2 Preview';
+                    const acquiredText = payload.acquiredText ?? (payload.acquisitionDate ? `Acquired: ${formatReadableDate(payload.acquisitionDate)}` : 'Acquisition date unavailable.');
+                    const detailParts = [];
+                    if (payload.detailText) detailParts.push(payload.detailText);
+                    if (payload.tileText || payload.tileId) detailParts.push(payload.tileText || payload.tileId);
+                    if (typeof payload.cloudCover === 'number' && !Number.isNaN(payload.cloudCover)) {
+                        detailParts.push(`Cloud cover: ${formatCloudCover(Number(payload.cloudCover))}`);
+                    }
+                    if (payload.collection) detailParts.push(`Collection: ${payload.collection}`);
+                    const details = detailParts.join(' • ');
+                    const feature = buildFeature(payload);
+                    if (feature) {
+                        context.source.addFeature(feature);
+                        context.layer.setVisible(true);
+                        const extent = feature.getGeometry()?.getExtent?.();
+                        if (extent) {
+                            focusExtent(extent);
+                        }
+                    }
+                    const downloadBase = payload.downloadUrlBase || payload.downloadUrl || null;
+                    const downloadUrl = applyTokenToUrl(downloadBase);
+                    const downloadFilename = payload.downloadFilename ?? buildDownloadName(payload.productId, title);
+                    const statusMessage = feature
+                        ? 'Coverage footprint displayed on the map. Imagery preview is disabled.'
+                        : 'Coverage area unavailable for this product.';
+                    localState.selection = {
+                        downloadUrl,
+                        downloadBase,
+                        downloadFilename,
+                        label: title
+                    };
+                    setPanelContent({
+                        title,
+                        acquired: acquiredText,
+                        details,
+                        status: buildStatusMessage(statusMessage)
+                    });
+                    setPanelVisible(true);
+                    updateActions();
+                };
 
-                sentinelPreviewController = controller;
-                return controller;
+                // Remove any preview selection and restore default messaging.
+                const clear = () => {
+                    localState.selection = null;
+                    localState.source?.clear();
+                    localState.layer?.setVisible(false);
+                    setPanelContent(defaultContent);
+                    setPanelVisible(false);
+                    updateActions();
+                };
+
+                setPanelContent(defaultContent);
+                setPanelVisible(false);
+                updateActions();
+
+                return { ensure: ensureContext, show, clear };
             };
+
+            const previewModule = createPreviewModule();
 
             if (typeof window !== 'undefined') {
                 if (window.map) {
-                    createSentinelPreviewController();
+                    previewModule.ensure();
                 } else {
                     window.addEventListener('map:ready', () => {
-                        createSentinelPreviewController();
-                    }, {
-                        once: true
-                    });
+                        previewModule.ensure();
+                    }, { once: true });
                 }
             }
 
-            // Public entry point invoked by catalogue cards to render a scene on the map.
-            const triggerSentinelPreview = (payload) => {
-                if (!payload) return;
-                const controller = createSentinelPreviewController();
-                if (!controller) {
-                    console.warn('Sentinel preview controller is unavailable. Map is not ready yet.');
-                    return;
-                }
-                controller.showPreview(payload);
-            };
-
-            if (sentinelPreviewClearBtn) {
-                sentinelPreviewClearBtn.addEventListener('click', (event) => {
+            if (previewElements.clearButton) {
+                previewElements.clearButton.addEventListener('click', (event) => {
                     event.preventDefault();
-                    createSentinelPreviewController()?.clear();
+                    previewModule.clear();
                 });
             }
 
-            window.showSentinelPreviewOnMap = triggerSentinelPreview;
+            window.showSentinelPreviewOnMap = (payload) => {
+                previewModule.show(payload);
+            };
 
-            // Wrapper around fetch that retries via AllOrigins when CORS rejects the primary request.
-            async function fetchSentinelCatalog(url) {
-                const attemptFetch = async (targetUrl) => {
+            // Fetch catalogue data, retrying through AllOrigins if needed.
+            const fetchCatalog = async (url) => {
+                const attempt = async (targetUrl) => {
                     const response = await fetch(targetUrl);
                     if (!response.ok) {
                         throw new Error(`Status ${response.status}`);
                     }
                     return response.json();
                 };
-
                 try {
-                    return await attemptFetch(url);
-                } catch (err) {
+                    return await attempt(url);
+                } catch (error) {
                     const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
-                    return await attemptFetch(proxyUrl);
+                    return await attempt(proxyUrl);
                 }
-            }
+            };
 
-            // Render a Sentinel catalogue card using the HTML template and bind preview/download handlers.
-            function createSentinelCard(feature) {
-                if (!sentinelTemplate) return null;
-
-                const clone = sentinelTemplate.content.cloneNode(true);
+            // Create a UI card summarizing a single Sentinel catalogue feature.
+            const renderCard = (feature) => {
+                if (!templateEl?.content) return null;
+                const clone = templateEl.content.cloneNode(true);
                 const props = feature?.properties ?? {};
                 const links = feature?.links ?? [];
                 const assets = feature?.assets ?? {};
@@ -1973,9 +2121,9 @@
                 const thumbnailImg = clone.querySelector('[data-sentinel-thumbnail]');
                 const thumbnailPlaceholder = clone.querySelector('[data-sentinel-placeholder]');
 
-                const shortenText = typeof window?.shortenFilename === 'function' ?
-                    (value, max = 40) => window.shortenFilename(String(value), max) :
-                    (value) => String(value ?? '');
+                const shortenText = typeof window?.shortenFilename === 'function'
+                    ? (value, max = 40) => window.shortenFilename(String(value), max)
+                    : (value) => String(value ?? '');
 
                 const productId = props.productIdentifier || props.title || feature?.id || 'Sentinel-2 Product';
                 const acquisitionDate = props.completionDate || props.startDate || props.endPosition || props.beginPosition || props.startTimeFromAscendingNode;
@@ -1990,12 +2138,13 @@
                     titleEl.textContent = shortenText(titleText, 48);
                     titleEl.setAttribute('title', titleText);
                 }
-
                 if (productEl) {
                     productEl.textContent = shortenText(productText, 44);
                     productEl.setAttribute('title', productText);
                 }
-                if (datetimeEl) datetimeEl.textContent = `Acquired: ${formatReadableDate(acquisitionDate)}`;
+                if (datetimeEl) {
+                    datetimeEl.textContent = `Acquired: ${formatReadableDate(acquisitionDate)}`;
+                }
 
                 const detailParts = [];
                 if (tileText) detailParts.push(tileText);
@@ -2009,18 +2158,16 @@
                     props.quicklook ||
                     assets?.thumbnail?.href ||
                     assets?.overview?.href ||
-                    links.find(link => link.rel === 'preview')?.href;
+                    links.find((link) => link.rel === 'preview')?.href;
 
-                const downloadUrl = resolveSentinelDownloadUrl(feature);
-                const downloadUrlWithToken = applySentinelTokenToUrl(downloadUrl);
-                const downloadFilename = buildSentinelDownloadName(productId, titleText);
-                const tokenAvailable = hasSentinelToken();
+                const downloadUrl = resolveDownloadUrl(feature);
+                const downloadUrlWithToken = applyTokenToUrl(downloadUrl);
+                const downloadFilename = buildDownloadName(productId, titleText);
 
                 if (downloadButton) {
-                    if (downloadUrl && downloadUrlWithToken && tokenAvailable) {
-                        const finalDownloadUrl = downloadUrlWithToken;
+                    if (downloadUrl && downloadUrlWithToken && hasToken()) {
                         downloadButton.classList.remove('hidden');
-                        downloadButton.setAttribute('href', finalDownloadUrl);
+                        downloadButton.setAttribute('href', downloadUrlWithToken);
                         downloadButton.setAttribute('aria-disabled', 'false');
                         downloadButton.setAttribute('title', `Download full scene for ${productText}`);
                         downloadButton.setAttribute('download', downloadFilename);
@@ -2038,45 +2185,29 @@
 
                 if (thumbnailImg) {
                     if (quicklookUrl) {
-                        const handleThumbnailError = () => {
+                        const handleError = () => {
                             thumbnailImg.classList.add('hidden');
                             thumbnailImg.removeAttribute('src');
-                            if (thumbnailPlaceholder) {
-                                thumbnailPlaceholder.classList.remove('hidden');
-                            }
+                            thumbnailPlaceholder?.classList.remove('hidden');
                         };
-
-                        const handleThumbnailLoad = () => {
+                        const handleLoad = () => {
                             thumbnailImg.classList.remove('hidden');
-                            if (thumbnailPlaceholder) {
-                                thumbnailPlaceholder.classList.add('hidden');
-                            }
+                            thumbnailPlaceholder?.classList.add('hidden');
                         };
-
                         thumbnailImg.classList.add('hidden');
-                        if (thumbnailPlaceholder) {
-                            thumbnailPlaceholder.classList.remove('hidden');
-                        }
-
-                        thumbnailImg.addEventListener('error', handleThumbnailError, {
-                            once: true
-                        });
-                        thumbnailImg.addEventListener('load', handleThumbnailLoad, {
-                            once: true
-                        });
+                        thumbnailPlaceholder?.classList.remove('hidden');
+                        thumbnailImg.addEventListener('error', handleError, { once: true });
+                        thumbnailImg.addEventListener('load', handleLoad, { once: true });
                         thumbnailImg.src = quicklookUrl;
                         thumbnailImg.alt = `Quicklook preview for ${productText}`;
                     } else {
                         thumbnailImg.classList.add('hidden');
                         thumbnailImg.removeAttribute('src');
-                        if (thumbnailPlaceholder) {
-                            thumbnailPlaceholder.classList.remove('hidden');
-                        }
+                        thumbnailPlaceholder?.classList.remove('hidden');
                     }
                 }
 
-                const bboxArray = Array.isArray(feature?.bbox) ? feature.bbox :
-                    (Array.isArray(props?.bbox) ? props.bbox : null);
+                const bboxArray = Array.isArray(feature?.bbox) ? feature.bbox : (Array.isArray(props?.bbox) ? props.bbox : null);
                 const hasCoverage = Boolean(feature?.geometry) || (Array.isArray(bboxArray) && bboxArray.length === 4);
 
                 if (previewButton) {
@@ -2111,173 +2242,16 @@
                 }
 
                 return clone;
-            }
+            };
 
-            // Pull the latest Sentinel results with optional filters and populate the panel list.
-            async function loadSentinelCollections(forceRefresh = false) {
-                if (!sentinelStatus || !sentinelList) return;
-                // Ensure the default date cache is refreshed before we inspect any inputs.
-                // This prevents the initial load from falling back to "today" for both start
-                // and end values when the inputs are still empty and the defaults have not
-                // been materialised yet.
-                applySentinelDefaultDates(false);
-                syncSentinelDateConstraints();
+            // Display a loading message while clearing previous catalogue entries.
+            const setLoadingState = () => {
+                statusEl.classList.remove('hidden');
+                statusEl.textContent = 'Fetching latest Sentinel-2 collections...';
+                listEl.innerHTML = '';
+            };
 
-                if (forceRefresh && window.MyZkToast?.info) {
-                    window.MyZkToast.info('Refreshing Sentinel-2 catalogue...');
-                }
-
-                sentinelStatus.classList.remove('hidden');
-                sentinelStatus.textContent = 'Fetching latest Sentinel-2 collections...';
-                sentinelList.innerHTML = '';
-
-                const params = new URLSearchParams({
-                    maxRecords: '20',
-                    sortParam: 'startDate',
-                    sortOrder: 'descending'
-                });
-
-                const startDateRaw = sentinelStartDateInput?.value?.trim();
-                const endDateRaw = sentinelEndDateInput?.value?.trim();
-
-                const sentinelRangeFallback = getDateRangeHelper(sentinelDefaultMonthsBack) || {};
-
-                let startDate = parseDateInput(startDateRaw) ??
-                    parseDateInput(sentinelDefaultStartValue) ??
-                    parseDateInput(sentinelRangeFallback.start) ??
-                    parseDateInput(new Date());
-                let endDate = parseDateInput(endDateRaw) ??
-                    parseDateInput(sentinelDefaultEndValue) ??
-                    parseDateInput(sentinelRangeFallback.end) ??
-                    parseDateInput(new Date());
-
-                if (!startDate || !endDate) {
-                    sentinelStatus.textContent = 'Please provide a valid start and end date to filter collections.';
-                    sentinelList.innerHTML = '';
-                    return;
-                }
-
-                startDate.setHours(0, 0, 0, 0);
-                endDate.setHours(23, 59, 59, 999);
-
-                if (startDate > endDate) {
-                    sentinelStatus.textContent = 'Start date must be earlier than or equal to end date.';
-                    sentinelList.innerHTML = '';
-                    return;
-                }
-
-                const startDateIso = ensureIsoDateString(startDate);
-                const endDateIso = ensureIsoDateString(endDate);
-
-                if (!startDateIso || !endDateIso) {
-                    sentinelStatus.textContent = 'Unable to format the selected date range. Please adjust the dates and try again.';
-                    sentinelList.innerHTML = '';
-                    return;
-                }
-
-                params.set('startDate', startDateIso);
-                params.set('completionDate', endDateIso);
-
-                const productTypeRaw = sentinelLevelInput?.value?.trim();
-                const productType = ['S2MSI2A', 'S2MSI1C'].includes(productTypeRaw) ? productTypeRaw : defaultProductType;
-                params.set('productType', productType);
-
-                const cloudRaw = sentinelCloudInput?.value?.trim();
-                const cloudNumber = cloudRaw === '' || cloudRaw === undefined ? null : Number(cloudRaw);
-                if (cloudNumber !== null && !Number.isNaN(cloudNumber)) {
-                    const normalized = clampNumber(cloudNumber, 0, 100);
-                    if (normalized !== null) {
-                        params.set('cloudCover', `[0,${Math.round(normalized)}]`);
-                    }
-                }
-
-                const latRaw = sentinelLatInput?.value?.trim();
-                const lonRaw = sentinelLonInput?.value?.trim();
-                const hasLat = latRaw !== undefined && latRaw !== '';
-                const hasLon = lonRaw !== undefined && lonRaw !== '';
-
-                if ((hasLat && !hasLon) || (!hasLat && hasLon)) {
-                    sentinelStatus.classList.remove('hidden');
-                    sentinelStatus.textContent = 'Please provide both latitude and longitude to filter by location.';
-                    sentinelList.innerHTML = '';
-                    return;
-                }
-
-                if (hasLat && hasLon) {
-                    const latNumber = Number(latRaw);
-                    const lonNumber = Number(lonRaw);
-                    const normalizedLat = clampNumber(latNumber, -90, 90);
-                    const normalizedLon = clampNumber(lonNumber, -180, 180);
-
-                    if (normalizedLat === null || normalizedLon === null) {
-                        sentinelStatus.classList.remove('hidden');
-                        sentinelStatus.textContent = 'Latitude must be between -90 and 90 and longitude between -180 and 180.';
-                        sentinelList.innerHTML = '';
-                        return;
-                    }
-
-                    params.set('lat', normalizedLat.toFixed(6));
-                    params.set('lon', normalizedLon.toFixed(6));
-                }
-
-                const requestUrl = `${sentinelCatalogEndpoint}?${params.toString()}`;
-
-                try {
-                    const response = await fetchSentinelCatalog(requestUrl);
-                    const features = Array.isArray(response?.features) ? response.features : [];
-
-                    if (!features.length) {
-                        sentinelStatus.textContent = 'No Sentinel-2 collections found for the selected date range.';
-                    } else {
-                        sentinelStatus.classList.add('hidden');
-                        features.forEach(feature => {
-                            const card = createSentinelCard(feature);
-                            if (card) {
-                                sentinelList.appendChild(card);
-                            }
-                        });
-                    }
-
-                    sentinelLoadedOnce = true;
-
-                    if (sentinelLastUpdated) {
-                        sentinelLastUpdated.textContent = new Date().toLocaleString('id-ID');
-                    }
-
-                    if (features.length && forceRefresh && window.MyZkToast?.success) {
-                        window.MyZkToast.success('Sentinel-2 collections updated.');
-                    }
-                } catch (error) {
-                    const message = error?.message ? ` (${error.message})` : '';
-                    sentinelStatus.classList.remove('hidden');
-                    sentinelStatus.textContent = `Unable to fetch Sentinel-2 collections${message}. Please try again later.`;
-
-                    if (sentinelLastUpdated) {
-                        sentinelLastUpdated.textContent = new Date().toLocaleString('id-ID');
-                    }
-
-                    if (window.MyZkToast?.error) {
-                        window.MyZkToast.error('Failed to update Sentinel-2 collections.');
-                    }
-                }
-            }
-
-            if (sentinelCloudInput && sentinelCloudInput.value === '') {
-                sentinelCloudInput.value = defaultCloudCoverMax;
-            }
-
-            if (sentinelLatInput && sentinelLatInput.value === '') {
-                sentinelLatInput.value = defaultLatitude;
-            }
-
-            if (sentinelLonInput && sentinelLonInput.value === '') {
-                sentinelLonInput.value = defaultLongitude;
-            }
-
-            if (sentinelLevelInput && sentinelLevelInput.value === '') {
-                sentinelLevelInput.value = defaultProductType;
-            }
-
+            // Ensure numeric filter inputs stay within sensible limits.
             const normalizeInputValue = (input, min, max) => {
                 if (!input) return;
                 if (input.value === '') {
@@ -2295,27 +2269,206 @@
                 }
             };
 
-            sentinelCloudInput?.addEventListener('blur', () => normalizeInputValue(sentinelCloudInput, 0, 100));
-            sentinelLatInput?.addEventListener('blur', () => normalizeInputValue(sentinelLatInput, -90, 90));
-            sentinelLonInput?.addEventListener('blur', () => normalizeInputValue(sentinelLonInput, -180, 180));
+            // Stamp the timestamp of the most recent successful fetch.
+            const updateLastUpdated = () => {
+                if (lastUpdatedEl) {
+                    lastUpdatedEl.textContent = new Date().toLocaleString('id-ID');
+                }
+            };
 
-            if (sentinelFilterForm) {
-                sentinelFilterForm.addEventListener('submit', (event) => {
+            // Reset all filter fields back to their default configuration.
+            const resetFilters = () => {
+                if (cloudInputEl) cloudInputEl.value = config.defaultCloudCover;
+                applyDefaultDates(true);
+                if (latInputEl) latInputEl.value = config.defaultLatitude;
+                if (lonInputEl) lonInputEl.value = config.defaultLongitude;
+                if (levelInputEl) levelInputEl.value = config.defaultProductType;
+            };
+
+            // Construct the query string parameters for the Sentinel catalogue API.
+            const buildQueryParams = () => {
+                const params = new URLSearchParams({
+                    maxRecords: '20',
+                    sortParam: 'startDate',
+                    sortOrder: 'descending'
+                });
+
+                const startValue = startDateInputEl?.value?.trim();
+                const endValue = endDateInputEl?.value?.trim();
+                const fallbackRange = getDefaultDateRange(config.defaultMonthsBack);
+
+                let startDate = parseDate(startValue) ?? parseDate(state.defaultStartIso) ?? parseDate(fallbackRange.start) ?? parseDate(new Date());
+                let endDate = parseDate(endValue) ?? parseDate(state.defaultEndIso) ?? parseDate(fallbackRange.end) ?? parseDate(new Date());
+
+                if (!startDate || !endDate) {
+                    throw new Error('Please provide a valid start and end date to filter collections.');
+                }
+
+                startDate.setHours(0, 0, 0, 0);
+                endDate.setHours(23, 59, 59, 999);
+
+                if (startDate > endDate) {
+                    throw new Error('Start date must be earlier than or equal to end date.');
+                }
+
+                const startIso = ensureIsoDateString(startDate);
+                const endIso = ensureIsoDateString(endDate);
+                if (!startIso || !endIso) {
+                    throw new Error('Unable to format the selected date range. Please adjust the dates and try again.');
+                }
+
+                params.set('startDate', startIso);
+                params.set('completionDate', endIso);
+
+                const productTypeRaw = levelInputEl?.value?.trim();
+                const productType = ['S2MSI2A', 'S2MSI1C'].includes(productTypeRaw) ? productTypeRaw : config.defaultProductType;
+                params.set('productType', productType);
+
+                const cloudRaw = cloudInputEl?.value?.trim();
+                const cloudNumber = cloudRaw === '' || cloudRaw === undefined ? null : Number(cloudRaw);
+                if (cloudNumber !== null && !Number.isNaN(cloudNumber)) {
+                    const normalized = clampNumber(cloudNumber, 0, 100);
+                    if (normalized !== null) {
+                        params.set('cloudCover', `[0,${Math.round(normalized)}]`);
+                    }
+                }
+
+                const latRaw = latInputEl?.value?.trim();
+                const lonRaw = lonInputEl?.value?.trim();
+                const hasLat = latRaw !== undefined && latRaw !== '';
+                const hasLon = lonRaw !== undefined && lonRaw !== '';
+
+                if ((hasLat && !hasLon) || (!hasLat && hasLon)) {
+                    throw new Error('Please provide both latitude and longitude to filter by location.');
+                }
+
+                if (hasLat && hasLon) {
+                    const latNumber = Number(latRaw);
+                    const lonNumber = Number(lonRaw);
+                    const normalizedLat = clampNumber(latNumber, -90, 90);
+                    const normalizedLon = clampNumber(lonNumber, -180, 180);
+                    if (normalizedLat === null || normalizedLon === null) {
+                        throw new Error('Latitude must be between -90 and 90 and longitude between -180 and 180.');
+                    }
+                    params.set('lat', normalizedLat.toFixed(6));
+                    params.set('lon', normalizedLon.toFixed(6));
+                }
+
+                return params;
+            };
+
+            // Fetch Sentinel collections based on current filters and render them.
+            const loadCollections = async (forceRefresh = false) => {
+                applyDefaultDates(false);
+                syncDateConstraints();
+
+                if (forceRefresh && window.MyZkToast?.info) {
+                    window.MyZkToast.info('Refreshing Sentinel-2 catalogue...');
+                }
+
+                setLoadingState();
+
+                try {
+                    const params = buildQueryParams();
+                    const requestUrl = `${config.endpoint}?${params.toString()}`;
+                    const response = await fetchCatalog(requestUrl);
+                    const features = Array.isArray(response?.features) ? response.features : [];
+
+                    if (!features.length) {
+                        statusEl.textContent = 'No Sentinel-2 collections found for the selected date range.';
+                    } else {
+                        statusEl.classList.add('hidden');
+                        features.forEach((feature) => {
+                            const card = renderCard(feature);
+                            if (card) {
+                                listEl.appendChild(card);
+                            }
+                        });
+                    }
+
+                    state.loadedOnce = true;
+                    window.AppMap.sentinel.loadedOnce = true;
+                    updateLastUpdated();
+
+                    if (features.length && forceRefresh && window.MyZkToast?.success) {
+                        window.MyZkToast.success('Sentinel-2 collections updated.');
+                    }
+                } catch (error) {
+                    statusEl.classList.remove('hidden');
+                    statusEl.textContent = error?.message || 'Unable to fetch Sentinel-2 collections. Please try again later.';
+                    updateLastUpdated();
+                    if (window.MyZkToast?.error) {
+                        window.MyZkToast.error('Failed to update Sentinel-2 collections.');
+                    }
+                }
+            };
+
+            // Attach listeners to filter inputs and actions to keep data fresh.
+            const bindEvents = () => {
+                startDateInputEl?.addEventListener('change', () => {
+                    if (endDateInputEl && startDateInputEl.value && endDateInputEl.value && endDateInputEl.value < startDateInputEl.value) {
+                        endDateInputEl.value = startDateInputEl.value;
+                    }
+                    syncDateConstraints();
+                });
+
+                endDateInputEl?.addEventListener('change', () => {
+                    if (startDateInputEl && endDateInputEl.value && startDateInputEl.value && startDateInputEl.value > endDateInputEl.value) {
+                        startDateInputEl.value = endDateInputEl.value;
+                    }
+                    syncDateConstraints();
+                });
+
+                cloudInputEl?.addEventListener('blur', () => normalizeInputValue(cloudInputEl, 0, 100));
+                latInputEl?.addEventListener('blur', () => normalizeInputValue(latInputEl, -90, 90));
+                lonInputEl?.addEventListener('blur', () => normalizeInputValue(lonInputEl, -180, 180));
+
+                formEl?.addEventListener('submit', (event) => {
                     event.preventDefault();
-                    loadSentinelCollections(true);
+                    loadCollections(true);
                 });
-            }
 
-            if (sentinelFilterResetButton) {
-                sentinelFilterResetButton.addEventListener('click', () => {
-                    if (sentinelCloudInput) sentinelCloudInput.value = defaultCloudCoverMax;
-                    applySentinelDefaultDates(true);
-                    if (sentinelLatInput) sentinelLatInput.value = defaultLatitude;
-                    if (sentinelLonInput) sentinelLonInput.value = defaultLongitude;
-                    if (sentinelLevelInput) sentinelLevelInput.value = defaultProductType;
-                    loadSentinelCollections(true);
+                resetButtonEl?.addEventListener('click', () => {
+                    resetFilters();
+                    loadCollections(true);
                 });
+            };
+
+            // Bootstrap sentinel catalogue helpers and trigger the initial load.
+            const initialise = () => {
+                ensureAppNamespace();
+                window.AppMap.sentinel.loadedOnce = state.loadedOnce;
+                window.AppMap.sentinel.loadCollections = loadCollections;
+
+                if (cloudInputEl && cloudInputEl.value === '') {
+                    cloudInputEl.value = config.defaultCloudCover;
+                }
+                if (latInputEl && latInputEl.value === '') {
+                    latInputEl.value = config.defaultLatitude;
+                }
+                if (lonInputEl && lonInputEl.value === '') {
+                    lonInputEl.value = config.defaultLongitude;
+                }
+                if (levelInputEl && levelInputEl.value === '') {
+                    levelInputEl.value = config.defaultProductType;
+                }
+
+                waitForFormatIso(() => applyDefaultDates(false));
+                bindEvents();
+                loadCollections();
+
+                document.dispatchEvent(new CustomEvent('app:sentinel:ready', {
+                    detail: window.AppMap.sentinel
+                }));
+            };
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', initialise, { once: true });
+            } else {
+                initialise();
             }
-        </script>
-    @endpush
+        })();
+    </script>
+@endpush
+
 </x-app-front-map-layout>
