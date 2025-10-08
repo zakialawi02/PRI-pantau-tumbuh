@@ -48,12 +48,14 @@ class ProcessImageryJob implements ShouldQueue
 
         if (!file_exists($pythonPath)) {
             Log::error("❌ [Job] Python venv not found: {$pythonPath}");
+            $this->refundCredits($imagery);
             $imagery->update(['processing_status' => 'error']);
             return;
         }
 
         if (!file_exists($scriptPath)) {
             Log::error("❌ [Job] Python script not found: {$scriptPath}");
+            $this->refundCredits($imagery);
             $imagery->update(['processing_status' => 'error']);
             return;
         }
@@ -120,8 +122,44 @@ class ProcessImageryJob implements ShouldQueue
                 Log::warning("⚠️ [Job] Processing done, but output file not detected in expected location.");
             }
         } else {
+            // Refund credits when processing fails
+            $this->refundCredits($imagery);
+
             $imagery->update(['processing_status' => 'error']);
             Log::error("❌ [Job] Processing failed for {$imagery->id}");
+        }
+    }
+
+    /**
+     * Refund credits to user when processing fails
+     */
+    private function refundCredits($imagery)
+    {
+        try {
+            // Get the user who owns this imagery
+            $user = $imagery->user;
+            if (!$user) {
+                Log::error("❌ [Job] User not found for imagery: {$imagery->id}");
+                return;
+            }
+
+            // Get user's credit record
+            $userCredit = $user->credits;
+            if (!$userCredit) {
+                Log::error("❌ [Job] User credit record not found for user: {$user->id}");
+                return;
+            }
+
+            // Get the credit cost from config
+            $creditCost = config('app-constants.imagery_processing_cost', 10);
+
+            // Refund the credits
+            $userCredit->credits += $creditCost;
+            $userCredit->save();
+
+            Log::info("💰 [Job] Refunded {$creditCost} credits to user {$user->id} for failed imagery processing: {$imagery->id}");
+        } catch (\Exception $e) {
+            Log::error("❌ [Job] Failed to refund credits for imagery {$imagery->id}: " . $e->getMessage());
         }
     }
 }

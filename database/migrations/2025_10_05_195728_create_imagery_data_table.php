@@ -20,7 +20,7 @@ return new class extends Migration
             $table->string('stored_name');
             $table->decimal('size', 20, 2)->default(0);
             $table->string('format', 10);
-            $table->string('path');          // lokasi penyimpanan file asli (public/citra/...)
+            $table->string('path');
 
             // hasil setelah diproses
             $table->string('processed_path')->nullable();
@@ -30,10 +30,13 @@ return new class extends Migration
             $table->enum('upload_status', ['pending', 'uploading', 'done', 'failed'])
                 ->default('pending')
                 ->comment('Track file upload progress');
-            $table->enum('processing_status', ['waiting', 'processing', 'completed', 'error'])
+            $table->enum('processing_status', ['skip', 'waiting', 'processing', 'completed', 'error', 'cancelled'])
                 ->default('waiting')
                 ->comment('Track Python processing state');
 
+            // scheduling for deletion
+            $table->timestamp('scheduled_deletion_at')->nullable()
+                ->comment('The date when the original imagery is scheduled to be deleted');
 
             $table->timestamp('uploaded_at')->nullable();
             $table->timestamps();

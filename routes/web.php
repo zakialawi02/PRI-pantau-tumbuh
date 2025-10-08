@@ -73,6 +73,7 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/imagery-merge-chunks', [ImageryDataController::class, 'mergeChunks'])->name('upload.merge');
     Route::get('/imagery-check-progress', [ImageryDataController::class, 'checkProgress'])->name('upload.progress');
     Route::get('/imagery/list', [ImageryDataController::class, 'listUserImagery'])->name('imagery.list');
+    Route::get('/user/credits/check', [UserCreditsController::class, 'checkUserCredits'])->name('user.credits.check');
 
     Route::post('/imagery-order', [ImageryDataController::class, 'imageryOrder'])->name('imageryOrder');
     Route::get('/imagery-checkout', [ImageryDataController::class, 'imageryCheckout'])->name('imageryCheckout');

@@ -9,13 +9,20 @@
 <x-app-front-map-layout class="flex h-screen w-screen flex-col overflow-hidden">
     <!-- HEADER -->
     <header class="bg-background border-foreground/5 flex h-12 items-center justify-between border-b-2 px-4">
-        <h1 class="text-primary text-sm font-bold">🌱 PantauTumbuh Dashboard</h1>
+        <a href="/">
+            <h1 class="text-primary max-h-10 w-auto text-sm font-bold"><x-application-logo class="h-8" /></h1>
+        </a>
         <div class="flex items-center space-x-3">
-            <!-- Credit Display for Authenticated Users -->
             @auth
+                <!-- Credit Display for Authenticated Users -->
                 <div class="bg-primary/10 text-primary flex items-center space-x-1 rounded-full px-3 py-1 text-xs font-medium">
-                    <i class="ri-coins-line mr-2"></i>
-                    <span>{{ Number::format(Auth::user()->current_credits, 2, locale: app()->getLocale()) }} Credit Points</span>
+                    <i class="ri-coins-line mr-1"></i>
+                    <p><span id="current-myCredits">{{ Number::format(Auth::user()->current_credits, 2, locale: app()->getLocale()) }}</span> <span>Credit Points</span></p>
+                </div>
+            @else
+                <div class="bg-primary/10 text-primary flex items-center space-x-1 rounded-full px-3 py-1 text-xs font-medium">
+                    <i class="ri-coins-line mr-1"></i>
+                    <p><span id="current-myCredits">-</span> <span>Credit Points</span></p>
                 </div>
             @endauth
 
@@ -111,6 +118,15 @@
                 <!-- content -->
                 <div class="panel-content flex-1 space-y-3 overflow-y-auto p-3">
                     <div class="space-y-2">
+                        <div class="flex items-center justify-between space-x-1">
+                            <x-button-primary class="px-2! py-1!" href="{{ route('admin.imagery.index') }}" size="small" variant="outline">
+                                <i class="ri-dashboard-line"></i>
+                                <span class="ml-1">Go to Dashboard</span>
+                            </x-button-primary>
+                            <button class="hover:bg-foreground/20 bg-foreground/10 rounded px-2 py-1 text-sm" onclick="window.AppMap.uploader.reload()">
+                                <i class="ri-refresh-line"></i>
+                            </button>
+                        </div>
                         <div class="space-y-2">
                             @auth
                                 <div class="space-y-2" id="myDataContainer">
@@ -339,7 +355,7 @@
                                         <ul class="text-foreground/70 space-y-1 text-sm">
                                             <li class="flex items-start">
                                                 <i class="ri-check-line text-success mr-2 mt-0.5 text-xs"></i>
-                                                <span>Sentinel-2, Landsat, and commercial satellites</span>
+                                                <span>Sentinel-2, Landsat, and QuickSat</span>
                                             </li>
                                             <li class="flex items-start">
                                                 <i class="ri-check-line text-success mr-2 mt-0.5 text-xs"></i>
@@ -377,7 +393,7 @@
 
                                         <!-- tombol kontrol -->
                                         <div class="flex flex-wrap gap-2">
-                                            <x-button-primary id="startBtn" type="button" size="small">🚀 Start Upload</x-button-primary>
+                                            <x-button-primary id="startBtn" type="button" size="small">Start Upload</x-button-primary>
                                             <x-button-danger id="pauseBtn" type="button" size="small">⏸️ Pause</x-button-danger>
                                             <x-button-secondary id="resumeBtn" type="button" size="small">▶️ Resume</x-button-secondary>
                                         </div>
@@ -1111,7 +1127,8 @@
                 const config = {
                     chunkSize: 5 * 1024 * 1024,
                     maxRetries: 3,
-                    autoResetDelay: 4000
+                    autoResetDelay: 4000,
+                    imageryProcessingCost: {{ config('app-constants.imagery_processing_cost', 10) }}
                 };
 
                 // Endpoints required throughout the upload process.
@@ -1158,6 +1175,10 @@
                             startBtn.disabled = false;
                             pauseBtn.disabled = true;
                             resumeBtn.disabled = true;
+                            // Restore original button text if it was changed to loading state
+                            if (startBtn.innerHTML.includes('Checking')) {
+                                startBtn.innerHTML = startBtn.innerHTML.replace(/<i class="ri-loader-4-line animate-spin"><\/i> Checking.../, 'Start Upload');
+                            }
                             break;
                         case 'uploading':
                             startBtn.disabled = true;
@@ -1176,10 +1197,24 @@
                             if (mode === 'error') {
                                 startBtn.disabled = false;
                             }
+                            // Restore original button text if it was changed to loading state
+                            if (startBtn.innerHTML.includes('Checking')) {
+                                startBtn.innerHTML = startBtn.innerHTML.replace(/<i class="ri-loader-4-line animate-spin"><\/i> Checking.../, 'Start Upload');
+                            }
+                            break;
+                        case 'loading':
+                            startBtn.disabled = true;
+                            startBtn.innerHTML = '<i class="ri-loader-4-line animate-spin"></i> Checking...';
+                            pauseBtn.disabled = true;
+                            resumeBtn.disabled = true;
                             break;
                         case 'idle':
                         default:
                             disableAll();
+                            // Restore original button text if it was changed to loading state
+                            if (startBtn.innerHTML.includes('Checking')) {
+                                startBtn.innerHTML = startBtn.innerHTML.replace(/<i class="ri-loader-4-line animate-spin"><\/i> Checking.../, 'Start Upload');
+                            }
                             break;
                     }
                 };
@@ -1350,6 +1385,12 @@
                     formData.append('total_chunks', state.totalChunks);
                     formData.append('source_type', elements.sourceInput.value);
 
+                    // Check if user has enough credits to determine processing status
+                    const creditCheck = await checkUserCredits();
+                    if (!creditCheck.hasCredits) {
+                        formData.append('skip_processing', 'true');
+                    }
+
                     try {
                         const response = await fetch(endpoints.merge, {
                             method: 'POST',
@@ -1368,6 +1409,7 @@
                         elements.progressText.textContent = `✅ Upload complete! ${result.message || 'Upload completed. Processing started in background.'}`;
                         MyZkToast.success(result.message || 'Upload completed successfully!');
                         setButtonState('done');
+                        $('#current-myCredits').text(formatNumber(result.data.currentCredits, 2));
                         await loadMyData();
                         scheduleAutoReset();
                     } catch (error) {
@@ -1394,18 +1436,64 @@
                         return;
                     }
 
-                    state.uploadId = generateUploadId();
-                    state.totalChunks = Math.ceil(state.file.size / config.chunkSize);
-                    state.currentChunk = 0;
-                    state.uploadedBytes = 0;
-                    state.paused = false;
-                    state.uploading = true;
-                    state.startTime = performance.now();
+                    // Show loading state on start button while checking credits
+                    setButtonState('loading');
 
-                    MyZkToast.info('🚀 Upload started...');
-                    elements.progressText.textContent = `🚀 Uploading ${state.file.name}...`;
-                    setButtonState('uploading');
-                    uploadNextChunk();
+                    // Check user credits before proceeding
+                    checkUserCredits().then(res => {
+                        // Restore ready state if user has credits
+                        setButtonState('ready');
+                        $('#current-myCredits').text(formatNumber(res.currentCredits, 2));
+
+                        // Show confirmation modal before starting upload
+                        ZkPopAlert.show({
+                            message: `${res.hasCredits ? `This upload will cost ${res.requiredCredits} credit points for processing imagery. Do you want to proceed?` : `Insufficient credit points for processing. You need ${res.requiredCredits} credits. You can still upload the file, but processing will be skipped. Please purchase more credits to continue processing.`}`,
+                            icon: '<i class="ri-upload-cloud-2-line text-2xl text-primary"></i>',
+                            confirmClass: "focus:ring-primary/80 rounded-md text-sm px-2.5 py-1.5 bg-primary text-primary-foreground border border-primary hover:bg-primary/80 focus:outline-none focus:ring-primary",
+                            confirmText: "Yes, Upload",
+                            cancelText: "Cancel",
+                            onConfirm: () => {
+                                state.uploadId = generateUploadId();
+                                state.totalChunks = Math.ceil(state.file.size / config.chunkSize);
+                                state.currentChunk = 0;
+                                state.uploadedBytes = 0;
+                                state.paused = false;
+                                state.uploading = true;
+                                state.startTime = performance.now();
+
+                                MyZkToast.info('🚀 Upload started...');
+                                elements.progressText.textContent = `🚀 Uploading ${state.file.name}...`;
+                                setButtonState('uploading');
+                                uploadNextChunk();
+                            }
+                        });
+                    }).catch(error => {
+                        // Restore ready state on error
+                        setButtonState('ready');
+                        MyZkToast.error('Failed to check credit balance: ' + error.message);
+                    });
+                };
+
+                // Function to check user credits
+                const checkUserCredits = async () => {
+                    const response = await fetch('{{ route('user.credits.check') }}');
+                    const result = await response.json();
+
+                    if (!result.success) {
+                        MyZkToast.error(result.message || 'Failed to check credit balance.');
+                        return false;
+                    }
+
+                    const currentCredits = parseFloat(formatNumber(result.credits, 2));
+                    const requiredCredits = config.imageryProcessingCost || 10; // Default to 10 if not set
+
+                    return new Promise((resolve) => {
+                        resolve(data = {
+                            hasCredits: currentCredits >= requiredCredits,
+                            currentCredits: currentCredits,
+                            requiredCredits: requiredCredits
+                        });
+                    });
                 };
 
                 // Suspend ongoing uploads without losing progress state.
@@ -1934,7 +2022,7 @@
                                 localState.imageryLayer = new ol.layer.Image({
                                     source: localState.imagerySource,
                                     visible: false,
-                                    opacity: 0.85,
+                                    opacity: 0.95,
                                     zIndex: 100
                                 });
                                 mapInstance.addLayer(localState.imageryLayer);

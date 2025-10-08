@@ -25,13 +25,15 @@ class ImageryData extends Model
         'uploaded_at',
         'processing_status',
         'processed_path',
-        'processed_at'
+        'processed_at',
+        'scheduled_deletion_at'
     ];
 
     protected $casts = [
         'size' => 'decimal:2',
         'uploaded_at' => 'datetime',
-        'processed_at' => 'datetime'
+        'processed_at' => 'datetime',
+        'scheduled_deletion_at' => 'datetime'
     ];
 
     public function user()

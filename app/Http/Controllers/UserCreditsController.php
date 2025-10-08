@@ -8,6 +8,7 @@ use App\Models\UserCredit;
 use Illuminate\Support\Str;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Yajra\DataTables\Facades\DataTables;
 
@@ -143,5 +144,30 @@ class UserCreditsController extends Controller
         $data['title'] = 'Checkout';
 
         return view('pages.front.order.checkout', compact('data'));
+    }
+
+
+    /**
+     * Check user's current credits
+     */
+    public function checkUserCredits()
+    {
+        try {
+            $user = Auth::user();
+
+            $currentCredits = (float) ($user->current_credits ?? 0);
+
+            return response()->json([
+                'success' => true,
+                'credits' => $currentCredits,
+                'message' => 'Credit balance retrieved successfully.'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to retrieve credit balance.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 }
