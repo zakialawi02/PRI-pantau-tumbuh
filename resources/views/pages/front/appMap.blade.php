@@ -515,7 +515,7 @@
             </div>
 
             <!-- Sentinel Preview Panel -->
-            <div class="absolute left-2 right-2 top-[6.5rem] z-40 flex justify-end sm:left-auto sm:right-2 sm:w-80">
+            <div class="absolute left-2 right-2 top-20 z-40 flex justify-end sm:left-auto sm:right-2 sm:w-80">
                 <div class="border-foreground/15 bg-background/95 supports-[backdrop-filter]:bg-background/70 pointer-events-auto hidden w-full max-w-md break-all rounded-xl border p-2 text-xs shadow-lg backdrop-blur" id="sentinelPreviewPanel">
                     <div class="flex items-start justify-between gap-2">
                         <div class="space-y-1">
@@ -1922,7 +1922,7 @@
                             if (imageLayerSupported) {
                                 const params = {
                                     ...wmsDefaults.baseParams,
-                                    LAYERS: wmsDefaults.layerCandidates.find((candidate) => typeof candidate === 'string' && candidate.trim()) || 'TRUE-COLOR'
+                                    LAYERS: wmsDefaults.layerCandidates.find((candidate) => typeof candidate === 'string' && candidate.trim()) || 'NATURAL-COLOR'
                                 };
                                 localState.imagerySource = new ol.source.ImageWMS({
                                     url: wmsDefaults.baseUrl,
@@ -1935,7 +1935,7 @@
                                     source: localState.imagerySource,
                                     visible: false,
                                     opacity: 0.85,
-                                    zIndex: 1190
+                                    zIndex: 100
                                 });
                                 mapInstance.addLayer(localState.imageryLayer);
                             }
@@ -1952,11 +1952,11 @@
                                         lineDash: [6, 6]
                                     }),
                                     fill: new ol.style.Fill({
-                                        color: 'rgba(59,130,246,0.15)'
+                                        color: 'rgba(59,130,246,0.05)'
                                     })
                                 }),
                                 visible: false,
-                                zIndex: 1200
+                                zIndex: 100
                             });
                             mapInstance.addLayer(localState.layer);
                         }
@@ -2140,7 +2140,7 @@
                         const layerName = (Array.isArray(options?.layers) ? options.layers : [])
                             .find((layer) => typeof layer === 'string' && layer.trim()) ||
                             wmsDefaults.layerCandidates.find((layer) => typeof layer === 'string' && layer.trim()) ||
-                            'TRUE-COLOR';
+                            'NATURAL-COLOR';
 
                         if (!url || !layerName) {
                             localState.imageryLayer.setVisible(false);
