@@ -2171,17 +2171,17 @@
                         const sanitizedParams = {
                             ...params
                         };
-                        delete sanitizedParams.BBOX;
 
                         const targetCrs = sanitizedParams?.CRS || sanitizedParams?.SRS || dataProjection;
                         const isLatLonAxis = targetCrs === 'EPSG:4326';
+                        const bboxValues = isLatLonAxis
+                            ? [minY, minX, maxY, maxX]
+                            : [minX, minY, maxX, maxY];
+
+                        sanitizedParams.BBOX = bboxValues.join(',');
+
                         if (geometryWkt) {
                             sanitizedParams.GEOMETRY = geometryWkt;
-                        } else {
-                            const bboxValues = isLatLonAxis
-                                ? [minY, minX, maxY, maxX]
-                                : [minX, minY, maxX, maxY];
-                            sanitizedParams.BBOX = bboxValues.join(',');
                         }
 
                         const query = {
@@ -2287,7 +2287,6 @@
                         const geometryWkt = buildFootprintGeometryWkt(payload);
                         if (geometryWkt) {
                             params.GEOMETRY = geometryWkt;
-                            delete params.BBOX;
                         }
 
                         const extent = buildLayerExtent(payload, geometryExtent);
