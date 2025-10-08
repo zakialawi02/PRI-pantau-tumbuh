@@ -803,20 +803,23 @@
                 // Quick helper that checks the viewport width to decide layout mode.
                 const isMobileView = () => window.innerWidth < 768;
 
-                // Resolve a sidebar button that points to the given panel id.
-                const getButtonByPanel = (panelId) => {
-                    if (!panelId) return null;
-                    return selectors.sidebarButtons.find((button) => {
-                        if (!button) return false;
-                        if (!button.dataset.panelTarget) {
-                            const inline = button.getAttribute('onclick') || '';
-                            const match = inline.match(/showPanel\('([^']+)'/);
-                            if (match) {
-                                button.dataset.panelTarget = match[1];
-                            }
+                // Ensure a sidebar button exposes its target panel id for later lookups.
+                const resolvePanelTarget = (button) => {
+                    if (!button) return null;
+                    if (!button.dataset.panelTarget) {
+                        const inline = button.getAttribute('onclick') || '';
+                        const match = inline.match(/showPanel\('([^']+)'/);
+                        if (match) {
+                            button.dataset.panelTarget = match[1];
                         }
-                        return button.dataset.panelTarget === panelId;
-                    }) || null;
+                    }
+                    return button.dataset.panelTarget || null;
+                };
+
+                // Resolve every sidebar button that points to the given panel id.
+                const getButtonsByPanel = (panelId) => {
+                    if (!panelId) return [];
+                    return selectors.sidebarButtons.filter((button) => resolvePanelTarget(button) === panelId);
                 };
 
                 // Ask the Sentinel module to load its catalogue as soon as it is ready.
@@ -846,15 +849,18 @@
 
                 // Apply the active state on the button that triggered the panel change.
                 const setActiveButton = (panelId, triggerButton) => {
-                    selectors.sidebarButtons.forEach((button) => button.classList.remove('active'));
+                    selectors.sidebarButtons.forEach((button) => {
+                        button.classList.remove('active');
+                        resolvePanelTarget(button);
+                    });
+
                     if (triggerButton) {
                         triggerButton.classList.add('active');
                         triggerButton.dataset.panelTarget = panelId;
-                        return;
                     }
 
-                    const fallbackButton = getButtonByPanel(panelId);
-                    fallbackButton?.classList.add('active');
+                    const relatedButtons = getButtonsByPanel(panelId);
+                    relatedButtons.forEach((button) => button.classList.add('active'));
                 };
 
                 // Toggle classes that animate the panel opening for mobile and desktop.
@@ -935,9 +941,9 @@
                         selectors.panelWrapper.classList.add('w-80', 'md:w-80', 'opacity-100');
                     }
 
-                    const activeButton = getButtonByPanel(activePanel);
+                    const activeButtons = getButtonsByPanel(activePanel);
                     selectors.sidebarButtons.forEach((button) => button.classList.remove('active'));
-                    activeButton?.classList.add('active');
+                    activeButtons.forEach((button) => button.classList.add('active'));
                 };
 
                 // Setup horizontal scrolling interaction for the mobile navigation pills.
