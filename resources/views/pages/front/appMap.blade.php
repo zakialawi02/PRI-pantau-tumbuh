@@ -1890,7 +1890,7 @@
                     const dataProjection = 'EPSG:4326';
                     const wmsDefaults = {
                         baseUrl: 'https://sh.dataspace.copernicus.eu/ogc/wms/1bd0fec1-0e52-427a-8e83-6e0dcd29a03a',
-                        layerCandidates: ['NATURAL-COLOR', 'TRUE-COLOR-S2L2A'],
+                        layerName: 'NATURAL-COLOR',
                         baseParams: {
                             FORMAT: 'image/png',
                             TRANSPARENT: true,
@@ -1907,7 +1907,8 @@
                         geoJson: null,
                         selection: null,
                         imageryLayer: null,
-                        imagerySource: null
+                        imagerySource: null,
+                        defaultImageryLoadFunction: null
                     };
 
                     // Lazily initialize OpenLayers resources used to draw footprints.
@@ -1922,7 +1923,7 @@
                             if (imageLayerSupported) {
                                 const params = {
                                     ...wmsDefaults.baseParams,
-                                    LAYERS: wmsDefaults.layerCandidates.find((candidate) => typeof candidate === 'string' && candidate.trim()) || 'NATURAL-COLOR'
+                                    LAYERS: wmsDefaults.layerName
                                 };
                                 localState.imagerySource = new ol.source.ImageWMS({
                                     url: wmsDefaults.baseUrl,
@@ -2104,7 +2105,7 @@
                         const uniqueLayers = Array.from(new Set(accumulator.layers));
                         const fallbackUrl = wmsDefaults.baseUrl;
                         const resolvedUrl = uniqueUrls.find((url) => /\/wms\//i.test(url)) || uniqueUrls[0] || fallbackUrl;
-                        const resolvedLayers = uniqueLayers.length ? uniqueLayers : wmsDefaults.layerCandidates;
+                        const resolvedLayers = uniqueLayers.length ? uniqueLayers : [wmsDefaults.layerName];
                         const time = resolveWmsTimeParam(payload);
                         return {
                             url: resolvedUrl,
@@ -2137,10 +2138,8 @@
                         }
                         const options = resolveImageryOptions(payload);
                         const url = ensureAbsoluteUrl(options?.url) || wmsDefaults.baseUrl;
-                        const layerName = (Array.isArray(options?.layers) ? options.layers : [])
-                            .find((layer) => typeof layer === 'string' && layer.trim()) ||
-                            wmsDefaults.layerCandidates.find((layer) => typeof layer === 'string' && layer.trim()) ||
-                            'NATURAL-COLOR';
+                        const naturalColorLayer = wmsDefaults.layerName;
+                        const layerName = naturalColorLayer;
 
                         if (!url || !layerName) {
                             localState.imageryLayer.setVisible(false);
@@ -2161,6 +2160,8 @@
                             params.token = token;
                         }
 
+                        const extent = buildLayerExtent(payload, geometryExtent);
+                        const boundedExtent = Array.isArray(extent) && extent.length === 4 ? extent : null;
                         const source = new ol.source.ImageWMS({
                             url,
                             params,
@@ -2168,12 +2169,27 @@
                             crossOrigin: 'anonymous',
                             attributions: wmsDefaults.attribution
                         });
+                        const defaultLoadFunction = source.getImageLoadFunction();
+                        localState.defaultImageryLoadFunction = defaultLoadFunction;
+                        if (boundedExtent && defaultLoadFunction && typeof defaultLoadFunction === 'function') {
+                            source.setImageLoadFunction((image, src) => {
+                                try {
+                                    const baseHref = (typeof window !== 'undefined' && window.location?.href) ? window.location.href : undefined;
+                                    const requestUrl = new URL(src, baseHref);
+                                    const bboxValue = boundedExtent.join(',');
+                                    requestUrl.searchParams.set('BBOX', bboxValue);
+                                    defaultLoadFunction(image, requestUrl.toString());
+                                } catch (error) {
+                                    console.warn('Failed to enforce WMS BBOX extent. Using default request.', error);
+                                    defaultLoadFunction(image, src);
+                                }
+                            });
+                        }
                         localState.imagerySource = source;
                         localState.imageryLayer.setSource(source);
 
-                        const extent = buildLayerExtent(payload, geometryExtent);
-                        if (extent) {
-                            localState.imageryLayer.setExtent(extent);
+                        if (boundedExtent) {
+                            localState.imageryLayer.setExtent(boundedExtent);
                         } else {
                             localState.imageryLayer.setExtent(undefined);
                         }
