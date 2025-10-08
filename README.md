@@ -83,6 +83,26 @@ DB_PASSWORD=
 -   `DB_USERNAME` - Database username
 -   `DB_PASSWORD` - Database password
 
+### Copernicus Data Space credentials
+
+Downloading full Sentinel-2 scenes from the Copernicus Data Space Ecosystem requires OAuth credentials. The application now requests and refreshes access tokens automatically when valid client credentials are configured in the environment.
+
+1. Sign in at [dataspace.copernicus.eu](https://dataspace.copernicus.eu/).
+2. Open your account menu and navigate to **API & Credentials**.
+3. Create (or reuse) a service account to obtain a **client ID** and **client secret**.
+4. Store both values in your Laravel environment file:
+
+    ```env
+    COPERNICUS_CLIENT_ID=your-client-id
+    COPERNICUS_CLIENT_SECRET=your-client-secret
+    # Optional: override the cache duration (seconds) for the short-lived token
+    # COPERNICUS_TOKEN_CACHE_SECONDS=3300
+    ```
+
+5. Reload the application (or redeploy if you are running in production).
+
+On every request the backend exchanges the configured client credentials for an access token and caches it briefly. Sentinel scene downloads will include a fresh token automatically, and the UI will surface an alert if the credentials are missing or invalid.
+
 ### Database Configuration
 
 1. Create a new database for your project

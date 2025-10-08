@@ -94,8 +94,101 @@ function formatCustomDate(
         return fallback;
     }
 }
+
+/**
+ * Formats a Date object into an ISO date string (YYYY-MM-DD) adjusted for the local timezone.
+ *
+ * This function takes a Date object and returns a string representation of the date
+ * in ISO format (YYYY-MM-DD), ensuring the date is adjusted for the local timezone.
+ * If the input is not a valid Date object, it returns an empty string.
+ *
+ * @param {Date} date - The Date object to format
+ * @returns {string} The formatted date string in YYYY-MM-DD format, or an empty string if input is invalid
+ *
+ * @example
+ * formatISODate(new Date("2023-12-01T10:30:00Z")) // Returns "2023-12-01" (adjusted for local timezone)
+ * formatISODate("invalid date") // Returns ""
+ */
+function formatISODate(date) {
+    if (!(date instanceof Date)) return "";
+    const copy = new Date(date.getTime());
+    copy.setMinutes(copy.getMinutes() - copy.getTimezoneOffset());
+    return copy.toISOString().split("T")[0];
+}
+
+/**
+ * Calculates a default date range ending today at 23:59 and starting
+ * a configurable number of months in the past at 00:00.
+ *
+ * @param {number} [monthsBack=1] - Number of months to subtract from the end date.
+ * @returns {{start: Date, end: Date}} An object containing start and end Date instances.
+ */
+function getDefaultDateRange(monthsBack = 1) {
+    const months = Number.isFinite(monthsBack) && monthsBack > 0 ? monthsBack : 1;
+    const end = new Date();
+    const endClone = new Date(end.getTime());
+    endClone.setHours(23, 59, 59, 999);
+
+    const startClone = new Date(endClone.getTime());
+    startClone.setMonth(startClone.getMonth() - months);
+    startClone.setHours(0, 0, 0, 0);
+
+    return { start: startClone, end: endClone };
+}
+
+/**
+ * Attempts to coerce the provided value into a valid Date instance.
+ *
+ * @param {string|Date|null|undefined} value - Input value to parse.
+ * @returns {Date|null} A new Date instance when the value can be parsed, otherwise null.
+ */
+function parseDateInput(value) {
+    if (value instanceof Date && !Number.isNaN(value.getTime())) {
+        return new Date(value.getTime());
+    }
+
+    if (typeof value === "string" && value.trim() !== "") {
+        const parsed = new Date(value);
+        if (!Number.isNaN(parsed.getTime())) {
+            return parsed;
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Formats a date string into a readable medium-style date with short time format.
+ *
+ * @param {string|Date|null|undefined} value - The date string or Date object to format
+ * @returns {string} A formatted date string in medium date format with short time format,
+ *                   or "Unknown date" if value is falsy,
+ *                   or the original value if it cannot be parsed as a valid date
+ *
+ * @example
+ * formatReadableDate("2023-12-01T10:30:00Z") // Returns "1 Des 2023 10.30 UTC"
+ * formatReadableDate(null) // Returns "Unknown date"
+ * formatReadableDate("invalid-date") // Returns "invalid-date"
+ */
+function formatReadableDate(value) {
+    if (!value) return "Unknown date";
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return value;
+    return (
+        parsed.toLocaleString("id-ID", {
+            dateStyle: "medium",
+            timeStyle: "short",
+            timeZone: "UTC",
+        }) + " UTC"
+    );
+}
+
 window.timeAgo = timeAgo;
 window.formatCustomDate = formatCustomDate;
+window.formatISODate = formatISODate;
+window.formatReadableDate = formatReadableDate;
+window.getDefaultDateRange = getDefaultDateRange;
+window.parseDateInput = parseDateInput;
 
 /**
  * Formats a number into a currency string based on the specified locale and currency code.

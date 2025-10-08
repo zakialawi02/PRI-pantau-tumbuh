@@ -47,6 +47,10 @@
                     <span class="text-xl">⬆️</span>
                     <span>Uploads</span>
                 </button>
+                <button class="sidebar-btn hover:text-primary flex flex-col items-center text-xs" onclick="showPanel('sentinel-panel', this)">
+                    <span class="text-xl">🛰️</span>
+                    <span>Sentinel-2</span>
+                </button>
                 <button class="sidebar-btn hover:text-primary flex flex-col items-center text-xs" onclick="showPanel('seasons-panel', this)">
                     <span class="text-xl">📅</span>
                     <span>Seasons</span>
@@ -73,6 +77,10 @@
                 <button class="sidebar-btn bg-neutral inline-flex items-center space-x-2 rounded-full border border-gray-300 px-3 py-1 text-sm font-medium" onclick="showPanel('uploads-panel', this)">
                     <span class="text-xl">⬆️</span>
                     <span>Uploads</span>
+                </button>
+                <button class="sidebar-btn bg-neutral inline-flex items-center space-x-2 rounded-full border border-gray-300 px-3 py-1 text-sm font-medium" onclick="showPanel('sentinel-panel', this)">
+                    <span class="text-xl">🛰️</span>
+                    <span>Sentinel-2</span>
                 </button>
                 <button class="sidebar-btn bg-neutral inline-flex items-center space-x-2 rounded-full border border-gray-300 px-3 py-1 text-sm font-medium" onclick="showPanel('seasons-panel', this)">
                     <span class="text-xl">📅</span>
@@ -166,6 +174,110 @@
                         </div>
                     </div>
                 </div>
+            </section>
+
+            <!-- ========== SENTINEL COLLECTION PANEL ========== -->
+            <section class="flex hidden h-full flex-col shadow-xl" id="sentinel-panel" data-sentinel-token="{{ $copernicusAccessToken ?? '' }}" data-sentinel-credentials="{{ $copernicusCredentialsConfigured ?? false ? 'true' : 'false' }}">
+                <div class="bg-background border-foreground/10 sticky top-0 z-20 flex items-center justify-between border-b p-2">
+                    <h2 class="text-lg font-bold">🛰️ Sentinel-2 Collections</h2>
+                    <button class="hover:bg-foreground/20 bg-foreground/10 rounded px-2 py-1 text-sm" onclick="closePanels()">✖</button>
+                </div>
+
+                <div class="panel-content flex-1 space-y-1 overflow-y-auto p-2">
+                    <form class="bg-background/60 border-foreground/10 rounded-lg border p-2 shadow-sm" id="sentinelFilterForm">
+                        <div class="mb-1.5 flex items-center justify-between">
+                            <h3 class="text-foreground text-sm font-semibold">Filter Collections</h3>
+                            <button class="text-foreground/60 hover:text-primary text-xs font-medium transition" id="sentinelFilterResetButton" type="button">
+                                Reset
+                            </button>
+                        </div>
+                        <div class="flex flex-col space-y-1">
+                            <div class="grid grid-cols-2 gap-1">
+                                <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="sentinelCloudFilter">
+                                    <span>Max Cloud Cover (%)</span>
+                                    <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-1.5 py-0.5 text-sm focus:outline-none focus:ring" id="sentinelCloudFilter" name="cloud-cover" type="number" value="40" max="100" min="0" placeholder="e.g. 30" step="1" />
+                                </label>
+                                <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="sentinelProductLevel">
+                                    <span>Product Level</span>
+                                    <select class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-1.5 py-0.5 text-sm focus:outline-none focus:ring" id="sentinelProductLevel" name="product-level">
+                                        <option value="S2MSI2A" selected>Level-2A (Surface Reflectance)</option>
+                                        <option value="S2MSI1C">Level-1C (Top-of-Atmosphere)</option>
+                                    </select>
+                                </label>
+                            </div>
+                            <div class="grid grid-cols-1 gap-1 sm:grid-cols-2">
+                                <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="sentinelStartDate">
+                                    <span>Start Date</span>
+                                    <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-1.5 py-0.5 text-sm focus:outline-none focus:ring" id="sentinelStartDate" name="start-date" type="date" autocomplete="off" />
+                                </label>
+                                <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="sentinelEndDate">
+                                    <span>End Date</span>
+                                    <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-1.5 py-0.5 text-sm focus:outline-none focus:ring" id="sentinelEndDate" name="end-date" type="date" autocomplete="off" />
+                                </label>
+                            </div>
+                            <div class="grid grid-cols-1 gap-1">
+                                <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="sentinelLatFilter">
+                                    <span>Latitude</span>
+                                    <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-1.5 py-0.5 text-sm focus:outline-none focus:ring" id="sentinelLatFilter" name="latitude" type="number" value="-1.24536" max="90" min="-90" placeholder="e.g. -6.2" step="0.000001" />
+                                </label>
+                                <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="sentinelLonFilter">
+                                    <span>Longitude</span>
+                                    <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-1.5 py-0.5 text-sm focus:outline-none focus:ring" id="sentinelLonFilter" name="longitude" type="number" value="114.54535" max="180" min="-180" placeholder="e.g. 106.8" step="0.000001" />
+                                </label>
+                            </div>
+                        </div>
+                        <p class="text-foreground/60 text-[11px]">Provide both latitude and longitude to focus on a specific location, or clear both fields to search globally.</p>
+                        <div class="mt-1 flex flex-wrap gap-1.5">
+                            <button class="bg-primary hover:bg-primary/90 text-background inline-flex items-center justify-center rounded-lg px-3 py-1.5 text-xs font-semibold transition" type="submit">
+                                Apply Filters
+                            </button>
+                        </div>
+                    </form>
+
+                    <div class="text-foreground/70 mt-4 text-sm" id="sentinelCollectionStatus">
+                        Loading latest Sentinel-2 acquisitions...
+                    </div>
+                    <div class="mt-2 space-y-2" id="sentinelCollectionList"></div>
+                </div>
+
+                <div class="bg-background border-foreground/10 sticky bottom-0 border-t p-3">
+                    <div class="text-foreground/70 text-xs">
+                        Data source: Copernicus Sentinel-2 (via public catalogue)
+                    </div>
+                    <div class="text-foreground/50 text-xs">
+                        Last updated: <span id="sentinelLastUpdated">–</span>
+                    </div>
+                </div>
+
+                <template id="sentinelCollectionTemplate">
+                    <div class="sentinel-card border-foreground/20 bg-background/60 flex flex-col rounded-xl border p-2 shadow-sm transition-all duration-200 hover:shadow-md">
+                        <div class="flex items-start space-x-2">
+                            <div class="border-foreground/10 bg-muted text-foreground/50 h-15 w-15 flex flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border" data-sentinel-thumb>
+                                <img class="hidden h-full w-full object-cover" data-sentinel-thumbnail alt="Sentinel-2 preview" />
+                                <div class="flex flex-col items-center text-[10px] font-medium" data-sentinel-placeholder>
+                                    <i class="ri-landscape-line text-lg"></i>
+                                    <span>Preview</span>
+                                </div>
+                            </div>
+                            <div class="flex min-w-0 flex-1 flex-col space-y-1">
+                                <p class="text-foreground break-all text-sm font-semibold" data-sentinel-title>Sentinel-2 Tile</p>
+                                <p class="text-foreground/70 break-all text-xs" data-sentinel-product>Product ID</p>
+                                <p class="text-foreground/80 truncate text-xs" data-sentinel-datetime>Acquired:</p>
+                                <p class="text-foreground/60 break-words text-xs" data-sentinel-details>Tile • Cloud cover</p>
+                            </div>
+                        </div>
+                        <div class="mt-2 flex flex-wrap gap-1" data-sentinel-actions>
+                            <a class="bg-primary text-background hover:bg-primary/90 inline-flex hidden items-center space-x-1 rounded-lg px-2 py-1 text-xs font-semibold transition" data-sentinel-download href="#" aria-disabled="true" target="_blank" rel="noopener noreferrer">
+                                <i class="ri-download-cloud-2-line"></i>
+                                <span>Download Scene</span>
+                            </a>
+                            <button class="hover:bg-primary/10 text-primary border-primary/40 inline-flex items-center space-x-1 rounded-lg border px-2 py-1 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50" data-sentinel-preview type="button">
+                                <i class="ri-image-line"></i>
+                                <span>Preview on Map</span>
+                            </button>
+                        </div>
+                    </div>
+                </template>
             </section>
 
             <!-- ========== Upload PANEL ========== -->
@@ -402,6 +514,31 @@
                 </div>
             </div>
 
+            <!-- Sentinel Preview Panel -->
+            <div class="absolute left-2 right-2 top-[6.5rem] z-40 flex justify-end sm:left-auto sm:right-2 sm:w-80">
+                <div class="border-foreground/15 bg-background/95 supports-[backdrop-filter]:bg-background/70 pointer-events-auto hidden w-full max-w-md break-all rounded-xl border p-2 text-xs shadow-lg backdrop-blur" id="sentinelPreviewPanel">
+                    <div class="flex items-start justify-between gap-2">
+                        <div class="space-y-1">
+                            <p class="text-primary text-[10px] font-semibold uppercase tracking-wide">Sentinel-2 Preview</p>
+                            <p class="text-foreground text-sm font-semibold leading-tight" data-sentinel-preview-title>–</p>
+                            <p class="text-foreground/70 text-xs leading-tight" data-sentinel-preview-acquired>Select a collection to preview on the map.</p>
+                            <p class="text-foreground/60 hidden text-xs leading-tight" data-sentinel-preview-details></p>
+                        </div>
+                        <button class="text-foreground/60 hover:text-foreground focus-visible:ring-primary/50 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-transparent transition focus-visible:outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-40" id="sentinelPreviewClearBtn" type="button" title="Tutup panel preview">
+                            <i class="ri-close-line text-sm"></i>
+                            <span class="sr-only">Tutup preview Sentinel</span>
+                        </button>
+                    </div>
+                    <p class="text-foreground/70 mt-2 text-xs" data-sentinel-preview-status>Awaiting preview selection.</p>
+                    <div class="mt-2 flex flex-wrap gap-1.5" id="sentinelPreviewActions">
+                        <a class="bg-primary text-background hover:bg-primary/90 inline-flex hidden items-center space-x-1 rounded-lg px-2 py-1 text-xs font-semibold transition" id="sentinelPreviewDownloadBtn" href="#" aria-disabled="true" target="_blank" rel="noopener noreferrer">
+                            <i class="ri-download-cloud-2-line text-sm"></i>
+                            <span>Download Scene</span>
+                        </a>
+                    </div>
+                </div>
+            </div>
+
             <!-- Right Buttons -->
             <div class="absolute right-2 top-1/2 flex -translate-y-1/2 flex-col space-y-1 text-base md:text-lg">
                 <button class="bg-neutral hover:bg-muted rounded px-2 py-1 text-xl font-bold transition-colors" title="Zoom In" onclick="zoomIn()">
@@ -612,558 +749,1726 @@
             </div>
         </div>
     </div>
+@push('javascript')
+    <script>
+        (() => {
+            // Centralized DOM references used by the panel controller.
+            const selectors = {
+                panelWrapper: document.getElementById('panel-wrapper'),
+                panels: Array.from(document.querySelectorAll('#panel-wrapper section')),
+                sidebarButtons: Array.from(document.querySelectorAll('.sidebar-btn')),
+                scroll: {
+                    container: document.getElementById('scroll-container'),
+                    left: document.getElementById('scroll-left'),
+                    right: document.getElementById('scroll-right')
+                }
+            };
 
-    @push('javascript')
-        <script>
-            const sourceInput = document.getElementById('sourceType');
-            const fileInput = document.getElementById('fileInput');
-            const fileInfo = document.getElementById('fileInfo');
-            const progressBar = document.getElementById('progressBar');
-            const progressText = document.getElementById('progressText');
-            const startBtn = document.getElementById('startBtn');
-            const pauseBtn = document.getElementById('pauseBtn');
-            const resumeBtn = document.getElementById('resumeBtn');
-            const myDataContainer = document.getElementById('myDataContainer');
+            if (!selectors.panelWrapper) {
+                return;
+            }
 
-            // === STATE ===
-            let paused = false;
-            let uploading = false;
-            let file = null;
-            let uploadId = null;
-            let currentChunk = 0;
-            let totalChunks = 0;
-            const chunkSize = 5 * 1024 * 1024; // 5 MB per chunk
-            let startTime = null;
-            let uploadedBytes = 0;
+            window.AppMap = window.AppMap || {};
 
-            // === INIT ===
-            setButtonState("idle");
-            loadMyData();
+            // Track the currently visible panel via a getter/setter for clarity.
+            const state = {
+                get activePanelId() {
+                    return selectors.panelWrapper.dataset.activePanel || null;
+                },
+                set activePanelId(value) {
+                    if (!value) {
+                        delete selectors.panelWrapper.dataset.activePanel;
+                        return;
+                    }
+                    selectors.panelWrapper.dataset.activePanel = value;
+                }
+            };
 
-            // === FILE SELECT ===
-            fileInput.addEventListener("change", (e) => {
-                file = e.target.files[0];
-                if (!file) return;
+            // Quick helper that checks the viewport width to decide layout mode.
+            const isMobileView = () => window.innerWidth < 768;
 
-                const sizeMB = (file.size / 1024 / 1024).toFixed(2);
-                const shortName = shortenFilename(file.name, 40);
+            // Resolve a sidebar button that points to the given panel id.
+            const getButtonByPanel = (panelId) => {
+                if (!panelId) return null;
+                return selectors.sidebarButtons.find((button) => {
+                    if (!button) return false;
+                    if (!button.dataset.panelTarget) {
+                        const inline = button.getAttribute('onclick') || '';
+                        const match = inline.match(/showPanel\('([^']+)'/);
+                        if (match) {
+                            button.dataset.panelTarget = match[1];
+                        }
+                    }
+                    return button.dataset.panelTarget === panelId;
+                }) || null;
+            };
 
-                fileInfo.classList.remove("hidden");
-                fileInfo.innerHTML = `
-                <strong>Name:</strong> ${shortName}<br>
-                <strong>Size:</strong> ${sizeMB} MB
-            `;
-
-                progressText.textContent = "✅ File ready to upload. Click 'Start Upload' to begin.";
-                progressBar.style.width = "0%";
-                MyZkToast.info("File ready to upload, click Start to begin.");
-                setButtonState("ready");
-            });
-
-            // === START UPLOAD ===
-            startBtn.addEventListener("click", () => {
-                if (!file) {
-                    MyZkToast.warning("Please select a file first!");
+            // Ask the Sentinel module to load its catalogue as soon as it is ready.
+            const requestSentinelCatalogue = () => {
+                const sentinelModule = window.AppMap?.sentinel;
+                if (sentinelModule?.loadCollections && !sentinelModule.loadedOnce) {
+                    sentinelModule.loadCollections();
                     return;
                 }
 
-                uploadId = Math.random().toString(36).substring(2, 12);
-                totalChunks = Math.ceil(file.size / chunkSize);
-                currentChunk = 0;
-                uploadedBytes = 0;
-                paused = false;
-                uploading = true;
-                startTime = performance.now();
+                if (!sentinelModule) {
+                    document.addEventListener('app:sentinel:ready', (event) => {
+                        const module = event.detail;
+                        if (module?.loadCollections && !module.loadedOnce) {
+                            module.loadCollections();
+                        }
+                    }, { once: true });
+                }
+            };
 
-                MyZkToast.info("🚀 Upload started...");
-                progressText.textContent = `🚀 Uploading ${file.name}...`;
-                setButtonState("uploading");
-                uploadNextChunk();
-            });
+            // Hide every panel element before showing the newly selected one.
+            const hideAllPanels = () => {
+                selectors.panels.forEach((panel) => panel.classList.add('hidden'));
+            };
 
-            // === PAUSE ===
-            pauseBtn.addEventListener("click", () => {
-                if (!uploading) return;
-                paused = true;
-                uploading = false;
-                progressText.textContent = "⏸️ Upload paused.";
-                MyZkToast.warning("Upload paused.");
-                setButtonState("paused");
-            });
-
-            // === RESUME ===
-            resumeBtn.addEventListener("click", () => {
-                if (!file) return;
-                paused = false;
-                uploading = true;
-                progressText.textContent = "▶️ Upload resumed...";
-                MyZkToast.info("Upload resumed...");
-                setButtonState("uploading");
-                uploadNextChunk();
-            });
-
-            // === UPLOAD CHUNK FUNCTION ===
-            async function uploadNextChunk(retryCount = 0) {
-                if (paused || !file) return;
-
-                if (currentChunk >= totalChunks) {
-                    progressText.textContent = "🧩 Merging file on server...";
-                    return mergeChunks();
+            // Apply the active state on the button that triggered the panel change.
+            const setActiveButton = (panelId, triggerButton) => {
+                selectors.sidebarButtons.forEach((button) => button.classList.remove('active'));
+                if (triggerButton) {
+                    triggerButton.classList.add('active');
+                    triggerButton.dataset.panelTarget = panelId;
+                    return;
                 }
 
-                const start = currentChunk * chunkSize;
-                const end = Math.min(file.size, start + chunkSize);
-                const chunk = file.slice(start, end);
-                const chunkSizeBytes = end - start;
+                const fallbackButton = getButtonByPanel(panelId);
+                fallbackButton?.classList.add('active');
+            };
 
-                const formData = new FormData();
-                formData.append("upload_id", uploadId);
-                formData.append("chunk_index", currentChunk);
-                formData.append("chunk", chunk);
+            // Toggle classes that animate the panel opening for mobile and desktop.
+            const animatePanelOpen = () => {
+                if (isMobileView()) {
+                    selectors.panelWrapper.classList.remove('translate-y-full', 'slide-down');
+                    selectors.panelWrapper.classList.add('translate-y-0', 'slide-up');
+                    return;
+                }
 
-                try {
-                    const res = await fetch('{{ route('upload.chunk') }}', {
-                        method: "POST",
-                        headers: {
-                            "X-CSRF-TOKEN": "{{ csrf_token() }}"
-                        },
-                        body: formData,
+                selectors.panelWrapper.classList.remove('w-0', 'md:w-0');
+                selectors.panelWrapper.classList.add('w-80', 'md:w-80');
+            };
+
+            // Revert the open animation by hiding or collapsing the panel wrapper.
+            const animatePanelClose = () => {
+                if (isMobileView()) {
+                    selectors.panelWrapper.classList.remove('slide-up');
+                    selectors.panelWrapper.classList.add('slide-down');
+                    setTimeout(() => {
+                        selectors.panelWrapper.classList.remove('translate-y-0');
+                        selectors.panelWrapper.classList.add('translate-y-full');
+                    }, 480);
+                    return;
+                }
+
+                selectors.panelWrapper.classList.remove('w-80', 'md:w-80');
+                selectors.panelWrapper.classList.add('w-0', 'md:w-0');
+            };
+
+            // Display a specific panel while making sure supporting UI stays in sync.
+            const showPanel = (panelId, triggerButton = null) => {
+                const targetPanel = document.getElementById(panelId);
+                if (!targetPanel) {
+                    console.warn(`Panel with id "${panelId}" not found.`);
+                    return;
+                }
+
+                hideAllPanels();
+                targetPanel.classList.remove('hidden');
+
+                setActiveButton(panelId, triggerButton);
+                animatePanelOpen();
+
+                state.activePanelId = panelId;
+
+                if (panelId === 'sentinel-panel') {
+                    requestSentinelCatalogue();
+                }
+            };
+
+            // Close the active panel and reset the wrapper back to its hidden state.
+            const closePanels = () => {
+                hideAllPanels();
+                selectors.sidebarButtons.forEach((button) => button.classList.remove('active'));
+                animatePanelClose();
+                state.activePanelId = null;
+            };
+
+            // Ensure the panel layout matches the current viewport (mobile vs. desktop).
+            const syncPanelLayoutWithViewport = () => {
+                const activePanel = state.activePanelId;
+
+                selectors.panelWrapper.classList.remove('slide-up', 'slide-down');
+
+                if (!activePanel) {
+                    selectors.panelWrapper.classList.add('translate-y-full');
+                    selectors.panelWrapper.classList.remove('translate-y-0', 'w-80', 'md:w-80');
+                    return;
+                }
+
+                if (isMobileView()) {
+                    selectors.panelWrapper.classList.remove('w-0', 'md:w-0', 'w-80', 'md:w-80');
+                    selectors.panelWrapper.classList.remove('translate-y-full');
+                    selectors.panelWrapper.classList.add('translate-y-0', 'opacity-100');
+                } else {
+                    selectors.panelWrapper.classList.remove('translate-y-full', 'translate-y-0');
+                    selectors.panelWrapper.classList.add('w-80', 'md:w-80', 'opacity-100');
+                }
+
+                const activeButton = getButtonByPanel(activePanel);
+                selectors.sidebarButtons.forEach((button) => button.classList.remove('active'));
+                activeButton?.classList.add('active');
+            };
+
+            // Setup horizontal scrolling interaction for the mobile navigation pills.
+            const initialiseHorizontalScroll = () => {
+                const { container, left, right } = selectors.scroll;
+                if (!container || !left || !right) {
+                    return;
+                }
+
+                // Scroll the button container by the provided amount with smooth motion.
+                const scrollByAmount = (amount) => {
+                    container.scrollBy({
+                        left: amount,
+                        behavior: 'smooth'
                     });
+                };
 
-                    const data = await res.json();
-                    if (!res.ok || !data.success) {
-                        throw new Error(data.message || `Chunk ${currentChunk} failed.`);
-                    }
+                left.addEventListener('click', () => scrollByAmount(-150));
+                right.addEventListener('click', () => scrollByAmount(150));
 
-                    currentChunk++;
-                    uploadedBytes += chunkSizeBytes;
+                let isDragging = false;
+                let dragStartX = 0;
+                let scrollStartLeft = 0;
 
-                    const now = performance.now();
-                    const elapsedSec = (now - startTime) / 1000;
-                    const speedMBps = (uploadedBytes / 1024 / 1024 / elapsedSec).toFixed(2);
-                    const remainingBytes = file.size - uploadedBytes;
-                    const estRemainingSec = remainingBytes / (speedMBps * 1024 * 1024);
-                    const etaText = estRemainingSec > 0 ? formatTimeETA(estRemainingSec) : "-";
+                // Allow mouse dragging to scroll the mobile navigation list.
+                container.addEventListener('mousedown', (event) => {
+                    isDragging = true;
+                    container.classList.add('cursor-grabbing');
+                    dragStartX = event.pageX - container.offsetLeft;
+                    scrollStartLeft = container.scrollLeft;
+                });
 
-                    const progress = Math.round((currentChunk / totalChunks) * 100);
-                    progressBar.style.width = `${progress}%`;
-                    progressText.textContent = `Uploading... ${progress}% | 🚀 ${speedMBps} MB/s | ⏳ ETA: ${etaText}`;
+                // Reset dragging flags when the pointer leaves or releases the container.
+                const stopDragging = () => {
+                    isDragging = false;
+                    container.classList.remove('cursor-grabbing');
+                };
 
-                    if (progress === 100) {
-                        MyZkToast.info("Merging file on server...");
-                    }
+                container.addEventListener('mouseleave', stopDragging);
+                container.addEventListener('mouseup', stopDragging);
 
-                    if (!paused) uploadNextChunk();
+                container.addEventListener('mousemove', (event) => {
+                    if (!isDragging) return;
+                    event.preventDefault();
+                    const currentX = event.pageX - container.offsetLeft;
+                    const delta = (currentX - dragStartX) * 2;
+                    container.scrollLeft = scrollStartLeft - delta;
+                });
+            };
 
-                } catch (err) {
-                    if (retryCount < 3) {
-                        setTimeout(() => uploadNextChunk(retryCount + 1), 2000 * (retryCount + 1));
-                    } else {
-                        progressText.textContent = `❌ Chunk ${currentChunk} failed after 3 retries. Upload paused.`;
-                        MyZkToast.error(`Chunk ${currentChunk} failed after 3 retries.`);
-                        paused = true;
-                        uploading = false;
-                        setButtonState("paused");
-                    }
-                }
-            }
+            // Automatically open the data panel on initial load.
+            const initialiseDefaultPanel = () => {
+                const defaultPanelId = 'data-panel';
+                const button = isMobileView()
+                    ? document.querySelector(`#scroll-container .sidebar-btn[onclick*='${defaultPanelId}']`)
+                    : document.querySelector(`aside .sidebar-btn[onclick*='${defaultPanelId}']`);
 
-            // === MERGE CHUNKS FUNCTION ===
-            async function mergeChunks() {
-                setButtonState("merging");
+                showPanel(defaultPanelId, button);
+            };
 
-                const sourceType = sourceInput.value;
-                const formData = new FormData();
-                formData.append("upload_id", uploadId);
-                formData.append("filename", file.name);
-                formData.append("total_chunks", totalChunks);
-                formData.append("source_type", sourceType); // Add source type to form data
+            // Connect resize handlers and modal toggles relevant to the dashboard.
+            const registerEventListeners = () => {
+                window.addEventListener('resize', syncPanelLayoutWithViewport);
 
-                try {
-                    const res = await fetch('{{ route('upload.merge') }}', {
-                        method: "POST",
-                        headers: {
-                            "X-CSRF-TOKEN": "{{ csrf_token() }}"
-                        },
-                        body: formData,
-                    });
+                document.getElementById('buySatelliteBtn')?.addEventListener('click', () => {
+                    document.getElementById('buyingPanel')?.classList.remove('hidden');
+                });
 
-                    const result = await res.json();
+                document.getElementById('buyingPanelCloseBtn')?.addEventListener('click', () => {
+                    document.getElementById('buyingPanel')?.classList.add('hidden');
+                });
+            };
 
-                    if (res.ok && result.success) {
-                        progressBar.style.width = "100%";
-                        progressText.textContent = `✅ Upload complete! ${result.message || "Upload completed. Processing started in background."}`;
-                        MyZkToast.success(result.message || "Upload completed successfully!");
-                        setButtonState("done");
-                        await loadMyData();
-                        autoReset();
-                    } else {
-                        throw new Error(result.message || "Failed to merge file on server.");
-                    }
+            const initialisePriceCalculator = () => {
+                // Convert area from square meters to hectares.
+                const toHectares = (squareMeters) => squareMeters / 10000;
+                // Provide a subtle animation whenever the price updates.
+                const highlightContainer = (container) => {
+                    container.style.transform = 'scale(1.02)';
+                    setTimeout(() => {
+                        container.style.transform = 'scale(1)';
+                    }, 200);
+                };
 
-                } catch (err) {
-                    progressText.textContent = `❌ Error: ${err.message}`;
-                    MyZkToast.error(err.message || "Server error during merge.");
-                    setButtonState("error");
-                    autoReset();
-                }
-            }
+                // Compute total credit points needed and update the display widget.
+                const calculateTotalPrice = () => {
+                    const areaInSquareMeters = window.geojsonArea || 0;
+                    const areaInHectares = toHectares(areaInSquareMeters);
+                    const totalPriceElement = document.getElementById('total_price');
 
-            // === AUTO RESET ===
-            function autoReset() {
-                setTimeout(() => {
-                    file = null;
-                    fileInput.value = "";
-                    fileInfo.classList.add("hidden");
-                    progressBar.style.width = "0%";
-                    progressText.textContent = "Ready for next upload.";
-                    setButtonState("idle");
-                }, 4000);
-            }
-
-            // === LOAD MY DATA ===
-            async function loadMyData() {
-                myDataContainer.innerHTML = `
-                <div class="flex justify-center py-4">
-                    <p class="text-sm text-foreground/60 animate-pulse">Loading your imagery list...</p>
-                </div>
-            `;
-
-                try {
-                    const res = await fetch('{{ route('imagery.list') }}');
-                    const result = await res.json();
-
-                    if (!res.ok || !result.success) throw new Error(result.message || "Failed to fetch imagery data.");
-                    const data = result.data;
-
-                    myDataContainer.innerHTML = ''; // clear existing
-
-                    if (data.length === 0) {
-                        myDataContainer.innerHTML = `<p class="text-sm text-gray-400 text-center py-4">No imagery uploaded yet.</p>`;
+                    if (!totalPriceElement) {
                         return;
                     }
 
-                    const cardListDataImagery = document.getElementById('imageryCardTemplate');
+                    const priceContainer = totalPriceElement.parentElement;
+                    const creditPointsNeeded = areaInHectares * {{ config('app-constants.imagery_credit_cost_per_hectare') }};
 
-                    data.forEach(item => {
-                        const clone = cardListDataImagery.content.cloneNode(true);
-                        const card = clone.querySelector('.imagery-card');
+                    if (areaInHectares > 0) {
+                        totalPriceElement.innerHTML = `
+                            <div class="flex justify-between items-center">
+                                <span class="text-lg font-bold text-green-700">${formatNumber(creditPointsNeeded.toFixed(2), 2)} Credit Points</span>
+                                <i class="ri-coins-line font-base text-success text-xl"></i>
+                            </div>
+                            <div class="text-xs text-foreground-70 mt-1">
+                                ${formatNumber(areaInHectares)} hectares × {{ Number::format(config('app-constants.imagery_credit_cost_per_hectare'), locale: app()->getLocale()) }} credit points/hectare
+                            </div>
+                        `;
+                        priceContainer.classList.remove('bg-muted/60', 'border-muted', 'bg-amber-50', 'border-amber-300');
+                        priceContainer.classList.add('bg-green-50', 'border-green-300', 'shadow-sm');
+                        highlightContainer(priceContainer);
+                    } else {
+                        totalPriceElement.innerHTML = `
+                            <div class="flex items-center text-foreground/50">
+                                <i class="ri-information-line mr-2"></i>
+                                Draw an area to calculate credit points
+                            </div>
+                        `;
+                        priceContainer.classList.remove('bg-green-50', 'border-green-300', 'shadow-sm');
+                        priceContainer.classList.add('bg-muted/60', 'border-muted');
+                    }
 
-                        // populate data
-                        card.querySelector('.imagery-format').textContent = item.format.slice(0, 3).toUpperCase();
-                        card.querySelector('.imagery-name').textContent = shortenFilename(item.original_name, 25);
-                        const meta = `${(item.size / 1024 / 1024).toFixed(2)} MB • ${new Date(item.uploaded_at).toLocaleDateString()} • `;
-                        const statusEl = card.querySelector('.imagery-status');
-                        statusEl.textContent = item.processing_status;
-                        statusEl.classList.toggle('text-success', item.processing_status === 'done');
-                        statusEl.classList.toggle('text-warning', item.processing_status !== 'done');
-                        card.querySelector('.imagery-meta').innerHTML = `${meta}<span class="${statusEl.className}">${statusEl.textContent}</span>`;
+                    priceContainer.style.transition = 'all 0.3s ease-in-out';
+                };
 
-                        // handle view button
-                        const viewBtn = card.querySelector('.view-btn');
-                        viewBtn.addEventListener('click', () => viewImagery(item));
+                window.calculateTotalPrice = calculateTotalPrice;
+            };
 
-                        // append to container
-                        myDataContainer.appendChild(clone);
-                    });
+            // Bootstrap the panel experience once the DOM has finished loading.
+            document.addEventListener('DOMContentLoaded', () => {
+                window.showPanel = showPanel;
+                window.closePanels = closePanels;
 
-                } catch (err) {
-                    myDataContainer.innerHTML = `
-                        <div class="text-sm text-red-500 bg-red-50 border border-red-200 rounded p-3">
-                            ❌ ${err.message}
-                        </div>
-                    `;
+                initialiseHorizontalScroll();
+                initialiseDefaultPanel();
+                registerEventListeners();
+                initialisePriceCalculator();
+                syncPanelLayoutWithViewport();
+
+                const sentinelModule = window.AppMap?.sentinel;
+                if (sentinelModule?.loadCollections && !sentinelModule.loadedOnce) {
+                    sentinelModule.loadCollections();
                 }
-            }
+            });
+        })();
+    </script>
+@endpush
+@push('javascript')
+    <script>
+        (() => {
+            // Cache frequently used DOM references for the uploader workflow.
+            const elements = {
+                sourceInput: document.getElementById('sourceType'),
+                fileInput: document.getElementById('fileInput'),
+                fileInfo: document.getElementById('fileInfo'),
+                progressBar: document.getElementById('progressBar'),
+                progressText: document.getElementById('progressText'),
+                startBtn: document.getElementById('startBtn'),
+                pauseBtn: document.getElementById('pauseBtn'),
+                resumeBtn: document.getElementById('resumeBtn'),
+                myDataContainer: document.getElementById('myDataContainer'),
+                cardTemplate: document.getElementById('imageryCardTemplate')
+            };
 
-            // === TAB FUNCTIONALITY ===
-            function initTabFunctionality() {
-                const tabButtons = document.querySelectorAll('.tab-btn');
-                const tabContents = document.querySelectorAll('.tab-content');
+            const allElementsReady = Object.values(elements).every(Boolean);
 
-                tabButtons.forEach(button => {
-                    button.addEventListener('click', () => {
-                        // Remove active class from all buttons and contents
-                        tabButtons.forEach(btn => btn.classList.remove('active'));
-                        tabContents.forEach(content => content.classList.remove('active'));
-
-                        // Add active class to clicked button
-                        button.classList.add('active');
-
-                        // Show corresponding content
-                        const tabId = button.getAttribute('data-tab');
-                        const content = document.getElementById(tabId);
-                        if (content) {
-                            content.classList.add('active');
-                        }
-                    });
+            if (!allElementsReady) {
+                console.warn('Imagery uploader controls missing. Skipping uploader bootstrap.', {
+                    hasSourceInput: Boolean(elements.sourceInput),
+                    hasFileInput: Boolean(elements.fileInput),
+                    hasFileInfo: Boolean(elements.fileInfo),
+                    hasProgressBar: Boolean(elements.progressBar),
+                    hasProgressText: Boolean(elements.progressText),
+                    hasStartBtn: Boolean(elements.startBtn),
+                    hasPauseBtn: Boolean(elements.pauseBtn),
+                    hasResumeBtn: Boolean(elements.resumeBtn),
+                    hasMyDataContainer: Boolean(elements.myDataContainer),
+                    hasTemplate: Boolean(elements.cardTemplate)
                 });
+                return;
             }
 
-            // Initialize tab functionality when DOM is loaded
-            document.addEventListener('DOMContentLoaded', initTabFunctionality);
+            // Configuration values that control chunking and retry behaviour.
+            const config = {
+                chunkSize: 5 * 1024 * 1024,
+                maxRetries: 3,
+                autoResetDelay: 4000
+            };
 
-            // === HELPER FUNCTIONS ===
-            function setButtonState(state) {
-                switch (state) {
-                    case "idle":
-                        startBtn.disabled = true;
-                        pauseBtn.disabled = true;
-                        resumeBtn.disabled = true;
-                        break;
-                    case "ready": // file sudah dipilih
+            // Endpoints required throughout the upload process.
+            const endpoints = {
+                chunk: '{{ route('upload.chunk') }}',
+                merge: '{{ route('upload.merge') }}',
+                list: '{{ route('imagery.list') }}'
+            };
+
+            // Mutable state object tracking progress and timings.
+            const state = {
+                paused: false,
+                uploading: false,
+                file: null,
+                uploadId: null,
+                currentChunk: 0,
+                totalChunks: 0,
+                startTime: 0,
+                uploadedBytes: 0
+            };
+
+            // Ensure the uploader exposes hooks on the global AppMap namespace.
+            const ensureAppNamespace = () => {
+                window.AppMap = window.AppMap || {};
+                window.AppMap.uploader = window.AppMap.uploader || {};
+            };
+
+            // Toggle button states based on the current upload lifecycle stage.
+            const setButtonState = (mode) => {
+                const { startBtn, pauseBtn, resumeBtn } = elements;
+
+                const disableAll = () => {
+                    startBtn.disabled = true;
+                    pauseBtn.disabled = true;
+                    resumeBtn.disabled = true;
+                };
+
+                switch (mode) {
+                    case 'ready':
                         startBtn.disabled = false;
                         pauseBtn.disabled = true;
                         resumeBtn.disabled = true;
                         break;
-                    case "uploading":
+                    case 'uploading':
                         startBtn.disabled = true;
                         pauseBtn.disabled = false;
                         resumeBtn.disabled = true;
                         break;
-                    case "paused":
+                    case 'paused':
                         startBtn.disabled = true;
                         pauseBtn.disabled = true;
                         resumeBtn.disabled = false;
                         break;
-                    case "merging":
-                        startBtn.disabled = true;
-                        pauseBtn.disabled = true;
-                        resumeBtn.disabled = true;
+                    case 'merging':
+                    case 'done':
+                    case 'error':
+                        disableAll();
+                        if (mode === 'error') {
+                            startBtn.disabled = false;
+                        }
                         break;
-                    case "done":
-                        startBtn.disabled = true;
-                        pauseBtn.disabled = true;
-                        resumeBtn.disabled = true;
-                        break;
-                    case "error":
-                        startBtn.disabled = false;
-                        pauseBtn.disabled = true;
-                        resumeBtn.disabled = true;
+                    case 'idle':
+                    default:
+                        disableAll();
                         break;
                 }
-            }
-        </script>
-    @endpush
+            };
 
-    @push('javascript')
-        <script>
-            const panelWrapper = document.getElementById("panel-wrapper");
-            const panels = document.querySelectorAll("#panel-wrapper section");
-            const sidebarButtons = document.querySelectorAll(".sidebar-btn");
-            const scrollContainer = document.getElementById('scroll-container');
-            const scrollLeftBtn = document.getElementById('scroll-left');
-            const scrollRightBtn = document.getElementById('scroll-right');
+            // Clear all runtime bookkeeping for a fresh upload session.
+            const resetState = () => {
+                state.paused = false;
+                state.uploading = false;
+                state.file = null;
+                state.uploadId = null;
+                state.currentChunk = 0;
+                state.totalChunks = 0;
+                state.startTime = 0;
+                state.uploadedBytes = 0;
+            };
 
-            const scrollAmount = 150; // pixels per click
+            // Restore the UI to an idle appearance without progress.
+            const resetUI = () => {
+                const { fileInput, fileInfo, progressBar, progressText } = elements;
+                fileInput.value = '';
+                fileInfo.classList.add('hidden');
+                fileInfo.innerHTML = '';
+                progressBar.style.width = '0%';
+                progressText.textContent = 'Ready for next upload.';
+            };
 
-            scrollLeftBtn.addEventListener('click', () => {
-                scrollContainer.scrollBy({
-                    left: -scrollAmount,
-                    behavior: 'smooth'
-                });
-            });
+            // Present the selected file name and size before uploading.
+            const showFileSummary = (file) => {
+                const { fileInfo, progressBar, progressText } = elements;
+                const sizeMB = (file.size / 1024 / 1024).toFixed(2);
+                const shortName = shortenFilename(file.name, 40);
 
-            scrollRightBtn.addEventListener('click', () => {
-                scrollContainer.scrollBy({
-                    left: scrollAmount,
-                    behavior: 'smooth'
-                });
-            });
+                fileInfo.classList.remove('hidden');
+                fileInfo.innerHTML = `
+                    <strong>Name:</strong> ${shortName}<br>
+                    <strong>Size:</strong> ${sizeMB} MB
+                `;
 
-            // Optional: drag/grab to scroll
-            let isDown = false;
-            let startX;
-            let scrollLeft;
+                progressText.textContent = "✅ File ready to upload. Click 'Start Upload' to begin.";
+                progressBar.style.width = '0%';
+            };
 
-            scrollContainer.addEventListener('mousedown', (e) => {
-                isDown = true;
-                scrollContainer.classList.add('cursor-grabbing');
-                startX = e.pageX - scrollContainer.offsetLeft;
-                scrollLeft = scrollContainer.scrollLeft;
-            });
+            // Update progress bar width and accompanying status text.
+            const updateProgressDisplay = (percentage, speedMBps, etaText) => {
+                const { progressBar, progressText } = elements;
+                progressBar.style.width = `${percentage}%`;
+                const speedText = Number.isFinite(speedMBps) ? speedMBps.toFixed(2) : '0.00';
+                progressText.textContent = `Uploading... ${percentage}% | 🚀 ${speedText} MB/s | ⏳ ETA: ${etaText}`;
+            };
 
-            scrollContainer.addEventListener('mouseleave', () => {
-                isDown = false;
-                scrollContainer.classList.remove('cursor-grabbing');
-            });
+            // React to new file input selections and prime the uploader.
+            const handleFileChange = (event) => {
+                state.file = event.target.files?.[0] || null;
 
-            scrollContainer.addEventListener('mouseup', () => {
-                isDown = false;
-                scrollContainer.classList.remove('cursor-grabbing');
-            });
-
-            scrollContainer.addEventListener('mousemove', (e) => {
-                if (!isDown) return;
-                e.preventDefault();
-                const x = e.pageX - scrollContainer.offsetLeft;
-                const walk = (x - startX) * 2; // scroll-fast
-                scrollContainer.scrollLeft = scrollLeft - walk;
-            });
-
-            function showPanel(id, btn = null) {
-                const isMobile = window.innerWidth < 768;
-
-                panels.forEach(p => p.classList.add("hidden"));
-                const targetPanel = document.getElementById(id);
-                targetPanel.classList.remove("hidden");
-
-                sidebarButtons.forEach(b => b.classList.remove("active"));
-                if (btn) btn.classList.add("active");
-                else {
-                    const matchedBtn = Array.from(sidebarButtons).find(b => b.getAttribute("onclick")?.includes(id));
-                    if (matchedBtn) matchedBtn.classList.add("active");
-                }
-
-                if (isMobile) {
-                    // reset posisi
-                    panelWrapper.classList.remove("translate-y-full");
-                    panelWrapper.classList.add("translate-y-0");
-
-                    // animasi slide-up
-                    panelWrapper.classList.remove("slide-down");
-                    panelWrapper.classList.add("slide-up");
-                } else {
-                    panelWrapper.classList.remove("w-0", "md:w-0");
-                    panelWrapper.classList.add("w-80", "md:w-80");
-                }
-
-                panelWrapper.dataset.activePanel = id;
-            }
-
-            function closePanels() {
-                const isMobile = window.innerWidth < 768;
-
-                panels.forEach(p => p.classList.add("hidden"));
-                sidebarButtons.forEach(b => b.classList.remove("active"));
-                delete panelWrapper.dataset.activePanel;
-
-                if (isMobile) {
-                    // animasi slide-down
-                    panelWrapper.classList.remove("slide-up");
-                    panelWrapper.classList.add("slide-down");
-
-                    // setelah animasi selesai (500ms), sembunyikan sepenuhnya
-                    setTimeout(() => {
-                        panelWrapper.classList.remove("translate-y-0");
-                        panelWrapper.classList.add("translate-y-full");
-                    }, 480);
-                } else {
-                    panelWrapper.classList.remove("w-80", "md:w-80");
-                    panelWrapper.classList.add("w-0", "md:w-0");
-                }
-            }
-
-
-            // === DEFAULT STATE saat halaman load ===
-            window.addEventListener("DOMContentLoaded", () => {
-                const defaultPanel = 'data-panel';
-                const isMobile = window.innerWidth < 768;
-
-                const defaultBtn = isMobile ?
-                    document.querySelector(`#scroll-container .sidebar-btn[onclick*='${defaultPanel}']`) :
-                    document.querySelector(`aside .sidebar-btn[onclick*='${defaultPanel}']`);
-
-                showPanel(defaultPanel, defaultBtn);
-            });
-
-            // === RESPONSIVE HANDLER: SYNC STATE SAAT RESIZE ===
-            window.addEventListener("resize", () => {
-                const isMobile = window.innerWidth < 768;
-                const activePanel = panelWrapper.dataset.activePanel;
-
-                // Jika tidak ada panel aktif (semua ditutup), keluar saja
-                if (!activePanel) {
-                    // Pastikan panel wrapper tertutup di semua mode
-                    panelWrapper.classList.add("translate-y-full");
-                    panelWrapper.classList.remove("translate-y-0", "w-80", "md:w-80");
+                if (!state.file) {
+                    resetState();
+                    resetUI();
+                    setButtonState('idle');
                     return;
                 }
 
-                // Hapus semua class transisi yang bisa bentrok
-                panelWrapper.classList.remove("slide-up", "slide-down");
+                showFileSummary(state.file);
+                MyZkToast.info('File ready to upload, click Start to begin.');
+                setButtonState('ready');
+            };
 
-                if (isMobile) {
-                    // mobile mode: gunakan slide-up style
-                    panelWrapper.classList.remove("w-0", "md:w-0", "w-80", "md:w-80");
-                    panelWrapper.classList.remove("translate-y-full");
-                    panelWrapper.classList.add("translate-y-0", "opacity-100");
-                } else {
-                    // desktop mode: gunakan lebar tetap (sidebar style)
-                    panelWrapper.classList.remove("translate-y-full", "translate-y-0");
-                    panelWrapper.classList.add("w-80", "md:w-80", "opacity-100");
+            // Generate a lightweight identifier for coordinating chunk requests.
+            const generateUploadId = () => Math.random().toString(36).substring(2, 12);
+
+            // Convert bytes remaining and elapsed seconds into a readable ETA.
+            const formatEta = (remainingBytes, elapsedSeconds) => {
+                if (!Number.isFinite(elapsedSeconds) || elapsedSeconds <= 0) {
+                    return '-';
+                }
+                const speedBytesPerSecond = state.uploadedBytes / elapsedSeconds;
+                if (speedBytesPerSecond <= 0) {
+                    return '-';
+                }
+                const remainingSeconds = remainingBytes / speedBytesPerSecond;
+                return remainingSeconds > 0 ? formatTimeETA(remainingSeconds) : '-';
+            };
+
+            // Upload the next chunk and retry if transient errors occur.
+            const uploadNextChunk = async (retryCount = 0) => {
+                if (state.paused || !state.file) return;
+
+                if (state.currentChunk >= state.totalChunks) {
+                    elements.progressText.textContent = '🧩 Merging file on server...';
+                    await mergeChunks();
+                    return;
                 }
 
-                // perbarui tombol active sesuai mode baru
-                const activeBtn = isMobile ?
-                    document.querySelector(`#scroll-container .sidebar-btn[onclick*='${activePanel}']`) :
-                    document.querySelector(`aside .sidebar-btn[onclick*='${activePanel}']`);
+                const start = state.currentChunk * config.chunkSize;
+                const end = Math.min(state.file.size, start + config.chunkSize);
+                const chunk = state.file.slice(start, end);
 
-                sidebarButtons.forEach(b => b.classList.remove("active"));
-                if (activeBtn) activeBtn.classList.add("active");
-            });
+                const formData = new FormData();
+                formData.append('upload_id', state.uploadId);
+                formData.append('chunk_index', state.currentChunk);
+                formData.append('chunk', chunk);
 
+                try {
+                    const response = await fetch(endpoints.chunk, {
+                        method: 'POST',
+                        headers: {
+                            'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                        },
+                        body: formData
+                    });
 
+                    const payload = await response.json();
+                    if (!response.ok || !payload.success) {
+                        throw new Error(payload.message || `Chunk ${state.currentChunk} failed.`);
+                    }
 
+                    state.currentChunk += 1;
+                    state.uploadedBytes += chunk.size;
 
-            // Buy Satellite Button Event
-            document.getElementById('buySatelliteBtn')?.addEventListener('click', function() {
-                const buyingPanel = document.getElementById('buyingPanel');
-                buyingPanel.classList.remove('hidden');
-            });
-            document.getElementById('buyingPanelCloseBtn')?.addEventListener('click', function() {
-                const buyingPanel = document.getElementById('buyingPanel');
-                buyingPanel.classList.add('hidden');
-            });
+                    const elapsedSeconds = Math.max((performance.now() - state.startTime) / 1000, 0.001);
+                    const speedMBps = state.uploadedBytes / 1024 / 1024 / elapsedSeconds;
+                    const remainingBytes = state.file.size - state.uploadedBytes;
+                    const etaText = formatEta(remainingBytes, elapsedSeconds);
+                    const progress = Math.round((state.currentChunk / state.totalChunks) * 100);
 
-            // Price calculation functions
-            function calculateTotalPrice() {
-                // Get area from global variable (set when polygon is drawn)
-                const areaInSquareMeters = window.geojsonArea || 0;
-                const areaInHectares = areaInSquareMeters / 10000; // Convert m² to hectares
+                    updateProgressDisplay(progress, speedMBps, etaText);
 
-                // Calculate credit points needed (using global constant rate)
-                const creditPointsNeeded = areaInHectares * {{ config('app-constants.imagery_credit_cost_per_hectare') }};
+                    if (progress === 100) {
+                        MyZkToast.info('Merging file on server...');
+                    }
 
-                // Update the display
-                const totalPriceElement = document.getElementById('total_price');
-                const priceContainer = totalPriceElement.parentElement;
+                    if (!state.paused) {
+                        await uploadNextChunk();
+                    }
+                } catch (error) {
+                    if (retryCount < config.maxRetries) {
+                        const delay = 2000 * (retryCount + 1);
+                        setTimeout(() => uploadNextChunk(retryCount + 1), delay);
+                        return;
+                    }
 
-                if (areaInHectares > 0) {
-                    totalPriceElement.innerHTML = `
-                        <div class="flex justify-between items-center">
-                            <span class="text-lg font-bold text-green-700">${formatNumber(creditPointsNeeded.toFixed(2))} Credit Points</span>
-                            <i class="ri-coins-line font-base text-success text-xl"></i>
-                        </div>
-                        <div class="text-xs text-foreground-70 mt-1">
-                            ${formatNumber(areaInHectares)} hectares × {{ Number::format(config('app-constants.imagery_credit_cost_per_hectare'), locale: app()->getLocale()) }} credit points/hectare
-                        </div>
-                    `;
-                    priceContainer.classList.remove('bg-muted/60', 'border-muted');
-                    priceContainer.classList.add('bg-green-50', 'border-green-300', 'shadow-sm');
+                    elements.progressText.textContent = `❌ Chunk ${state.currentChunk} failed after ${config.maxRetries} retries. Upload paused.`;
+                    MyZkToast.error(`Chunk ${state.currentChunk} failed after ${config.maxRetries} retries.`);
+                    state.paused = true;
+                    state.uploading = false;
+                    setButtonState('paused');
+                }
+            };
 
-                    // Add a subtle animation
-                    priceContainer.style.transform = 'scale(1.02)';
-                    setTimeout(() => {
-                        priceContainer.style.transform = 'scale(1)';
-                    }, 200);
-                } else {
-                    totalPriceElement.innerHTML = `
-                        <div class="flex items-center text-foreground/50">
-                            <i class="ri-information-line mr-2"></i>
-                            Draw an area to calculate credit points
-                        </div>
-                    `;
-                    priceContainer.classList.remove('bg-green-50', 'border-green-300', 'shadow-sm', 'bg-amber-50', 'border-amber-300');
-                    priceContainer.classList.add('bg-muted/60', 'border-muted');
+            // Ask the backend to merge all uploaded chunks into a single file.
+            const mergeChunks = async () => {
+                setButtonState('merging');
+
+                const formData = new FormData();
+                formData.append('upload_id', state.uploadId);
+                formData.append('filename', state.file.name);
+                formData.append('total_chunks', state.totalChunks);
+                formData.append('source_type', elements.sourceInput.value);
+
+                try {
+                    const response = await fetch(endpoints.merge, {
+                        method: 'POST',
+                        headers: {
+                            'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                        },
+                        body: formData
+                    });
+
+                    const result = await response.json();
+                    if (!response.ok || !result.success) {
+                        throw new Error(result.message || 'Failed to merge file on server.');
+                    }
+
+                    elements.progressBar.style.width = '100%';
+                    elements.progressText.textContent = `✅ Upload complete! ${result.message || 'Upload completed. Processing started in background.'}`;
+                    MyZkToast.success(result.message || 'Upload completed successfully!');
+                    setButtonState('done');
+                    await loadMyData();
+                    scheduleAutoReset();
+                } catch (error) {
+                    elements.progressText.textContent = `❌ Error: ${error.message}`;
+                    MyZkToast.error(error.message || 'Server error during merge.');
+                    setButtonState('error');
+                    scheduleAutoReset();
+                }
+            };
+
+            // After finishing, reset the UI back to idle after a short delay.
+            const scheduleAutoReset = () => {
+                setTimeout(() => {
+                    resetState();
+                    resetUI();
+                    setButtonState('idle');
+                }, config.autoResetDelay);
+            };
+
+            // Validate prerequisites and kick off the chunk upload loop.
+            const startUpload = () => {
+                if (!state.file) {
+                    MyZkToast.warning('Please select a file first!');
+                    return;
                 }
 
-                // Add transition for smooth color changes
-                priceContainer.style.transition = 'all 0.3s ease-in-out';
+                state.uploadId = generateUploadId();
+                state.totalChunks = Math.ceil(state.file.size / config.chunkSize);
+                state.currentChunk = 0;
+                state.uploadedBytes = 0;
+                state.paused = false;
+                state.uploading = true;
+                state.startTime = performance.now();
+
+                MyZkToast.info('🚀 Upload started...');
+                elements.progressText.textContent = `🚀 Uploading ${state.file.name}...`;
+                setButtonState('uploading');
+                uploadNextChunk();
+            };
+
+            // Suspend ongoing uploads without losing progress state.
+            const pauseUpload = () => {
+                if (!state.uploading) {
+                    return;
+                }
+                state.paused = true;
+                state.uploading = false;
+                elements.progressText.textContent = '⏸️ Upload paused.';
+                MyZkToast.warning('Upload paused.');
+                setButtonState('paused');
+            };
+
+            // Resume uploads after a pause by continuing from the current chunk.
+            const resumeUpload = () => {
+                if (!state.file) {
+                    return;
+                }
+                state.paused = false;
+                state.uploading = true;
+                elements.progressText.textContent = '▶️ Upload resumed...';
+                MyZkToast.info('Upload resumed...');
+                setButtonState('uploading');
+                uploadNextChunk();
+            };
+
+            // Create a DOM fragment describing a single imagery record.
+            const renderImageryCard = (item) => {
+                const template = elements.cardTemplate;
+                if (!template?.content) {
+                    return null;
+                }
+
+                const fragment = template.content.cloneNode(true);
+                const card = fragment.querySelector('.imagery-card');
+                if (!card) {
+                    return null;
+                }
+
+                const formatLabel = item.format.slice(0, 3).toUpperCase();
+                card.querySelector('.imagery-format').textContent = formatLabel;
+                card.querySelector('.imagery-name').textContent = shortenFilename(item.original_name, 25);
+
+                const sizeMb = (item.size / 1024 / 1024).toFixed(2);
+                const uploadDate = new Date(item.uploaded_at).toLocaleDateString();
+                const statusEl = card.querySelector('.imagery-status');
+                statusEl.textContent = item.processing_status;
+                statusEl.classList.toggle('text-success', item.processing_status === 'done');
+                statusEl.classList.toggle('text-warning', item.processing_status !== 'done');
+
+                const meta = `${sizeMb} MB • ${uploadDate} • <span class="${statusEl.className}">${statusEl.textContent}</span>`;
+                card.querySelector('.imagery-meta').innerHTML = meta;
+
+                const viewBtn = card.querySelector('.view-btn');
+                viewBtn?.addEventListener('click', () => viewImagery(item));
+
+                return fragment;
+            };
+
+            // Retrieve the user's imagery list and render it into the panel.
+            const loadMyData = async () => {
+                const container = elements.myDataContainer;
+                container.innerHTML = `
+                    <div class="flex justify-center py-4">
+                        <p class="text-sm text-foreground/60 animate-pulse">Loading your imagery list...</p>
+                    </div>
+                `;
+
+                try {
+                    const response = await fetch(endpoints.list);
+                    const payload = await response.json();
+                    if (!response.ok || !payload.success) {
+                        throw new Error(payload.message || 'Failed to fetch imagery data.');
+                    }
+
+                    const data = payload.data || [];
+                    container.innerHTML = '';
+
+                    if (data.length === 0) {
+                        container.innerHTML = '<p class="text-sm text-gray-400 text-center py-4">No imagery uploaded yet.</p>';
+                        return;
+                    }
+
+                    data.forEach((item) => {
+                        const fragment = renderImageryCard(item);
+                        if (fragment) {
+                            container.appendChild(fragment);
+                        }
+                    });
+                } catch (error) {
+                    container.innerHTML = `
+                        <div class="text-sm text-red-500 bg-red-50 border border-red-200 rounded p-3">
+                            ❌ ${error.message}
+                        </div>
+                    `;
+                }
+            };
+
+            // Attach DOM event listeners for file and control buttons.
+            const bindEventListeners = () => {
+                elements.fileInput.addEventListener('change', handleFileChange);
+                elements.startBtn.addEventListener('click', startUpload);
+                elements.pauseBtn.addEventListener('click', pauseUpload);
+                elements.resumeBtn.addEventListener('click', resumeUpload);
+            };
+
+            // Bootstrap the uploader module and fetch initial server data.
+            const initialise = () => {
+                ensureAppNamespace();
+                window.setButtonState = setButtonState;
+                window.AppMap.uploader.reload = loadMyData;
+
+                resetState();
+                resetUI();
+                setButtonState('idle');
+                bindEventListeners();
+                loadMyData();
+            };
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', initialise, { once: true });
+            } else {
+                initialise();
+            }
+        })();
+    </script>
+@endpush
+@push('javascript')
+    <script>
+        (() => {
+            const statusEl = document.getElementById('sentinelCollectionStatus');
+            const listEl = document.getElementById('sentinelCollectionList');
+            const templateEl = document.getElementById('sentinelCollectionTemplate');
+            const lastUpdatedEl = document.getElementById('sentinelLastUpdated');
+            const formEl = document.getElementById('sentinelFilterForm');
+            const resetButtonEl = document.getElementById('sentinelFilterResetButton');
+            const cloudInputEl = document.getElementById('sentinelCloudFilter');
+            const startDateInputEl = document.getElementById('sentinelStartDate');
+            const endDateInputEl = document.getElementById('sentinelEndDate');
+            const latInputEl = document.getElementById('sentinelLatFilter');
+            const lonInputEl = document.getElementById('sentinelLonFilter');
+            const levelInputEl = document.getElementById('sentinelProductLevel');
+            const panelEl = document.getElementById('sentinel-panel');
+
+            const previewPanelEl = document.getElementById('sentinelPreviewPanel');
+            const previewElements = {
+                panel: previewPanelEl,
+                title: previewPanelEl?.querySelector('[data-sentinel-preview-title]') ?? null,
+                acquired: previewPanelEl?.querySelector('[data-sentinel-preview-acquired]') ?? null,
+                details: previewPanelEl?.querySelector('[data-sentinel-preview-details]') ?? null,
+                status: previewPanelEl?.querySelector('[data-sentinel-preview-status]') ?? null,
+                clearButton: document.getElementById('sentinelPreviewClearBtn'),
+                downloadButton: document.getElementById('sentinelPreviewDownloadBtn')
+            };
+
+            if (!statusEl || !listEl || !templateEl) {
+                return;
             }
 
-            // Make calculateTotalPrice available globally for map.js
-            window.calculateTotalPrice = calculateTotalPrice;
-        </script>
-    @endpush
+            const config = {
+                endpoint: 'https://catalogue.dataspace.copernicus.eu/resto/api/collections/Sentinel2/search.json',
+                defaultMonthsBack: 1,
+                defaultCloudCover: 40,
+                defaultLatitude: -1.24536,
+                defaultLongitude: 114.54535,
+                defaultProductType: 'S2MSI2A'
+            };
+
+            const state = {
+                loadedOnce: false,
+                defaultStartIso: '',
+                defaultEndIso: '',
+                token: sanitizeToken(panelEl?.dataset?.sentinelToken ?? ''),
+                tokenConfigured: (panelEl?.dataset?.sentinelCredentials ?? '').toLowerCase() === 'true'
+            };
+
+            const ignoredDownloadKeywords = ['quicklook', 'thumbnail', 'thumb', 'overview', 'browse', 'preview', 'allorigins'];
+
+            // Ensure sentinel helpers are available under the shared AppMap namespace.
+            const ensureAppNamespace = () => {
+                window.AppMap = window.AppMap || {};
+                window.AppMap.sentinel = window.AppMap.sentinel || {};
+            };
+
+            // Safely convert incoming values into Date objects when possible.
+            const parseDate = (value) => {
+                if (typeof window.parseDateInput === 'function') {
+                    return window.parseDateInput(value);
+                }
+                if (value instanceof Date) {
+                    return new Date(value);
+                }
+                if (typeof value === 'string' && value.trim()) {
+                    const parsed = new Date(value);
+                    return Number.isNaN(parsed.getTime()) ? null : parsed;
+                }
+                return null;
+            };
+
+            // Determine the default date window used for catalogue searches.
+            const getDefaultDateRange = (monthsBack = config.defaultMonthsBack) => {
+                const months = Number.isFinite(monthsBack) && monthsBack > 0 ? monthsBack : config.defaultMonthsBack;
+                const end = new Date();
+                end.setHours(23, 59, 59, 999);
+                const start = new Date(end.getTime());
+                start.setMonth(start.getMonth() - months);
+                start.setHours(0, 0, 0, 0);
+                return { start, end };
+            };
+
+            // Normalize a Date into a YYYY-MM-DD formatted string.
+            const ensureIsoDateString = (date) => {
+                if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+                    return '';
+                }
+                if (typeof window.formatISODate === 'function') {
+                    return window.formatISODate(date);
+                }
+                return date.toISOString().split('T')[0];
+            };
+
+            // Keep start and end date fields within mutually valid ranges.
+            const syncDateConstraints = () => {
+                if (!startDateInputEl || !endDateInputEl) return;
+                endDateInputEl.min = startDateInputEl.value || '';
+                startDateInputEl.max = endDateInputEl.value || '';
+            };
+
+            // Populate filters with default dates when empty or forced.
+            const applyDefaultDates = (force = false) => {
+                const range = getDefaultDateRange(config.defaultMonthsBack);
+                const start = parseDate(range.start) ?? new Date();
+                start.setHours(0, 0, 0, 0);
+                const end = parseDate(range.end) ?? new Date();
+                end.setHours(23, 59, 59, 999);
+
+                state.defaultStartIso = ensureIsoDateString(start);
+                state.defaultEndIso = ensureIsoDateString(end);
+
+                if (startDateInputEl && (force || !startDateInputEl.value)) {
+                    startDateInputEl.value = state.defaultStartIso;
+                }
+                if (endDateInputEl && (force || !endDateInputEl.value)) {
+                    endDateInputEl.value = state.defaultEndIso;
+                }
+
+                syncDateConstraints();
+            };
+
+            // Retry until the global formatter exists before running the callback.
+            const waitForFormatIso = (callback, attempts = 10, delayMs = 50) => {
+                if (typeof window.formatISODate === 'function' || attempts <= 0) {
+                    callback();
+                    return;
+                }
+                setTimeout(() => waitForFormatIso(callback, attempts - 1, delayMs), delayMs);
+            };
+
+            // Present cloud cover percentages with graceful fallbacks.
+            const formatCloudCover = (value) => {
+                if (typeof value === 'number' && !Number.isNaN(value)) {
+                    return `${value.toFixed(1)}%`;
+                }
+                return 'N/A';
+            };
+
+            // Clamp numeric inputs and return null when value is invalid.
+            const clampNumber = (value, min, max) => {
+                if (typeof value !== 'number' || Number.isNaN(value)) return null;
+                return Math.min(Math.max(value, min), max);
+            };
+
+            function sanitizeToken(value) {
+                return typeof value === 'string' ? value.trim() : '';
+            }
+
+            const hasToken = () => sanitizeToken(state.token).length > 0;
+
+            // Craft a status message that explains token requirements when missing.
+            const buildStatusMessage = (message) => {
+                const parts = [];
+                if (message) parts.push(message);
+                if (!hasToken()) {
+                    parts.push(state.tokenConfigured
+                        ? 'Download unavailable: Copernicus access token could not be issued.'
+                        : 'Configure Copernicus credentials on the server to enable downloads.');
+                }
+                return parts.join(' ');
+            };
+
+            // Add the Copernicus token query parameter to download URLs when possible.
+            const applyTokenToUrl = (url) => {
+                if (!url) return null;
+                const token = sanitizeToken(state.token);
+                if (!token) return null;
+                const queryPattern = /([?&])token=[^&#]*/i;
+                if (queryPattern.test(url)) {
+                    return url.replace(queryPattern, `$1token=${encodeURIComponent(token)}`);
+                }
+                const separator = url.includes('?') ? '&' : '?';
+                return `${url}${separator}token=${encodeURIComponent(token)}`;
+            };
+
+            // Validate that a URL appears to be a downloadable resource link.
+            const isValidDownloadUrl = (url) => {
+                if (typeof url !== 'string') return false;
+                const trimmed = url.trim();
+                if (!trimmed) return false;
+                if (!/^https?:\/\//i.test(trimmed)) return false;
+                const lowered = trimmed.toLowerCase();
+                return !ignoredDownloadKeywords.some((keyword) => lowered.includes(keyword));
+            };
+
+            // Recursively gather URLs from the various service response formats.
+            const extractServiceUrls = (service) => {
+                const results = [];
+                if (!service) return results;
+                if (typeof service === 'string') {
+                    results.push(service);
+                    return results;
+                }
+                if (Array.isArray(service)) {
+                    service.forEach((item) => {
+                        results.push(...extractServiceUrls(item));
+                    });
+                    return results;
+                }
+                if (typeof service === 'object') {
+                    ['url', 'href', 'https', 'http'].forEach((key) => {
+                        const value = service[key];
+                        if (typeof value === 'string') {
+                            results.push(value);
+                        }
+                    });
+                }
+                return results;
+            };
+
+            // Determine the best download URL candidate from a feature payload.
+            const resolveDownloadUrl = (feature) => {
+                if (!feature) return null;
+
+                const props = feature.properties ?? {};
+                const links = Array.isArray(feature.links) ? feature.links : [];
+                const assets = feature.assets ?? {};
+
+                const candidateScores = new Map();
+                const registerCandidate = (url, score = 0) => {
+                    if (!isValidDownloadUrl(url)) return;
+                    const existing = candidateScores.get(url);
+                    if (existing === undefined || score > existing) {
+                        candidateScores.set(url, score);
+                    }
+                };
+
+                const registerFromService = (service, score = 0) => {
+                    extractServiceUrls(service).forEach((url) => registerCandidate(url, score));
+                };
+
+                const linkScoreByRel = {
+                    enclosure: 100,
+                    download: 95,
+                    data: 90,
+                    alternate: 75,
+                    source: 70,
+                    self: 65
+                };
+
+                links.forEach((link) => {
+                    const href = typeof link?.href === 'string' ? link.href : null;
+                    if (!href) return;
+                    const rel = typeof link?.rel === 'string' ? link.rel.toLowerCase() : '';
+                    const type = typeof link?.type === 'string' ? link.type.toLowerCase() : '';
+                    let score = linkScoreByRel[rel] ?? 60;
+                    if (type.includes('zip') || type.includes('safe') || type.includes('application/octet-stream')) {
+                        score += 15;
+                    }
+                    registerCandidate(href, score);
+                });
+
+                ['downloadUrl', 'productDownloadUrl', 'productUrl', 'dataUrl', 'url', 'servicesDownloadUrl', 'resourceUrl'].forEach((key) => {
+                    const value = props[key];
+                    if (typeof value === 'string') {
+                        registerCandidate(value, 92);
+                    }
+                });
+
+                const services = props.services;
+                if (services && typeof services === 'object' && !Array.isArray(services)) {
+                    Object.entries(services).forEach(([key, serviceValue]) => {
+                        const lowerKey = String(key).toLowerCase();
+                        let score = 70;
+                        if (lowerKey.includes('download')) score = 95;
+                        else if (lowerKey.includes('data')) score = 88;
+                        else if (lowerKey.includes('s3') || lowerKey.includes('aws')) score = 82;
+                        registerFromService(serviceValue, score);
+                    });
+                } else {
+                    registerFromService(services, 80);
+                }
+
+                Object.entries(assets).forEach(([key, assetValue]) => {
+                    const lowerKey = String(key).toLowerCase();
+                    if (ignoredDownloadKeywords.some((keyword) => lowerKey.includes(keyword))) {
+                        return;
+                    }
+                    const href = typeof assetValue === 'string'
+                        ? assetValue
+                        : (typeof assetValue?.href === 'string'
+                            ? assetValue.href
+                            : (typeof assetValue?.url === 'string' ? assetValue.url : null));
+                    if (!href) return;
+                    let score = 68;
+                    if (Array.isArray(assetValue?.roles)) {
+                        const roleScore = assetValue.roles.some((role) => ['data', 'download', 'product', 'analytic'].includes(String(role).toLowerCase()));
+                        if (roleScore) score += 20;
+                    }
+                    const type = typeof assetValue?.type === 'string' ? assetValue.type.toLowerCase() : '';
+                    if (type.includes('zip') || type.includes('safe') || type.includes('geotiff') || type.includes('jp2')) {
+                        score += 12;
+                    }
+                    if (/(data|product|tile|granule|image|scene)/.test(lowerKey)) {
+                        score += 6;
+                    }
+                    registerCandidate(href, score);
+                });
+
+                const propsAssets = props.assets;
+                if (propsAssets && typeof propsAssets === 'object' && !Array.isArray(propsAssets)) {
+                    Object.entries(propsAssets).forEach(([key, assetValue]) => {
+                        const lowerKey = String(key).toLowerCase();
+                        if (ignoredDownloadKeywords.some((keyword) => lowerKey.includes(keyword))) {
+                            return;
+                        }
+                        if (typeof assetValue === 'string') {
+                            registerCandidate(assetValue, 66);
+                        } else if (assetValue && typeof assetValue === 'object') {
+                            if (typeof assetValue.href === 'string') {
+                                registerCandidate(assetValue.href, 66);
+                            }
+                            if (typeof assetValue.url === 'string') {
+                                registerCandidate(assetValue.url, 66);
+                            }
+                        }
+                    });
+                }
+
+                let bestUrl = null;
+                let bestScore = -Infinity;
+                candidateScores.forEach((score, url) => {
+                    if (score > bestScore) {
+                        bestScore = score;
+                        bestUrl = url;
+                    }
+                });
+
+                return bestUrl ?? null;
+            };
+
+            // Generate a filesystem-friendly filename for Sentinel downloads.
+            const buildDownloadName = (primary, fallback) => {
+                const base = String(primary ?? fallback ?? 'sentinel-2-scene').trim();
+                const normalized = base.replace(/[\s]+/g, '_').replace(/[^A-Za-z0-9._-]+/g, '_');
+                return normalized || 'sentinel-2-scene';
+            };
+
+            // Encapsulate preview map rendering, metadata display, and downloads.
+            const createPreviewModule = () => {
+                const defaultContent = {
+                    title: previewElements.title?.textContent ?? '–',
+                    acquired: previewElements.acquired?.textContent ?? '',
+                    details: previewElements.details?.textContent ?? '',
+                    status: previewElements.status?.textContent ?? ''
+                };
+
+                const dataProjection = 'EPSG:4326';
+                const localState = {
+                    map: null,
+                    projection: null,
+                    layer: null,
+                    source: null,
+                    geoJson: null,
+                    selection: null
+                };
+
+                // Lazily initialize OpenLayers resources used to draw footprints.
+                const ensureContext = () => {
+                    if (typeof window === 'undefined' || typeof ol === 'undefined') return null;
+                    const mapInstance = window.map;
+                    const projection = mapInstance?.getView?.()?.getProjection?.();
+                    if (!mapInstance || !projection) return null;
+
+                    if (!localState.layer) {
+                        localState.source = new ol.source.Vector();
+                        localState.layer = new ol.layer.Vector({
+                            source: localState.source,
+                            style: new ol.style.Style({
+                                stroke: new ol.style.Stroke({
+                                    color: 'rgba(59,130,246,0.9)',
+                                    width: 2,
+                                    lineDash: [6, 6]
+                                }),
+                                fill: new ol.style.Fill({
+                                    color: 'rgba(59,130,246,0.15)'
+                                })
+                            }),
+                            visible: false,
+                            zIndex: 1200
+                        });
+                        mapInstance.addLayer(localState.layer);
+                    }
+
+                    localState.geoJson = localState.geoJson ?? new ol.format.GeoJSON();
+                    localState.map = mapInstance;
+                    localState.projection = projection;
+                    return localState;
+                };
+
+                // Show or hide the preview panel container.
+                const setPanelVisible = (visible) => {
+                    if (!previewElements.panel) return;
+                    previewElements.panel.classList.toggle('hidden', !visible);
+                    previewElements.panel.setAttribute('aria-hidden', visible ? 'false' : 'true');
+                };
+
+                // Replace preview title and metadata labels with provided values.
+                const setPanelContent = (content = {}) => {
+                    const next = { ...defaultContent, ...content };
+                    if (previewElements.title) previewElements.title.textContent = next.title;
+                    if (previewElements.acquired) previewElements.acquired.textContent = next.acquired;
+                    if (previewElements.details) {
+                        previewElements.details.textContent = next.details;
+                        previewElements.details.classList.toggle('hidden', !next.details);
+                    }
+                    if (previewElements.status) previewElements.status.textContent = next.status;
+                };
+
+                // Animate the main map to zoom onto the preview geometry.
+                const focusExtent = (extent) => {
+                    if (!extent || !localState.map) return;
+                    const view = localState.map.getView?.();
+                    if (!view?.fit) return;
+                    view.fit(extent, {
+                        padding: [32, 32, 32, 32],
+                        duration: 400,
+                        maxZoom: 14
+                    });
+                };
+
+                // Convert footprint/geometry payloads into OpenLayers features.
+                const buildFeature = (payload) => {
+                    if (!localState.geoJson || !localState.projection || !payload) return null;
+                    const { footprint, geometry, bbox } = payload;
+                    try {
+                        if (footprint) {
+                            return localState.geoJson.readFeature(footprint, {
+                                featureProjection: localState.projection,
+                                dataProjection
+                            });
+                        }
+                        if (geometry) {
+                            return localState.geoJson.readFeature({
+                                type: 'Feature',
+                                geometry
+                            }, {
+                                featureProjection: localState.projection,
+                                dataProjection
+                            });
+                        }
+                        if (Array.isArray(bbox) && bbox.length === 4) {
+                            const transformed = ol.proj.transformExtent(bbox, dataProjection, localState.projection);
+                            return new ol.Feature({
+                                geometry: ol.geom.Polygon.fromExtent(transformed)
+                            });
+                        }
+                    } catch (error) {
+                        console.error('Unable to construct Sentinel footprint', error);
+                    }
+                    return null;
+                };
+
+                // Sync button states (clear/download) with the current selection.
+                const updateActions = () => {
+                    const hasSelection = Boolean(localState.selection);
+                    if (previewElements.clearButton) {
+                        previewElements.clearButton.disabled = !hasSelection;
+                        previewElements.clearButton.setAttribute('aria-disabled', hasSelection ? 'false' : 'true');
+                    }
+                    if (!previewElements.downloadButton) return;
+                    if (hasSelection && localState.selection.downloadUrl && hasToken()) {
+                        previewElements.downloadButton.classList.remove('hidden');
+                        previewElements.downloadButton.setAttribute('href', localState.selection.downloadUrl);
+                        previewElements.downloadButton.setAttribute('aria-disabled', 'false');
+                        previewElements.downloadButton.setAttribute('title', `Download full scene for ${localState.selection.label}`);
+                        previewElements.downloadButton.setAttribute('download', localState.selection.downloadFilename);
+                        previewElements.downloadButton.dataset.downloadBase = localState.selection.downloadBase ?? '';
+                        previewElements.downloadButton.tabIndex = 0;
+                    } else {
+                        previewElements.downloadButton.classList.add('hidden');
+                        previewElements.downloadButton.removeAttribute('href');
+                        previewElements.downloadButton.removeAttribute('download');
+                        previewElements.downloadButton.removeAttribute('title');
+                        previewElements.downloadButton.setAttribute('aria-disabled', 'true');
+                        delete previewElements.downloadButton.dataset.downloadBase;
+                        previewElements.downloadButton.tabIndex = -1;
+                    }
+                };
+
+                // Render preview metadata and geometry for the chosen catalogue entry.
+                const show = (payload) => {
+                    const context = ensureContext();
+                    if (!context) return;
+                    context.source?.clear();
+                    context.layer?.setVisible(false);
+                    localState.selection = null;
+                    updateActions();
+                    if (!payload) {
+                        setPanelContent();
+                        setPanelVisible(false);
+                        return;
+                    }
+                    const title = payload.title || payload.productId || 'Sentinel-2 Preview';
+                    const acquiredText = payload.acquiredText ?? (payload.acquisitionDate ? `Acquired: ${formatReadableDate(payload.acquisitionDate)}` : 'Acquisition date unavailable.');
+                    const detailParts = [];
+                    if (payload.detailText) detailParts.push(payload.detailText);
+                    if (payload.tileText || payload.tileId) detailParts.push(payload.tileText || payload.tileId);
+                    if (typeof payload.cloudCover === 'number' && !Number.isNaN(payload.cloudCover)) {
+                        detailParts.push(`Cloud cover: ${formatCloudCover(Number(payload.cloudCover))}`);
+                    }
+                    if (payload.collection) detailParts.push(`Collection: ${payload.collection}`);
+                    const details = detailParts.join(' • ');
+                    const feature = buildFeature(payload);
+                    if (feature) {
+                        context.source.addFeature(feature);
+                        context.layer.setVisible(true);
+                        const extent = feature.getGeometry()?.getExtent?.();
+                        if (extent) {
+                            focusExtent(extent);
+                        }
+                    }
+                    const downloadBase = payload.downloadUrlBase || payload.downloadUrl || null;
+                    const downloadUrl = applyTokenToUrl(downloadBase);
+                    const downloadFilename = payload.downloadFilename ?? buildDownloadName(payload.productId, title);
+                    const statusMessage = feature
+                        ? 'Coverage footprint displayed on the map. Imagery preview is disabled.'
+                        : 'Coverage area unavailable for this product.';
+                    localState.selection = {
+                        downloadUrl,
+                        downloadBase,
+                        downloadFilename,
+                        label: title
+                    };
+                    setPanelContent({
+                        title,
+                        acquired: acquiredText,
+                        details,
+                        status: buildStatusMessage(statusMessage)
+                    });
+                    setPanelVisible(true);
+                    updateActions();
+                };
+
+                // Remove any preview selection and restore default messaging.
+                const clear = () => {
+                    localState.selection = null;
+                    localState.source?.clear();
+                    localState.layer?.setVisible(false);
+                    setPanelContent(defaultContent);
+                    setPanelVisible(false);
+                    updateActions();
+                };
+
+                setPanelContent(defaultContent);
+                setPanelVisible(false);
+                updateActions();
+
+                return { ensure: ensureContext, show, clear };
+            };
+
+            const previewModule = createPreviewModule();
+
+            if (typeof window !== 'undefined') {
+                if (window.map) {
+                    previewModule.ensure();
+                } else {
+                    window.addEventListener('map:ready', () => {
+                        previewModule.ensure();
+                    }, { once: true });
+                }
+            }
+
+            if (previewElements.clearButton) {
+                previewElements.clearButton.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    previewModule.clear();
+                });
+            }
+
+            window.showSentinelPreviewOnMap = (payload) => {
+                previewModule.show(payload);
+            };
+
+            // Fetch catalogue data, retrying through AllOrigins if needed.
+            const fetchCatalog = async (url) => {
+                const attempt = async (targetUrl) => {
+                    const response = await fetch(targetUrl);
+                    if (!response.ok) {
+                        throw new Error(`Status ${response.status}`);
+                    }
+                    return response.json();
+                };
+                try {
+                    return await attempt(url);
+                } catch (error) {
+                    const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+                    return await attempt(proxyUrl);
+                }
+            };
+
+            // Create a UI card summarizing a single Sentinel catalogue feature.
+            const renderCard = (feature) => {
+                if (!templateEl?.content) return null;
+                const clone = templateEl.content.cloneNode(true);
+                const props = feature?.properties ?? {};
+                const links = feature?.links ?? [];
+                const assets = feature?.assets ?? {};
+
+                const titleEl = clone.querySelector('[data-sentinel-title]');
+                const productEl = clone.querySelector('[data-sentinel-product]');
+                const datetimeEl = clone.querySelector('[data-sentinel-datetime]');
+                const detailEl = clone.querySelector('[data-sentinel-details]');
+                const previewButton = clone.querySelector('[data-sentinel-preview]');
+                const downloadButton = clone.querySelector('[data-sentinel-download]');
+                const thumbnailImg = clone.querySelector('[data-sentinel-thumbnail]');
+                const thumbnailPlaceholder = clone.querySelector('[data-sentinel-placeholder]');
+
+                const shortenText = typeof window?.shortenFilename === 'function'
+                    ? (value, max = 40) => window.shortenFilename(String(value), max)
+                    : (value) => String(value ?? '');
+
+                const productId = props.productIdentifier || props.title || feature?.id || 'Sentinel-2 Product';
+                const acquisitionDate = props.completionDate || props.startDate || props.endPosition || props.beginPosition || props.startTimeFromAscendingNode;
+                const mgrsIdentifier = props.mgrsId || props.tileId || props.MGRS;
+                const tileText = mgrsIdentifier ? `Tile ${mgrsIdentifier}` : null;
+                const cloudCover = props.cloudCover ?? props['cloudcoverpercentage'] ?? props['cloudCoverageAssessment'];
+
+                const titleText = props.title || productId;
+                const productText = productId;
+
+                if (titleEl) {
+                    titleEl.textContent = shortenText(titleText, 48);
+                    titleEl.setAttribute('title', titleText);
+                }
+                if (productEl) {
+                    productEl.textContent = shortenText(productText, 44);
+                    productEl.setAttribute('title', productText);
+                }
+                if (datetimeEl) {
+                    datetimeEl.textContent = `Acquired: ${formatReadableDate(acquisitionDate)}`;
+                }
+
+                const detailParts = [];
+                if (tileText) detailParts.push(tileText);
+                if (cloudCover !== undefined) detailParts.push(`Cloud cover: ${formatCloudCover(Number(cloudCover))}`);
+                if (props.collection) detailParts.push(`Collection: ${props.collection}`);
+                if (detailEl) {
+                    detailEl.textContent = detailParts.length ? detailParts.join(' • ') : 'No additional metadata available';
+                }
+
+                const quicklookUrl = props.thumbnail ||
+                    props.quicklook ||
+                    assets?.thumbnail?.href ||
+                    assets?.overview?.href ||
+                    links.find((link) => link.rel === 'preview')?.href;
+
+                const downloadUrl = resolveDownloadUrl(feature);
+                const downloadUrlWithToken = applyTokenToUrl(downloadUrl);
+                const downloadFilename = buildDownloadName(productId, titleText);
+
+                if (downloadButton) {
+                    if (downloadUrl && downloadUrlWithToken && hasToken()) {
+                        downloadButton.classList.remove('hidden');
+                        downloadButton.setAttribute('href', downloadUrlWithToken);
+                        downloadButton.setAttribute('aria-disabled', 'false');
+                        downloadButton.setAttribute('title', `Download full scene for ${productText}`);
+                        downloadButton.setAttribute('download', downloadFilename);
+                        downloadButton.dataset.downloadBase = downloadUrl;
+                        downloadButton.tabIndex = 0;
+                    } else {
+                        downloadButton.classList.add('hidden');
+                        downloadButton.setAttribute('href', '#');
+                        downloadButton.setAttribute('aria-disabled', 'true');
+                        downloadButton.removeAttribute('download');
+                        delete downloadButton.dataset.downloadBase;
+                        downloadButton.tabIndex = -1;
+                    }
+                }
+
+                if (thumbnailImg) {
+                    if (quicklookUrl) {
+                        const handleError = () => {
+                            thumbnailImg.classList.add('hidden');
+                            thumbnailImg.removeAttribute('src');
+                            thumbnailPlaceholder?.classList.remove('hidden');
+                        };
+                        const handleLoad = () => {
+                            thumbnailImg.classList.remove('hidden');
+                            thumbnailPlaceholder?.classList.add('hidden');
+                        };
+                        thumbnailImg.classList.add('hidden');
+                        thumbnailPlaceholder?.classList.remove('hidden');
+                        thumbnailImg.addEventListener('error', handleError, { once: true });
+                        thumbnailImg.addEventListener('load', handleLoad, { once: true });
+                        thumbnailImg.src = quicklookUrl;
+                        thumbnailImg.alt = `Quicklook preview for ${productText}`;
+                    } else {
+                        thumbnailImg.classList.add('hidden');
+                        thumbnailImg.removeAttribute('src');
+                        thumbnailPlaceholder?.classList.remove('hidden');
+                    }
+                }
+
+                const bboxArray = Array.isArray(feature?.bbox) ? feature.bbox : (Array.isArray(props?.bbox) ? props.bbox : null);
+                const hasCoverage = Boolean(feature?.geometry) || (Array.isArray(bboxArray) && bboxArray.length === 4);
+
+                if (previewButton) {
+                    if (hasCoverage || quicklookUrl) {
+                        previewButton.disabled = false;
+                        previewButton.title = 'Display preview on the map';
+                        previewButton.addEventListener('click', () => {
+                            window.showSentinelPreviewOnMap?.({
+                                title: titleText,
+                                productId,
+                                quicklookUrl,
+                                downloadUrl: downloadUrlWithToken,
+                                downloadUrlBase: downloadUrl,
+                                downloadFilename,
+                                geometry: feature?.geometry,
+                                bbox: bboxArray,
+                                acquisitionDate,
+                                tileText,
+                                cloudCover,
+                                collection: props.collection || feature?.collection || null,
+                                services: props?.services ?? null,
+                                links,
+                                assets,
+                                featureProperties: props,
+                                featureId: feature?.id ?? null
+                            });
+                        });
+                    } else {
+                        previewButton.disabled = true;
+                        previewButton.title = 'Preview not available for this product';
+                    }
+                }
+
+                return clone;
+            };
+
+            // Display a loading message while clearing previous catalogue entries.
+            const setLoadingState = () => {
+                statusEl.classList.remove('hidden');
+                statusEl.textContent = 'Fetching latest Sentinel-2 collections...';
+                listEl.innerHTML = '';
+            };
+
+            // Ensure numeric filter inputs stay within sensible limits.
+            const normalizeInputValue = (input, min, max) => {
+                if (!input) return;
+                if (input.value === '') {
+                    input.value = '';
+                    return;
+                }
+                const parsed = Number(input.value);
+                if (Number.isNaN(parsed)) {
+                    input.value = '';
+                    return;
+                }
+                const normalized = clampNumber(parsed, min, max);
+                if (normalized !== null) {
+                    input.value = normalized.toString();
+                }
+            };
+
+            // Stamp the timestamp of the most recent successful fetch.
+            const updateLastUpdated = () => {
+                if (lastUpdatedEl) {
+                    lastUpdatedEl.textContent = new Date().toLocaleString('id-ID');
+                }
+            };
+
+            // Reset all filter fields back to their default configuration.
+            const resetFilters = () => {
+                if (cloudInputEl) cloudInputEl.value = config.defaultCloudCover;
+                applyDefaultDates(true);
+                if (latInputEl) latInputEl.value = config.defaultLatitude;
+                if (lonInputEl) lonInputEl.value = config.defaultLongitude;
+                if (levelInputEl) levelInputEl.value = config.defaultProductType;
+            };
+
+            // Construct the query string parameters for the Sentinel catalogue API.
+            const buildQueryParams = () => {
+                const params = new URLSearchParams({
+                    maxRecords: '20',
+                    sortParam: 'startDate',
+                    sortOrder: 'descending'
+                });
+
+                const startValue = startDateInputEl?.value?.trim();
+                const endValue = endDateInputEl?.value?.trim();
+                const fallbackRange = getDefaultDateRange(config.defaultMonthsBack);
+
+                let startDate = parseDate(startValue) ?? parseDate(state.defaultStartIso) ?? parseDate(fallbackRange.start) ?? parseDate(new Date());
+                let endDate = parseDate(endValue) ?? parseDate(state.defaultEndIso) ?? parseDate(fallbackRange.end) ?? parseDate(new Date());
+
+                if (!startDate || !endDate) {
+                    throw new Error('Please provide a valid start and end date to filter collections.');
+                }
+
+                startDate.setHours(0, 0, 0, 0);
+                endDate.setHours(23, 59, 59, 999);
+
+                if (startDate > endDate) {
+                    throw new Error('Start date must be earlier than or equal to end date.');
+                }
+
+                const startIso = ensureIsoDateString(startDate);
+                const endIso = ensureIsoDateString(endDate);
+                if (!startIso || !endIso) {
+                    throw new Error('Unable to format the selected date range. Please adjust the dates and try again.');
+                }
+
+                params.set('startDate', startIso);
+                params.set('completionDate', endIso);
+
+                const productTypeRaw = levelInputEl?.value?.trim();
+                const productType = ['S2MSI2A', 'S2MSI1C'].includes(productTypeRaw) ? productTypeRaw : config.defaultProductType;
+                params.set('productType', productType);
+
+                const cloudRaw = cloudInputEl?.value?.trim();
+                const cloudNumber = cloudRaw === '' || cloudRaw === undefined ? null : Number(cloudRaw);
+                if (cloudNumber !== null && !Number.isNaN(cloudNumber)) {
+                    const normalized = clampNumber(cloudNumber, 0, 100);
+                    if (normalized !== null) {
+                        params.set('cloudCover', `[0,${Math.round(normalized)}]`);
+                    }
+                }
+
+                const latRaw = latInputEl?.value?.trim();
+                const lonRaw = lonInputEl?.value?.trim();
+                const hasLat = latRaw !== undefined && latRaw !== '';
+                const hasLon = lonRaw !== undefined && lonRaw !== '';
+
+                if ((hasLat && !hasLon) || (!hasLat && hasLon)) {
+                    throw new Error('Please provide both latitude and longitude to filter by location.');
+                }
+
+                if (hasLat && hasLon) {
+                    const latNumber = Number(latRaw);
+                    const lonNumber = Number(lonRaw);
+                    const normalizedLat = clampNumber(latNumber, -90, 90);
+                    const normalizedLon = clampNumber(lonNumber, -180, 180);
+                    if (normalizedLat === null || normalizedLon === null) {
+                        throw new Error('Latitude must be between -90 and 90 and longitude between -180 and 180.');
+                    }
+                    params.set('lat', normalizedLat.toFixed(6));
+                    params.set('lon', normalizedLon.toFixed(6));
+                }
+
+                return params;
+            };
+
+            // Fetch Sentinel collections based on current filters and render them.
+            const loadCollections = async (forceRefresh = false) => {
+                applyDefaultDates(false);
+                syncDateConstraints();
+
+                if (forceRefresh && window.MyZkToast?.info) {
+                    window.MyZkToast.info('Refreshing Sentinel-2 catalogue...');
+                }
+
+                setLoadingState();
+
+                try {
+                    const params = buildQueryParams();
+                    const requestUrl = `${config.endpoint}?${params.toString()}`;
+                    const response = await fetchCatalog(requestUrl);
+                    const features = Array.isArray(response?.features) ? response.features : [];
+
+                    if (!features.length) {
+                        statusEl.textContent = 'No Sentinel-2 collections found for the selected date range.';
+                    } else {
+                        statusEl.classList.add('hidden');
+                        features.forEach((feature) => {
+                            const card = renderCard(feature);
+                            if (card) {
+                                listEl.appendChild(card);
+                            }
+                        });
+                    }
+
+                    state.loadedOnce = true;
+                    window.AppMap.sentinel.loadedOnce = true;
+                    updateLastUpdated();
+
+                    if (features.length && forceRefresh && window.MyZkToast?.success) {
+                        window.MyZkToast.success('Sentinel-2 collections updated.');
+                    }
+                } catch (error) {
+                    statusEl.classList.remove('hidden');
+                    statusEl.textContent = error?.message || 'Unable to fetch Sentinel-2 collections. Please try again later.';
+                    updateLastUpdated();
+                    if (window.MyZkToast?.error) {
+                        window.MyZkToast.error('Failed to update Sentinel-2 collections.');
+                    }
+                }
+            };
+
+            // Attach listeners to filter inputs and actions to keep data fresh.
+            const bindEvents = () => {
+                startDateInputEl?.addEventListener('change', () => {
+                    if (endDateInputEl && startDateInputEl.value && endDateInputEl.value && endDateInputEl.value < startDateInputEl.value) {
+                        endDateInputEl.value = startDateInputEl.value;
+                    }
+                    syncDateConstraints();
+                });
+
+                endDateInputEl?.addEventListener('change', () => {
+                    if (startDateInputEl && endDateInputEl.value && startDateInputEl.value && startDateInputEl.value > endDateInputEl.value) {
+                        startDateInputEl.value = endDateInputEl.value;
+                    }
+                    syncDateConstraints();
+                });
+
+                cloudInputEl?.addEventListener('blur', () => normalizeInputValue(cloudInputEl, 0, 100));
+                latInputEl?.addEventListener('blur', () => normalizeInputValue(latInputEl, -90, 90));
+                lonInputEl?.addEventListener('blur', () => normalizeInputValue(lonInputEl, -180, 180));
+
+                formEl?.addEventListener('submit', (event) => {
+                    event.preventDefault();
+                    loadCollections(true);
+                });
+
+                resetButtonEl?.addEventListener('click', () => {
+                    resetFilters();
+                    loadCollections(true);
+                });
+            };
+
+            // Bootstrap sentinel catalogue helpers and trigger the initial load.
+            const initialise = () => {
+                ensureAppNamespace();
+                window.AppMap.sentinel.loadedOnce = state.loadedOnce;
+                window.AppMap.sentinel.loadCollections = loadCollections;
+
+                if (cloudInputEl && cloudInputEl.value === '') {
+                    cloudInputEl.value = config.defaultCloudCover;
+                }
+                if (latInputEl && latInputEl.value === '') {
+                    latInputEl.value = config.defaultLatitude;
+                }
+                if (lonInputEl && lonInputEl.value === '') {
+                    lonInputEl.value = config.defaultLongitude;
+                }
+                if (levelInputEl && levelInputEl.value === '') {
+                    levelInputEl.value = config.defaultProductType;
+                }
+
+                waitForFormatIso(() => applyDefaultDates(false));
+                bindEvents();
+                loadCollections();
+
+                document.dispatchEvent(new CustomEvent('app:sentinel:ready', {
+                    detail: window.AppMap.sentinel
+                }));
+            };
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', initialise, { once: true });
+            } else {
+                initialise();
+            }
+        })();
+    </script>
+@endpush
+
 </x-app-front-map-layout>
