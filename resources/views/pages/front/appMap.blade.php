@@ -2025,9 +2025,130 @@
                         baseParams: {
                             FORMAT: 'image/png',
                             TRANSPARENT: true,
-                            SHOWLOGO: false
+                            SHOWLOGO: false,
+                            VERSION: '1.3.0'
                         },
                         attribution: 'Sentinel Hub / Copernicus Data Space Ecosystem'
+                    };
+
+                    const MAX_WMS_PIXELS = 250000;
+                    const MAX_WMS_DIMENSION = Math.floor(Math.sqrt(MAX_WMS_PIXELS));
+
+                    const buildWmsParams = (overrides = {}) => ({
+                        ...wmsDefaults.baseParams,
+                        ...overrides
+                    });
+
+                    const reorderExtentForAxisOrientation = (extent, orientation) => {
+                        if (!Array.isArray(extent) || extent.length !== 4) return extent;
+                        if (typeof orientation !== 'string' || orientation.length < 2) return extent;
+                        const firstAxis = orientation[0]?.toLowerCase?.();
+                        const secondAxis = orientation[1]?.toLowerCase?.();
+                        if (firstAxis === 'n' && secondAxis === 'e') {
+                            return [extent[1], extent[0], extent[3], extent[2]];
+                        }
+                        return extent;
+                    };
+
+                    const normalizeWmsUrl = (src, context) => {
+                        if (typeof src !== 'string' || !src) return src;
+                        try {
+                            const url = new URL(src, window.location.href);
+                            const projection = context?.projection;
+                            const projectionCode = typeof projection?.getCode === 'function'
+                                ? projection.getCode()
+                                : (typeof projection === 'string' ? projection : null);
+                            const bboxParam = url.searchParams.get('BBOX');
+
+                            if (bboxParam && projectionCode && projectionCode !== dataProjection && typeof ol?.proj?.transformExtent === 'function') {
+                                const values = bboxParam.split(',').map((value) => Number(value));
+                                if (values.length === 4 && values.every((value) => Number.isFinite(value))) {
+                                    try {
+                                        const transformed = ol.proj.transformExtent(values, projectionCode, dataProjection);
+                                        if (Array.isArray(transformed)) {
+                                            const orientation = typeof ol?.proj?.get === 'function'
+                                                ? ol.proj.get(dataProjection)?.getAxisOrientation?.()
+                                                : null;
+                                            const oriented = reorderExtentForAxisOrientation(transformed, orientation);
+                                            const formatted = oriented.map((value) => value.toFixed(8));
+                                            url.searchParams.set('BBOX', formatted.join(','));
+                                        }
+                                    } catch (error) {
+                                        console.warn('Failed to transform WMS BBOX to EPSG:4326', error);
+                                    }
+                                }
+                            }
+
+                            url.searchParams.set('CRS', dataProjection);
+                            url.searchParams.set('SRS', dataProjection);
+                            if (!url.searchParams.has('VERSION') && wmsDefaults.baseParams?.VERSION) {
+                                url.searchParams.set('VERSION', wmsDefaults.baseParams.VERSION);
+                            }
+
+                            const width = Number(url.searchParams.get('WIDTH'));
+                            const height = Number(url.searchParams.get('HEIGHT'));
+                            if (Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0) {
+                                const maxDimension = Number.isFinite(MAX_WMS_DIMENSION) && MAX_WMS_DIMENSION > 0
+                                    ? MAX_WMS_DIMENSION
+                                    : null;
+                                const dimensionScale = maxDimension
+                                    ? Math.min(1, maxDimension / Math.max(width, height))
+                                    : 1;
+                                let adjustedWidth = Math.max(1, Math.floor(width * dimensionScale));
+                                let adjustedHeight = Math.max(1, Math.floor(height * dimensionScale));
+
+                                const limitPixels = (w, h) => {
+                                    if (!Number.isFinite(MAX_WMS_PIXELS) || MAX_WMS_PIXELS <= 0) {
+                                        return [w, h];
+                                    }
+                                    const currentPixels = w * h;
+                                    if (currentPixels <= MAX_WMS_PIXELS) {
+                                        return [w, h];
+                                    }
+                                    const scale = Math.sqrt(MAX_WMS_PIXELS / currentPixels);
+                                    let nextWidth = Math.max(1, Math.floor(w * scale));
+                                    let nextHeight = Math.max(1, Math.floor(h * scale));
+                                    while (nextWidth * nextHeight > MAX_WMS_PIXELS && (nextWidth > 1 || nextHeight > 1)) {
+                                        if (nextWidth >= nextHeight && nextWidth > 1) {
+                                            nextWidth -= 1;
+                                        } else if (nextHeight > 1) {
+                                            nextHeight -= 1;
+                                        } else {
+                                            break;
+                                        }
+                                    }
+                                    return [nextWidth, nextHeight];
+                                };
+
+                                [adjustedWidth, adjustedHeight] = limitPixels(adjustedWidth, adjustedHeight);
+
+                                if (adjustedWidth !== width) {
+                                    url.searchParams.set('WIDTH', String(adjustedWidth));
+                                }
+                                if (adjustedHeight !== height) {
+                                    url.searchParams.set('HEIGHT', String(adjustedHeight));
+                                }
+                            }
+
+                            return url.toString();
+                        } catch (error) {
+                            console.warn('Unable to normalize WMS request URL', error);
+                            return src;
+                        }
+                    };
+
+                    const createImageLoadFunction = (context) => {
+                        const fallbackLoader = typeof ol?.source?.Image?.defaultImageLoadFunction === 'function'
+                            ? ol.source.Image.defaultImageLoadFunction
+                            : ((image, source) => {
+                                if (image?.getImage) {
+                                    image.getImage().src = source;
+                                }
+                            });
+                        return (image, src) => {
+                            const normalizedSrc = normalizeWmsUrl(src, context);
+                            fallbackLoader(image, normalizedSrc);
+                        };
                     };
 
                     const localState = {
@@ -2041,6 +2162,17 @@
                         imagerySource: null
                     };
 
+                    const imageLoadFunction = createImageLoadFunction(localState);
+
+                    const createImageSource = (url, params) => new ol.source.ImageWMS({
+                        url,
+                        params,
+                        ratio: 1,
+                        crossOrigin: 'anonymous',
+                        attributions: wmsDefaults.attribution,
+                        imageLoadFunction
+                    });
+
                     // Lazily initialize OpenLayers resources used to draw footprints.
                     const ensureContext = () => {
                         if (typeof window === 'undefined' || typeof ol === 'undefined') return null;
@@ -2048,20 +2180,16 @@
                         const projection = mapInstance?.getView?.()?.getProjection?.();
                         if (!mapInstance || !projection) return null;
 
+                        localState.map = mapInstance;
+                        localState.projection = projection;
+
                         if (!localState.imageryLayer) {
                             const imageLayerSupported = Boolean(ol?.source?.ImageWMS) && typeof ol?.layer?.Image === 'function';
                             if (imageLayerSupported) {
-                                const params = {
-                                    ...wmsDefaults.baseParams,
+                                const params = buildWmsParams({
                                     LAYERS: wmsDefaults.layerName
-                                };
-                                localState.imagerySource = new ol.source.ImageWMS({
-                                    url: wmsDefaults.baseUrl,
-                                    params,
-                                    ratio: 1,
-                                    crossOrigin: 'anonymous',
-                                    attributions: wmsDefaults.attribution
                                 });
+                                localState.imagerySource = createImageSource(wmsDefaults.baseUrl, params);
                                 localState.imageryLayer = new ol.layer.Image({
                                     source: localState.imagerySource,
                                     visible: false,
@@ -2093,8 +2221,6 @@
                         }
 
                         localState.geoJson = localState.geoJson ?? new ol.format.GeoJSON();
-                        localState.map = mapInstance;
-                        localState.projection = projection;
                         return localState;
                     };
 
@@ -2274,10 +2400,9 @@
                             return false;
                         }
 
-                        const params = {
-                            ...wmsDefaults.baseParams,
+                        const params = buildWmsParams({
                             LAYERS: layerName
-                        };
+                        });
 
                         if (options?.time) {
                             params.TIME = options.time;
@@ -2288,13 +2413,7 @@
                             params.token = token;
                         }
 
-                        const source = new ol.source.ImageWMS({
-                            url,
-                            params,
-                            ratio: 1,
-                            crossOrigin: 'anonymous',
-                            attributions: wmsDefaults.attribution
-                        });
+                        const source = createImageSource(url, params);
                         localState.imagerySource = source;
                         localState.imageryLayer.setSource(source);
 
