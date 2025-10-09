@@ -2385,106 +2385,83 @@
                         return null;
                     };
 
-                    const inspectServiceEntry = (entry, accumulator) => {
-                        if (!entry) return;
-                        if (Array.isArray(entry)) {
-                            entry.forEach((value) => inspectServiceEntry(value, accumulator));
-                            return;
-                        }
-                        if (typeof entry === 'string') {
-                            const url = ensureAbsoluteUrl(entry);
-                            if (url && /wms|ogc/i.test(entry)) {
-                                accumulator.urls.push(url);
-                            }
-                            return;
-                        }
-                        if (typeof entry !== 'object') return;
-
-                        const urlKeys = ['wms', 'ogc', 'ogcWms', 'ogcUrl', 'wmsUrl', 'url', 'href', 'endpoint'];
-                        urlKeys.forEach((key) => {
-                            const value = entry[key];
-                            if (typeof value === 'string') {
-                                const url = ensureAbsoluteUrl(value);
-                                if (url && (/wms/i.test(key) || /ogc/i.test(key) || /wms|ogc/i.test(url))) {
-                                    accumulator.urls.push(url);
-                                }
-                            } else if (value && typeof value === 'object') {
-                                inspectServiceEntry(value, accumulator);
-                            }
-                        });
-
-                        const layerKeys = ['layer', 'layers', 'layerId', 'layerIds', 'layerName', 'defaultLayer'];
-                        layerKeys.forEach((key) => {
-                            const value = entry[key];
-                            toLayerArray(value).forEach((layer) => accumulator.layers.push(layer));
-                        });
-
-                        Object.entries(entry).forEach(([, value]) => {
-                            if (value && typeof value === 'object' && !Array.isArray(value)) {
-                                inspectServiceEntry(value, accumulator);
-                            }
-                        });
-                    };
-
                     const resolveImageryOptions = (payload) => {
-                        const accumulator = {
-                            urls: [],
-                            layers: []
+                        const wmsPattern = /wms|ogc/i;
+                        const layerKeys = ['layer', 'layers', 'layerId', 'layerIds', 'layerName', 'defaultLayer'];
+                        const urls = new Set();
+                        const layers = new Set();
+
+                        const pushUrl = (value, force = false) => {
+                            const url = ensureAbsoluteUrl(value);
+                            if (url && (force || wmsPattern.test(url))) {
+                                urls.add(url);
+                            }
                         };
-                        if (payload?.services && typeof payload.services === 'object') {
-                            Object.values(payload.services).forEach((service) => {
-                                inspectServiceEntry(service, accumulator);
+
+                        const pushLayers = (value) => {
+                            toLayerArray(value).forEach((layer) => {
+                                if (layer) layers.add(layer);
                             });
+                        };
+
+                        const inspectEntry = (entry) => {
+                            if (!entry) return;
+                            if (typeof entry === 'string') {
+                                pushUrl(entry);
+                                return;
+                            }
+                            if (Array.isArray(entry)) {
+                                entry.forEach(inspectEntry);
+                                return;
+                            }
+                            if (typeof entry !== 'object') return;
+
+                            Object.entries(entry).forEach(([key, value]) => {
+                                if (layerKeys.includes(key)) {
+                                    pushLayers(value);
+                                }
+                                if (typeof value === 'string') {
+                                    const isUrlKey = key === 'href' || key === 'url';
+                                    const isWmsKey = wmsPattern.test(key);
+                                    if (isUrlKey || isWmsKey) {
+                                        pushUrl(value, isWmsKey);
+                                    } else if (layerKeys.includes(key)) {
+                                        pushLayers(value);
+                                    } else if (wmsPattern.test(value)) {
+                                        pushUrl(value);
+                                    }
+                                } else {
+                                    inspectEntry(value);
+                                }
+                            });
+                        };
+
+                        if (payload?.services) {
+                            inspectEntry(payload.services);
                         }
+
                         if (Array.isArray(payload?.links)) {
                             payload.links.forEach((link) => {
-                                const rel = String(link?.rel ?? '');
-                                const type = String(link?.type ?? '');
-                                const title = String(link?.title ?? '');
-                                if (/wms|ogc/i.test(rel) || /wms|ogc/i.test(type) || /wms|ogc/i.test(title)) {
-                                    const url = ensureAbsoluteUrl(link?.href);
-                                    if (url) {
-                                        accumulator.urls.push(url);
-                                    }
+                                const meta = `${link?.rel ?? ''} ${link?.type ?? ''} ${link?.title ?? ''}`;
+                                if (wmsPattern.test(meta)) {
+                                    pushUrl(link?.href, true);
                                 }
-                            });
-                        }
-                        if (payload?.assets && typeof payload.assets === 'object') {
-                            Object.values(payload.assets).forEach((asset) => {
-                                if (typeof asset === 'string') {
-                                    const url = ensureAbsoluteUrl(asset);
-                                    if (url && /wms|ogc/i.test(url)) {
-                                        accumulator.urls.push(url);
-                                    }
-                                    return;
-                                }
-                                if (asset && typeof asset === 'object') {
-                                    ['href', 'url', 'wms', 'ogc'].forEach((key) => {
-                                        const value = asset[key];
-                                        if (typeof value === 'string') {
-                                            const url = ensureAbsoluteUrl(value);
-                                            if (url && (/wms/i.test(key) || /ogc/i.test(key) || /wms|ogc/i.test(url))) {
-                                                accumulator.urls.push(url);
-                                            }
-                                        }
-                                    });
-                                    ['layer', 'layers', 'layerId', 'layerIds'].forEach((key) => {
-                                        const value = asset[key];
-                                        toLayerArray(value).forEach((layer) => accumulator.layers.push(layer));
-                                    });
-                                }
+                                inspectEntry(link);
                             });
                         }
 
-                        const uniqueUrls = Array.from(new Set(accumulator.urls));
-                        const fallbackUrl = wmsDefaults.baseUrl;
-                        const resolvedUrl = uniqueUrls.find((url) => /\/wms\//i.test(url)) || uniqueUrls[0] || fallbackUrl;
-                        const resolvedLayers = [wmsDefaults.layerName];
-                        const time = resolveWmsTimeParam(payload);
+                        if (payload?.assets && typeof payload.assets === 'object') {
+                            Object.values(payload.assets).forEach(inspectEntry);
+                        }
+
+                        const sortedUrls = Array.from(urls);
+                        const url = sortedUrls.find((value) => /\/wms\//i.test(value)) || sortedUrls[0] || wmsDefaults.baseUrl;
+                        const resolvedLayers = layers.size ? Array.from(layers) : [wmsDefaults.layerName];
+
                         return {
-                            url: resolvedUrl,
+                            url,
                             layers: resolvedLayers,
-                            time
+                            time: resolveWmsTimeParam(payload)
                         };
                     };
 
@@ -2512,7 +2489,7 @@
                         }
                         const options = resolveImageryOptions(payload);
                         const url = ensureAbsoluteUrl(options?.url) || wmsDefaults.baseUrl;
-                        const layerName = wmsDefaults.layerName;
+                        const layerName = Array.isArray(options?.layers) && options.layers.length > 0 ? options.layers.join(',') : wmsDefaults.layerName;
 
                         if (!url || !layerName) {
                             localState.imageryLayer.setVisible(false);
