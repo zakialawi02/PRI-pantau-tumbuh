@@ -584,6 +584,10 @@
                     </div>
                     <p class="text-foreground/70 mt-2 text-xs" data-sentinel-preview-status>Awaiting preview selection.</p>
                     <div class="mt-2 flex flex-wrap gap-1.5" id="sentinelPreviewActions">
+                        <button class="bg-foreground/10 hover:bg-foreground/20 inline-flex hidden items-center space-x-1 rounded-lg px-2 py-1 text-xs font-semibold transition" id="sentinelPreviewImageryBtn" type="button" aria-pressed="false" aria-disabled="true">
+                            <i class="ri-eye-line text-sm" data-sentinel-preview-imagery-icon></i>
+                            <span data-sentinel-preview-imagery-label>Preview Imagery</span>
+                        </button>
                         <a class="bg-primary text-background hover:bg-primary/90 inline-flex hidden items-center space-x-1 rounded-lg px-2 py-1 text-xs font-semibold transition" id="sentinelPreviewDownloadBtn" href="#" aria-disabled="true" target="_blank" rel="noopener noreferrer">
                             <i class="ri-download-cloud-2-line text-sm"></i>
                             <span>Download Scene</span>
@@ -1692,7 +1696,10 @@
                     details: previewPanelEl?.querySelector('[data-sentinel-preview-details]') ?? null,
                     status: previewPanelEl?.querySelector('[data-sentinel-preview-status]') ?? null,
                     clearButton: document.getElementById('sentinelPreviewClearBtn'),
-                    downloadButton: document.getElementById('sentinelPreviewDownloadBtn')
+                    downloadButton: document.getElementById('sentinelPreviewDownloadBtn'),
+                    imageryButton: document.getElementById('sentinelPreviewImageryBtn'),
+                    imageryLabel: previewPanelEl?.querySelector('[data-sentinel-preview-imagery-label]') ?? null,
+                    imageryIcon: previewPanelEl?.querySelector('[data-sentinel-preview-imagery-icon]') ?? null
                 };
 
                 if (!statusEl || !listEl || !templateEl) {
@@ -2018,6 +2025,10 @@
                         status: previewElements.status?.textContent ?? ''
                     };
 
+                    const cloneDefaultContent = () => ({
+                        ...defaultContent
+                    });
+
                     const dataProjection = 'EPSG:4326';
                     const wmsDefaults = {
                         baseUrl: 'https://sh.dataspace.copernicus.eu/ogc/wms/1bd0fec1-0e52-427a-8e83-6e0dcd29a03a',
@@ -2025,9 +2036,238 @@
                         baseParams: {
                             FORMAT: 'image/png',
                             TRANSPARENT: true,
-                            SHOWLOGO: false
+                            SHOWLOGO: false,
+                            VERSION: '1.3.0'
                         },
                         attribution: 'Sentinel Hub / Copernicus Data Space Ecosystem'
+                    };
+
+                    const MAX_METERS_PER_PIXEL = 200;
+                    const MAX_WMS_DIMENSION = 4096;
+                    const MAX_WMS_PIXELS = MAX_WMS_DIMENSION * MAX_WMS_DIMENSION;
+                    const IMAGE_LOAD_DEBOUNCE_MS = 300;
+
+                    const buildWmsParams = (overrides = {}) => ({
+                        ...wmsDefaults.baseParams,
+                        ...overrides
+                    });
+
+                    const getDataProjectionOrientation = () => {
+                        if (typeof ol?.proj?.get !== 'function') return 'ne';
+                        try {
+                            return ol.proj.get(dataProjection)?.getAxisOrientation?.() ?? 'ne';
+                        } catch (error) {
+                            console.warn('Failed to read projection axis orientation', error);
+                            return 'ne';
+                        }
+                    };
+
+                    const reorderExtentForAxisOrientation = (extent, orientation) => {
+                        if (!Array.isArray(extent) || extent.length !== 4) return extent;
+                        if (typeof orientation !== 'string' || orientation.length < 2) return extent;
+                        const firstAxis = orientation[0]?.toLowerCase?.();
+                        const secondAxis = orientation[1]?.toLowerCase?.();
+                        if (firstAxis === 'n' && secondAxis === 'e') {
+                            return [extent[1], extent[0], extent[3], extent[2]];
+                        }
+                        return extent;
+                    };
+
+                    const restoreExtentFromAxisOrientation = (extent, orientation) => {
+                        if (!Array.isArray(extent) || extent.length !== 4) return extent;
+                        if (typeof orientation !== 'string' || orientation.length < 2) return extent;
+                        const firstAxis = orientation[0]?.toLowerCase?.();
+                        const secondAxis = orientation[1]?.toLowerCase?.();
+                        if (firstAxis === 'n' && secondAxis === 'e') {
+                            return [extent[1], extent[0], extent[3], extent[2]];
+                        }
+                        return extent;
+                    };
+
+                    const enforceMetersPerPixelLimit = (width, height, url, orientation) => {
+                        if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+                            return [width, height];
+                        }
+                        if (!Number.isFinite(MAX_METERS_PER_PIXEL) || MAX_METERS_PER_PIXEL <= 0) {
+                            return [width, height];
+                        }
+                        if (typeof ol?.proj?.transformExtent !== 'function') {
+                            return [width, height];
+                        }
+                        const bboxParam = url.searchParams.get('BBOX');
+                        if (typeof bboxParam !== 'string' || bboxParam.trim().length === 0) {
+                            return [width, height];
+                        }
+                        const values = bboxParam.split(',').map((value) => Number(value));
+                        if (values.length !== 4 || values.some((value) => !Number.isFinite(value))) {
+                            return [width, height];
+                        }
+                        try {
+                            const lonLatExtent = restoreExtentFromAxisOrientation(values, orientation);
+                            const metricExtent = ol.proj.transformExtent(lonLatExtent, dataProjection, 'EPSG:3857');
+                            if (!Array.isArray(metricExtent) || metricExtent.length !== 4) {
+                                return [width, height];
+                            }
+                            const widthMeters = Math.abs(metricExtent[2] - metricExtent[0]);
+                            const heightMeters = Math.abs(metricExtent[3] - metricExtent[1]);
+                            if (widthMeters <= 0 && heightMeters <= 0) {
+                                return [width, height];
+                            }
+                            const widthFactor = widthMeters > 0 ?
+                                widthMeters / (MAX_METERS_PER_PIXEL * width) :
+                                0;
+                            const heightFactor = heightMeters > 0 ?
+                                heightMeters / (MAX_METERS_PER_PIXEL * height) :
+                                0;
+                            const scale = Math.max(1, widthFactor, heightFactor);
+                            if (scale <= 1) {
+                                return [width, height];
+                            }
+                            const nextWidth = Math.max(width, Math.ceil(width * scale));
+                            const nextHeight = Math.max(height, Math.ceil(height * scale));
+                            return [nextWidth, nextHeight];
+                        } catch (error) {
+                            console.warn('Failed to enforce WMS meters-per-pixel limit', error);
+                            return [width, height];
+                        }
+                    };
+
+                    const normalizeWmsUrl = (src, context) => {
+                        if (typeof src !== 'string' || !src) return src;
+                        try {
+                            const url = new URL(src, window.location.href);
+                            const projection = context?.projection;
+                            const orientation = getDataProjectionOrientation();
+                            const projectionCode = typeof projection?.getCode === 'function' ?
+                                projection.getCode() :
+                                (typeof projection === 'string' ? projection : null);
+                            const bboxParam = url.searchParams.get('BBOX');
+
+                            if (bboxParam && projectionCode && projectionCode !== dataProjection && typeof ol?.proj?.transformExtent === 'function') {
+                                const values = bboxParam.split(',').map((value) => Number(value));
+                                if (values.length === 4 && values.every((value) => Number.isFinite(value))) {
+                                    try {
+                                        const transformed = ol.proj.transformExtent(values, projectionCode, dataProjection);
+                                        if (Array.isArray(transformed)) {
+                                            const oriented = reorderExtentForAxisOrientation(transformed, orientation);
+                                            const formatted = oriented.map((value) => value.toFixed(8));
+                                            url.searchParams.set('BBOX', formatted.join(','));
+                                        }
+                                    } catch (error) {
+                                        console.warn('Failed to transform WMS BBOX to EPSG:4326', error);
+                                    }
+                                }
+                            }
+
+                            url.searchParams.set('CRS', dataProjection);
+                            url.searchParams.set('SRS', dataProjection);
+                            if (!url.searchParams.has('VERSION') && wmsDefaults.baseParams?.VERSION) {
+                                url.searchParams.set('VERSION', wmsDefaults.baseParams.VERSION);
+                            }
+
+                            const width = Number(url.searchParams.get('WIDTH'));
+                            const height = Number(url.searchParams.get('HEIGHT'));
+                            if (Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0) {
+                                let adjustedWidth = width;
+                                let adjustedHeight = height;
+
+                                [adjustedWidth, adjustedHeight] = enforceMetersPerPixelLimit(
+                                    adjustedWidth,
+                                    adjustedHeight,
+                                    url,
+                                    orientation
+                                );
+
+                                if (Number.isFinite(MAX_WMS_DIMENSION) && MAX_WMS_DIMENSION > 0) {
+                                    const largestDimension = Math.max(adjustedWidth, adjustedHeight);
+                                    if (largestDimension > MAX_WMS_DIMENSION) {
+                                        const scale = MAX_WMS_DIMENSION / largestDimension;
+                                        adjustedWidth = Math.max(1, Math.floor(adjustedWidth * scale));
+                                        adjustedHeight = Math.max(1, Math.floor(adjustedHeight * scale));
+                                    }
+                                }
+
+                                const limitPixels = (w, h) => {
+                                    if (!Number.isFinite(MAX_WMS_PIXELS) || MAX_WMS_PIXELS <= 0) {
+                                        return [w, h];
+                                    }
+                                    const currentPixels = w * h;
+                                    if (currentPixels <= MAX_WMS_PIXELS) {
+                                        return [w, h];
+                                    }
+                                    const scale = Math.sqrt(MAX_WMS_PIXELS / currentPixels);
+                                    let nextWidth = Math.max(1, Math.floor(w * scale));
+                                    let nextHeight = Math.max(1, Math.floor(h * scale));
+                                    while (nextWidth * nextHeight > MAX_WMS_PIXELS && (nextWidth > 1 || nextHeight > 1)) {
+                                        if (nextWidth >= nextHeight && nextWidth > 1) {
+                                            nextWidth -= 1;
+                                        } else if (nextHeight > 1) {
+                                            nextHeight -= 1;
+                                        } else {
+                                            break;
+                                        }
+                                    }
+                                    return [nextWidth, nextHeight];
+                                };
+
+                                [adjustedWidth, adjustedHeight] = limitPixels(adjustedWidth, adjustedHeight);
+
+                                if (adjustedWidth !== width) {
+                                    url.searchParams.set('WIDTH', String(adjustedWidth));
+                                }
+                                if (adjustedHeight !== height) {
+                                    url.searchParams.set('HEIGHT', String(adjustedHeight));
+                                }
+                            }
+
+                            return url.toString();
+                        } catch (error) {
+                            console.warn('Unable to normalize WMS request URL', error);
+                            return src;
+                        }
+                    };
+
+                    const createImageLoadFunction = (context) => {
+                        const fallbackLoader = typeof ol?.source?.Image?.defaultImageLoadFunction === 'function' ?
+                            ol.source.Image.defaultImageLoadFunction :
+                            ((image, source) => {
+                                if (image?.getImage) {
+                                    image.getImage().src = source;
+                                }
+                            });
+
+                        const scheduleLoad = (imageInstance, source) => {
+                            const normalizedSrc = normalizeWmsUrl(source, context);
+                            fallbackLoader(imageInstance, normalizedSrc);
+                        };
+
+                        return (image, src) => {
+                            const delay = Number.isFinite(context?.imageLoadDelay) ?
+                                context.imageLoadDelay :
+                                IMAGE_LOAD_DEBOUNCE_MS;
+
+                            if (!delay || delay <= 0) {
+                                scheduleLoad(image, src);
+                                return;
+                            }
+
+                            if (context.imageLoadTimer) {
+                                clearTimeout(context.imageLoadTimer);
+                                context.imageLoadTimer = null;
+                            }
+
+                            context.imageLoadPending = {
+                                image,
+                                src
+                            };
+                            context.imageLoadTimer = setTimeout(() => {
+                                const pending = context.imageLoadPending;
+                                context.imageLoadTimer = null;
+                                context.imageLoadPending = null;
+                                if (!pending) return;
+                                scheduleLoad(pending.image, pending.src);
+                            }, delay);
+                        };
                     };
 
                     const localState = {
@@ -2038,8 +2278,36 @@
                         geoJson: null,
                         selection: null,
                         imageryLayer: null,
-                        imagerySource: null
+                        imagerySource: null,
+                        imageLoadTimer: null,
+                        imageLoadPending: null,
+                        imageLoadDelay: IMAGE_LOAD_DEBOUNCE_MS,
+                        previewContent: cloneDefaultContent(),
+                        hasFootprint: false,
+                        imageryPayload: null,
+                        imageryExtent: null,
+                        imageryAvailable: false,
+                        imageryShown: false
                     };
+
+                    const cancelPendingImageryLoad = () => {
+                        if (localState.imageLoadTimer) {
+                            clearTimeout(localState.imageLoadTimer);
+                            localState.imageLoadTimer = null;
+                        }
+                        localState.imageLoadPending = null;
+                    };
+
+                    const imageLoadFunction = createImageLoadFunction(localState);
+
+                    const createImageSource = (url, params) => new ol.source.ImageWMS({
+                        url,
+                        params,
+                        ratio: 1,
+                        crossOrigin: 'anonymous',
+                        attributions: wmsDefaults.attribution,
+                        imageLoadFunction
+                    });
 
                     // Lazily initialize OpenLayers resources used to draw footprints.
                     const ensureContext = () => {
@@ -2048,20 +2316,16 @@
                         const projection = mapInstance?.getView?.()?.getProjection?.();
                         if (!mapInstance || !projection) return null;
 
+                        localState.map = mapInstance;
+                        localState.projection = projection;
+
                         if (!localState.imageryLayer) {
                             const imageLayerSupported = Boolean(ol?.source?.ImageWMS) && typeof ol?.layer?.Image === 'function';
                             if (imageLayerSupported) {
-                                const params = {
-                                    ...wmsDefaults.baseParams,
+                                const params = buildWmsParams({
                                     LAYERS: wmsDefaults.layerName
-                                };
-                                localState.imagerySource = new ol.source.ImageWMS({
-                                    url: wmsDefaults.baseUrl,
-                                    params,
-                                    ratio: 1,
-                                    crossOrigin: 'anonymous',
-                                    attributions: wmsDefaults.attribution
                                 });
+                                localState.imagerySource = createImageSource(wmsDefaults.baseUrl, params);
                                 localState.imageryLayer = new ol.layer.Image({
                                     source: localState.imagerySource,
                                     visible: false,
@@ -2093,8 +2357,6 @@
                         }
 
                         localState.geoJson = localState.geoJson ?? new ol.format.GeoJSON();
-                        localState.map = mapInstance;
-                        localState.projection = projection;
                         return localState;
                     };
 
@@ -2140,106 +2402,83 @@
                         return null;
                     };
 
-                    const inspectServiceEntry = (entry, accumulator) => {
-                        if (!entry) return;
-                        if (Array.isArray(entry)) {
-                            entry.forEach((value) => inspectServiceEntry(value, accumulator));
-                            return;
-                        }
-                        if (typeof entry === 'string') {
-                            const url = ensureAbsoluteUrl(entry);
-                            if (url && /wms|ogc/i.test(entry)) {
-                                accumulator.urls.push(url);
-                            }
-                            return;
-                        }
-                        if (typeof entry !== 'object') return;
-
-                        const urlKeys = ['wms', 'ogc', 'ogcWms', 'ogcUrl', 'wmsUrl', 'url', 'href', 'endpoint'];
-                        urlKeys.forEach((key) => {
-                            const value = entry[key];
-                            if (typeof value === 'string') {
-                                const url = ensureAbsoluteUrl(value);
-                                if (url && (/wms/i.test(key) || /ogc/i.test(key) || /wms|ogc/i.test(url))) {
-                                    accumulator.urls.push(url);
-                                }
-                            } else if (value && typeof value === 'object') {
-                                inspectServiceEntry(value, accumulator);
-                            }
-                        });
-
-                        const layerKeys = ['layer', 'layers', 'layerId', 'layerIds', 'layerName', 'defaultLayer'];
-                        layerKeys.forEach((key) => {
-                            const value = entry[key];
-                            toLayerArray(value).forEach((layer) => accumulator.layers.push(layer));
-                        });
-
-                        Object.entries(entry).forEach(([, value]) => {
-                            if (value && typeof value === 'object' && !Array.isArray(value)) {
-                                inspectServiceEntry(value, accumulator);
-                            }
-                        });
-                    };
-
                     const resolveImageryOptions = (payload) => {
-                        const accumulator = {
-                            urls: [],
-                            layers: []
+                        const wmsPattern = /wms|ogc/i;
+                        const layerKeys = ['layer', 'layers', 'layerId', 'layerIds', 'layerName', 'defaultLayer'];
+                        const urls = new Set();
+                        const layers = new Set();
+
+                        const pushUrl = (value, force = false) => {
+                            const url = ensureAbsoluteUrl(value);
+                            if (url && (force || wmsPattern.test(url))) {
+                                urls.add(url);
+                            }
                         };
-                        if (payload?.services && typeof payload.services === 'object') {
-                            Object.values(payload.services).forEach((service) => {
-                                inspectServiceEntry(service, accumulator);
+
+                        const pushLayers = (value) => {
+                            toLayerArray(value).forEach((layer) => {
+                                if (layer) layers.add(layer);
                             });
+                        };
+
+                        const inspectEntry = (entry) => {
+                            if (!entry) return;
+                            if (typeof entry === 'string') {
+                                pushUrl(entry);
+                                return;
+                            }
+                            if (Array.isArray(entry)) {
+                                entry.forEach(inspectEntry);
+                                return;
+                            }
+                            if (typeof entry !== 'object') return;
+
+                            Object.entries(entry).forEach(([key, value]) => {
+                                if (layerKeys.includes(key)) {
+                                    pushLayers(value);
+                                }
+                                if (typeof value === 'string') {
+                                    const isUrlKey = key === 'href' || key === 'url';
+                                    const isWmsKey = wmsPattern.test(key);
+                                    if (isUrlKey || isWmsKey) {
+                                        pushUrl(value, isWmsKey);
+                                    } else if (layerKeys.includes(key)) {
+                                        pushLayers(value);
+                                    } else if (wmsPattern.test(value)) {
+                                        pushUrl(value);
+                                    }
+                                } else {
+                                    inspectEntry(value);
+                                }
+                            });
+                        };
+
+                        if (payload?.services) {
+                            inspectEntry(payload.services);
                         }
+
                         if (Array.isArray(payload?.links)) {
                             payload.links.forEach((link) => {
-                                const rel = String(link?.rel ?? '');
-                                const type = String(link?.type ?? '');
-                                const title = String(link?.title ?? '');
-                                if (/wms|ogc/i.test(rel) || /wms|ogc/i.test(type) || /wms|ogc/i.test(title)) {
-                                    const url = ensureAbsoluteUrl(link?.href);
-                                    if (url) {
-                                        accumulator.urls.push(url);
-                                    }
+                                const meta = `${link?.rel ?? ''} ${link?.type ?? ''} ${link?.title ?? ''}`;
+                                if (wmsPattern.test(meta)) {
+                                    pushUrl(link?.href, true);
                                 }
-                            });
-                        }
-                        if (payload?.assets && typeof payload.assets === 'object') {
-                            Object.values(payload.assets).forEach((asset) => {
-                                if (typeof asset === 'string') {
-                                    const url = ensureAbsoluteUrl(asset);
-                                    if (url && /wms|ogc/i.test(url)) {
-                                        accumulator.urls.push(url);
-                                    }
-                                    return;
-                                }
-                                if (asset && typeof asset === 'object') {
-                                    ['href', 'url', 'wms', 'ogc'].forEach((key) => {
-                                        const value = asset[key];
-                                        if (typeof value === 'string') {
-                                            const url = ensureAbsoluteUrl(value);
-                                            if (url && (/wms/i.test(key) || /ogc/i.test(key) || /wms|ogc/i.test(url))) {
-                                                accumulator.urls.push(url);
-                                            }
-                                        }
-                                    });
-                                    ['layer', 'layers', 'layerId', 'layerIds'].forEach((key) => {
-                                        const value = asset[key];
-                                        toLayerArray(value).forEach((layer) => accumulator.layers.push(layer));
-                                    });
-                                }
+                                inspectEntry(link);
                             });
                         }
 
-                        const uniqueUrls = Array.from(new Set(accumulator.urls));
-                        const fallbackUrl = wmsDefaults.baseUrl;
-                        const resolvedUrl = uniqueUrls.find((url) => /\/wms\//i.test(url)) || uniqueUrls[0] || fallbackUrl;
-                        const resolvedLayers = [wmsDefaults.layerName];
-                        const time = resolveWmsTimeParam(payload);
+                        if (payload?.assets && typeof payload.assets === 'object') {
+                            Object.values(payload.assets).forEach(inspectEntry);
+                        }
+
+                        const sortedUrls = Array.from(urls);
+                        const url = sortedUrls.find((value) => /\/wms\//i.test(value)) || sortedUrls[0] || wmsDefaults.baseUrl;
+                        const resolvedLayers = layers.size ? Array.from(layers) : [wmsDefaults.layerName];
+
                         return {
-                            url: resolvedUrl,
+                            url,
                             layers: resolvedLayers,
-                            time
+                            time: resolveWmsTimeParam(payload)
                         };
                     };
 
@@ -2267,17 +2506,16 @@
                         }
                         const options = resolveImageryOptions(payload);
                         const url = ensureAbsoluteUrl(options?.url) || wmsDefaults.baseUrl;
-                        const layerName = wmsDefaults.layerName;
+                        const layerName = Array.isArray(options?.layers) && options.layers.length > 0 ? options.layers.join(',') : wmsDefaults.layerName;
 
                         if (!url || !layerName) {
                             localState.imageryLayer.setVisible(false);
                             return false;
                         }
 
-                        const params = {
-                            ...wmsDefaults.baseParams,
+                        const params = buildWmsParams({
                             LAYERS: layerName
-                        };
+                        });
 
                         if (options?.time) {
                             params.TIME = options.time;
@@ -2288,13 +2526,7 @@
                             params.token = token;
                         }
 
-                        const source = new ol.source.ImageWMS({
-                            url,
-                            params,
-                            ratio: 1,
-                            crossOrigin: 'anonymous',
-                            attributions: wmsDefaults.attribution
-                        });
+                        const source = createImageSource(url, params);
                         localState.imagerySource = source;
                         localState.imageryLayer.setSource(source);
 
@@ -2329,6 +2561,37 @@
                             previewElements.details.classList.toggle('hidden', !next.details);
                         }
                         if (previewElements.status) previewElements.status.textContent = next.status;
+                    };
+
+                    const resetPreviewContent = () => {
+                        localState.previewContent = cloneDefaultContent();
+                        setPanelContent(localState.previewContent);
+                    };
+
+                    const applyPreviewContent = (content = {}) => {
+                        localState.previewContent = {
+                            ...cloneDefaultContent(),
+                            ...content
+                        };
+                        setPanelContent(localState.previewContent);
+                    };
+
+                    const updateStatus = (message) => {
+                        localState.previewContent = {
+                            ...localState.previewContent,
+                            status: buildStatusMessage(message)
+                        };
+                        setPanelContent(localState.previewContent);
+                    };
+
+                    const getFootprintStatus = () => {
+                        if (!localState.hasFootprint) {
+                            return 'Coverage area unavailable for this product.';
+                        }
+                        if (localState.imageryAvailable) {
+                            return 'Coverage footprint displayed on the map. Use the "Preview Imagery" button to display the Sentinel scene.';
+                        }
+                        return 'Coverage footprint displayed on the map. Imagery preview unavailable.';
                     };
 
                     // Animate the main map to zoom onto the preview geometry.
@@ -2386,23 +2649,43 @@
                             previewElements.clearButton.disabled = !hasSelection;
                             previewElements.clearButton.setAttribute('aria-disabled', hasSelection ? 'false' : 'true');
                         }
-                        if (!previewElements.downloadButton) return;
-                        if (hasSelection && localState.selection.downloadUrl && hasToken()) {
-                            previewElements.downloadButton.classList.remove('hidden');
-                            previewElements.downloadButton.setAttribute('href', localState.selection.downloadUrl);
-                            previewElements.downloadButton.setAttribute('aria-disabled', 'false');
-                            previewElements.downloadButton.setAttribute('title', `Download full scene for ${localState.selection.label}`);
-                            previewElements.downloadButton.setAttribute('download', localState.selection.downloadFilename);
-                            previewElements.downloadButton.dataset.downloadBase = localState.selection.downloadBase ?? '';
-                            previewElements.downloadButton.tabIndex = 0;
-                        } else {
-                            previewElements.downloadButton.classList.add('hidden');
-                            previewElements.downloadButton.removeAttribute('href');
-                            previewElements.downloadButton.removeAttribute('download');
-                            previewElements.downloadButton.removeAttribute('title');
-                            previewElements.downloadButton.setAttribute('aria-disabled', 'true');
-                            delete previewElements.downloadButton.dataset.downloadBase;
-                            previewElements.downloadButton.tabIndex = -1;
+                        if (previewElements.imageryButton) {
+                            const canShowImagery = hasSelection && localState.imageryAvailable;
+                            previewElements.imageryButton.classList.toggle('hidden', !canShowImagery);
+                            previewElements.imageryButton.disabled = !canShowImagery;
+                            previewElements.imageryButton.setAttribute('aria-disabled', canShowImagery ? 'false' : 'true');
+                            previewElements.imageryButton.setAttribute('aria-pressed', localState.imageryShown ? 'true' : 'false');
+                            if (canShowImagery) {
+                                previewElements.imageryButton.title = localState.imageryShown ? 'Hide Sentinel imagery from the map' : 'Display Sentinel imagery on the map';
+                            } else {
+                                previewElements.imageryButton.removeAttribute('title');
+                            }
+                            if (previewElements.imageryLabel) {
+                                previewElements.imageryLabel.textContent = localState.imageryShown ? 'Hide Imagery' : 'Preview Imagery';
+                            }
+                            if (previewElements.imageryIcon) {
+                                previewElements.imageryIcon.classList.toggle('ri-eye-line', !localState.imageryShown);
+                                previewElements.imageryIcon.classList.toggle('ri-eye-off-line', localState.imageryShown);
+                            }
+                        }
+                        if (previewElements.downloadButton) {
+                            if (hasSelection && localState.selection.downloadUrl && hasToken()) {
+                                previewElements.downloadButton.classList.remove('hidden');
+                                previewElements.downloadButton.setAttribute('href', localState.selection.downloadUrl);
+                                previewElements.downloadButton.setAttribute('aria-disabled', 'false');
+                                previewElements.downloadButton.setAttribute('title', `Download full scene for ${localState.selection.label}`);
+                                previewElements.downloadButton.setAttribute('download', localState.selection.downloadFilename);
+                                previewElements.downloadButton.dataset.downloadBase = localState.selection.downloadBase ?? '';
+                                previewElements.downloadButton.tabIndex = 0;
+                            } else {
+                                previewElements.downloadButton.classList.add('hidden');
+                                previewElements.downloadButton.removeAttribute('href');
+                                previewElements.downloadButton.removeAttribute('download');
+                                previewElements.downloadButton.removeAttribute('title');
+                                previewElements.downloadButton.setAttribute('aria-disabled', 'true');
+                                delete previewElements.downloadButton.dataset.downloadBase;
+                                previewElements.downloadButton.tabIndex = -1;
+                            }
                         }
                     };
 
@@ -2410,6 +2693,7 @@
                     const show = (payload) => {
                         const context = ensureContext();
                         if (!context) return;
+                        cancelPendingImageryLoad();
                         context.source?.clear();
                         context.layer?.setVisible(false);
                         if (localState.imageryLayer) {
@@ -2418,9 +2702,14 @@
                         }
                         localState.imagerySource = null;
                         localState.selection = null;
+                        localState.imageryPayload = null;
+                        localState.imageryExtent = null;
+                        localState.imageryAvailable = false;
+                        localState.imageryShown = false;
+                        localState.hasFootprint = false;
+                        resetPreviewContent();
                         updateActions();
                         if (!payload) {
-                            setPanelContent();
                             setPanelVisible(false);
                             if (localState.imageryLayer) {
                                 localState.imageryLayer.setVisible(false);
@@ -2448,23 +2737,24 @@
                             if (featureExtent) {
                                 focusExtent(featureExtent);
                             }
+                            localState.hasFootprint = true;
                         }
-                        const imageryShown = applyImageryPreview(payload, featureExtent);
+                        if (localState.imageryLayer && localState.hasFootprint) {
+                            localState.imageryPayload = payload;
+                            localState.imageryExtent = featureExtent;
+                            localState.imageryAvailable = true;
+                        }
                         const downloadBase = payload.downloadUrlBase || payload.downloadUrl || null;
                         const downloadUrl = applyTokenToUrl(downloadBase);
                         const downloadFilename = payload.downloadFilename ?? buildDownloadName(payload.productId, title);
-                        const statusMessage = feature ?
-                            (imageryShown ?
-                                'Coverage footprint and true color scene displayed on the map.' :
-                                'Coverage footprint displayed on the map. Imagery preview unavailable.') :
-                            'Coverage area unavailable for this product.';
+                        const statusMessage = getFootprintStatus();
                         localState.selection = {
                             downloadUrl,
                             downloadBase,
                             downloadFilename,
                             label: title
                         };
-                        setPanelContent({
+                        applyPreviewContent({
                             title,
                             acquired: acquiredText,
                             details,
@@ -2474,9 +2764,52 @@
                         updateActions();
                     };
 
+                    const showImagery = () => {
+                        const context = ensureContext();
+                        if (!context || !localState.imageryAvailable || !localState.imageryPayload) {
+                            return false;
+                        }
+                        const result = applyImageryPreview(localState.imageryPayload, localState.imageryExtent);
+                        if (result) {
+                            localState.imageryShown = true;
+                            updateStatus('Coverage footprint and true color scene displayed on the map.');
+                        } else {
+                            localState.imageryAvailable = false;
+                            localState.imageryShown = false;
+                            if (localState.imageryLayer) {
+                                localState.imageryLayer.setVisible(false);
+                                localState.imageryLayer.setExtent(undefined);
+                            }
+                            updateStatus(getFootprintStatus());
+                        }
+                        updateActions();
+                        return result;
+                    };
+
+                    const hideImagery = () => {
+                        cancelPendingImageryLoad();
+                        if (localState.imageryLayer) {
+                            localState.imageryLayer.setVisible(false);
+                            localState.imageryLayer.setExtent(undefined);
+                        }
+                        localState.imagerySource = null;
+                        localState.imageryShown = false;
+                        updateStatus(getFootprintStatus());
+                        updateActions();
+                        return true;
+                    };
+
+                    const toggleImagery = () => {
+                        if (localState.imageryShown) {
+                            return hideImagery();
+                        }
+                        return showImagery();
+                    };
+
                     // Remove any preview selection and restore default messaging.
                     const clear = () => {
                         localState.selection = null;
+                        cancelPendingImageryLoad();
                         localState.source?.clear();
                         localState.layer?.setVisible(false);
                         if (localState.imageryLayer) {
@@ -2484,19 +2817,27 @@
                             localState.imageryLayer.setExtent(undefined);
                         }
                         localState.imagerySource = null;
-                        setPanelContent(defaultContent);
+                        localState.imageryPayload = null;
+                        localState.imageryExtent = null;
+                        localState.imageryAvailable = false;
+                        localState.imageryShown = false;
+                        localState.hasFootprint = false;
+                        resetPreviewContent();
                         setPanelVisible(false);
                         updateActions();
                     };
 
-                    setPanelContent(defaultContent);
+                    resetPreviewContent();
                     setPanelVisible(false);
                     updateActions();
 
                     return {
                         ensure: ensureContext,
                         show,
-                        clear
+                        clear,
+                        showImagery,
+                        hideImagery,
+                        toggleImagery
                     };
                 };
 
@@ -2518,6 +2859,13 @@
                     previewElements.clearButton.addEventListener('click', (event) => {
                         event.preventDefault();
                         previewModule.clear();
+                    });
+                }
+
+                if (previewElements.imageryButton) {
+                    previewElements.imageryButton.addEventListener('click', (event) => {
+                        event.preventDefault();
+                        previewModule.toggleImagery();
                     });
                 }
 
