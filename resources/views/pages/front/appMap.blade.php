@@ -584,6 +584,10 @@
                     </div>
                     <p class="text-foreground/70 mt-2 text-xs" data-sentinel-preview-status>Awaiting preview selection.</p>
                     <div class="mt-2 flex flex-wrap gap-1.5" id="sentinelPreviewActions">
+                        <button class="bg-foreground/10 hover:bg-foreground/20 inline-flex hidden items-center space-x-1 rounded-lg px-2 py-1 text-xs font-semibold transition" id="sentinelPreviewImageryBtn" type="button" aria-pressed="false" aria-disabled="true">
+                            <i class="ri-eye-line text-sm" data-sentinel-preview-imagery-icon></i>
+                            <span data-sentinel-preview-imagery-label>Preview Imagery</span>
+                        </button>
                         <a class="bg-primary text-background hover:bg-primary/90 inline-flex hidden items-center space-x-1 rounded-lg px-2 py-1 text-xs font-semibold transition" id="sentinelPreviewDownloadBtn" href="#" aria-disabled="true" target="_blank" rel="noopener noreferrer">
                             <i class="ri-download-cloud-2-line text-sm"></i>
                             <span>Download Scene</span>
@@ -1692,7 +1696,10 @@
                     details: previewPanelEl?.querySelector('[data-sentinel-preview-details]') ?? null,
                     status: previewPanelEl?.querySelector('[data-sentinel-preview-status]') ?? null,
                     clearButton: document.getElementById('sentinelPreviewClearBtn'),
-                    downloadButton: document.getElementById('sentinelPreviewDownloadBtn')
+                    downloadButton: document.getElementById('sentinelPreviewDownloadBtn'),
+                    imageryButton: document.getElementById('sentinelPreviewImageryBtn'),
+                    imageryLabel: previewPanelEl?.querySelector('[data-sentinel-preview-imagery-label]') ?? null,
+                    imageryIcon: previewPanelEl?.querySelector('[data-sentinel-preview-imagery-icon]') ?? null
                 };
 
                 if (!statusEl || !listEl || !templateEl) {
@@ -2018,6 +2025,10 @@
                         status: previewElements.status?.textContent ?? ''
                     };
 
+                    const cloneDefaultContent = () => ({
+                        ...defaultContent
+                    });
+
                     const dataProjection = 'EPSG:4326';
                     const wmsDefaults = {
                         baseUrl: 'https://sh.dataspace.copernicus.eu/ogc/wms/1bd0fec1-0e52-427a-8e83-6e0dcd29a03a',
@@ -2270,7 +2281,13 @@
                         imagerySource: null,
                         imageLoadTimer: null,
                         imageLoadPending: null,
-                        imageLoadDelay: IMAGE_LOAD_DEBOUNCE_MS
+                        imageLoadDelay: IMAGE_LOAD_DEBOUNCE_MS,
+                        previewContent: cloneDefaultContent(),
+                        hasFootprint: false,
+                        imageryPayload: null,
+                        imageryExtent: null,
+                        imageryAvailable: false,
+                        imageryShown: false
                     };
 
                     const cancelPendingImageryLoad = () => {
@@ -2546,6 +2563,37 @@
                         if (previewElements.status) previewElements.status.textContent = next.status;
                     };
 
+                    const resetPreviewContent = () => {
+                        localState.previewContent = cloneDefaultContent();
+                        setPanelContent(localState.previewContent);
+                    };
+
+                    const applyPreviewContent = (content = {}) => {
+                        localState.previewContent = {
+                            ...cloneDefaultContent(),
+                            ...content
+                        };
+                        setPanelContent(localState.previewContent);
+                    };
+
+                    const updateStatus = (message) => {
+                        localState.previewContent = {
+                            ...localState.previewContent,
+                            status: buildStatusMessage(message)
+                        };
+                        setPanelContent(localState.previewContent);
+                    };
+
+                    const getFootprintStatus = () => {
+                        if (!localState.hasFootprint) {
+                            return 'Coverage area unavailable for this product.';
+                        }
+                        if (localState.imageryAvailable) {
+                            return 'Coverage footprint displayed on the map. Use the "Preview Imagery" button to display the Sentinel scene.';
+                        }
+                        return 'Coverage footprint displayed on the map. Imagery preview unavailable.';
+                    };
+
                     // Animate the main map to zoom onto the preview geometry.
                     const focusExtent = (extent) => {
                         if (!extent || !localState.map) return;
@@ -2601,23 +2649,43 @@
                             previewElements.clearButton.disabled = !hasSelection;
                             previewElements.clearButton.setAttribute('aria-disabled', hasSelection ? 'false' : 'true');
                         }
-                        if (!previewElements.downloadButton) return;
-                        if (hasSelection && localState.selection.downloadUrl && hasToken()) {
-                            previewElements.downloadButton.classList.remove('hidden');
-                            previewElements.downloadButton.setAttribute('href', localState.selection.downloadUrl);
-                            previewElements.downloadButton.setAttribute('aria-disabled', 'false');
-                            previewElements.downloadButton.setAttribute('title', `Download full scene for ${localState.selection.label}`);
-                            previewElements.downloadButton.setAttribute('download', localState.selection.downloadFilename);
-                            previewElements.downloadButton.dataset.downloadBase = localState.selection.downloadBase ?? '';
-                            previewElements.downloadButton.tabIndex = 0;
-                        } else {
-                            previewElements.downloadButton.classList.add('hidden');
-                            previewElements.downloadButton.removeAttribute('href');
-                            previewElements.downloadButton.removeAttribute('download');
-                            previewElements.downloadButton.removeAttribute('title');
-                            previewElements.downloadButton.setAttribute('aria-disabled', 'true');
-                            delete previewElements.downloadButton.dataset.downloadBase;
-                            previewElements.downloadButton.tabIndex = -1;
+                        if (previewElements.imageryButton) {
+                            const canShowImagery = hasSelection && localState.imageryAvailable;
+                            previewElements.imageryButton.classList.toggle('hidden', !canShowImagery);
+                            previewElements.imageryButton.disabled = !canShowImagery;
+                            previewElements.imageryButton.setAttribute('aria-disabled', canShowImagery ? 'false' : 'true');
+                            previewElements.imageryButton.setAttribute('aria-pressed', localState.imageryShown ? 'true' : 'false');
+                            if (canShowImagery) {
+                                previewElements.imageryButton.title = localState.imageryShown ? 'Hide Sentinel imagery from the map' : 'Display Sentinel imagery on the map';
+                            } else {
+                                previewElements.imageryButton.removeAttribute('title');
+                            }
+                            if (previewElements.imageryLabel) {
+                                previewElements.imageryLabel.textContent = localState.imageryShown ? 'Hide Imagery' : 'Preview Imagery';
+                            }
+                            if (previewElements.imageryIcon) {
+                                previewElements.imageryIcon.classList.toggle('ri-eye-line', !localState.imageryShown);
+                                previewElements.imageryIcon.classList.toggle('ri-eye-off-line', localState.imageryShown);
+                            }
+                        }
+                        if (previewElements.downloadButton) {
+                            if (hasSelection && localState.selection.downloadUrl && hasToken()) {
+                                previewElements.downloadButton.classList.remove('hidden');
+                                previewElements.downloadButton.setAttribute('href', localState.selection.downloadUrl);
+                                previewElements.downloadButton.setAttribute('aria-disabled', 'false');
+                                previewElements.downloadButton.setAttribute('title', `Download full scene for ${localState.selection.label}`);
+                                previewElements.downloadButton.setAttribute('download', localState.selection.downloadFilename);
+                                previewElements.downloadButton.dataset.downloadBase = localState.selection.downloadBase ?? '';
+                                previewElements.downloadButton.tabIndex = 0;
+                            } else {
+                                previewElements.downloadButton.classList.add('hidden');
+                                previewElements.downloadButton.removeAttribute('href');
+                                previewElements.downloadButton.removeAttribute('download');
+                                previewElements.downloadButton.removeAttribute('title');
+                                previewElements.downloadButton.setAttribute('aria-disabled', 'true');
+                                delete previewElements.downloadButton.dataset.downloadBase;
+                                previewElements.downloadButton.tabIndex = -1;
+                            }
                         }
                     };
 
@@ -2634,9 +2702,14 @@
                         }
                         localState.imagerySource = null;
                         localState.selection = null;
+                        localState.imageryPayload = null;
+                        localState.imageryExtent = null;
+                        localState.imageryAvailable = false;
+                        localState.imageryShown = false;
+                        localState.hasFootprint = false;
+                        resetPreviewContent();
                         updateActions();
                         if (!payload) {
-                            setPanelContent();
                             setPanelVisible(false);
                             if (localState.imageryLayer) {
                                 localState.imageryLayer.setVisible(false);
@@ -2664,23 +2737,24 @@
                             if (featureExtent) {
                                 focusExtent(featureExtent);
                             }
+                            localState.hasFootprint = true;
                         }
-                        const imageryShown = applyImageryPreview(payload, featureExtent);
+                        if (localState.imageryLayer && localState.hasFootprint) {
+                            localState.imageryPayload = payload;
+                            localState.imageryExtent = featureExtent;
+                            localState.imageryAvailable = true;
+                        }
                         const downloadBase = payload.downloadUrlBase || payload.downloadUrl || null;
                         const downloadUrl = applyTokenToUrl(downloadBase);
                         const downloadFilename = payload.downloadFilename ?? buildDownloadName(payload.productId, title);
-                        const statusMessage = feature ?
-                            (imageryShown ?
-                                'Coverage footprint and true color scene displayed on the map.' :
-                                'Coverage footprint displayed on the map. Imagery preview unavailable.') :
-                            'Coverage area unavailable for this product.';
+                        const statusMessage = getFootprintStatus();
                         localState.selection = {
                             downloadUrl,
                             downloadBase,
                             downloadFilename,
                             label: title
                         };
-                        setPanelContent({
+                        applyPreviewContent({
                             title,
                             acquired: acquiredText,
                             details,
@@ -2688,6 +2762,48 @@
                         });
                         setPanelVisible(true);
                         updateActions();
+                    };
+
+                    const showImagery = () => {
+                        const context = ensureContext();
+                        if (!context || !localState.imageryAvailable || !localState.imageryPayload) {
+                            return false;
+                        }
+                        const result = applyImageryPreview(localState.imageryPayload, localState.imageryExtent);
+                        if (result) {
+                            localState.imageryShown = true;
+                            updateStatus('Coverage footprint and true color scene displayed on the map.');
+                        } else {
+                            localState.imageryAvailable = false;
+                            localState.imageryShown = false;
+                            if (localState.imageryLayer) {
+                                localState.imageryLayer.setVisible(false);
+                                localState.imageryLayer.setExtent(undefined);
+                            }
+                            updateStatus(getFootprintStatus());
+                        }
+                        updateActions();
+                        return result;
+                    };
+
+                    const hideImagery = () => {
+                        cancelPendingImageryLoad();
+                        if (localState.imageryLayer) {
+                            localState.imageryLayer.setVisible(false);
+                            localState.imageryLayer.setExtent(undefined);
+                        }
+                        localState.imagerySource = null;
+                        localState.imageryShown = false;
+                        updateStatus(getFootprintStatus());
+                        updateActions();
+                        return true;
+                    };
+
+                    const toggleImagery = () => {
+                        if (localState.imageryShown) {
+                            return hideImagery();
+                        }
+                        return showImagery();
                     };
 
                     // Remove any preview selection and restore default messaging.
@@ -2701,19 +2817,27 @@
                             localState.imageryLayer.setExtent(undefined);
                         }
                         localState.imagerySource = null;
-                        setPanelContent(defaultContent);
+                        localState.imageryPayload = null;
+                        localState.imageryExtent = null;
+                        localState.imageryAvailable = false;
+                        localState.imageryShown = false;
+                        localState.hasFootprint = false;
+                        resetPreviewContent();
                         setPanelVisible(false);
                         updateActions();
                     };
 
-                    setPanelContent(defaultContent);
+                    resetPreviewContent();
                     setPanelVisible(false);
                     updateActions();
 
                     return {
                         ensure: ensureContext,
                         show,
-                        clear
+                        clear,
+                        showImagery,
+                        hideImagery,
+                        toggleImagery
                     };
                 };
 
@@ -2735,6 +2859,13 @@
                     previewElements.clearButton.addEventListener('click', (event) => {
                         event.preventDefault();
                         previewModule.clear();
+                    });
+                }
+
+                if (previewElements.imageryButton) {
+                    previewElements.imageryButton.addEventListener('click', (event) => {
+                        event.preventDefault();
+                        previewModule.toggleImagery();
                     });
                 }
 
