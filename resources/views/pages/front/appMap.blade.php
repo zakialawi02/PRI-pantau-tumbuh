@@ -2031,13 +2031,24 @@
                         attribution: 'Sentinel Hub / Copernicus Data Space Ecosystem'
                     };
 
-                    const MAX_WMS_PIXELS = 250000;
-                    const MAX_WMS_DIMENSION = Math.floor(Math.sqrt(MAX_WMS_PIXELS));
+                    const MAX_METERS_PER_PIXEL = 200;
+                    const MAX_WMS_DIMENSION = 4096;
+                    const MAX_WMS_PIXELS = MAX_WMS_DIMENSION * MAX_WMS_DIMENSION;
 
                     const buildWmsParams = (overrides = {}) => ({
                         ...wmsDefaults.baseParams,
                         ...overrides
                     });
+
+                    const getDataProjectionOrientation = () => {
+                        if (typeof ol?.proj?.get !== 'function') return 'ne';
+                        try {
+                            return ol.proj.get(dataProjection)?.getAxisOrientation?.() ?? 'ne';
+                        } catch (error) {
+                            console.warn('Failed to read projection axis orientation', error);
+                            return 'ne';
+                        }
+                    };
 
                     const reorderExtentForAxisOrientation = (extent, orientation) => {
                         if (!Array.isArray(extent) || extent.length !== 4) return extent;
@@ -2050,11 +2061,71 @@
                         return extent;
                     };
 
+                    const restoreExtentFromAxisOrientation = (extent, orientation) => {
+                        if (!Array.isArray(extent) || extent.length !== 4) return extent;
+                        if (typeof orientation !== 'string' || orientation.length < 2) return extent;
+                        const firstAxis = orientation[0]?.toLowerCase?.();
+                        const secondAxis = orientation[1]?.toLowerCase?.();
+                        if (firstAxis === 'n' && secondAxis === 'e') {
+                            return [extent[1], extent[0], extent[3], extent[2]];
+                        }
+                        return extent;
+                    };
+
+                    const enforceMetersPerPixelLimit = (width, height, url, orientation) => {
+                        if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+                            return [width, height];
+                        }
+                        if (!Number.isFinite(MAX_METERS_PER_PIXEL) || MAX_METERS_PER_PIXEL <= 0) {
+                            return [width, height];
+                        }
+                        if (typeof ol?.proj?.transformExtent !== 'function') {
+                            return [width, height];
+                        }
+                        const bboxParam = url.searchParams.get('BBOX');
+                        if (typeof bboxParam !== 'string' || bboxParam.trim().length === 0) {
+                            return [width, height];
+                        }
+                        const values = bboxParam.split(',').map((value) => Number(value));
+                        if (values.length !== 4 || values.some((value) => !Number.isFinite(value))) {
+                            return [width, height];
+                        }
+                        try {
+                            const lonLatExtent = restoreExtentFromAxisOrientation(values, orientation);
+                            const metricExtent = ol.proj.transformExtent(lonLatExtent, dataProjection, 'EPSG:3857');
+                            if (!Array.isArray(metricExtent) || metricExtent.length !== 4) {
+                                return [width, height];
+                            }
+                            const widthMeters = Math.abs(metricExtent[2] - metricExtent[0]);
+                            const heightMeters = Math.abs(metricExtent[3] - metricExtent[1]);
+                            if (widthMeters <= 0 && heightMeters <= 0) {
+                                return [width, height];
+                            }
+                            const widthFactor = widthMeters > 0
+                                ? widthMeters / (MAX_METERS_PER_PIXEL * width)
+                                : 0;
+                            const heightFactor = heightMeters > 0
+                                ? heightMeters / (MAX_METERS_PER_PIXEL * height)
+                                : 0;
+                            const scale = Math.max(1, widthFactor, heightFactor);
+                            if (scale <= 1) {
+                                return [width, height];
+                            }
+                            const nextWidth = Math.max(width, Math.ceil(width * scale));
+                            const nextHeight = Math.max(height, Math.ceil(height * scale));
+                            return [nextWidth, nextHeight];
+                        } catch (error) {
+                            console.warn('Failed to enforce WMS meters-per-pixel limit', error);
+                            return [width, height];
+                        }
+                    };
+
                     const normalizeWmsUrl = (src, context) => {
                         if (typeof src !== 'string' || !src) return src;
                         try {
                             const url = new URL(src, window.location.href);
                             const projection = context?.projection;
+                            const orientation = getDataProjectionOrientation();
                             const projectionCode = typeof projection?.getCode === 'function'
                                 ? projection.getCode()
                                 : (typeof projection === 'string' ? projection : null);
@@ -2066,9 +2137,6 @@
                                     try {
                                         const transformed = ol.proj.transformExtent(values, projectionCode, dataProjection);
                                         if (Array.isArray(transformed)) {
-                                            const orientation = typeof ol?.proj?.get === 'function'
-                                                ? ol.proj.get(dataProjection)?.getAxisOrientation?.()
-                                                : null;
                                             const oriented = reorderExtentForAxisOrientation(transformed, orientation);
                                             const formatted = oriented.map((value) => value.toFixed(8));
                                             url.searchParams.set('BBOX', formatted.join(','));
@@ -2088,14 +2156,24 @@
                             const width = Number(url.searchParams.get('WIDTH'));
                             const height = Number(url.searchParams.get('HEIGHT'));
                             if (Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0) {
-                                const maxDimension = Number.isFinite(MAX_WMS_DIMENSION) && MAX_WMS_DIMENSION > 0
-                                    ? MAX_WMS_DIMENSION
-                                    : null;
-                                const dimensionScale = maxDimension
-                                    ? Math.min(1, maxDimension / Math.max(width, height))
-                                    : 1;
-                                let adjustedWidth = Math.max(1, Math.floor(width * dimensionScale));
-                                let adjustedHeight = Math.max(1, Math.floor(height * dimensionScale));
+                                let adjustedWidth = width;
+                                let adjustedHeight = height;
+
+                                [adjustedWidth, adjustedHeight] = enforceMetersPerPixelLimit(
+                                    adjustedWidth,
+                                    adjustedHeight,
+                                    url,
+                                    orientation
+                                );
+
+                                if (Number.isFinite(MAX_WMS_DIMENSION) && MAX_WMS_DIMENSION > 0) {
+                                    const largestDimension = Math.max(adjustedWidth, adjustedHeight);
+                                    if (largestDimension > MAX_WMS_DIMENSION) {
+                                        const scale = MAX_WMS_DIMENSION / largestDimension;
+                                        adjustedWidth = Math.max(1, Math.floor(adjustedWidth * scale));
+                                        adjustedHeight = Math.max(1, Math.floor(adjustedHeight * scale));
+                                    }
+                                }
 
                                 const limitPixels = (w, h) => {
                                     if (!Number.isFinite(MAX_WMS_PIXELS) || MAX_WMS_PIXELS <= 0) {
