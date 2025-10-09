@@ -568,8 +568,8 @@
             </div>
 
             <!-- Sentinel Preview Panel -->
-            <div class="absolute left-2 right-2 top-20 z-40 flex justify-end sm:left-auto sm:right-2 sm:w-80">
-                <div class="border-foreground/15 bg-background/95 supports-[backdrop-filter]:bg-background/70 pointer-events-auto hidden w-full max-w-md break-all rounded-xl border p-2 text-xs shadow-lg backdrop-blur" id="sentinelPreviewPanel">
+            <div class="absolute bottom-0 right-0 top-auto z-50 flex w-full justify-end shadow-xl md:bottom-auto md:right-2 md:top-20 md:w-80">
+                <div class="border-foreground/15 bg-background/95 supports-[backdrop-filter]:bg-background/70 pointer-events-auto hidden break-all rounded-xl border p-2 text-xs shadow-xl backdrop-blur" id="sentinelPreviewPanel">
                     <div class="flex items-start justify-between gap-2">
                         <div class="space-y-1">
                             <p class="text-primary text-[10px] font-semibold uppercase tracking-wide">Sentinel-2 Preview</p>
