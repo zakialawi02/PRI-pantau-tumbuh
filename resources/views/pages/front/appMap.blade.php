@@ -2102,12 +2102,12 @@
                             if (widthMeters <= 0 && heightMeters <= 0) {
                                 return [width, height];
                             }
-                            const widthFactor = widthMeters > 0
-                                ? widthMeters / (MAX_METERS_PER_PIXEL * width)
-                                : 0;
-                            const heightFactor = heightMeters > 0
-                                ? heightMeters / (MAX_METERS_PER_PIXEL * height)
-                                : 0;
+                            const widthFactor = widthMeters > 0 ?
+                                widthMeters / (MAX_METERS_PER_PIXEL * width) :
+                                0;
+                            const heightFactor = heightMeters > 0 ?
+                                heightMeters / (MAX_METERS_PER_PIXEL * height) :
+                                0;
                             const scale = Math.max(1, widthFactor, heightFactor);
                             if (scale <= 1) {
                                 return [width, height];
@@ -2127,9 +2127,9 @@
                             const url = new URL(src, window.location.href);
                             const projection = context?.projection;
                             const orientation = getDataProjectionOrientation();
-                            const projectionCode = typeof projection?.getCode === 'function'
-                                ? projection.getCode()
-                                : (typeof projection === 'string' ? projection : null);
+                            const projectionCode = typeof projection?.getCode === 'function' ?
+                                projection.getCode() :
+                                (typeof projection === 'string' ? projection : null);
                             const bboxParam = url.searchParams.get('BBOX');
 
                             if (bboxParam && projectionCode && projectionCode !== dataProjection && typeof ol?.proj?.transformExtent === 'function') {
@@ -2217,9 +2217,9 @@
                     };
 
                     const createImageLoadFunction = (context) => {
-                        const fallbackLoader = typeof ol?.source?.Image?.defaultImageLoadFunction === 'function'
-                            ? ol.source.Image.defaultImageLoadFunction
-                            : ((image, source) => {
+                        const fallbackLoader = typeof ol?.source?.Image?.defaultImageLoadFunction === 'function' ?
+                            ol.source.Image.defaultImageLoadFunction :
+                            ((image, source) => {
                                 if (image?.getImage) {
                                     image.getImage().src = source;
                                 }
@@ -2231,9 +2231,9 @@
                         };
 
                         return (image, src) => {
-                            const delay = Number.isFinite(context?.imageLoadDelay)
-                                ? context.imageLoadDelay
-                                : IMAGE_LOAD_DEBOUNCE_MS;
+                            const delay = Number.isFinite(context?.imageLoadDelay) ?
+                                context.imageLoadDelay :
+                                IMAGE_LOAD_DEBOUNCE_MS;
 
                             if (!delay || delay <= 0) {
                                 scheduleLoad(image, src);
@@ -2245,7 +2245,10 @@
                                 context.imageLoadTimer = null;
                             }
 
-                            context.imageLoadPending = { image, src };
+                            context.imageLoadPending = {
+                                image,
+                                src
+                            };
                             context.imageLoadTimer = setTimeout(() => {
                                 const pending = context.imageLoadPending;
                                 context.imageLoadTimer = null;
