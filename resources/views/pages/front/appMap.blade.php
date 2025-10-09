@@ -2034,6 +2034,7 @@
                     const MAX_METERS_PER_PIXEL = 200;
                     const MAX_WMS_DIMENSION = 4096;
                     const MAX_WMS_PIXELS = MAX_WMS_DIMENSION * MAX_WMS_DIMENSION;
+                    const IMAGE_LOAD_DEBOUNCE_MS = 300;
 
                     const buildWmsParams = (overrides = {}) => ({
                         ...wmsDefaults.baseParams,
@@ -2223,9 +2224,35 @@
                                     image.getImage().src = source;
                                 }
                             });
+
+                        const scheduleLoad = (imageInstance, source) => {
+                            const normalizedSrc = normalizeWmsUrl(source, context);
+                            fallbackLoader(imageInstance, normalizedSrc);
+                        };
+
                         return (image, src) => {
-                            const normalizedSrc = normalizeWmsUrl(src, context);
-                            fallbackLoader(image, normalizedSrc);
+                            const delay = Number.isFinite(context?.imageLoadDelay)
+                                ? context.imageLoadDelay
+                                : IMAGE_LOAD_DEBOUNCE_MS;
+
+                            if (!delay || delay <= 0) {
+                                scheduleLoad(image, src);
+                                return;
+                            }
+
+                            if (context.imageLoadTimer) {
+                                clearTimeout(context.imageLoadTimer);
+                                context.imageLoadTimer = null;
+                            }
+
+                            context.imageLoadPending = { image, src };
+                            context.imageLoadTimer = setTimeout(() => {
+                                const pending = context.imageLoadPending;
+                                context.imageLoadTimer = null;
+                                context.imageLoadPending = null;
+                                if (!pending) return;
+                                scheduleLoad(pending.image, pending.src);
+                            }, delay);
                         };
                     };
 
@@ -2237,7 +2264,18 @@
                         geoJson: null,
                         selection: null,
                         imageryLayer: null,
-                        imagerySource: null
+                        imagerySource: null,
+                        imageLoadTimer: null,
+                        imageLoadPending: null,
+                        imageLoadDelay: IMAGE_LOAD_DEBOUNCE_MS
+                    };
+
+                    const cancelPendingImageryLoad = () => {
+                        if (localState.imageLoadTimer) {
+                            clearTimeout(localState.imageLoadTimer);
+                            localState.imageLoadTimer = null;
+                        }
+                        localState.imageLoadPending = null;
                     };
 
                     const imageLoadFunction = createImageLoadFunction(localState);
@@ -2607,6 +2645,7 @@
                     const show = (payload) => {
                         const context = ensureContext();
                         if (!context) return;
+                        cancelPendingImageryLoad();
                         context.source?.clear();
                         context.layer?.setVisible(false);
                         if (localState.imageryLayer) {
@@ -2674,6 +2713,7 @@
                     // Remove any preview selection and restore default messaging.
                     const clear = () => {
                         localState.selection = null;
+                        cancelPendingImageryLoad();
                         localState.source?.clear();
                         localState.layer?.setVisible(false);
                         if (localState.imageryLayer) {
