@@ -269,16 +269,16 @@ class PaymentController extends Controller
                 'amount'          => $plan->price,
                 'currency'        => $plan->currency,
                 'status'          => 'pending',
-                'due_date'        => Carbon::now()->addDays(2), // 2 days from now
+                'due_date'        => Carbon::now()->addDays(1), // 1 days from now
                 'payment_method'  => $request->payment_method ?? 'manual',
                 'account_name'    => $request->account_name ?? null,
                 'account_number'  => $request->account_number ?? null,
-                'credit_points'   => $plan->credit_points, // Store the credit points for this payment
+                'credit_points'   => $plan->credit_points, // Store the credit points buy by user
             ]);
 
             Cache::forget($request->order_id);
 
-            // Send order confirmation email
+            // Send order credit confirmation email
             try {
                 Mail::to($user->email)->send(new OrderCreditConfirmation($payment));
             } catch (Exception $e) {
@@ -441,9 +441,9 @@ class PaymentController extends Controller
                         $this->addCreditsToUser($payment->user_id, $payment->credit_points);
                     }
 
-                    // Send payment confirmation email for successful payments
+                    // Send payment credit confirmation email for successful payments
                     try {
-                        Mail::to($payment->email)->send(new PaymentCreditConfirmation($payment));
+                        Mail::to($payment->email)->queue(new PaymentCreditConfirmation($payment));
                     } catch (Exception $e) {
                         Log::error("Failed to send payment confirmation email: " . $e->getMessage());
                         // Continue with the process even if email fails
@@ -478,9 +478,9 @@ class PaymentController extends Controller
                         $this->addCreditsToUser($payment->user_id, $payment->credit_points);
                     }
 
-                    // Send payment confirmation email for successful payments
+                    // Send payment credit confirmation email for successful payments
                     try {
-                        Mail::to($payment->email)->send(new PaymentCreditConfirmation($payment));
+                        Mail::to($payment->email)->queue(new PaymentCreditConfirmation($payment));
                     } catch (Exception $e) {
                         Log::error("Failed to send payment confirmation email: " . $e->getMessage());
                         // Continue with the process even if email fails

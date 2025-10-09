@@ -15,16 +15,53 @@
         <div class="flex items-center space-x-3">
             @auth
                 <!-- Credit Display for Authenticated Users -->
-                <div class="bg-primary/10 text-primary flex items-center space-x-1 rounded-full px-3 py-1 text-xs font-medium">
-                    <i class="ri-coins-line mr-1"></i>
-                    <p><span id="current-myCredits">{{ Number::format(Auth::user()->current_credits, 2, locale: app()->getLocale()) }}</span> <span>Credit Points</span></p>
+                <div class="group relative">
+                    <div class="bg-primary/10 text-primary flex cursor-pointer items-center space-x-1 rounded-full px-3 py-1 text-xs font-medium">
+                        <i class="ri-coins-line mr-1"></i>
+                        <p><span id="current-myCredits">{{ Number::format(Auth::user()->current_credits, 2, locale: app()->getLocale()) }}</span> <span>Credit Points</span></p>
+                    </div>
+
+                    <!-- Dropdown CTA for purchasing credit points -->
+                    <div class="absolute right-0 z-50 hidden w-64 transition duration-200 ease-in-out group-hover:block">
+                        <div class="bg-background rounded-md py-2 shadow-xl">
+                            <div class="text-foreground/50 border-b px-4 py-2 text-xs">Your current balance</div>
+                            <a class="text-foreground/70 hover:bg-foreground/10 block px-4 py-3 text-sm" href="{{ route('admin.purchase-credits') }}">
+                                <div class="flex items-center">
+                                    <i class="ri-coins-line mr-3 text-lg"></i>
+                                    <div>
+                                        <div class="font-medium">Purchase More Credits</div>
+                                        <div class="text-foreground/50 text-xs">Get more credit points to access more premium features</div>
+                                    </div>
+                                </div>
+                            </a>
+                        </div>
+                    </div>
                 </div>
             @else
-                <div class="bg-primary/10 text-primary flex items-center space-x-1 rounded-full px-3 py-1 text-xs font-medium">
-                    <i class="ri-coins-line mr-1"></i>
-                    <p><span id="current-myCredits">-</span> <span>Credit Points</span></p>
+                <div class="group relative">
+                    <div class="bg-primary/10 text-primary flex cursor-pointer items-center space-x-1 rounded-full px-3 py-1 text-xs font-medium">
+                        <i class="ri-coins-line mr-1"></i>
+                        <p><span id="current-myCredits">-</span> <span>Credit Points</span></p>
+                    </div>
+
+                    <!-- Dropdown CTA for purchasing credit points (for guests) -->
+                    <div class="absolute right-0 z-50 hidden w-64 transition duration-200 ease-in-out group-hover:block">
+                        <div class="bg-background rounded-md py-2 shadow-xl">
+                            <a class="text-foreground/70 hover:bg-foreground/10 block px-4 py-3 text-sm" href="{{ route('purchase-credits') }}">
+                                <div class="flex items-center">
+                                    <i class="ri-coins-line mr-3 text-lg"></i>
+                                    <div>
+                                        <div class="font-medium">Purchase Credits</div>
+                                        <div class="text-foreground/50 text-xs">Sign in to purchase credits</div>
+                                    </div>
+                                </div>
+                            </a>
+                        </div>
+                    </div>
                 </div>
             @endauth
+
+            <x-button-primary href="{{ route('login') }}" size="small" variant="outline">Login</x-button-primary>
 
             <!-- Nav Menu -->
             <div class="text-foreground bg-background z-51 fixed inset-0 hidden w-full flex-col items-center justify-center space-y-6 whitespace-nowrap text-center uppercase opacity-0 transition-all duration-500 ease-in-out" id="navbar">
@@ -525,7 +562,7 @@
                     </button>
                 </div>
                 <!-- Search Results Recommendation Container -->
-                <div class="border-foreground/30 absolute left-0 top-full z-50 mt-1 hidden max-h-[300px] w-full overflow-y-auto rounded-lg border bg-white shadow-lg" id="search-results-recommendation">
+                <div class="border-foreground/30 bg-background absolute left-0 top-full z-50 mt-1 hidden max-h-[300px] w-full overflow-y-auto rounded-lg border shadow-lg" id="search-results-recommendation">
                     <!-- Results will be dynamically inserted here -->
                 </div>
             </div>

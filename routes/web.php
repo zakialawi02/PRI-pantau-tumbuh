@@ -126,7 +126,7 @@ Route::get('/terms-of-service', function () {
     return view('pages.front.terms-of-service');
 })->name('terms-of-service');
 
-Route::get('/purchase-credits', [UserCreditsController::class, 'purchasePublic'])->name('purchase-credits.public');
+Route::get('/purchase-credits', [UserCreditsController::class, 'purchasePublic'])->name('purchase-credits');
 
 Route::get('/app/imagery', [MapController::class, 'index'])->name('appMap');
 

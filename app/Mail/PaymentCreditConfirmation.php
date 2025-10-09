@@ -10,7 +10,7 @@ use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
 use App\Models\Payment;
 
-class PaymentCreditConfirmation extends Mailable
+class PaymentCreditConfirmation extends Mailable implements ShouldQueue
 {
     use Queueable, SerializesModels;
 

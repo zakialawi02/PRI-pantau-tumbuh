@@ -152,13 +152,13 @@
                         @method('PUT')
                         <input id="payment-id" name="payment_id" type="hidden">
                         <div class="mb-4">
-                            <label class="mb-1 block text-sm font-medium text-gray-700">Current Status</label>
+                            <label class="text-foreground/70 mb-1 block text-sm font-medium">Current Status</label>
                             <p class="inline-block rounded-full px-2 py-1 text-sm font-medium" id="current-status-display"></p>
                         </div>
 
                         <div class="mb-4">
-                            <label class="mb-1 block text-sm font-medium text-gray-700" for="status">New Status</label>
-                            <select class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm" id="status" name="status">
+                            <label class="text-foreground/70 mb-1 block text-sm font-medium" for="status">New Status</label>
+                            <select class="border-foreground/30 focus:border-primary focus:ring-primary mt-1 block w-full rounded-md shadow-sm sm:text-sm" id="status" name="status">
                                 <option value="pending">Pending</option>
                                 <option value="waiting_verification">Waiting Verification</option>
                                 <option value="paid">Paid</option>
@@ -170,18 +170,18 @@
 
                         <!-- Payment Proof Section -->
                         <div class="mb-4" id="payment-proof-section" style="display: none;">
-                            <label class="mb-1 block text-sm font-medium text-gray-700">Payment Proof</label>
+                            <label class="text-foreground/70 mb-1 block text-sm font-medium">Payment Proof</label>
                             <div class="mt-1">
                                 <img class="h-auto max-w-full cursor-pointer rounded-lg border" id="payment-proof-image" src="" alt="Payment Proof" style="max-height: 200px;" onclick="window.openProofModal(this.src)">
-                                <p class="mt-1 text-xs text-gray-500">Click image to view larger version</p>
+                                <p class="text-foreground/50 mt-1 text-xs">Click image to view larger version</p>
                             </div>
                         </div>
 
                         <div class="flex justify-end space-x-3">
-                            <button class="inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2" data-hs-overlay="#update-status-modal" type="button">
+                            <button class="border-foreground/30 bg-neutral text-foreground/70 hover:bg-foreground/10 focus:ring-primary inline-flex items-center rounded-md border px-4 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-offset-2" data-hs-overlay="#update-status-modal" type="button">
                                 Cancel
                             </button>
-                            <button class="inline-flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2" type="submit">
+                            <button class="bg-primary text-neutral hover:bg-primary/80 focus:ring-primary inline-flex items-center rounded-md px-4 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-offset-2" type="submit">
                                 Update Status
                             </button>
                         </div>
@@ -310,7 +310,7 @@
 
                                 // If payment is paid, show paid_at date
                                 if (row.status === 'paid' && row.paid_at) {
-                                    dateString += '<br><span class="text-xs text-gray-500">Paid: ' + formatCustomDate(row.paid_at) + '</span>';
+                                    dateString += '<br><span class="text-xs text-foreground/50">Paid: ' + formatCustomDate(row.paid_at) + '</span>';
                                 }
 
                                 // Check if overdue (only if not paid)

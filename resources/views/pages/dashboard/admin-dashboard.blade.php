@@ -82,7 +82,7 @@
                                     <div class="ml-4">
                                         <h4 class="font-medium">#{{ $payment->invoice_number }}</h4>
                                         <p class="text-sm text-gray-600">
-                                            By {{ $payment->user->name }} • {{ $payment->paid_at ? $payment->paid_at->isoFormat('MMM D, YYYY') : 'N/A' }}
+                                            By {{ $payment->user->name ?? '-' }} • {{ $payment->paid_at ? $payment->paid_at->isoFormat('MMM D, YYYY') : 'N/A' }}
                                         </p>
                                     </div>
                                 </div>

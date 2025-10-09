@@ -267,7 +267,7 @@
                         },
                         success: function(response) {
                             closeModal('#plan-modal');
-                            $('#myTable').DataTable().ajax.reload();
+                            $('#myTable').DataTable().ajax.reload(null, false);
                             MyZkToast.success(response.message);
                         },
                         error: function(error) {
@@ -316,7 +316,7 @@
                         type: "DELETE",
                         url: `{{ route('admin.plans.destroy', ':planId') }}`.replace(':planId', planId),
                         success: function(response) {
-                            $('#myTable').DataTable().ajax.reload();
+                            $('#myTable').DataTable().ajax.reload(null, false);
                             MyZkToast.success(response.message);
                         },
                         error: function(error) {

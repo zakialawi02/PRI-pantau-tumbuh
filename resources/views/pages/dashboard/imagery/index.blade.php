@@ -273,7 +273,7 @@
                         type: 'DELETE',
                         url: "{{ route('admin.imagery.destroy', ':id') }}".replace(':id', imageryId),
                         success: function(response) {
-                            $('#myTable').DataTable().ajax.reload();
+                            $('#myTable').DataTable().ajax.reload(null, false);
                             MyZkToast.success(response.message);
                         },
                         error: function(error) {

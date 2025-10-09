@@ -235,7 +235,7 @@
                         },
                         success: function(response) {
                             closeModal('#add-credits-modal');
-                            $('#usersTable').DataTable().ajax.reload();
+                            $('#usersTable').DataTable().ajax.reload(null, false);
                             MyZkToast.success(response.message);
                         },
                         error: function(error) {
