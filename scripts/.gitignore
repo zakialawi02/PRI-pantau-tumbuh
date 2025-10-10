@@ -21,3 +21,7 @@ gee_credential.json
 example_*
 L8*
 getImagery*.py
+*.zip
+*.tif*
+*.tiff*
+*.xml*
