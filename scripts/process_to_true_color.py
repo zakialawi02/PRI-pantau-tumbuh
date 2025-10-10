@@ -8,15 +8,13 @@ preserved whenever it is available within the imagery; otherwise, an attempt is
 made to recover it from the metadata before falling back to an educated guess
 derived from the tile identifier.
 
-Usage::
-
-    python scripts/process_to_true_color.py --zip-path <zipfile> [--output <tif>]
+Konfigurasi input/output diatur langsung pada konstanta ``CONFIG`` yang dapat
+disesuaikan manual di dalam berkas ini.
 
 """
 
 from __future__ import annotations
 
-import argparse
 import os
 import re
 import shutil
@@ -38,6 +36,15 @@ from rasterio.transform import Affine
 TRUECOLOUR_BANDS: Mapping[str, str] = {"B04": "Red", "B03": "Green", "B02": "Blue"}
 
 
+@dataclass(frozen=True)
+class ProcessingConfig:
+    """Konfigurasi manual untuk menjalankan pemrosesan."""
+
+    zip_path: Path
+    output_path: Optional[Path] = None
+    keep_temp_directory: bool = False
+
+
 @dataclass
 class ExtractionResult:
     """Container for artefacts extracted from the Sentinel archive."""
@@ -46,26 +53,14 @@ class ExtractionResult:
     metadata_path: Optional[Path]
 
 
-def parse_arguments() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--zip-path",
-        required=True,
-        type=Path,
-        help="Path to the Sentinel-2 product in .zip format.",
-    )
-    parser.add_argument(
-        "--output",
-        type=Path,
-        help="Destination path for the generated true colour COG."
-             " Defaults to <zip-name>_truecolor.tif in the current directory.",
-    )
-    parser.add_argument(
-        "--keep-temp",
-        action="store_true",
-        help="Keep the temporary extraction directory for inspection.",
-    )
-    return parser.parse_args()
+# ---------------------------------------------------------------------------
+# ⚙️  Ubah nilai konstanta CONFIG berikut sebelum menjalankan skrip.
+# ---------------------------------------------------------------------------
+CONFIG = ProcessingConfig(
+    zip_path=Path("/path/ke/produk_Sentinel2.zip"),
+    output_path=None,
+    keep_temp_directory=False,
+)
 
 
 @contextmanager
@@ -289,24 +284,25 @@ def create_truecolour_cog(
         )
 
 
-def main() -> None:
-    args = parse_arguments()
+def main(config: ProcessingConfig = CONFIG) -> None:
+    if not config.zip_path.exists():
+        raise FileNotFoundError(
+            "Produk Sentinel tidak ditemukan: {}. Ubah nilai CONFIG.zip_path sebelum menjalankan."
+            .format(config.zip_path)
+        )
 
-    if not args.zip_path.exists():
-        raise FileNotFoundError(f"Produk Sentinel tidak ditemukan: {args.zip_path}")
-
-    output_path = args.output
+    output_path = config.output_path
     if output_path is None:
-        default_name = args.zip_path.stem + "_truecolor.tif"
+        default_name = config.zip_path.stem + "_truecolor.tif"
         output_path = Path.cwd() / default_name
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    print(f"📦 Memproses arsip: {args.zip_path}")
+    print(f"📦 Memproses arsip: {config.zip_path}")
 
-    with managed_temporary_directory(keep=args.keep_temp) as temp_dir:
+    with managed_temporary_directory(keep=config.keep_temp_directory) as temp_dir:
         print(f"📂 Mengambil aset penting ke: {temp_dir}")
-        extraction = extract_required_assets(args.zip_path, temp_dir)
+        extraction = extract_required_assets(config.zip_path, temp_dir)
 
         for code, path in extraction.band_paths.items():
             print(f"   • {code} ({TRUECOLOUR_BANDS[code]}): {path.relative_to(temp_dir)}")
@@ -320,7 +316,7 @@ def main() -> None:
 
         crs = derive_crs(
             reference_band=extraction.band_paths["B04"],
-            zip_name=args.zip_path.stem,
+            zip_name=config.zip_path.stem,
             metadata_path=extraction.metadata_path,
         )
 
