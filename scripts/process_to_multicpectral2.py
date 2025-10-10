@@ -1,187 +1,374 @@
-import os, re, zipfile, shutil
+"""process_to_multicpectral2
+=================================
+Script untuk mengolah arsip Sentinel-2 Level-2A (format .zip dari Copernicus)
+menjadi citra multispektral multiband (B01 s.d. B12) dalam satu berkas GeoTIFF/COG.
+
+Fitur utama:
+- Mengekstrak arsip .zip ke folder sementara (di direktori yang sama dengan arsip).
+- Mengambil setiap band spektral (B01, B02, ..., B12, termasuk B8A) dan
+  meresampel ke resolusi 10 m.
+- Opsional reproyeksi ke CRS lain (default: CRS asli produk).
+- Menulis keluaran sebagai Cloud Optimized GeoTIFF (COG) dengan penamaan band.
+- Menghapus direktori ekstraksi sementara setelah proses selesai.
+
+Contoh penggunaan:
+    python scripts/process_to_multicpectral2.py \
+        /path/ke/S2A_MSIL2A_20240218T021531_N0509_R046_T49MFM_20240218T050829.zip \
+        output_multispectral.tif --target-crs EPSG:4326
+
+Catatan:
+- Script membutuhkan dependensi: rasterio, numpy.
+- Untuk dataset yang memiliki lebih dari satu tile/granule, script akan memakai
+  granule pertama yang ditemukan.
+"""
+
+from __future__ import annotations
+
+import argparse
+import re
+import shutil
+import sys
+import tempfile
+import zipfile
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Dict, Iterable, List, Optional, Tuple
+
 import numpy as np
 import rasterio
-from rasterio.enums import Resampling
-from rasterio.warp import calculate_default_transform, reproject
 from rasterio.crs import CRS
+from rasterio.enums import Resampling
+from rasterio.io import DatasetReader
+from rasterio.warp import calculate_default_transform, reproject
 import xml.etree.ElementTree as ET
-from glob import glob
 
-# ===== KONFIGURASI =====
-zip_path = "S2A_MSIL2A_20250923T023141_N0511_R046_T50MKD_20250923T073216.zip"
-output_tif = "sentinel2L2_multispectral_10m_cog_4326.tif"
+# Urutan band yang diminta pengguna
+ORDERED_BANDS: Tuple[str, ...] = (
+    "B01",  # Coastal Aerosol (60 m)
+    "B02",  # Blue (10 m)
+    "B03",  # Green (10 m)
+    "B04",  # Red (10 m)
+    "B05",  # Red Edge 1 (20 m)
+    "B06",  # Red Edge 2 (20 m)
+    "B07",  # Red Edge 3 (20 m)
+    "B08",  # NIR (10 m)
+    "B8A",  # Narrow NIR (20 m)
+    "B09",  # Water Vapour (60 m)
+    "B11",  # SWIR 1 (20 m)
+    "B12",  # SWIR 2 (20 m)
+)
 
-# ===== 1) EKSTRAK DI FOLDER YANG SAMA =====
-zip_dir = os.path.dirname(os.path.abspath(zip_path))
-zip_name = os.path.splitext(os.path.basename(zip_path))[0]
-unzip_dir = os.path.join(zip_dir, f"{zip_name}_unzip")
-if os.path.exists(unzip_dir):
-    shutil.rmtree(unzip_dir)
-os.makedirs(unzip_dir, exist_ok=True)
+# Prioritas resolusi (10 m lebih disukai dibanding 20 m, dst)
+RESOLUTION_PRIORITY: Dict[str, int] = {"10m": 0, "20m": 1, "60m": 2, "": 3}
 
-print(f"📂 Mengekstrak ke: {unzip_dir}")
-with zipfile.ZipFile(zip_path, 'r') as z:
-    z.extractall(unzip_dir)
 
-# ===== 2) METADATA (opsional, best-effort) =====
-dirs = [os.path.join(unzip_dir, d) for d in os.listdir(unzip_dir) if os.path.isdir(os.path.join(unzip_dir, d))]
-base_dir = dirs[0] if dirs else unzip_dir
-xml_files = glob(os.path.join(base_dir, "**", "MTD_MSIL*.xml"), recursive=True)
+@dataclass
+class ProcessingConfig:
+    zip_path: Path
+    output_path: Path
+    target_crs: Optional[CRS]
+    resampling: Resampling
+    overwrite: bool
 
-metadata = {k:"Unknown" for k in
-            ["SENSING_TIME","PLATFORM","PRODUCT_ID","PROCESSING_BASELINE",
-             "DATASTRIP_ID","TILE_ID","CLOUD_COVERAGE_ASSESSMENT"]}
 
-if xml_files:
+class ProcessingError(RuntimeError):
+    """Kesalahan yang terjadi ketika memproses arsip."""
+
+
+def parse_arguments(argv: Optional[Iterable[str]] = None) -> ProcessingConfig:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Konversi arsip Sentinel-2 Level-2A (.zip) menjadi citra multispektral "
+            "multiband (B01-B12) dalam satu GeoTIFF/COG."
+        )
+    )
+    parser.add_argument("zip_path", type=Path, help="Path ke arsip .zip Sentinel-2 Level-2A")
+    parser.add_argument("output_path", type=Path, help="Path keluaran GeoTIFF/COG")
+    parser.add_argument(
+        "--target-crs",
+        type=str,
+        default=None,
+        help="CRS keluaran (contoh: EPSG:4326). Jika tidak diisi, menggunakan CRS asli tile."
+    )
+    parser.add_argument(
+        "--resampling",
+        choices=[r.name.lower() for r in Resampling],
+        default="bilinear",
+        help="Metode resampling untuk penyeragaman resolusi (default: bilinear)."
+    )
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Timpa berkas keluaran jika sudah ada."
+    )
+
+    args = parser.parse_args(list(argv) if argv is not None else None)
+
+    if not args.zip_path.exists():
+        raise ProcessingError(f"Berkas zip tidak ditemukan: {args.zip_path}")
+    if args.output_path.exists() and not args.overwrite:
+        raise ProcessingError(
+            f"Berkas keluaran sudah ada: {args.output_path}. Gunakan --overwrite untuk menimpa."
+        )
+
+    target_crs = CRS.from_user_input(args.target_crs) if args.target_crs else None
+    resampling = Resampling[args.resampling.upper()]
+
+    return ProcessingConfig(
+        zip_path=args.zip_path,
+        output_path=args.output_path,
+        target_crs=target_crs,
+        resampling=resampling,
+        overwrite=args.overwrite,
+    )
+
+
+def extract_zip_to_temp(zip_path: Path) -> Path:
+    """Ekstrak arsip zip ke folder sementara di direktori yang sama dengan arsip."""
+    extract_parent = zip_path.parent
+    temp_dir = Path(tempfile.mkdtemp(prefix=zip_path.stem + "_", dir=str(extract_parent)))
+
+    with zipfile.ZipFile(zip_path, "r") as zf:
+        zf.extractall(temp_dir)
+
+    return temp_dir
+
+
+def find_safe_root(extracted_dir: Path) -> Path:
+    """Temukan direktori *.SAFE pada hasil ekstraksi."""
+    for path in extracted_dir.iterdir():
+        if path.suffix.lower() == ".safe" and path.is_dir():
+            return path
+    # Jika tidak ada ekstensi .SAFE, coba gunakan folder pertama
+    candidates = [p for p in extracted_dir.iterdir() if p.is_dir()]
+    if not candidates:
+        raise ProcessingError("Tidak menemukan direktori .SAFE pada hasil ekstraksi.")
+    return candidates[0]
+
+
+def gather_band_files(safe_root: Path) -> Dict[str, Path]:
+    """Kumpulkan berkas JP2 setiap band dengan memilih resolusi terbaik."""
+    band_map: Dict[str, Path] = {}
+    pattern = re.compile(r"_(B0[1-9]|B1[12]|B8A)(?:_(10m|20m|60m))?\.jp2$", re.IGNORECASE)
+
+    for jp2_path in safe_root.rglob("*.jp2"):
+        name = jp2_path.name
+        if any(key in name.upper() for key in ("TCI", "PVI", "AOT", "SCL", "MSK", "QA")):
+            continue
+        match = pattern.search(name)
+        if not match:
+            continue
+        band_code = match.group(1).upper()
+        if band_code not in ORDERED_BANDS:
+            continue
+        resolution = match.group(2) or ""
+        priority = RESOLUTION_PRIORITY.get(resolution, RESOLUTION_PRIORITY[""])
+        prev = band_map.get(band_code)
+        if prev is None:
+            band_map[band_code] = jp2_path
+        else:
+            prev_match = pattern.search(prev.name)
+            prev_res = prev_match.group(2) if prev_match else ""
+            prev_priority = RESOLUTION_PRIORITY.get(prev_res or "", RESOLUTION_PRIORITY[""])
+            if priority < prev_priority:
+                band_map[band_code] = jp2_path
+
+    missing = [band for band in ORDERED_BANDS if band not in band_map]
+    if missing:
+        raise ProcessingError(
+            "Tidak menemukan berkas untuk band: " + ", ".join(missing)
+        )
+
+    return band_map
+
+
+def read_metadata(safe_root: Path) -> Dict[str, str]:
+    """Baca metadata utama dari MTD_MSIL2A.xml (best effort)."""
+    metadata_path = safe_root / "MTD_MSIL2A.xml"
+    if not metadata_path.exists():
+        # fallback: cari file XML lain yang sesuai
+        xml_candidates = list(safe_root.rglob("MTD_MSIL*.xml"))
+        metadata_path = xml_candidates[0] if xml_candidates else None
+
+    metadata: Dict[str, str] = {}
+    if metadata_path is None:
+        return metadata
+
     try:
-        tree = ET.parse(xml_files[0]); root = tree.getroot()
-        ns = {}
-        for elem in root.iter():
-            if elem.tag.startswith("{"):
-                ns["n"] = elem.tag[1:].split("}")[0]; break
-        def get_text(path):
+        tree = ET.parse(metadata_path)
+        root = tree.getroot()
+        ns = {"n": root.tag.split("}")[0].strip("{")}
+
+        def text(path: str, default: str = "") -> str:
             node = root.find(path, ns)
-            return node.text if node is not None else "Unknown"
-        metadata["SENSING_TIME"] = get_text(".//n:SENSING_TIME")
-        metadata["PLATFORM"] = get_text(".//n:SPACECRAFT_NAME")
-        metadata["PRODUCT_ID"] = get_text(".//n:PRODUCT_URI")
-        metadata["PROCESSING_BASELINE"] = get_text(".//n:PROCESSING_BASELINE")
-        metadata["DATASTRIP_ID"] = get_text(".//n:DATASTRIP_ID")
-        metadata["TILE_ID"] = get_text(".//n:TILE_ID")
-        metadata["CLOUD_COVERAGE_ASSESSMENT"] = get_text(".//n:CLOUD_COVERAGE_ASSESSMENT")
-    except Exception as e:
-        print(f"⚠️ Gagal baca metadata: {e}")
+            return node.text.strip() if node is not None and node.text else default
 
-print("\n🛰️ Metadata Scene:")
-for k, v in metadata.items(): print(f"   {k:<28}: {v}")
+        metadata = {
+            "PRODUCT_URI": text(".//n:PRODUCT_URI"),
+            "SENSING_TIME": text(".//n:SENSING_TIME"),
+            "PROCESSING_LEVEL": text(".//n:PROCESSING_LEVEL"),
+            "PROCESSING_BASELINE": text(".//n:PROCESSING_BASELINE"),
+            "SPACECRAFT_NAME": text(".//n:SPACECRAFT_NAME"),
+            "DATATAKE_ID": text(".//n:DATATAKE_ID"),
+        }
+    except Exception:
+        # Metadata optional, abaikan bila gagal
+        metadata = {}
 
-# ===== 3) KUMPULKAN FILE BAND (mendukung pola L2A: _Bxx_10m/20m/60m.jp2) =====
-all_jp2 = sorted(glob(os.path.join(base_dir, "**", "*.jp2"), recursive=True))
-re_band = re.compile(r'_(B0[1-9]|B1[12]|B8A)(?:_(10m|20m|60m))?\.jp2$', re.IGNORECASE)
+    return metadata
 
-# buang file non-band: TCI, mask, AOT, WVP, SCL
-exclude_keys = ("TCI", "MSK", "QA", "QUAL", "AOT", "WVP", "SCL")
-band_paths = [p for p in all_jp2
-              if re_band.search(os.path.basename(p)) and not any(k in os.path.basename(p).upper() for k in exclude_keys)]
 
-if not band_paths:
-    print("⚠️ Tidak ditemukan band .jp2 Level-2A dengan pola L2A. Daftar contoh .jp2:")
-    for s in all_jp2[:20]:
-        print("   •", os.path.relpath(s, unzip_dir))
-    raise FileNotFoundError("Tidak ditemukan file band .jp2 Level-2A!")
+def choose_reference_band(band_map: Dict[str, Path]) -> str:
+    """Pilih band referensi untuk grid 10 m (prioritas B02/B03/B04/B08)."""
+    preferred = ["B02", "B03", "B04", "B08"]
+    for band in preferred:
+        if band in band_map:
+            return band
+    # fallback ke band pertama yang tersedia
+    return ORDERED_BANDS[0]
 
-print(f"\n📄 Ditemukan {len(band_paths)} band kandidat:")
-for p in band_paths: print(" -", os.path.basename(p))
 
-# ===== 4) PILIH BAND REFERENSI 10m (B02/B04/B08) =====
-prefer = ["_B02_10m", "_B04_10m", "_B08_10m", "_B02", "_B04", "_B08"]
-ref_band_path = None
-for key in prefer:
-    for p in band_paths:
-        if key.lower() in os.path.basename(p).lower():
-            ref_band_path = p; break
-    if ref_band_path: break
-if ref_band_path is None:
-    raise RuntimeError("Tidak ditemukan band referensi 10 m (B02/B04/B08).")
+def build_target_grid(
+    reference_dataset: DatasetReader,
+    target_crs: Optional[CRS],
+) -> Tuple[CRS, rasterio.Affine, int, int]:
+    src_crs = reference_dataset.crs
+    if src_crs is None:
+        raise ProcessingError("CRS band referensi tidak ditemukan.")
 
-with rasterio.open(ref_band_path) as ref:
-    ref_transform = ref.transform
-    ref_shape = ref.shape
-    ref_bounds = ref.bounds
-    ref_profile = ref.profile.copy()
+    if target_crs is None or target_crs == src_crs:
+        return src_crs, reference_dataset.transform, reference_dataset.width, reference_dataset.height
 
-# ===== 5) DETEKSI HEMISFER DARI NORTHING (tanpa PROJ) =====
-# UTM south pakai false northing ~10,000,000. Jika nilai Y (northing) rata-rata > 7e6, besar kemungkinan hemisfer Selatan.
-northing_avg = (ref_bounds.top + ref_bounds.bottom) / 2.0
-hemisphere = "S" if northing_avg > 7_000_000 else "N"
-
-# Dapatkan zona dari nama ZIP → 'T49MHU' → 49
-m_zone = re.search(r'T(\d{2})[A-Z]{3}', zip_name)
-if not m_zone:
-    raise ValueError("Tidak bisa mengekstrak zona UTM dari nama ZIP.")
-utm_zone = int(m_zone.group(1))
-print(f"\n🗺️ UTM terdeteksi: Zone {utm_zone}{hemisphere} | northing_avg={northing_avg:,.0f}")
-
-# ===== 6) BANGUN CRS MANUAL (tanpa PROJ) =====
-central_meridian = (utm_zone - 1)*6 - 180 + 3
-false_northing = 10_000_000 if hemisphere == "S" else 0
-
-crs_utm = CRS.from_wkt(
-    f'PROJCS["WGS 84 / UTM zone {utm_zone}{hemisphere}",'
-    'GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],'
-    'PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]],'
-    'PROJECTION["Transverse_Mercator"],'
-    'PARAMETER["latitude_of_origin",0],'
-    f'PARAMETER["central_meridian",{central_meridian}],'
-    'PARAMETER["scale_factor",0.9996],'
-    'PARAMETER["false_easting",500000],'
-    f'PARAMETER["false_northing",{false_northing}],'
-    'UNIT["metre",1]]'
-)
-crs_wgs84 = CRS.from_wkt(
-    'GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],'
-    'PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]]'
-)
-
-# ===== 7) RESAMPLE SEMUA BAND → 10 m (menggunakan grid referensi) =====
-bands_data, band_names = [], []
-for bpath in band_paths:
-    base = os.path.basename(bpath)
-    m = re_band.search(base)
-    bcode = m.group(1).upper() if m else base  # B01..B12, B8A
-    band_names.append(bcode)
-    with rasterio.open(bpath) as src:
-        arr = src.read(out_shape=(1, ref_shape[0], ref_shape[1]),
-                       resampling=Resampling.bilinear)[0]
-        bands_data.append(arr)
-
-# ===== 8) REPROJECT UTM → WGS84 (benar secara geografis) =====
-print("\n🧭 Reprojecting semua band ke EPSG:4326 ...")
-transform, width, height = calculate_default_transform(
-    crs_utm, crs_wgs84, ref_shape[1], ref_shape[0], *ref_bounds
-)
-dst_data = np.zeros((len(bands_data), height, width), dtype=np.uint16)
-
-for i, band in enumerate(bands_data):
-    reproject(
-        source=band,
-        destination=dst_data[i],
-        src_transform=ref_transform,
-        src_crs=crs_utm,
-        dst_transform=transform,
-        dst_crs=crs_wgs84,
-        resampling=Resampling.bilinear
+    transform, width, height = calculate_default_transform(
+        src_crs,
+        target_crs,
+        reference_dataset.width,
+        reference_dataset.height,
+        *reference_dataset.bounds,
     )
+    return target_crs, transform, width, height
 
-# ===== 9) SIMPAN SEBAGAI COG =====
-profile = ref_profile.copy()
-profile.update(
-    driver="COG",
-    dtype=np.uint16,
-    count=len(bands_data),
-    height=height, width=width,
-    transform=transform, crs=crs_wgs84,
-    compress="LZW", BIGTIFF="YES",
-    blockxsize=512, blockysize=512
-)
 
-with rasterio.open(output_tif, "w", **profile) as dst:
-    for i, bcode in enumerate(band_names, start=1):
-        dst.write(dst_data[i-1], i)
-        dst.set_band_description(i, bcode)
-    dst.update_tags(
-        **metadata,
-        REPROJECTED_TO="EPSG:4326 (manual WKT)",
-        BAND_LIST=",".join(band_names),
-        NOTE="Sentinel-2 Level-2A: semua band disamakan ke 10 m dan direproyeksi ke WGS84 COG"
-    )
+def reproject_band(
+    src_path: Path,
+    dst_array: np.ndarray,
+    dst_transform: rasterio.Affine,
+    dst_crs: CRS,
+    resampling: Resampling,
+) -> None:
+    with rasterio.open(src_path) as src:
+        if src.count != 1:
+            raise ProcessingError(f"Berkas band bukan single-band: {src_path}")
+        reproject(
+            source=rasterio.band(src, 1),
+            destination=dst_array,
+            src_transform=src.transform,
+            src_crs=src.crs,
+            dst_transform=dst_transform,
+            dst_crs=dst_crs,
+            resampling=resampling,
+            num_threads=2,
+        )
 
-print(f"\n✅ File multispectral Level-2A disimpan: {output_tif}")
-print("   CRS: EPSG:4326 (WGS84) | Format: COG | Band:", len(band_names))
 
-# ===== 10) HAPUS FOLDER UNZIP =====
-try:
-    shutil.rmtree(unzip_dir)
-    print(f"🧹 Folder hasil unzip dihapus: {unzip_dir}")
-except Exception as e:
-    print(f"⚠️ Gagal hapus folder unzip: {e}")
+def convert_float_to_uint16(array: np.ndarray) -> np.ndarray:
+    array = np.nan_to_num(array, nan=0.0, copy=False)
+    array = np.clip(array, 0, np.iinfo(np.uint16).max)
+    return np.rint(array).astype(np.uint16)
+
+
+def write_output(
+    output_path: Path,
+    bands_data: List[np.ndarray],
+    band_names: List[str],
+    transform: rasterio.Affine,
+    crs: CRS,
+    metadata: Dict[str, str],
+) -> None:
+    dtype = np.uint16
+    profile = {
+        "driver": "COG",
+        "dtype": dtype,
+        "count": len(bands_data),
+        "height": bands_data[0].shape[0],
+        "width": bands_data[0].shape[1],
+        "transform": transform,
+        "crs": crs,
+        "nodata": 0,
+        "compress": "LZW",
+        "blockxsize": 512,
+        "blockysize": 512,
+        "BIGTIFF": "IF_SAFER",
+    }
+
+    with rasterio.open(output_path, "w", **profile) as dst:
+        for index, (band_name, data) in enumerate(zip(band_names, bands_data), start=1):
+            dst.write(data.astype(dtype), index)
+            dst.set_band_description(index, band_name)
+        if metadata:
+            dst.update_tags(**metadata)
+        dst.update_tags(BAND_ORDER=",".join(band_names))
+
+
+def process(config: ProcessingConfig) -> None:
+    temp_dir: Optional[Path] = None
+    try:
+        temp_dir = extract_zip_to_temp(config.zip_path)
+        safe_root = find_safe_root(temp_dir)
+        band_map = gather_band_files(safe_root)
+        metadata = read_metadata(safe_root)
+
+        reference_band_code = choose_reference_band(band_map)
+        with rasterio.open(band_map[reference_band_code]) as ref_ds:
+            target_crs, target_transform, target_width, target_height = build_target_grid(
+                ref_ds, config.target_crs
+            )
+
+        bands_output: List[np.ndarray] = []
+        for band in ORDERED_BANDS:
+            src_path = band_map[band]
+            destination = np.zeros((target_height, target_width), dtype=np.float32)
+            reproject_band(
+                src_path=src_path,
+                dst_array=destination,
+                dst_transform=target_transform,
+                dst_crs=target_crs,
+                resampling=config.resampling,
+            )
+            bands_output.append(convert_float_to_uint16(destination))
+
+        write_output(
+            output_path=config.output_path,
+            bands_data=bands_output,
+            band_names=list(ORDERED_BANDS),
+            transform=target_transform,
+            crs=target_crs,
+            metadata=metadata,
+        )
+
+        print(f"✅ Multispektral berhasil dibuat: {config.output_path}")
+        print(f"   CRS keluaran : {target_crs.to_string()}" if target_crs else "   CRS keluaran : (tidak diketahui)")
+        print(f"   Resolusi     : {target_width} x {target_height} piksel")
+    finally:
+        if temp_dir and temp_dir.exists():
+            try:
+                shutil.rmtree(temp_dir)
+                print(f"🧹 Folder sementara dihapus: {temp_dir}")
+            except Exception as exc:  # pragma: no cover
+                print(f"⚠️ Gagal menghapus folder sementara {temp_dir}: {exc}")
+
+
+def main(argv: Optional[Iterable[str]] = None) -> None:
+    try:
+        config = parse_arguments(argv)
+        process(config)
+    except ProcessingError as exc:
+        print(f"❌ Proses gagal: {exc}")
+        sys.exit(1)
+    except Exception as exc:
+        print(f"❌ Terjadi kesalahan tak terduga: {exc}")
+        sys.exit(2)
+
+
+if __name__ == "__main__":
+    main()
