@@ -18,7 +18,6 @@ from __future__ import annotations
 import os
 import re
 import shutil
-import tempfile
 import xml.etree.ElementTree as ET
 import zipfile
 from contextlib import contextmanager
@@ -29,6 +28,7 @@ from typing import Dict, Iterator, List, Mapping, MutableMapping, Optional, Tupl
 import numpy as np
 import rasterio
 from rasterio.crs import CRS
+from rasterio.errors import CRSError
 from rasterio.enums import Resampling
 from rasterio.transform import Affine
 
@@ -64,17 +64,27 @@ CONFIG = ProcessingConfig(
 
 
 @contextmanager
-def managed_temporary_directory(keep: bool = False) -> Iterator[Path]:
-    """Create (and optionally keep) a temporary directory."""
+def managed_workspace_directory(zip_path: Path, keep: bool = False) -> Iterator[Path]:
+    """Create a workspace directory next to the provided archive."""
 
-    temp_dir = Path(tempfile.mkdtemp(prefix="s2_truecolour_"))
+    base_dir = zip_path.resolve().parent
+    stem = zip_path.stem
+
+    candidate = base_dir / f"{stem}_truecolour_tmp"
+    counter = 1
+    while candidate.exists():
+        counter += 1
+        candidate = base_dir / f"{stem}_truecolour_tmp{counter}"
+
+    candidate.mkdir(parents=True, exist_ok=False)
+
     try:
-        yield temp_dir
+        yield candidate
     finally:
         if keep:
-            print(f"ℹ️  Menjaga folder sementara di: {temp_dir}")
+            print(f"ℹ️  Menjaga folder sementara di: {candidate}")
         else:
-            shutil.rmtree(temp_dir, ignore_errors=True)
+            shutil.rmtree(candidate, ignore_errors=True)
 
 
 def extract_required_assets(zip_path: Path, destination: Path) -> ExtractionResult:
@@ -164,6 +174,20 @@ def extract_metadata_fields(metadata_path: Optional[Path]) -> Dict[str, str]:
     return metadata
 
 
+def safe_crs_from_epsg(epsg: int) -> Optional[CRS]:
+    """Safely attempt to create a CRS from an EPSG code."""
+
+    try:
+        return CRS.from_epsg(epsg)
+    except (CRSError, ValueError):
+        print(
+            "⚠️  Gagal memuat CRS dari EPSG:{} melalui database PROJ lokal.".format(
+                epsg
+            )
+        )
+        return None
+
+
 def derive_crs(
     reference_band: Path,
     zip_name: str,
@@ -190,15 +214,17 @@ def derive_crs(
                         continue
                     if code.upper().startswith("EPSG:"):
                         epsg = int(code.split(":", 1)[1])
-                        crs = CRS.from_epsg(epsg)
-                        print(f"📐 CRS diambil dari metadata (EPSG:{epsg}).")
-                        return crs
+                        crs = safe_crs_from_epsg(epsg)
+                        if crs:
+                            print(f"📐 CRS diambil dari metadata (EPSG:{epsg}).")
+                            return crs
                     if code.isdigit():
                         epsg = int(code)
-                        crs = CRS.from_epsg(epsg)
-                        print(f"📐 CRS diambil dari metadata (EPSG:{epsg}).")
-                        return crs
-        except (ET.ParseError, ValueError):
+                        crs = safe_crs_from_epsg(epsg)
+                        if crs:
+                            print(f"📐 CRS diambil dari metadata (EPSG:{epsg}).")
+                            return crs
+        except (ET.ParseError, ValueError, CRSError):
             pass
 
     match = re.search(r"T(\d{2})([A-Z]{3})", zip_name)
@@ -208,19 +234,17 @@ def derive_crs(
         if match.group(2)[0] < "N":
             hemisphere = "S"
         utm_epsg = 32600 + utm_zone if hemisphere == "N" else 32700 + utm_zone
-        try:
-            crs = CRS.from_epsg(utm_epsg)
+        crs = safe_crs_from_epsg(utm_epsg)
+        if crs:
             print(
                 "🗺️  CRS diduga dari kode tile ({}{} → EPSG:{}).".format(
                     match.group(1), match.group(2), utm_epsg
                 )
             )
             return crs
-        except ValueError:
-            pass
 
-    print("⚠️  CRS tidak ditemukan, fallback ke EPSG:4326 (WGS84).")
-    return CRS.from_epsg(4326)
+    print("⚠️  CRS tidak ditemukan, fallback ke WGS84 (manual proj4).")
+    return CRS.from_proj4("+proj=longlat +datum=WGS84 +no_defs +type=crs")
 
 
 def read_and_resample_bands(
@@ -300,12 +324,18 @@ def main(config: ProcessingConfig = CONFIG) -> None:
 
     print(f"📦 Memproses arsip: {config.zip_path}")
 
-    with managed_temporary_directory(keep=config.keep_temp_directory) as temp_dir:
+    with managed_workspace_directory(
+        config.zip_path, keep=config.keep_temp_directory
+    ) as temp_dir:
         print(f"📂 Mengambil aset penting ke: {temp_dir}")
         extraction = extract_required_assets(config.zip_path, temp_dir)
 
         for code, path in extraction.band_paths.items():
-            print(f"   • {code} ({TRUECOLOUR_BANDS[code]}): {path.relative_to(temp_dir)}")
+            try:
+                displayed = path.relative_to(temp_dir)
+            except ValueError:
+                displayed = path
+            print(f"   • {code} ({TRUECOLOUR_BANDS[code]}): {displayed}")
 
         metadata_fields = extract_metadata_fields(extraction.metadata_path)
         print("\n🛰️ Metadata Scene:")
