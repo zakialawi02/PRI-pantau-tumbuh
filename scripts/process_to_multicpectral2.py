@@ -11,10 +11,9 @@ Fitur utama:
 - Menulis keluaran sebagai Cloud Optimized GeoTIFF (COG) dengan penamaan band.
 - Menghapus direktori ekstraksi sementara setelah proses selesai.
 
-Contoh penggunaan:
-    python scripts/process_to_multicpectral2.py \
-        /path/ke/S2A_MSIL2A_20240218T021531_N0509_R046_T49MFM_20240218T050829.zip \
-        output_multispectral.tif --target-crs EPSG:4326
+Cara pakai:
+- Sesuaikan nilai pada kamus `MANUAL_CONFIG` di bawah (path arsip, keluaran, CRS, dll).
+- Jalankan script ini: `python scripts/process_to_multicpectral2.py`.
 
 Catatan:
 - Script membutuhkan dependensi: rasterio, numpy.
@@ -24,7 +23,6 @@ Catatan:
 
 from __future__ import annotations
 
-import argparse
 import re
 import shutil
 import sys
@@ -32,7 +30,7 @@ import tempfile
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import rasterio
@@ -62,6 +60,16 @@ ORDERED_BANDS: Tuple[str, ...] = (
 RESOLUTION_PRIORITY: Dict[str, int] = {"10m": 0, "20m": 1, "60m": 2, "": 3}
 
 
+# Konfigurasi manual (ubah sesuai kebutuhan sebelum menjalankan script)
+MANUAL_CONFIG = {
+    "zip_path": Path("/path/ke/S2A_MSIL2A_20240218T021531_N0509_R046_T49MFM_20240218T050829.zip"),
+    "output_path": Path("/path/keluaran/output_multispektral.tif"),
+    "target_crs": None,  # Contoh: "EPSG:4326"
+    "resampling": "bilinear",
+    "overwrite": False,
+}
+
+
 @dataclass
 class ProcessingConfig:
     zip_path: Path
@@ -75,51 +83,55 @@ class ProcessingError(RuntimeError):
     """Kesalahan yang terjadi ketika memproses arsip."""
 
 
-def parse_arguments(argv: Optional[Iterable[str]] = None) -> ProcessingConfig:
-    parser = argparse.ArgumentParser(
-        description=(
-            "Konversi arsip Sentinel-2 Level-2A (.zip) menjadi citra multispektral "
-            "multiband (B01-B12) dalam satu GeoTIFF/COG."
-        )
-    )
-    parser.add_argument("zip_path", type=Path, help="Path ke arsip .zip Sentinel-2 Level-2A")
-    parser.add_argument("output_path", type=Path, help="Path keluaran GeoTIFF/COG")
-    parser.add_argument(
-        "--target-crs",
-        type=str,
-        default=None,
-        help="CRS keluaran (contoh: EPSG:4326). Jika tidak diisi, menggunakan CRS asli tile."
-    )
-    parser.add_argument(
-        "--resampling",
-        choices=[r.name.lower() for r in Resampling],
-        default="bilinear",
-        help="Metode resampling untuk penyeragaman resolusi (default: bilinear)."
-    )
-    parser.add_argument(
-        "--overwrite",
-        action="store_true",
-        help="Timpa berkas keluaran jika sudah ada."
-    )
+def build_config() -> ProcessingConfig:
+    """Bangun konfigurasi proses berdasarkan pengaturan manual."""
 
-    args = parser.parse_args(list(argv) if argv is not None else None)
+    def ensure_path(value: object, key: str) -> Path:
+        if value is None:
+            raise ProcessingError(f"Nilai {key!r} belum diisi pada MANUAL_CONFIG.")
+        if isinstance(value, Path):
+            return value.expanduser()
+        if isinstance(value, str):
+            return Path(value).expanduser()
+        raise ProcessingError(f"Nilai {key!r} harus berupa string atau Path.")
 
-    if not args.zip_path.exists():
-        raise ProcessingError(f"Berkas zip tidak ditemukan: {args.zip_path}")
-    if args.output_path.exists() and not args.overwrite:
+    zip_path = ensure_path(MANUAL_CONFIG.get("zip_path"), "zip_path")
+    output_path = ensure_path(MANUAL_CONFIG.get("output_path"), "output_path")
+
+    target_input = MANUAL_CONFIG.get("target_crs")
+    if target_input in (None, "", False):
+        target_crs: Optional[CRS] = None
+    else:
+        try:
+            target_crs = CRS.from_user_input(target_input)
+        except Exception as exc:  # pragma: no cover - validasi sederhana
+            raise ProcessingError(f"CRS tidak valid: {target_input}") from exc
+
+    resampling_name = str(MANUAL_CONFIG.get("resampling", "bilinear")).upper()
+    if resampling_name not in Resampling.__members__:
         raise ProcessingError(
-            f"Berkas keluaran sudah ada: {args.output_path}. Gunakan --overwrite untuk menimpa."
+            "Metode resampling tidak dikenal: {}. Pilihan: {}".format(
+                resampling_name,
+                ", ".join(name.lower() for name in Resampling.__members__)
+            )
         )
+    resampling = Resampling[resampling_name]
 
-    target_crs = CRS.from_user_input(args.target_crs) if args.target_crs else None
-    resampling = Resampling[args.resampling.upper()]
+    overwrite = bool(MANUAL_CONFIG.get("overwrite", False))
+
+    if not zip_path.exists():
+        raise ProcessingError(f"Berkas zip tidak ditemukan: {zip_path}")
+    if output_path.exists() and not overwrite:
+        raise ProcessingError(
+            f"Berkas keluaran sudah ada: {output_path}. Atur overwrite=True untuk menimpa."
+        )
 
     return ProcessingConfig(
-        zip_path=args.zip_path,
-        output_path=args.output_path,
+        zip_path=zip_path,
+        output_path=output_path,
         target_crs=target_crs,
         resampling=resampling,
-        overwrite=args.overwrite,
+        overwrite=overwrite,
     )
 
 
@@ -358,9 +370,9 @@ def process(config: ProcessingConfig) -> None:
                 print(f"⚠️ Gagal menghapus folder sementara {temp_dir}: {exc}")
 
 
-def main(argv: Optional[Iterable[str]] = None) -> None:
+def main() -> None:
     try:
-        config = parse_arguments(argv)
+        config = build_config()
         process(config)
     except ProcessingError as exc:
         print(f"❌ Proses gagal: {exc}")
