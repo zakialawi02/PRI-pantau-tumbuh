@@ -107,11 +107,12 @@ def build_config() -> ProcessingConfig:
         except Exception as exc:  # pragma: no cover - validasi sederhana
             raise ProcessingError(f"CRS tidak valid: {target_input}") from exc
 
-    resampling_name = str(MANUAL_CONFIG.get("resampling", "bilinear")).upper()
+    resampling_raw = MANUAL_CONFIG.get("resampling", "bilinear")
+    resampling_name = str(resampling_raw).lower()
     if resampling_name not in Resampling.__members__:
         raise ProcessingError(
             "Metode resampling tidak dikenal: {}. Pilihan: {}".format(
-                resampling_name,
+                resampling_raw,
                 ", ".join(name.lower() for name in Resampling.__members__)
             )
         )
