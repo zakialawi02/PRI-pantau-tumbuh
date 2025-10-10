@@ -77,8 +77,8 @@ RESAMPLING_LOOKUP: Dict[str, Resampling] = {
 
 # Konfigurasi manual (ubah sesuai kebutuhan sebelum menjalankan script)
 MANUAL_CONFIG = {
-    "zip_path": Path("/path/ke/S2A_MSIL2A_20240218T021531_N0509_R046_T49MFM_20240218T050829.zip"),
-    "output_path": Path("/path/keluaran/output_multispektral.tif"),
+    "zip_path": Path("./S2A_MSIL2A_20250923T023141_N0511_R046_T50MKD_20250923T073216.zip"),
+    "output_path": Path("./output_multispektral.tif"),
     "target_crs": None,  # Contoh: "EPSG:4326"
     "resampling": "bilinear",
     "overwrite": False,
