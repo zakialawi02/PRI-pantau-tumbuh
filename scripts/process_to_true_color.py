@@ -174,18 +174,53 @@ def extract_metadata_fields(metadata_path: Optional[Path]) -> Dict[str, str]:
     return metadata
 
 
+MANUAL_EPSG_PROJ4: Mapping[int, str] = {
+    4326: "+proj=longlat +datum=WGS84 +no_defs +type=crs",
+    3857: "+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 "
+    "+x_0=0.0 +y_0=0.0 +k=1.0 +units=m +nadgrids=@null +wktext +no_defs +type=crs",
+}
+
+
+def manual_crs_from_epsg(epsg: int) -> Optional[CRS]:
+    """Create a CRS from a small curated set of EPSG definitions."""
+
+    if epsg in MANUAL_EPSG_PROJ4:
+        return CRS.from_proj4(MANUAL_EPSG_PROJ4[epsg])
+
+    if 32601 <= epsg <= 32660:
+        zone = epsg - 32600
+        proj4 = (
+            f"+proj=utm +zone={zone} +datum=WGS84 +units=m +no_defs +type=crs"
+        )
+        return CRS.from_proj4(proj4)
+
+    if 32701 <= epsg <= 32760:
+        zone = epsg - 32700
+        proj4 = (
+            f"+proj=utm +zone={zone} +south +datum=WGS84 +units=m +no_defs +type=crs"
+        )
+        return CRS.from_proj4(proj4)
+
+    return None
+
+
 def safe_crs_from_epsg(epsg: int) -> Optional[CRS]:
-    """Safely attempt to create a CRS from an EPSG code."""
+    """Safely attempt to create a CRS without relying on the PROJ database."""
 
     try:
-        return CRS.from_epsg(epsg)
-    except (CRSError, ValueError):
-        print(
-            "⚠️  Gagal memuat CRS dari EPSG:{} melalui database PROJ lokal.".format(
-                epsg
-            )
-        )
-        return None
+        crs = manual_crs_from_epsg(epsg)
+    except CRSError:
+        crs = None
+
+    if crs is not None:
+        print(f"📐 CRS EPSG:{epsg} dimuat dari definisi manual.")
+        return crs
+
+    print(
+        "⚠️  Definisi manual untuk EPSG:{} tidak tersedia."
+        " Perlu fallback lain.".format(epsg)
+    )
+    return None
 
 
 def derive_crs(
