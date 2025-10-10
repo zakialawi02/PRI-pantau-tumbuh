@@ -30,7 +30,7 @@ import tempfile
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple
 
 import numpy as np
 import rasterio
@@ -231,6 +231,129 @@ def read_metadata(safe_root: Path) -> Dict[str, str]:
     return metadata
 
 
+def _crs_from_tags(tags: Dict[str, str]) -> Optional[CRS]:
+    """Coba bangun CRS dari metadata tag rasterio."""
+
+    for key in ("HORIZONTAL_CS_CODE", "horizontal_cs_code", "EPSG_CODE", "epsg_code", "crs"):
+        value = tags.get(key)
+        if value:
+            try:
+                return CRS.from_user_input(value)
+            except Exception:
+                continue
+    return None
+
+
+def _iterate_metadata_xml(band_path: Path, safe_root: Path) -> Iterable[Path]:
+    """Hasilkan kandidat berkas XML yang mungkin menyimpan CRS."""
+
+    seen = set()
+
+    # Mulai dari folder band lalu naik ke atas untuk mencari metadata tile.
+    for parent in band_path.parents:
+        for pattern in ("MTD_TL*.xml", "MTD_L2A*.xml", "MTD_TD*.xml"):
+            for candidate in parent.glob(pattern):
+                if candidate not in seen and candidate.is_file():
+                    seen.add(candidate)
+                    yield candidate
+        direct = parent / "MTD_TL.xml"
+        if direct.exists() and direct not in seen:
+            seen.add(direct)
+            yield direct
+
+    # Metadata utama SAFE.
+    safe_xml = safe_root / "MTD_MSIL2A.xml"
+    if safe_xml.exists() and safe_xml not in seen:
+        seen.add(safe_xml)
+        yield safe_xml
+
+
+def _crs_from_xml(xml_path: Path) -> Optional[CRS]:
+    """Parse CRS dari berkas metadata XML Sentinel."""
+
+    try:
+        tree = ET.parse(xml_path)
+    except Exception:
+        return None
+
+    root = tree.getroot()
+    for element in root.iter():
+        local_name = element.tag.split("}")[-1]
+        if local_name in {"HORIZONTAL_CS_CODE", "HORIZONTAL_CS_NAME", "Vertical_CS", "Projected_CRS"}:
+            text = element.text.strip() if element.text else ""
+            if not text:
+                continue
+            for candidate in (text, text.replace(" ", "")):
+                try:
+                    return CRS.from_user_input(candidate)
+                except Exception:
+                    continue
+    return None
+
+
+TILE_ID_PATTERN = re.compile(r"T(\d{2})([A-Z]{3})")
+
+
+def _tile_id_from_path(path: Path) -> Optional[str]:
+    """Ambil tile-id Sentinel-2 dari nama berkas atau folder."""
+
+    for part in path.parts:
+        match = TILE_ID_PATTERN.search(part.upper())
+        if match:
+            return match.group(0)
+    return None
+
+
+def _crs_from_tile_id(tile_id: str) -> Optional[CRS]:
+    """Hitung EPSG dari tile-id (TxxYYY)."""
+
+    if len(tile_id) < 4:
+        return None
+    try:
+        zone = int(tile_id[1:3])
+    except ValueError:
+        return None
+
+    lat_band = tile_id[3]
+    if not lat_band.isalpha():
+        return None
+
+    hemisphere_north = lat_band >= "N"
+    epsg = 32600 + zone if hemisphere_north else 32700 + zone
+    try:
+        return CRS.from_epsg(epsg)
+    except Exception:
+        return None
+
+
+def resolve_source_crs(
+    reference_dataset: DatasetReader,
+    band_path: Path,
+    safe_root: Path,
+) -> Tuple[CRS, str]:
+    """Cari CRS sumber dengan berbagai strategi fallback."""
+
+    if reference_dataset.crs:
+        return reference_dataset.crs, "metadata JP2"
+
+    tag_crs = _crs_from_tags(reference_dataset.tags())
+    if tag_crs:
+        return tag_crs, "tag JP2"
+
+    for xml_path in _iterate_metadata_xml(band_path, safe_root):
+        crs = _crs_from_xml(xml_path)
+        if crs:
+            return crs, f"metadata {xml_path.name}"
+
+    tile_id = _tile_id_from_path(band_path) or _tile_id_from_path(safe_root)
+    if tile_id:
+        crs = _crs_from_tile_id(tile_id)
+        if crs:
+            return crs, f"tile-id {tile_id}"
+
+    return CRS.from_epsg(4326), "fallback EPSG:4326"
+
+
 def choose_reference_band(band_map: Dict[str, Path]) -> str:
     """Pilih band referensi untuk grid 10 m (prioritas B02/B03/B04/B08)."""
     preferred = ["B02", "B03", "B04", "B08"]
@@ -243,17 +366,14 @@ def choose_reference_band(band_map: Dict[str, Path]) -> str:
 
 def build_target_grid(
     reference_dataset: DatasetReader,
+    source_crs: CRS,
     target_crs: Optional[CRS],
 ) -> Tuple[CRS, rasterio.Affine, int, int]:
-    src_crs = reference_dataset.crs
-    if src_crs is None:
-        raise ProcessingError("CRS band referensi tidak ditemukan.")
-
-    if target_crs is None or target_crs == src_crs:
-        return src_crs, reference_dataset.transform, reference_dataset.width, reference_dataset.height
+    if target_crs is None or target_crs == source_crs:
+        return source_crs, reference_dataset.transform, reference_dataset.width, reference_dataset.height
 
     transform, width, height = calculate_default_transform(
-        src_crs,
+        source_crs,
         target_crs,
         reference_dataset.width,
         reference_dataset.height,
@@ -268,15 +388,19 @@ def reproject_band(
     dst_transform: rasterio.Affine,
     dst_crs: CRS,
     resampling: Resampling,
+    source_crs: CRS,
 ) -> None:
     with rasterio.open(src_path) as src:
         if src.count != 1:
             raise ProcessingError(f"Berkas band bukan single-band: {src_path}")
+        src_crs = src.crs or source_crs
+        if src_crs is None:
+            raise ProcessingError(f"CRS tidak diketahui untuk band {src_path.name}")
         reproject(
             source=rasterio.band(src, 1),
             destination=dst_array,
             src_transform=src.transform,
-            src_crs=src.crs,
+            src_crs=src_crs,
             dst_transform=dst_transform,
             dst_crs=dst_crs,
             resampling=resampling,
@@ -332,9 +456,11 @@ def process(config: ProcessingConfig) -> None:
         metadata = read_metadata(safe_root)
 
         reference_band_code = choose_reference_band(band_map)
-        with rasterio.open(band_map[reference_band_code]) as ref_ds:
+        reference_path = band_map[reference_band_code]
+        with rasterio.open(reference_path) as ref_ds:
+            source_crs, crs_origin = resolve_source_crs(ref_ds, reference_path, safe_root)
             target_crs, target_transform, target_width, target_height = build_target_grid(
-                ref_ds, config.target_crs
+                ref_ds, source_crs, config.target_crs
             )
 
         bands_output: List[np.ndarray] = []
@@ -347,6 +473,7 @@ def process(config: ProcessingConfig) -> None:
                 dst_transform=target_transform,
                 dst_crs=target_crs,
                 resampling=config.resampling,
+                source_crs=source_crs,
             )
             bands_output.append(convert_float_to_uint16(destination))
 
@@ -360,6 +487,7 @@ def process(config: ProcessingConfig) -> None:
         )
 
         print(f"✅ Multispektral berhasil dibuat: {config.output_path}")
+        print(f"   CRS sumber   : {source_crs.to_string()} ({crs_origin})")
         print(f"   CRS keluaran : {target_crs.to_string()}" if target_crs else "   CRS keluaran : (tidak diketahui)")
         print(f"   Resolusi     : {target_width} x {target_height} piksel")
     finally:
