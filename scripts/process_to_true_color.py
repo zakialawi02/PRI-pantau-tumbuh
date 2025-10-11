@@ -33,6 +33,7 @@ from rasterio.enums import Resampling
 from rasterio.transform import Affine
 
 
+# Daftar band yang dibutuhkan untuk komposit true colour.
 TRUECOLOUR_BANDS: Mapping[str, str] = {"B04": "Red", "B03": "Green", "B02": "Blue"}
 
 
@@ -90,6 +91,8 @@ def managed_workspace_directory(zip_path: Path, keep: bool = False) -> Iterator[
 def extract_required_assets(zip_path: Path, destination: Path) -> ExtractionResult:
     """Extract the metadata file and the 10 m RGB bands from the archive."""
 
+    print("🔍 Membaca isi arsip Sentinel untuk mencari band dan metadata...")
+
     band_members: MutableMapping[str, str] = {}
     metadata_member: Optional[str] = None
 
@@ -123,14 +126,17 @@ def extract_required_assets(zip_path: Path, destination: Path) -> ExtractionResu
                 "Band berikut tidak ditemukan dalam arsip: " + ", ".join(missing)
             )
 
-        extracted_bands = {
-            band: Path(archive.extract(member, destination))
-            for band, member in band_members.items()
-        }
+        extracted_bands = {}
+        for band, member in band_members.items():
+            print(f"   • Mengekstrak {band} → {member}")
+            extracted_bands[band] = Path(archive.extract(member, destination))
 
         extracted_metadata: Optional[Path] = None
         if metadata_member:
+            print(f"🗂️  Metadata ditemukan: {metadata_member}")
             extracted_metadata = Path(archive.extract(metadata_member, destination))
+        else:
+            print("⚠️  Metadata utama tidak ditemukan dalam arsip. Melanjutkan tanpa metadata.")
 
     return ExtractionResult(band_paths=extracted_bands, metadata_path=extracted_metadata)
 
@@ -143,6 +149,7 @@ def extract_metadata_fields(metadata_path: Optional[Path]) -> Dict[str, str]:
         "PLATFORM": "Unknown",
         "PRODUCT_ID": "Unknown",
         "CLOUD_COVERAGE_ASSESSMENT": "Unknown",
+        "PRODUCT_LEVEL": "Unknown",
     }
 
     if metadata_path is None or not metadata_path.exists():
@@ -171,6 +178,16 @@ def extract_metadata_fields(metadata_path: Optional[Path]) -> Dict[str, str]:
         find_first("CLOUD_COVERAGE_ASSESSMENT")
         or defaults["CLOUD_COVERAGE_ASSESSMENT"]
     )
+    level = find_first("PROCESSING_LEVEL") or find_first("PRODUCT_TYPE")
+    if level:
+        match = re.search(
+            r"(Level[-_ ]?\d[A-Z]?|MSIL\d[A-Z]?)",
+            level,
+            flags=re.IGNORECASE,
+        )
+        if match:
+            level = match.group(0)
+    metadata["PRODUCT_LEVEL"] = level or defaults["PRODUCT_LEVEL"]
     return metadata
 
 
@@ -223,9 +240,43 @@ def safe_crs_from_epsg(epsg: int) -> Optional[CRS]:
     return None
 
 
+def _tile_code_from_metadata(metadata_path: Path) -> Optional[str]:
+    """Ambil kode tile Sentinel-2 dari metadata bila tersedia."""
+
+    try:
+        tree = ET.parse(metadata_path)
+    except (ET.ParseError, FileNotFoundError):
+        return None
+
+    root = tree.getroot()
+
+    # Cari kode tile pada elemen yang umum dipakai oleh produk Level-1C/2A.
+    candidates = [
+        "TILE_ID",
+        "PRODUCT_URI",
+        "PRODUCT_ID",
+        "PRODUCT_TILE_ID",
+    ]
+    for tag in candidates:
+        for element in root.findall(f".//{{*}}{tag}"):
+            if not element.text:
+                continue
+            match = re.search(r"T\d{2}[A-Z]{3}", element.text)
+            if match:
+                return match.group(0)
+
+    # Sebagai alternatif, periksa atribut dari elemen mana pun.
+    for element in root.iter():
+        for value in element.attrib.values():
+            match = re.search(r"T\d{2}[A-Z]{3}", value)
+            if match:
+                return match.group(0)
+
+    return None
+
+
 def derive_crs(
     reference_band: Path,
-    zip_name: str,
     metadata_path: Optional[Path] = None,
 ) -> CRS:
     """Determine the CRS, prioritising the raster, followed by metadata."""
@@ -262,21 +313,24 @@ def derive_crs(
         except (ET.ParseError, ValueError, CRSError):
             pass
 
-    match = re.search(r"T(\d{2})([A-Z]{3})", zip_name)
-    if match:
-        utm_zone = int(match.group(1))
-        hemisphere = "N"
-        if match.group(2)[0] < "N":
-            hemisphere = "S"
-        utm_epsg = 32600 + utm_zone if hemisphere == "N" else 32700 + utm_zone
-        crs = safe_crs_from_epsg(utm_epsg)
-        if crs:
-            print(
-                "🗺️  CRS diduga dari kode tile ({}{} → EPSG:{}).".format(
-                    match.group(1), match.group(2), utm_epsg
-                )
-            )
-            return crs
+    if metadata_path and metadata_path.exists():
+        tile_code = _tile_code_from_metadata(metadata_path)
+        if tile_code:
+            match = re.search(r"T(\d{2})([A-Z]{3})", tile_code)
+            if match:
+                utm_zone = int(match.group(1))
+                hemisphere = "N"
+                if match.group(2)[0] < "N":
+                    hemisphere = "S"
+                utm_epsg = 32600 + utm_zone if hemisphere == "N" else 32700 + utm_zone
+                crs = safe_crs_from_epsg(utm_epsg)
+                if crs:
+                    print(
+                        "🗺️  CRS diduga dari metadata tile ({}{} → EPSG:{}).".format(
+                            match.group(1), match.group(2), utm_epsg
+                        )
+                    )
+                    return crs
 
     print("⚠️  CRS tidak ditemukan, fallback ke WGS84 (manual proj4).")
     return CRS.from_proj4("+proj=longlat +datum=WGS84 +no_defs +type=crs")
@@ -286,6 +340,8 @@ def read_and_resample_bands(
     band_paths: Mapping[str, Path]
 ) -> Tuple[np.ndarray, Mapping[str, object], Affine, str]:
     """Read Sentinel bands and resample them to match the 10 m grid."""
+
+    print("🧮 Membaca dan meresampel band B04, B03, B02 ke grid 10 m...")
 
     reference_path = band_paths["B04"]
     arrays: List[np.ndarray] = []
@@ -303,6 +359,7 @@ def read_and_resample_bands(
                 resampling=Resampling.bilinear,
             )[0]
             arrays.append(data)
+            print(f"   • Band {band_code} berhasil dibaca dan disesuaikan ukurannya.")
 
     stacked = np.stack(arrays, axis=0)
     return stacked, profile, transform, dtype
@@ -330,6 +387,8 @@ def create_truecolour_cog(
         blockxsize=512,
         blockysize=512,
     )
+
+    print(f"💾 Menulis True Colour COG ke {output_path}...")
 
     with rasterio.open(output_path, "w", **output_profile) as dst:
         for idx, band_code in enumerate(("B04", "B03", "B02"), start=1):
@@ -381,9 +440,14 @@ def main(config: ProcessingConfig = CONFIG) -> None:
 
         crs = derive_crs(
             reference_band=extraction.band_paths["B04"],
-            zip_name=config.zip_path.stem,
             metadata_path=extraction.metadata_path,
         )
+
+        if extraction.metadata_path and extraction.metadata_path.exists():
+            product_level = metadata_fields.get("PRODUCT_LEVEL", "Unknown")
+            print(f"🏷️  Produk Sentinel terdeteksi pada level: {product_level}")
+        else:
+            print("🏷️  Produk Sentinel level tidak dapat ditentukan (metadata tidak tersedia).")
 
         create_truecolour_cog(
             stacked_bands=stacked.astype(dtype, copy=False),
