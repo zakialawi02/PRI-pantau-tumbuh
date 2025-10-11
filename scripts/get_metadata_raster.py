@@ -2,19 +2,30 @@
 
 This script prints a comprehensive summary of the information stored in a
 GeoTIFF/TIFF raster, including dataset-level metadata, per-band details, and
-basic statistics for the pixel values.  Use the CLI by passing the path to a
-GeoTIFF file as an argument.
+basic statistics for the pixel values.  A default configuration is hard-coded
+in the ``CONFIG`` dictionary and can be adjusted directly in this file.  An
+optional positional argument lets you override the raster path without editing
+the file, while still avoiding external configuration or ``argparse``.
 """
 
 from __future__ import annotations
 
 import json
 import sys
-from typing import Any, Dict, Sequence
+from pathlib import Path
+from typing import Any, Dict, MutableMapping, Sequence
 
 import numpy as np
 import rasterio
 from affine import Affine
+
+
+CONFIG: Dict[str, Any] = {
+    "raster_path": "./sentinel2L1_multispectral_10m_cog_auto_crs.tif",
+    "indent": 2,
+    "output_path": None,
+    "ensure_ascii": False,
+}
 
 
 def _format_affine(transform: Affine) -> Dict[str, float]:
@@ -99,58 +110,74 @@ def collect_raster_metadata(file_path: str) -> Dict[str, Any]:
 
 def _print_usage(program: str) -> None:
     message = (
-        "Usage: {program} <path> [--indent <spaces>]\n\n"
-        "Print metadata and statistics from a GeoTIFF/TIFF raster file."
+        "Usage: {program} [<path>]\n\n"
+        "When no path is provided, the script will use the hard-coded CONFIG\n"
+        "dictionary defined at the top of the module. Edit CONFIG to change\n"
+        "the default raster path, JSON indentation, or output destination."
     ).format(program=program)
     print(message, file=sys.stderr)
 
 
-def _parse_cli(argv: Sequence[str]) -> tuple[str, int]:
+def _resolve_runtime_config(
+    argv: Sequence[str],
+    base_config: MutableMapping[str, Any],
+) -> Dict[str, Any]:
     program = argv[0] if argv else "get_metadata_raster.py"
-    path: str | None = None
-    indent = 2
-    args_iter = iter(argv[1:])
+    config: Dict[str, Any] = dict(base_config)
 
-    for arg in args_iter:
-        if arg == "--indent":
-            try:
-                indent_value = next(args_iter)
-            except StopIteration as exc:
-                raise SystemExit("--indent requires an integer value") from exc
-            try:
-                indent = int(indent_value)
-            except ValueError as exc:
-                raise SystemExit("--indent requires an integer value") from exc
-            continue
+    args = list(argv[1:])
+    if not args:
+        if not config.get("raster_path"):
+            _print_usage(program)
+            raise SystemExit(1)
+        return config
 
-        if arg.startswith("--indent="):
-            indent_value = arg.split("=", 1)[1]
-            try:
-                indent = int(indent_value)
-            except ValueError as exc:
-                raise SystemExit("--indent requires an integer value") from exc
-            continue
+    if len(args) > 1:
+        raise SystemExit("Only one raster path can be provided")
 
-        if arg.startswith("-"):
-            raise SystemExit(f"Unknown option: {arg}")
-
-        if path is not None:
-            raise SystemExit("Only one raster path can be provided")
-
-        path = arg
-
-    if path is None:
+    option = args[0]
+    if option in {"-h", "--help"}:
         _print_usage(program)
-        raise SystemExit(1)
+        raise SystemExit(0)
 
-    return path, indent
+    if option.startswith("-"):
+        raise SystemExit(f"Unknown option: {option}")
+
+    config["raster_path"] = option
+    return config
 
 
 def main(argv: Sequence[str] | None = None) -> None:
-    cli_args = _parse_cli(list(argv) if argv is not None else sys.argv)
-    path, indent = cli_args
-    metadata = collect_raster_metadata(path)
-    print(json.dumps(metadata, indent=indent, ensure_ascii=False))
+    runtime_config = _resolve_runtime_config(
+        list(argv) if argv is not None else sys.argv,
+        CONFIG,
+    )
+
+    raster_path = runtime_config.get("raster_path")
+    if not isinstance(raster_path, str) or not raster_path.strip():
+        raise SystemExit("CONFIG must define a non-empty 'raster_path'.")
+
+    indent_value = runtime_config.get("indent", 2)
+    try:
+        indent = int(indent_value)
+    except (TypeError, ValueError) as exc:
+        raise SystemExit("CONFIG 'indent' must be an integer value.") from exc
+
+    ensure_ascii = bool(runtime_config.get("ensure_ascii", False))
+
+    metadata = collect_raster_metadata(raster_path)
+
+    output_path = runtime_config.get("output_path")
+    if output_path:
+        destination = Path(str(output_path)).expanduser()
+        destination.write_text(
+            json.dumps(metadata, indent=indent, ensure_ascii=ensure_ascii),
+            encoding="utf-8",
+        )
+        print(f"Metadata written to {destination}")
+        return
+
+    print(json.dumps(metadata, indent=indent, ensure_ascii=ensure_ascii))
 
 
 if __name__ == "__main__":
