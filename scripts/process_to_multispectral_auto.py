@@ -115,7 +115,7 @@ def build_config(config_data: Optional[Dict[str, object]] = None) -> ProcessingC
             f"Berkas keluaran {output} sudah ada. Set 'overwrite' ke True untuk menimpa."
         )
 
-    resampling_name = str(cfg.get("resampling", "bilinear")).upper()
+    resampling_name = str(cfg.get("resampling", "bilinear")).lower()
     if resampling_name not in Resampling.__members__:
         raise ValueError(
             "Nilai 'resampling' tidak dikenal. Pilih salah satu dari: "
@@ -127,7 +127,7 @@ def build_config(config_data: Optional[Dict[str, object]] = None) -> ProcessingC
     print(f"  • sumber: {source}")
     print(f"  • keluaran: {output}")
     print(f"  • overwrite: {cfg.get('overwrite', False)}")
-    print(f"  • resampling: {resampling_name.lower()}")
+    print(f"  • resampling: {resampling_name}")
 
     return ProcessingConfig(
         source=source,
