@@ -26,6 +26,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional
 import xml.etree.ElementTree as ET
+from urllib.error import URLError
+from urllib.request import urlopen
 
 import numpy as np
 import rasterio
@@ -232,25 +234,47 @@ def select_reference_band(band_map: Dict[str, Path]) -> Path:
 
 
 def determine_output_crs(band_map: Dict[str, Path], safe_dir: Path) -> CRS:
-    """Ambil CRS dari band atau metadata bila diperlukan."""
+    """Ambil CRS dari band, metadata, nama file, atau fallback standar."""
 
     sample_band = next(iter(band_map.values()))
     with rasterio.open(sample_band) as ds:
         if ds.crs:
-            print(f"📐 CRS keluaran: {ds.crs}")
+            print(f"📐 CRS keluaran (langsung dari band): {ds.crs}")
             return ds.crs
 
     print("⚠️ CRS tidak ditemukan langsung pada band. Mencari dari metadata...")
     metadata_file = locate_metadata_file(safe_dir)
-    if metadata_file is None:
-        raise RuntimeError("Tidak dapat menemukan metadata produk untuk menentukan CRS.")
+    if metadata_file is not None:
+        epsg_from_meta = epsg_from_metadata(metadata_file)
+        if epsg_from_meta is not None:
+            crs = build_crs_from_epsg(epsg_from_meta)
+            if crs is not None:
+                print(f"📐 CRS keluaran (metadata EPSG:{epsg_from_meta}): {crs}")
+                return crs
+            print(
+                "⚠️ Kode EPSG dari metadata ditemukan tetapi tidak dapat dibangun dari referensi lokal."
+            )
+        else:
+            print("⚠️ Metadata tidak mengandung kode EPSG eksplisit.")
+    else:
+        print("⚠️ Metadata utama tidak ditemukan, melanjutkan ke heuristik nama file.")
 
-    crs = crs_from_metadata(metadata_file)
-    if crs is None:
-        raise RuntimeError("Tidak dapat menentukan CRS dari metadata raster.")
+    print("🔤 Mencoba menurunkan EPSG dari nama file JP2...")
+    epsg_from_name = infer_epsg_from_band_name(sample_band.name)
+    if epsg_from_name is not None:
+        crs = build_crs_from_epsg(epsg_from_name)
+        if crs is not None:
+            print(f"📐 CRS keluaran (nama file EPSG:{epsg_from_name}): {crs}")
+            return crs
+        print("⚠️ EPSG dari nama file diketahui tetapi gagal dibangun.")
+    else:
+        print("⚠️ Tidak dapat menurunkan kode EPSG dari nama file.")
 
-    print(f"📐 CRS keluaran (metadata): {crs}")
-    return crs
+    print("ℹ️  Menggunakan fallback EPSG:4326 (WGS84 lat/lon).")
+    fallback = build_crs_from_epsg(4326)
+    if fallback is None:
+        raise RuntimeError("Tidak dapat membangun CRS fallback EPSG:4326.")
+    return fallback
 
 
 def locate_metadata_file(safe_dir: Path) -> Optional[Path]:
@@ -273,8 +297,8 @@ def locate_metadata_file(safe_dir: Path) -> Optional[Path]:
     return None
 
 
-def crs_from_metadata(metadata_file: Path) -> Optional[CRS]:
-    """Baca CRS dari metadata XML Sentinel-2."""
+def epsg_from_metadata(metadata_file: Path) -> Optional[int]:
+    """Ambil kode EPSG dari metadata XML Sentinel-2."""
 
     try:
         root = ET.parse(metadata_file).getroot()
@@ -312,12 +336,92 @@ def crs_from_metadata(metadata_file: Path) -> Optional[CRS]:
         print("⚠️ Tidak menemukan kode EPSG di metadata.")
         return None
 
-    epsg_code = possible_codes[0]
+    return possible_codes[0]
+
+
+def build_crs_from_epsg(epsg_code: int) -> Optional[CRS]:
+    """Bangun CRS dari kode EPSG dengan fallback daring dan hardcode."""
+
     try:
-        return CRS.from_epsg(epsg_code)
+        crs = CRS.from_epsg(epsg_code)
+        print(f"   ↪️  CRS dibangun dari proj.db (EPSG:{epsg_code}).")
+        return crs
     except Exception as exc:  # pylint: disable=broad-except
-        print(f"⚠️ Gagal membangun CRS dari EPSG:{epsg_code}: {exc}")
+        print(f"⚠️ Gagal memuat EPSG:{epsg_code} dari proj.db: {exc}")
+
+    print("   ↪️  Mencoba mengambil definisi dari epsg.io...")
+    try:
+        with urlopen(f"https://epsg.io/{epsg_code}.proj4", timeout=10) as response:
+            proj_string = response.read().decode("utf-8").strip()
+        if proj_string:
+            crs = CRS.from_proj4(proj_string)
+            print("   ↪️  CRS dibangun dari definisi epsg.io.")
+            return crs
+    except (URLError, TimeoutError, ValueError) as exc:
+        print(f"⚠️ Tidak dapat mengambil definisi EPSG:{epsg_code} dari internet: {exc}")
+    except Exception as exc:  # pylint: disable=broad-except
+        print(f"⚠️ Kesalahan tidak terduga saat mengambil EPSG:{epsg_code}: {exc}")
+
+    hardcoded = hardcoded_epsg_definition(epsg_code)
+    if hardcoded is not None:
+        print("   ↪️  Menggunakan definisi CRS hardcode.")
+        return hardcoded
+
+    print(f"⚠️ Tidak ada definisi CRS yang tersedia untuk EPSG:{epsg_code}.")
+    return None
+
+
+def hardcoded_epsg_definition(epsg_code: int) -> Optional[CRS]:
+    """Berikan CRS hardcode untuk kode EPSG umum Sentinel-2."""
+
+    if 32601 <= epsg_code <= 32660:
+        zone = epsg_code - 32600
+        proj4 = f"+proj=utm +zone={zone} +datum=WGS84 +units=m +no_defs +type=crs"
+        return CRS.from_proj4(proj4)
+    if 32701 <= epsg_code <= 32760:
+        zone = epsg_code - 32700
+        proj4 = (
+            f"+proj=utm +zone={zone} +datum=WGS84 +units=m +no_defs +south +type=crs"
+        )
+        return CRS.from_proj4(proj4)
+    if epsg_code == 4326:
+        return CRS.from_proj4("+proj=longlat +datum=WGS84 +no_defs +type=crs")
+    return None
+
+
+def infer_epsg_from_band_name(filename: str) -> Optional[int]:
+    """Turunkan kode EPSG berdasarkan pola nama file Sentinel-2."""
+
+    upper = filename.upper()
+    if "T" not in upper:
         return None
+
+    parts = upper.split("_")
+    tile_token = next((part for part in parts if part.startswith("T") and len(part) >= 3), None)
+    if tile_token is None:
+        return None
+
+    digits = "".join(ch for ch in tile_token[1:] if ch.isdigit())
+    if len(digits) < 2:
+        return None
+
+    try:
+        zone = int(digits[:2])
+    except ValueError:
+        return None
+
+    if zone < 1 or zone > 60:
+        return None
+
+    latitude_band = tile_token[3] if len(tile_token) > 3 else ""
+    if latitude_band:
+        if "C" <= latitude_band <= "M":
+            return 32700 + zone
+        if "N" <= latitude_band <= "X":
+            return 32600 + zone
+
+    # Default asumsi lintang utara bila tidak yakin.
+    return 32600 + zone
 
 
 def prepare_output_profile(ref_band_path: Path, band_count: int, output_crs: CRS) -> dict:
