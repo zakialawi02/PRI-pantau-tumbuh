@@ -10,23 +10,21 @@ Script ini akan:
 5. Menulis keluaran GeoTIFF berformat Cloud Optimized GeoTIFF (COG).
 6. Membersihkan direktori sementara setelah proses selesai.
 
-Penggunaan:
-    python scripts/process_to_multispectral_auto.py \
-        --source /path/ke/produk.zip \
-        --output /path/keluaran.tif
+Konfigurasi dipasang langsung di dalam berkas melalui variabel
+``USER_CONFIG`` di bawah. Sesuaikan path sumber, lokasi output, metode
+resampling, serta opsi penimpaan file sebelum menjalankan script:
 
-Opsi tambahan tersedia, jalankan dengan parameter ``--help``.
+    python scripts/process_to_multispectral_auto.py
 """
 
 from __future__ import annotations
 
-import argparse
 import sys
 import tempfile
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional
+from typing import Dict, List, Optional
 
 import numpy as np
 import rasterio
@@ -88,55 +86,53 @@ class ProcessingConfig:
     resampling: Resampling
 
 
-def parse_args(argv: Optional[Iterable[str]] = None) -> ProcessingConfig:
-    """Parse argumen CLI dan membentuk :class:`ProcessingConfig`."""
+USER_CONFIG = {
+    "source": "/path/ke/produk.zip",  # Ganti dengan path sumber Sentinel-2 (.zip atau .SAFE)
+    "output": None,  # Isi path keluaran atau biarkan None untuk otomatis
+    "overwrite": False,  # Ubah ke True bila ingin menimpa file keluaran
+    "resampling": "bilinear",  # Pilih metode resampling (mis. 'bilinear', 'cubic')
+}
 
-    parser = argparse.ArgumentParser(
-        description="Proses arsip Sentinel-2 Level-1C / Level-2A menjadi COG multispektral"
-    )
-    parser.add_argument(
-        "--source",
-        required=True,
-        type=Path,
-        help="Path sumber (arsip .zip atau direktori .SAFE)",
-    )
-    parser.add_argument(
-        "--output",
-        required=False,
-        type=Path,
-        help="Path keluaran GeoTIFF. Default: <nama_sumber>_multispectral.tif",
-    )
-    parser.add_argument(
-        "--resampling",
-        default="bilinear",
-        choices=[name.lower() for name in Resampling.__members__.keys()],
-        help="Metode resampling untuk band dengan resolusi >10m",
-    )
-    parser.add_argument(
-        "--overwrite",
-        action="store_true",
-        help="Izinkan menimpa file keluaran bila sudah ada",
-    )
 
-    args = parser.parse_args(argv)
+def build_config(config_data: Optional[Dict[str, object]] = None) -> ProcessingConfig:
+    """Bangun :class:`ProcessingConfig` dari konfigurasi manual."""
 
-    output = args.output
-    if output is None:
+    cfg = dict(USER_CONFIG)
+    if config_data:
+        cfg.update(config_data)
+
+    source = Path(str(cfg["source"])).expanduser().resolve()
+
+    output_raw = cfg.get("output")
+    if output_raw in (None, "", False):
         suffix = "_multispectral.tif"
-        stem = args.source.stem
-        output = args.source.with_name(f"{stem}{suffix}")
+        output = source.with_name(f"{source.stem}{suffix}")
+    else:
+        output = Path(str(output_raw)).expanduser().resolve()
 
-    if output.exists() and not args.overwrite:
-        parser.error(
-            f"Berkas keluaran {output} sudah ada. Gunakan --overwrite untuk menimpa."
+    if output.exists() and not cfg.get("overwrite", False):
+        raise FileExistsError(
+            f"Berkas keluaran {output} sudah ada. Set 'overwrite' ke True untuk menimpa."
         )
 
-    resampling = Resampling[args.resampling.upper()]
+    resampling_name = str(cfg.get("resampling", "bilinear")).upper()
+    if resampling_name not in Resampling.__members__:
+        raise ValueError(
+            "Nilai 'resampling' tidak dikenal. Pilih salah satu dari: "
+            + ", ".join(name.lower() for name in Resampling.__members__.keys())
+        )
+    resampling = Resampling[resampling_name]
+
+    print("📝 Konfigurasi aktif:")
+    print(f"  • sumber: {source}")
+    print(f"  • keluaran: {output}")
+    print(f"  • overwrite: {cfg.get('overwrite', False)}")
+    print(f"  • resampling: {resampling_name.lower()}")
 
     return ProcessingConfig(
-        source=args.source,
+        source=source,
         output=output,
-        overwrite=args.overwrite,
+        overwrite=bool(cfg.get("overwrite", False)),
         resampling=resampling,
     )
 
@@ -304,11 +300,11 @@ def write_multispectral(
     print(f"🎉 Penulisan selesai: {output_path}")
 
 
-def main(argv: Optional[Iterable[str]] = None) -> int:
+def main() -> int:
     """Fungsi utama script."""
 
     try:
-        config = parse_args(argv)
+        config = build_config()
         safe_dir, temp_dir = ensure_safe_dir(config.source)
         detect_product_level(safe_dir)
         band_map = collect_band_files(safe_dir)
