@@ -1,159 +1,404 @@
+"""Utility for generating Sentinel-2 true colour composites.
+
+The script accepts Sentinel-2 Level-1C or Level-2A products packaged as a
+single ``.zip`` file, extracts only the assets that are required to build a
+true colour composite (B04, B03, B02 and the main metadata document), and
+produces a Cloud Optimised GeoTIFF at 10 m resolution. The raster projection is
+preserved whenever it is available within the imagery; otherwise, an attempt is
+made to recover it from the metadata before falling back to an educated guess
+derived from the tile identifier.
+
+Konfigurasi input/output diatur langsung pada konstanta ``CONFIG`` yang dapat
+disesuaikan manual di dalam berkas ini.
+
+"""
+
+from __future__ import annotations
+
 import os
-import zipfile
-import rasterio
-from rasterio.enums import Resampling
-from rasterio.crs import CRS
-import numpy as np
-import xml.etree.ElementTree as ET
-from glob import glob
-import shutil
 import re
+import shutil
+import xml.etree.ElementTree as ET
+import zipfile
+from contextlib import contextmanager
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Dict, Iterator, List, Mapping, MutableMapping, Optional, Tuple
 
-# ===== KONFIGURASI =====
-zip_path = "S2C_MSIL1C_20251001T022551_N0511_R046_T50MKD_20251001T051811.zip"
-output_tif = "sentinel2L1_truecolor_10m_cog_auto_crs.tif"
+import numpy as np
+import rasterio
+from rasterio.crs import CRS
+from rasterio.errors import CRSError
+from rasterio.enums import Resampling
+from rasterio.transform import Affine
 
-# ===== 1. EKSTRAKSI ZIP =====
-zip_dir = os.path.dirname(os.path.abspath(zip_path))
-zip_name = os.path.splitext(os.path.basename(zip_path))[0]
-unzip_dir = os.path.join(zip_dir, f"{zip_name}_unzip")
 
-if os.path.exists(unzip_dir):
-    shutil.rmtree(unzip_dir)
-os.makedirs(unzip_dir, exist_ok=True)
+TRUECOLOUR_BANDS: Mapping[str, str] = {"B04": "Red", "B03": "Green", "B02": "Blue"}
 
-print(f"📂 Mengekstrak ke: {unzip_dir}")
-with zipfile.ZipFile(zip_path, 'r') as z:
-    z.extractall(unzip_dir)
 
-# ===== 2. BACA METADATA SCENE =====
-dirs = [os.path.join(unzip_dir, d) for d in os.listdir(unzip_dir)
-        if os.path.isdir(os.path.join(unzip_dir, d))]
-base_dir = dirs[0] if dirs else unzip_dir
-xml_files = glob(os.path.join(base_dir, "**", "MTD_*.xml"), recursive=True)
-metadata = {
-    "SENSING_TIME": "Unknown",
-    "PLATFORM": "Unknown",
-    "PRODUCT_ID": "Unknown",
-    "CLOUD_COVERAGE_ASSESSMENT": "Unknown"
-}
-if xml_files:
-    xml_path = xml_files[0]
-    tree = ET.parse(xml_path)
+@dataclass(frozen=True)
+class ProcessingConfig:
+    """Konfigurasi manual untuk menjalankan pemrosesan."""
+
+    zip_path: Path
+    output_path: Optional[Path] = None
+    keep_temp_directory: bool = False
+
+
+@dataclass
+class ExtractionResult:
+    """Container for artefacts extracted from the Sentinel archive."""
+
+    band_paths: Mapping[str, Path]
+    metadata_path: Optional[Path]
+
+
+# ---------------------------------------------------------------------------
+# ⚙️  Ubah nilai konstanta CONFIG berikut sebelum menjalankan skrip.
+# ---------------------------------------------------------------------------
+CONFIG = ProcessingConfig(
+    zip_path=Path("/path/ke/produk_Sentinel2.zip"),
+    output_path=None,
+    keep_temp_directory=False,
+)
+
+
+@contextmanager
+def managed_workspace_directory(zip_path: Path, keep: bool = False) -> Iterator[Path]:
+    """Create a workspace directory next to the provided archive."""
+
+    base_dir = zip_path.resolve().parent
+    stem = zip_path.stem
+
+    candidate = base_dir / f"{stem}_truecolour_tmp"
+    counter = 1
+    while candidate.exists():
+        counter += 1
+        candidate = base_dir / f"{stem}_truecolour_tmp{counter}"
+
+    candidate.mkdir(parents=True, exist_ok=False)
+
+    try:
+        yield candidate
+    finally:
+        if keep:
+            print(f"ℹ️  Menjaga folder sementara di: {candidate}")
+        else:
+            shutil.rmtree(candidate, ignore_errors=True)
+
+
+def extract_required_assets(zip_path: Path, destination: Path) -> ExtractionResult:
+    """Extract the metadata file and the 10 m RGB bands from the archive."""
+
+    band_members: MutableMapping[str, str] = {}
+    metadata_member: Optional[str] = None
+
+    band_patterns = {
+        band: re.compile(
+            r"GRANULE/.*/IMG_DATA/(?:R10m/)?[^/]*_{band}(?:_10m)?\.jp2$".format(
+                band=band
+            ),
+            re.IGNORECASE,
+        )
+        for band in TRUECOLOUR_BANDS
+    }
+    metadata_pattern = re.compile(r"MTD_MSIL[12][AC]\.xml$", re.IGNORECASE)
+
+    with zipfile.ZipFile(zip_path) as archive:
+        members = archive.namelist()
+
+        for member in members:
+            basename = os.path.basename(member)
+            if metadata_member is None and metadata_pattern.search(basename):
+                metadata_member = member
+            for band_code in TRUECOLOUR_BANDS:
+                if band_code in band_members:
+                    continue
+                if band_patterns[band_code].search(member):
+                    band_members[band_code] = member
+
+        missing = [b for b in TRUECOLOUR_BANDS if b not in band_members]
+        if missing:
+            raise FileNotFoundError(
+                "Band berikut tidak ditemukan dalam arsip: " + ", ".join(missing)
+            )
+
+        extracted_bands = {
+            band: Path(archive.extract(member, destination))
+            for band, member in band_members.items()
+        }
+
+        extracted_metadata: Optional[Path] = None
+        if metadata_member:
+            extracted_metadata = Path(archive.extract(metadata_member, destination))
+
+    return ExtractionResult(band_paths=extracted_bands, metadata_path=extracted_metadata)
+
+
+def extract_metadata_fields(metadata_path: Optional[Path]) -> Dict[str, str]:
+    """Parse useful fields from the metadata XML, returning fallbacks if needed."""
+
+    defaults = {
+        "SENSING_TIME": "Unknown",
+        "PLATFORM": "Unknown",
+        "PRODUCT_ID": "Unknown",
+        "CLOUD_COVERAGE_ASSESSMENT": "Unknown",
+    }
+
+    if metadata_path is None or not metadata_path.exists():
+        return defaults
+
+    try:
+        tree = ET.parse(metadata_path)
+    except ET.ParseError:
+        return defaults
+
     root = tree.getroot()
-    ns = {}
-    for elem in root.iter():
-        if elem.tag[0] == "{":
-            uri = elem.tag[1:].split("}")[0]
-            ns["n"] = uri
-            break
-    def get_text(path):
-        node = root.find(path, ns)
-        return node.text if node is not None else "Unknown"
-    metadata["SENSING_TIME"] = get_text(".//n:SENSING_TIME")
-    metadata["PLATFORM"] = get_text(".//n:SPACECRAFT_NAME")
-    metadata["PRODUCT_ID"] = get_text(".//n:PRODUCT_URI")
-    metadata["CLOUD_COVERAGE_ASSESSMENT"] = get_text(".//n:CLOUD_COVERAGE_ASSESSMENT")
 
-print("\n🛰️ Metadata Scene:")
-for k, v in metadata.items():
-    print(f"   {k:<28}: {v}")
+    def find_first(tag: str) -> Optional[str]:
+        for element in root.findall(f".//{{*}}{tag}"):
+            if element.text:
+                value = element.text.strip()
+                if value:
+                    return value
+        return None
 
-# ===== 3. PILIH BAND RGB (B04–B03–B02) =====
-truecolor_bands = {"B04": "Red", "B03": "Green", "B02": "Blue"}
-band_paths = sorted(glob(os.path.join(base_dir, "**", "*.jp2"), recursive=True))
-band_files = {}
-for bcode in truecolor_bands:
-    for p in band_paths:
-        if f"_{bcode}.jp2" in os.path.basename(p):
-            band_files[bcode] = p
-            break
-if len(band_files) < 3:
-    raise FileNotFoundError("Tidak semua band B02, B03, B04 ditemukan.")
+    metadata = defaults.copy()
+    metadata["SENSING_TIME"] = find_first("SENSING_TIME") or defaults["SENSING_TIME"]
+    metadata["PLATFORM"] = find_first("SPACECRAFT_NAME") or defaults["PLATFORM"]
+    metadata["PRODUCT_ID"] = find_first("PRODUCT_URI") or defaults["PRODUCT_ID"]
+    metadata["CLOUD_COVERAGE_ASSESSMENT"] = (
+        find_first("CLOUD_COVERAGE_ASSESSMENT")
+        or defaults["CLOUD_COVERAGE_ASSESSMENT"]
+    )
+    return metadata
 
-print("\n🎨 Band yang dipakai:")
-for b, p in band_files.items():
-    print(f"   {b} ({truecolor_bands[b]}) → {os.path.basename(p)}")
 
-# ===== 4. BACA BAND REFERENSI =====
-ref_band_path = band_files["B04"]
-with rasterio.open(ref_band_path) as ref:
-    ref_shape = ref.shape
-    ref_bounds = ref.bounds
-    ref_transform = ref.transform
-    ref_profile = ref.profile.copy()
-    ref_crs = ref.crs
+MANUAL_EPSG_PROJ4: Mapping[int, str] = {
+    4326: "+proj=longlat +datum=WGS84 +no_defs +type=crs",
+    3857: "+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 "
+    "+x_0=0.0 +y_0=0.0 +k=1.0 +units=m +nadgrids=@null +wktext +no_defs +type=crs",
+}
 
-# ===== 5. TENTUKAN CRS (AUTO + FALLBACK) =====
-crs_final = None
-if ref_crs:
-    crs_final = ref_crs
-    print(f"📐 CRS asli terdeteksi dari raster: {crs_final}")
-if crs_final is None:
-    match = re.search(r'T(\d{2})([A-Z]{3})', zip_name)
+
+def manual_crs_from_epsg(epsg: int) -> Optional[CRS]:
+    """Create a CRS from a small curated set of EPSG definitions."""
+
+    if epsg in MANUAL_EPSG_PROJ4:
+        return CRS.from_proj4(MANUAL_EPSG_PROJ4[epsg])
+
+    if 32601 <= epsg <= 32660:
+        zone = epsg - 32600
+        proj4 = (
+            f"+proj=utm +zone={zone} +datum=WGS84 +units=m +no_defs +type=crs"
+        )
+        return CRS.from_proj4(proj4)
+
+    if 32701 <= epsg <= 32760:
+        zone = epsg - 32700
+        proj4 = (
+            f"+proj=utm +zone={zone} +south +datum=WGS84 +units=m +no_defs +type=crs"
+        )
+        return CRS.from_proj4(proj4)
+
+    return None
+
+
+def safe_crs_from_epsg(epsg: int) -> Optional[CRS]:
+    """Safely attempt to create a CRS without relying on the PROJ database."""
+
+    try:
+        crs = manual_crs_from_epsg(epsg)
+    except CRSError:
+        crs = None
+
+    if crs is not None:
+        print(f"📐 CRS EPSG:{epsg} dimuat dari definisi manual.")
+        return crs
+
+    print(
+        "⚠️  Definisi manual untuk EPSG:{} tidak tersedia."
+        " Perlu fallback lain.".format(epsg)
+    )
+    return None
+
+
+def derive_crs(
+    reference_band: Path,
+    zip_name: str,
+    metadata_path: Optional[Path] = None,
+) -> CRS:
+    """Determine the CRS, prioritising the raster, followed by metadata."""
+
+    with rasterio.open(reference_band) as src:
+        raster_crs = src.crs
+    if raster_crs:
+        print(f"📐 CRS terdeteksi langsung dari raster: {raster_crs}")
+        return raster_crs
+
+    if metadata_path and metadata_path.exists():
+        try:
+            tree = ET.parse(metadata_path)
+            root = tree.getroot()
+            for tag in ("HORIZONTAL_CS_CODE", "Code"):
+                for element in root.findall(f".//{{*}}{tag}"):
+                    if not element.text:
+                        continue
+                    code = element.text.strip()
+                    if not code:
+                        continue
+                    if code.upper().startswith("EPSG:"):
+                        epsg = int(code.split(":", 1)[1])
+                        crs = safe_crs_from_epsg(epsg)
+                        if crs:
+                            print(f"📐 CRS diambil dari metadata (EPSG:{epsg}).")
+                            return crs
+                    if code.isdigit():
+                        epsg = int(code)
+                        crs = safe_crs_from_epsg(epsg)
+                        if crs:
+                            print(f"📐 CRS diambil dari metadata (EPSG:{epsg}).")
+                            return crs
+        except (ET.ParseError, ValueError, CRSError):
+            pass
+
+    match = re.search(r"T(\d{2})([A-Z]{3})", zip_name)
     if match:
         utm_zone = int(match.group(1))
-        utm_hemisphere = "S" if utm_zone >= 30 else "N"
-        print(f"🗺️ CRS tidak ada, fallback ke UTM zone {utm_zone}{utm_hemisphere}")
-        crs_final = CRS.from_wkt(
-            f'PROJCS["WGS 84 / UTM zone {utm_zone}{utm_hemisphere}",'
-            'GEOGCS["WGS 84",DATUM["WGS_1984",'
-            'SPHEROID["WGS 84",6378137,298.257223563]],'
-            'PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]],'
-            f'PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],'
-            f'PARAMETER["central_meridian",{(utm_zone - 1)*6 - 180 + 3}],'
-            'PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],'
-            f'PARAMETER["false_northing",{10000000 if utm_hemisphere=="S" else 0}],UNIT["metre",1]]'
+        hemisphere = "N"
+        if match.group(2)[0] < "N":
+            hemisphere = "S"
+        utm_epsg = 32600 + utm_zone if hemisphere == "N" else 32700 + utm_zone
+        crs = safe_crs_from_epsg(utm_epsg)
+        if crs:
+            print(
+                "🗺️  CRS diduga dari kode tile ({}{} → EPSG:{}).".format(
+                    match.group(1), match.group(2), utm_epsg
+                )
+            )
+            return crs
+
+    print("⚠️  CRS tidak ditemukan, fallback ke WGS84 (manual proj4).")
+    return CRS.from_proj4("+proj=longlat +datum=WGS84 +no_defs +type=crs")
+
+
+def read_and_resample_bands(
+    band_paths: Mapping[str, Path]
+) -> Tuple[np.ndarray, Mapping[str, object], Affine, str]:
+    """Read Sentinel bands and resample them to match the 10 m grid."""
+
+    reference_path = band_paths["B04"]
+    arrays: List[np.ndarray] = []
+    with rasterio.open(reference_path) as reference:
+        out_height, out_width = reference.shape
+        profile = reference.profile
+        transform = reference.transform
+        dtype = reference.dtypes[0]
+
+    for band_code in ("B04", "B03", "B02"):
+        band_path = band_paths[band_code]
+        with rasterio.open(band_path) as src:
+            data = src.read(
+                out_shape=(1, out_height, out_width),
+                resampling=Resampling.bilinear,
+            )[0]
+            arrays.append(data)
+
+    stacked = np.stack(arrays, axis=0)
+    return stacked, profile, transform, dtype
+
+
+def create_truecolour_cog(
+    stacked_bands: np.ndarray,
+    profile: Mapping[str, object],
+    transform,
+    crs: CRS,
+    output_path: Path,
+    metadata: Mapping[str, str],
+) -> None:
+    """Write the stacked RGB data into a Cloud Optimised GeoTIFF."""
+
+    output_profile = dict(profile)
+    output_profile.update(
+        driver="COG",
+        dtype=stacked_bands.dtype,
+        count=stacked_bands.shape[0],
+        transform=transform,
+        crs=crs,
+        compress="LZW",
+        BIGTIFF="IF_NEEDED",
+        blockxsize=512,
+        blockysize=512,
+    )
+
+    with rasterio.open(output_path, "w", **output_profile) as dst:
+        for idx, band_code in enumerate(("B04", "B03", "B02"), start=1):
+            dst.write(stacked_bands[idx - 1], idx)
+            dst.set_band_description(idx, f"{TRUECOLOUR_BANDS[band_code]} ({band_code})")
+        dst.update_tags(
+            **metadata,
+            CRS_SOURCE=str(crs),
+            RGB_COMPOSITION="B04-Red, B03-Green, B02-Blue",
+            NOTE="True colour composite pada resolusi 10 m.",
         )
-if crs_final is None:
-    crs_final = CRS.from_wkt(
-        'GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],'
-        'PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]]'
-    )
-    print("⚠️ Gagal deteksi CRS, fallback ke EPSG:4326 (WGS84).")
 
-# ===== 6. RESAMPLING BAND KE 10 m =====
-bands_data = []
-for bcode in ["B04", "B03", "B02"]:
-    with rasterio.open(band_files[bcode]) as src:
-        data = src.read(
-            out_shape=(1, ref_shape[0], ref_shape[1]),
-            resampling=Resampling.bilinear
-        )[0]
-        bands_data.append(data)
 
-# ===== 7. SIMPAN COG TRUE COLOR =====
-profile = ref_profile.copy()
-profile.update(
-    driver="COG",
-    dtype=np.uint16,
-    count=3,
-    transform=ref_transform,
-    crs=crs_final,
-    compress="LZW",
-    BIGTIFF="YES",
-    blockxsize=512,
-    blockysize=512
-)
-with rasterio.open(output_tif, "w", **profile) as dst:
-    for i, bcode in enumerate(["B04", "B03", "B02"], start=1):
-        dst.write(bands_data[i-1], i)
-        dst.set_band_description(i, f"{truecolor_bands[bcode]} ({bcode})")
-    dst.update_tags(
-        **metadata,
-        CRS_SOURCE=str(crs_final),
-        RGB_COMPOSITION="B04-Red, B03-Green, B02-Blue",
-        NOTE="True color composite disamakan ke 10m. CRS otomatis dari raster, fallback ke EPSG:4326 jika gagal."
-    )
+def main(config: ProcessingConfig = CONFIG) -> None:
+    if not config.zip_path.exists():
+        raise FileNotFoundError(
+            "Produk Sentinel tidak ditemukan: {}. Ubah nilai CONFIG.zip_path sebelum menjalankan."
+            .format(config.zip_path)
+        )
 
-print(f"\n✅ File True Color (COG) disimpan: {output_tif}")
-print(f"   CRS output: {crs_final}")
-print(f"   Resolusi: 10 m")
-print(f"   Format: Cloud-Optimized GeoTIFF")
+    output_path = config.output_path
+    if output_path is None:
+        default_name = config.zip_path.stem + "_truecolor.tif"
+        output_path = Path.cwd() / default_name
 
-# ===== 8. HAPUS FOLDER UNZIP =====
-try:
-    shutil.rmtree(unzip_dir)
-    print(f"🧹 Folder hasil unzip dihapus: {unzip_dir}")
-except Exception as e:
-    print(f"⚠️ Gagal menghapus folder unzip: {e}")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    print(f"📦 Memproses arsip: {config.zip_path}")
+
+    with managed_workspace_directory(
+        config.zip_path, keep=config.keep_temp_directory
+    ) as temp_dir:
+        print(f"📂 Mengambil aset penting ke: {temp_dir}")
+        extraction = extract_required_assets(config.zip_path, temp_dir)
+
+        for code, path in extraction.band_paths.items():
+            try:
+                displayed = path.relative_to(temp_dir)
+            except ValueError:
+                displayed = path
+            print(f"   • {code} ({TRUECOLOUR_BANDS[code]}): {displayed}")
+
+        metadata_fields = extract_metadata_fields(extraction.metadata_path)
+        print("\n🛰️ Metadata Scene:")
+        for key, value in metadata_fields.items():
+            print(f"   {key:<28}: {value}")
+
+        stacked, profile, transform, dtype = read_and_resample_bands(extraction.band_paths)
+
+        crs = derive_crs(
+            reference_band=extraction.band_paths["B04"],
+            zip_name=config.zip_path.stem,
+            metadata_path=extraction.metadata_path,
+        )
+
+        create_truecolour_cog(
+            stacked_bands=stacked.astype(dtype, copy=False),
+            profile=profile,
+            transform=transform,
+            crs=crs,
+            output_path=output_path,
+            metadata=metadata_fields,
+        )
+
+    print("\n✅ File True Colour (COG) disimpan:", output_path)
+    print(f"   CRS output: {crs}")
+    print("   Resolusi: 10 m")
+    print("   Format: Cloud-Optimized GeoTIFF")
+
+
+if __name__ == "__main__":
+    main()
