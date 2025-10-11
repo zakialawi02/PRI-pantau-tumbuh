@@ -108,8 +108,7 @@ def build_config(config_data: Optional[Dict[str, object]] = None) -> ProcessingC
 
     output_raw = cfg.get("output")
     if output_raw in (None, "", False):
-        suffix = "_multispectral.tif"
-        output = source.with_name(f"{source.stem}{suffix}")
+        output = source.with_name(f"multispectral_{source.stem}.tif")
     else:
         output = Path(str(output_raw)).expanduser().resolve()
 
