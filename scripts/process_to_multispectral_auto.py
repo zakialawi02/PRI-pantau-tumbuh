@@ -25,6 +25,7 @@ import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional
+import xml.etree.ElementTree as ET
 
 import numpy as np
 import rasterio
@@ -161,7 +162,7 @@ def ensure_safe_dir(source: Path) -> tuple[Path, Optional[tempfile.TemporaryDire
         raise ValueError("Sumber harus berupa arsip .zip atau direktori .SAFE.")
 
     print(f"📦 Mengekstrak arsip: {source}")
-    temp_dir = tempfile.TemporaryDirectory(prefix="s2_safe_")
+    temp_dir = tempfile.TemporaryDirectory(prefix="s2_safe_", dir=str(source.parent))
     with zipfile.ZipFile(source, "r") as zf:
         zf.extractall(temp_dir.name)
     print(f"✅ Ekstraksi selesai ke: {temp_dir.name}")
@@ -230,15 +231,93 @@ def select_reference_band(band_map: Dict[str, Path]) -> Path:
     raise RuntimeError("Tidak menemukan band referensi 10 m (B04/B02/B08).")
 
 
-def determine_output_crs(band_map: Dict[str, Path]) -> CRS:
-    """Ambil CRS dari salah satu band sebagai acuan."""
+def determine_output_crs(band_map: Dict[str, Path], safe_dir: Path) -> CRS:
+    """Ambil CRS dari band atau metadata bila diperlukan."""
 
     sample_band = next(iter(band_map.values()))
     with rasterio.open(sample_band) as ds:
-        if ds.crs is None:
-            raise RuntimeError("Tidak dapat menentukan CRS dari metadata raster.")
-        print(f"📐 CRS keluaran: {ds.crs}")
-        return ds.crs
+        if ds.crs:
+            print(f"📐 CRS keluaran: {ds.crs}")
+            return ds.crs
+
+    print("⚠️ CRS tidak ditemukan langsung pada band. Mencari dari metadata...")
+    metadata_file = locate_metadata_file(safe_dir)
+    if metadata_file is None:
+        raise RuntimeError("Tidak dapat menemukan metadata produk untuk menentukan CRS.")
+
+    crs = crs_from_metadata(metadata_file)
+    if crs is None:
+        raise RuntimeError("Tidak dapat menentukan CRS dari metadata raster.")
+
+    print(f"📐 CRS keluaran (metadata): {crs}")
+    return crs
+
+
+def locate_metadata_file(safe_dir: Path) -> Optional[Path]:
+    """Cari file metadata utama Sentinel-2."""
+
+    preferred = [
+        safe_dir / "MTD_MSIL1C.xml",
+        safe_dir / "MTD_MSIL2A.xml",
+    ]
+    for candidate in preferred:
+        if candidate.exists():
+            print(f"🔎 Menggunakan metadata: {candidate.name}")
+            return candidate
+
+    for candidate in safe_dir.rglob("MTD_*.xml"):
+        print(f"🔎 Menggunakan metadata: {candidate.name}")
+        return candidate
+
+    print("⚠️ Metadata utama tidak ditemukan di direktori produk.")
+    return None
+
+
+def crs_from_metadata(metadata_file: Path) -> Optional[CRS]:
+    """Baca CRS dari metadata XML Sentinel-2."""
+
+    try:
+        root = ET.parse(metadata_file).getroot()
+    except ET.ParseError as exc:
+        print(f"⚠️ Gagal membaca metadata {metadata_file.name}: {exc}")
+        return None
+
+    def extract_epsg(text: str) -> Optional[int]:
+        text = text.strip()
+        if not text:
+            return None
+        upper = text.upper()
+        if "EPSG" in upper and ":" in text:
+            candidate = text.split(":")[-1]
+        else:
+            candidate = text
+        digits = "".join(ch for ch in candidate if ch.isdigit())
+        if not digits:
+            return None
+        return int(digits)
+
+    possible_codes: List[int] = []
+    keys = ("HORIZONTAL_CS_CODE", "HORIZONTAL_CS_NAME", "EPSG")
+    for elem in root.iter():
+        if not elem.text:
+            continue
+        tag_upper = elem.tag.upper()
+        text_upper = elem.text.upper()
+        if any(key in tag_upper for key in keys) or "EPSG" in text_upper:
+            epsg = extract_epsg(elem.text)
+            if epsg is not None:
+                possible_codes.append(epsg)
+
+    if not possible_codes:
+        print("⚠️ Tidak menemukan kode EPSG di metadata.")
+        return None
+
+    epsg_code = possible_codes[0]
+    try:
+        return CRS.from_epsg(epsg_code)
+    except Exception as exc:  # pylint: disable=broad-except
+        print(f"⚠️ Gagal membangun CRS dari EPSG:{epsg_code}: {exc}")
+        return None
 
 
 def prepare_output_profile(ref_band_path: Path, band_count: int, output_crs: CRS) -> dict:
@@ -311,7 +390,7 @@ def main() -> int:
         if not band_map:
             raise RuntimeError("Tidak menemukan band apapun di dalam produk.")
         ref_band = select_reference_band(band_map)
-        output_crs = determine_output_crs(band_map)
+        output_crs = determine_output_crs(band_map, safe_dir)
         profile = prepare_output_profile(ref_band, len(band_map), output_crs)
 
         print(f"🛠  Menulis COG multispektral ke: {config.output}")
