@@ -198,7 +198,7 @@
                                     <div>
                                         <p class="text-foreground imagery-name font-medium">Sample Imagery</p>
                                         <p class="imagery-meta text-foreground/60 text-sm">
-                                            10 MB • 2025-10-05 • <span class="imagery-status text-success font-semibold">done</span>
+                                            10 MB • 2025-10-05 • <span class="imagery-status text-success font-semibold">completed</span>
                                         </p>
                                     </div>
                                 </div>
@@ -1238,7 +1238,7 @@
                             resumeBtn.disabled = false;
                             break;
                         case 'merging':
-                        case 'done':
+                        case 'completed':
                         case 'error':
                             disableAll();
                             if (mode === 'error') {
@@ -1455,7 +1455,7 @@
                         elements.progressBar.style.width = '100%';
                         elements.progressText.textContent = `✅ Upload complete! ${result.message || 'Upload completed. Processing started in background.'}`;
                         MyZkToast.success(result.message || 'Upload completed successfully!');
-                        setButtonState('done');
+                        setButtonState('completed');
                         $('#current-myCredits').text(formatNumber(result.data.currentCredits, 2));
                         await loadMyData();
                         scheduleAutoReset();
@@ -1583,16 +1583,44 @@
 
                     const formatLabel = item.format.slice(0, 3).toUpperCase();
                     card.querySelector('.imagery-format').textContent = formatLabel;
-                    card.querySelector('.imagery-name').textContent = shortenFilename(item.original_name, 25);
+                    card.querySelector('.imagery-name').textContent = shortenFilename(item.stored_name, 25);
 
                     const sizeMb = (item.size / 1024 / 1024).toFixed(2);
                     const uploadDate = new Date(item.uploaded_at).toLocaleDateString();
                     const statusEl = card.querySelector('.imagery-status');
-                    statusEl.textContent = item.processing_status;
-                    statusEl.classList.toggle('text-success', item.processing_status === 'done');
-                    statusEl.classList.toggle('text-warning', item.processing_status !== 'done');
+                    const statusKey = (item.processing_status || 'unknown').toLowerCase();
+                    const statusMap = {
+                        completed: {
+                            label: 'Completed',
+                            className: 'text-success'
+                        },
+                        processing: {
+                            label: 'Processing',
+                            className: 'text-warning'
+                        },
+                        waiting: {
+                            label: 'Waiting',
+                            className: 'text-warning'
+                        },
+                        queued: {
+                            label: 'Queued',
+                            className: 'text-warning'
+                        },
+                        error: {
+                            label: 'Failed',
+                            className: 'text-red-500'
+                        },
+                    };
 
-                    const meta = `${sizeMb} MB • ${uploadDate} • <span class="${statusEl.className}">${statusEl.textContent}</span>`;
+                    const statusInfo = statusMap[statusKey] || {
+                        label: statusKey.charAt(0).toUpperCase() + statusKey.slice(1),
+                        className: 'text-foreground/60',
+                    };
+
+                    statusEl.className = `imagery-status font-semibold ${statusInfo.className}`;
+                    statusEl.textContent = statusInfo.label;
+
+                    const meta = `${sizeMb} MB • ${uploadDate} • <span class="imagery-status font-semibold ${statusInfo.className}">${statusInfo.label}</span>`;
                     card.querySelector('.imagery-meta').innerHTML = meta;
 
                     const viewBtn = card.querySelector('.view-btn');

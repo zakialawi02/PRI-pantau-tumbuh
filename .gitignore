@@ -29,3 +29,12 @@ scripts/venv/
 # Ignore Python cache
 *.pyc
 __pycache__/
+*/Data Model/*
+gee_credential.json
+example_*
+L8*
+getImagery*.py
+*.zip
+*.tif*
+*.tiff*
+*.xml*
