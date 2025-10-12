@@ -9,6 +9,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Symfony\Component\Process\Process;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
 
 class ProcessImageryJob implements ShouldQueue
@@ -39,6 +40,39 @@ class ProcessImageryJob implements ShouldQueue
         $scriptPath = "{$base}/process_imagery.py";
         $filePath   = storage_path("app/public/citra/{$imagery->stored_name}");
 
+        if (!File::exists($filePath)) {
+            Log::error("❌ [Job] Input imagery file not found: {$filePath}");
+            $this->refundCredits($imagery);
+            $imagery->update(['processing_status' => 'error']);
+            return;
+        }
+
+        $processedDirectory = storage_path('app/public/citra/processed');
+        if (!File::isDirectory($processedDirectory)) {
+            File::makeDirectory($processedDirectory, 0755, true, true);
+        }
+
+        $extension = pathinfo($imagery->stored_name, PATHINFO_EXTENSION) ?: 'tif';
+        $processedFileName = pathinfo($imagery->stored_name, PATHINFO_FILENAME) . '_processed.' . $extension;
+        $outputPath = $processedDirectory . DIRECTORY_SEPARATOR . $processedFileName;
+
+        $modelPath = $base . DIRECTORY_SEPARATOR . 'Data Model' . DIRECTORY_SEPARATOR . 'Best_Model2.h5';
+        $scalerPath = $base . DIRECTORY_SEPARATOR . 'Data Model' . DIRECTORY_SEPARATOR . 'Best_Scaler2.pkl';
+
+        if (!File::exists($modelPath)) {
+            Log::error("❌ [Job] Model file not found: {$modelPath}");
+            $this->refundCredits($imagery);
+            $imagery->update(['processing_status' => 'error']);
+            return;
+        }
+
+        if (!File::exists($scalerPath)) {
+            Log::error("❌ [Job] Scaler file not found: {$scalerPath}");
+            $this->refundCredits($imagery);
+            $imagery->update(['processing_status' => 'error']);
+            return;
+        }
+
         // Path Python di venv
         if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
             $pythonPath = "{$base}\\venv\\Scripts\\python.exe";
@@ -61,7 +95,15 @@ class ProcessImageryJob implements ShouldQueue
         }
 
         // Jalankan proses Python
-        $process = new Process([$pythonPath, $scriptPath, $filePath, $imagery->id]);
+        $processEnv = $this->buildProcessEnvironment([
+            'IMAGERY_INPUT_PATH' => $filePath,
+            'IMAGERY_OUTPUT_PATH' => $outputPath,
+            'IMAGERY_MODEL_PATH' => $modelPath,
+            'IMAGERY_SCALER_PATH' => $scalerPath,
+            'IMAGERY_ID' => (string) $imagery->id,
+        ]);
+
+        $process = new Process([$pythonPath, $scriptPath], $base, $processEnv);
         $process->setTimeout(7200); // max 2 jam
         $process->run();
 
@@ -84,33 +126,16 @@ class ProcessImageryJob implements ShouldQueue
 
         // Cek hasil eksekusi
         if ($process->isSuccessful()) {
-            // Nama file hasil proses
-            $processedFileName = pathinfo($imagery->stored_name, PATHINFO_FILENAME) . '_processed.' . pathinfo($imagery->stored_name, PATHINFO_EXTENSION);
-
-            // Lokasi absolut di server
-            $primaryPath = storage_path("app/public/citra/processed/{$processedFileName}");
-            $fallbackPath = public_path("storage/citra/processed/{$processedFileName}");
-
-            // Path yang disimpan ke DB (yang bisa diakses via browser)
             $publicPath = "storage/citra/processed/{$processedFileName}";
 
-            $foundPath = null;
-            if (file_exists($primaryPath)) {
-                Log::info("🔍 [Job Debug] Expecting processed file at: {$primaryPath}");
-
-                $foundPath = $primaryPath;
-            } elseif (file_exists($fallbackPath)) {
-                $foundPath = $fallbackPath;
-            }
-
-            if ($foundPath) {
+            if (File::exists($outputPath)) {
                 $imagery->update([
                     'processing_status' => 'completed',
                     'processed_path' => $publicPath,
                     'processed_at' => now(),
                 ]);
 
-                Log::info("✅ [Job] Processing completed successfully. Output file found at: {$foundPath}");
+                Log::info("✅ [Job] Processing completed successfully. Output file found at: {$outputPath}");
                 return;
             } else {
                 // Simpan path-nya tetap, tapi log kalau file gak terdeteksi
@@ -161,5 +186,21 @@ class ProcessImageryJob implements ShouldQueue
         } catch (\Exception $e) {
             Log::error("❌ [Job] Failed to refund credits for imagery {$imagery->id}: " . $e->getMessage());
         }
+    }
+
+    private function buildProcessEnvironment(array $overrides = []): array
+    {
+        $baseEnv = [];
+        foreach (array_merge($_ENV, $_SERVER) as $key => $value) {
+            if (is_string($key) && !array_key_exists($key, $baseEnv)) {
+                $baseEnv[$key] = $value;
+            }
+        }
+
+        foreach ($overrides as $key => $value) {
+            $baseEnv[$key] = $value;
+        }
+
+        return $baseEnv;
     }
 }

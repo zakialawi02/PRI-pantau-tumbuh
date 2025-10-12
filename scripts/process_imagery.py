@@ -23,10 +23,24 @@ import time
 # =====================
 # 0. KONFIGURASI
 # =====================
-INPUT_PATH      = ""
-MODEL_PATH      = "./Data Model/Best_Model2.h5"
-SCALER_PATH     = "./Data Model/Best_Scaler2.pkl"
-OUT_TIF         = ""
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+INPUT_PATH      = os.environ.get("IMAGERY_INPUT_PATH", "")
+MODEL_PATH      = os.environ.get("IMAGERY_MODEL_PATH", os.path.join(BASE_DIR, "Data Model", "Best_Model2.h5"))
+SCALER_PATH     = os.environ.get("IMAGERY_SCALER_PATH", os.path.join(BASE_DIR, "Data Model", "Best_Scaler2.pkl"))
+OUT_TIF         = os.environ.get("IMAGERY_OUTPUT_PATH", "")
+
+if not INPUT_PATH or not OUT_TIF:
+    print("[ERROR] IMAGERY_INPUT_PATH atau IMAGERY_OUTPUT_PATH belum ditetapkan.")
+    sys.exit(1)
+
+if not os.path.exists(MODEL_PATH):
+    print(f"[ERROR] Model tidak ditemukan pada path: {MODEL_PATH}")
+    sys.exit(1)
+
+if not os.path.exists(SCALER_PATH):
+    print(f"[ERROR] Scaler tidak ditemukan pada path: {SCALER_PATH}")
+    sys.exit(1)
 
 TILE_W = 2048
 TILE_H = 2048
