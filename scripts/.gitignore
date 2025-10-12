@@ -25,3 +25,6 @@ getImagery*.py
 *.tif*
 *.tiff*
 *.xml*
+Tiles_*
+Data Model/*
+pri_*

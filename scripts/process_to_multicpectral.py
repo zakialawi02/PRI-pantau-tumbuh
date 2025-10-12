@@ -1,158 +1,243 @@
 import os
+import time
+import gc
 import zipfile
-import rasterio
-from rasterio.enums import Resampling
-from rasterio.warp import calculate_default_transform, reproject
-from rasterio.crs import CRS
-import numpy as np
-import xml.etree.ElementTree as ET
-from glob import glob
 import shutil
 import re
+from glob import glob
+import numpy as np
+import rasterio
+from rasterio.enums import Resampling
+from rasterio.crs import CRS
+from rasterio.vrt import WarpedVRT
+from rasterio.windows import Window
 
-# ===== KONFIGURASI =====
+# ========= KONFIGURASI =========
 zip_path = "S2C_MSIL1C_20251001T022551_N0511_R046_T50MKD_20251001T051811.zip"
 output_tif = "sentinel2L1_multispectral_10m_cog_auto_crs.tif"
 
-# ===== 1. EKSTRAKSI ZIP =====
-zip_dir = os.path.dirname(os.path.abspath(zip_path))
-zip_name = os.path.splitext(os.path.basename(zip_path))[0]
-unzip_dir = os.path.join(zip_dir, f"{zip_name}_unzip")
-
-if os.path.exists(unzip_dir):
-    shutil.rmtree(unzip_dir)
-os.makedirs(unzip_dir, exist_ok=True)
-
-print(f"📂 Mengekstrak ke: {unzip_dir}")
-with zipfile.ZipFile(zip_path, 'r') as z:
-    z.extractall(unzip_dir)
-
-# ===== 2. URUTAN BAND (B01–B12) =====
-ordered_bands = [
-    "B01",  # 1  Coastal Aerosol
-    "B02",  # 2  Blue
-    "B03",  # 3  Green
-    "B04",  # 4  Red
-    "B05",  # 5  Red Edge 1
-    "B06",  # 6  Red Edge 2
-    "B07",  # 7  Red Edge 3
-    "B08",  # 8  NIR
-    "B8A",  # 9  Red Edge 4 (Narrow NIR)
-    "B09",  # 10 Water Vapor
-    "B11",  # 11 SWIR 1
-    "B12"   # 12 SWIR 2
-]
-
-# ===== 3. TEMUKAN FILE BAND =====
-band_paths = sorted(glob(os.path.join(unzip_dir, "**", "*.jp2"), recursive=True))
-band_files = {}
-for bcode in ordered_bands:
-    for p in band_paths:
-        if f"_{bcode}.jp2" in os.path.basename(p):
-            band_files[bcode] = p
-            break
-
-missing = [b for b in ordered_bands if b not in band_files]
-if missing:
-    print(f"⚠️ Beberapa band tidak ditemukan: {missing}")
-
-print("\n🎨 Urutan band yang dipakai:")
-for i, b in enumerate(ordered_bands, 1):
-    print(f"   {i:02d}. {b} → {os.path.basename(band_files.get(b, '❌ Tidak ditemukan'))}")
-
-# ===== 4. BACA BAND REFERENSI =====
-ref_band_path = band_files.get("B04") or band_files.get("B02") or band_files.get("B08")
-if ref_band_path is None:
-    raise RuntimeError("Tidak ditemukan band referensi 10m (B02/B04/B08).")
-
-with rasterio.open(ref_band_path) as ref:
-    ref_shape = ref.shape
-    ref_bounds = ref.bounds
-    ref_transform = ref.transform
-    ref_profile = ref.profile.copy()
-    ref_crs = ref.crs
-
-# ===== 5. TENTUKAN CRS (AUTO + FALLBACK) =====
-crs_final = None
-
-# 5a. Jika file punya CRS asli
-if ref_crs:
-    crs_final = ref_crs
-    print(f"📐 CRS asli terdeteksi dari raster: {crs_final}")
-
-# 5b. Jika tidak ada CRS, deteksi UTM dari nama tile
-if crs_final is None:
-    match = re.search(r'T(\d{2})([A-Z]{3})', zip_name)
-    if match:
-        utm_zone = int(match.group(1))
-        utm_hemisphere = "S" if utm_zone >= 30 else "N"
-        print(f"🗺️ CRS tidak ada, fallback ke UTM zone {utm_zone}{utm_hemisphere}")
-        crs_final = CRS.from_wkt(
-            f'PROJCS["WGS 84 / UTM zone {utm_zone}{utm_hemisphere}",'
-            'GEOGCS["WGS 84",DATUM["WGS_1984",'
-            'SPHEROID["WGS 84",6378137,298.257223563]],'
-            'PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]],'
-            f'PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],'
-            f'PARAMETER["central_meridian",{(utm_zone - 1)*6 - 180 + 3}],'
-            'PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],'
-            f'PARAMETER["false_northing",{10000000 if utm_hemisphere=="S" else 0}],UNIT["metre",1]]'
-        )
-
-# 5c. Jika tetap gagal → fallback terakhir ke EPSG:4326
-if crs_final is None:
-    crs_final = CRS.from_wkt(
-        'GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],'
-        'PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]]'
-    )
-    print("⚠️ Gagal deteksi CRS, fallback ke EPSG:4326 (WGS84).")
-
-# ===== 6. RESAMPLING SEMUA BAND KE 10 m =====
-bands_data = []
-for bcode in ordered_bands:
-    path = band_files.get(bcode)
-    if path is None:
-        print(f"⚠️ Melewati {bcode} (tidak ditemukan).")
-        continue
-    with rasterio.open(path) as src:
-        data = src.read(
-            out_shape=(1, ref_shape[0], ref_shape[1]),
-            resampling=Resampling.bilinear
-        )[0]
-        bands_data.append(data)
-
-# ===== 7. SIMPAN SEBAGAI COG  =====
-profile = ref_profile.copy()
-profile.update(
+COG_PROFILE = dict(
     driver="COG",
-    dtype=np.uint16,
-    count=len(bands_data),
-    transform=ref_transform,
-    crs=crs_final,
     compress="LZW",
     BIGTIFF="YES",
     blockxsize=512,
-    blockysize=512
+    blockysize=512,
+    NUM_THREADS="ALL_CPUS",
+    OVERVIEWS="AUTO"  # biarkan GDAL tentukan level overviews
 )
 
+# Urutan band standar S2
+ORDERED_BANDS = [
+    "B01","B02","B03","B04","B05","B06","B07","B08","B8A","B09","B11","B12"
+]
+
+# Mapping resolusi native (m)
+NATIVE_RES = {
+    "B01": 60, "B02": 10, "B03": 10, "B04": 10,
+    "B05": 20, "B06": 20, "B07": 20, "B08": 10,
+    "B8A": 20, "B09": 60, "B11": 20, "B12": 20
+}
+
+# ========= UTIL =========
+def clean_dir(path):
+    if os.path.exists(path):
+        shutil.rmtree(path)
+    os.makedirs(path, exist_ok=True)
+
+def mgrs_hemisphere_from_lat_band(letter: str) -> str:
+    """
+    MGRS latitude band letters:
+      C–M: Southern Hemisphere, N–X: Northern (I,O tidak dipakai)
+    """
+    letter = letter.upper()
+    southern = "CDEFGHJKLM"
+    northern = "NPQRSTUVWX"
+    if letter in southern:
+        return "S"
+    if letter in northern:
+        return "N"
+    return None
+
+def infer_crs_from_zipname(zip_name: str) -> CRS | None:
+    # Contoh: ..._T50MKD_... => zone=50, latband='M'
+    m = re.search(r"T(\d{2})([A-Z])([A-Z]{2})", zip_name)  # zona, lat band, 100km grid
+    if not m:
+        return None
+    zone = int(m.group(1))
+    lat_band = m.group(2)
+    hemi = mgrs_hemisphere_from_lat_band(lat_band)
+    if not hemi:
+        return None
+    central_meridian = (zone - 1) * 6 - 180 + 3
+    false_north = 10000000 if hemi == "S" else 0
+    proj4 = (
+        f"+proj=utm +zone={zone} +datum=WGS84 +units=m +no_defs "
+        + ("+south " if hemi == "S" else "")
+    )
+    try:
+        return CRS.from_proj4(proj4)
+    except Exception:
+        # Fallback WKT jika perlu
+        return CRS.from_wkt(
+            f'PROJCS["WGS 84 / UTM zone {zone}{hemi}",'
+            'GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],'
+            'PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]],'
+            'PROJECTION["Transverse_Mercator"],'
+            'PARAMETER["latitude_of_origin",0],'
+            f'PARAMETER["central_meridian",{central_meridian}],'
+            'PARAMETER["scale_factor",0.9996],'
+            'PARAMETER["false_easting",500000],'
+            f'PARAMETER["false_northing",{false_north}],UNIT["metre",1]]'
+        )
+
+def list_band_files(unzip_dir: str) -> dict:
+    """
+    Cari file JP2 tiap band, prefer jalur resmi S2 L1C:
+      .../GRANULE/*/IMG_DATA/R10m/*.jp2, R20m, R60m
+    Kalau penamaan beda (variasi _B02_10m.jp2 vs _B02.jp2), kita toleran.
+    """
+    jp2s = sorted(glob(os.path.join(unzip_dir, "**", "*.jp2"), recursive=True))
+    by_band = {}
+
+    def choose_first(patterns):
+        for p in jp2s:
+            name = os.path.basename(p)
+            for pat in patterns:
+                if pat in name:
+                    return p
+        return None
+
+    for b in ORDERED_BANDS:
+        res = NATIVE_RES[b]
+        # Pola umum baru: _B02_10m.jp2; pola lama: _B02.jp2 (di folder R10m)
+        patterns = [f"_{b}_{res}m.jp2", f"_{b}.jp2"]
+        path = choose_first(patterns)
+        if path is None:
+            # fallback: deteksi via folder resolusi
+            for p in jp2s:
+                if f"_{b}_" in os.path.basename(p) or f"_{b}.jp2" in os.path.basename(p):
+                    path = p
+                    break
+        if path:
+            by_band[b] = path
+    return by_band
+
+# ========= 1) EKSTRAK ZIP =========
+zip_dir = os.path.dirname(os.path.abspath(zip_path))
+zip_name = os.path.splitext(os.path.basename(zip_path))[0]
+unzip_dir = os.path.join(zip_dir, f"{zip_name}_unzip")
+clean_dir(unzip_dir)
+
+print(f"📂 Mengekstrak ke: {unzip_dir}")
+with zipfile.ZipFile(zip_path, "r") as zf:
+    zf.extractall(unzip_dir)
+
+# ========= 2) TEMUKAN FILE BAND =========
+band_files = list_band_files(unzip_dir)
+missing = [b for b in ORDERED_BANDS if b not in band_files]
+if missing:
+    print(f"⚠️ Band tidak ditemukan: {missing}")
+
+print("\n🎨 Urutan band & file:")
+for i, b in enumerate(ORDERED_BANDS, 1):
+    print(f"  {i:02d}. {b}: {os.path.basename(band_files.get(b, '❌ NOT FOUND'))}")
+
+# ========= 3) GRID REFERENSI 10 m =========
+ref_code_candidates = ["B04", "B02", "B08"]
+ref_path = next((band_files[c] for c in ref_code_candidates if c in band_files), None)
+if not ref_path:
+    raise RuntimeError("Tidak ditemukan band referensi 10 m (B04/B02/B08).")
+
+with rasterio.open(ref_path) as ref:
+    ref_crs = ref.crs
+    ref_transform = ref.transform
+    ref_width = ref.width
+    ref_height = ref.height
+    ref_profile = ref.profile.copy()
+
+# ========= 4) CRS FINAL (AUTO + FALLBACK MGRS) =========
+crs_final = ref_crs
+if not crs_final:
+    crs_final = infer_crs_from_zipname(zip_name)
+if not crs_final:
+    print("⚠️ Gagal infer dari MGRS, fallback ke EPSG:4326.")
+    crs_final = CRS.from_epsg(4326)
+
+print(f"📐 CRS output: {crs_final}")
+
+# ========= 5) TULIS COG MULTIBAND (WINDOWED) =========
+dtype = np.uint16  # L1C scaling 0..10000
+band_count = len(ORDERED_BANDS)
+profile = ref_profile.copy()
+profile.update(
+    dtype=dtype,
+    count=sum(1 for b in ORDERED_BANDS if b in band_files),
+    transform=ref_transform,
+    crs=crs_final,
+    width=ref_width,
+    height=ref_height,
+    **COG_PROFILE
+)
+
+# Siapkan writer
 with rasterio.open(output_tif, "w", **profile) as dst:
-    for i, bcode in enumerate(ordered_bands, start=1):
-        if i <= len(bands_data):
-            dst.write(bands_data[i - 1], i)
-            dst.set_band_description(i, f"{bcode} (Band {i})")
+    out_band_index = 1
+
+    for bcode in ORDERED_BANDS:
+        jp2 = band_files.get(bcode)
+        if not jp2:
+            print(f"⚠️ Melewati {bcode} (file tidak ditemukan).")
+            continue
+
+        # Set resampling: bilinear utk kontinyu
+        resamp = Resampling.bilinear
+
+        with rasterio.open(jp2) as src:
+            # Pastikan CRS/transform target = grid referensi 10 m
+            # WarpedVRT akan *on-the-fly* reproject/resize ke grid target
+            vrt = WarpedVRT(
+                src,
+                crs=crs_final,
+                transform=ref_transform,
+                width=ref_width,
+                height=ref_height,
+                resampling=resamp
+            )
+
+            # Tulis per window agar hemat memori
+            for ji, window in dst.block_windows(out_band_index):
+                data = vrt.read(1, window=window, out_dtype=dtype)
+                dst.write(data, out_band_index, window=window)
+
+        dst.set_band_description(out_band_index, f"{bcode}")
+        print(f"✅ Tulis band {bcode} → layer {out_band_index}")
+        out_band_index += 1
+
+    # Tag metadata
     dst.update_tags(
-        REPROJECTED_TO=str(crs_final),
-        BAND_ORDER=",".join(ordered_bands),
-        NOTE="Semua band Sentinel-2 disamakan resolusi ke 10m. CRS diambil otomatis dari raster JP2, fallback ke EPSG:4326 jika gagal."
+        BAND_ORDER=",".join([b for b in ORDERED_BANDS if b in band_files]),
+        NOTE="Semua band Sentinel-2 L1C diraster ke grid 10m referensi; COG dengan overviews."
     )
 
-print(f"\n✅ File multispectral (COG) disimpan: {output_tif}")
-print(f"   CRS output: {crs_final}")
-print(f"   Jumlah band: {len(bands_data)} (B01–B12)")
-print(f"   Resolusi: 10 m")
+print("\n🎉 Selesai!")
+print(f"🗂 Output COG: {output_tif}")
+print(f"📏 Resolusi target: 10 m")
+print(f"📦 Jumlah band tertulis: {profile['count']}")
 
-# ===== 8. HAPUS FOLDER UNZIP =====
-try:
-    shutil.rmtree(unzip_dir)
-    print(f"🧹 Folder hasil unzip dihapus: {unzip_dir}")
-except Exception as e:
-    print(f"⚠️ Gagal menghapus folder unzip: {e}")
+# ========= 6) BERSIHKAN UNZIP =========
+print("\n🧹 Menutup file & membersihkan...")
+
+# pastikan semua file raster & VRT sudah dilepas
+gc.collect()
+time.sleep(1.0)  # beri waktu OS menutup file handle
+
+for _ in range(3):  # coba hingga 3x
+    try:
+        shutil.rmtree(unzip_dir)
+        print(f"✅ Folder unzip dihapus: {unzip_dir}")
+        break
+    except PermissionError as e:
+        print(f"⚠️ Folder masih terkunci, coba lagi dalam 1 detik...")
+        time.sleep(1.0)
+else:
+    print(f"⚠️ Gagal hapus folder unzip setelah 3 percobaan.")
