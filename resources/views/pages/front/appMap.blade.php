@@ -1583,18 +1583,33 @@
 
                     const formatLabel = item.format.slice(0, 3).toUpperCase();
                     card.querySelector('.imagery-format').textContent = formatLabel;
-                    card.querySelector('.imagery-name').textContent = shortenFilename(item.original_name, 25);
+                    card.querySelector('.imagery-name').textContent = shortenFilename(item.stored_name, 25);
 
                     const sizeMb = (item.size / 1024 / 1024).toFixed(2);
                     const uploadDate = new Date(item.uploaded_at).toLocaleDateString();
                     const statusEl = card.querySelector('.imagery-status');
                     const statusKey = (item.processing_status || 'unknown').toLowerCase();
                     const statusMap = {
-                        completed: { label: 'Completed', className: 'text-success' },
-                        processing: { label: 'Processing', className: 'text-warning' },
-                        waiting: { label: 'Waiting', className: 'text-warning' },
-                        queued: { label: 'Queued', className: 'text-warning' },
-                        error: { label: 'Failed', className: 'text-red-500' },
+                        completed: {
+                            label: 'Completed',
+                            className: 'text-success'
+                        },
+                        processing: {
+                            label: 'Processing',
+                            className: 'text-warning'
+                        },
+                        waiting: {
+                            label: 'Waiting',
+                            className: 'text-warning'
+                        },
+                        queued: {
+                            label: 'Queued',
+                            className: 'text-warning'
+                        },
+                        error: {
+                            label: 'Failed',
+                            className: 'text-red-500'
+                        },
                     };
 
                     const statusInfo = statusMap[statusKey] || {

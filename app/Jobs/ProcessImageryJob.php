@@ -76,8 +76,14 @@ class ProcessImageryJob implements ShouldQueue
         // Path Python di venv
         if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
             $pythonPath = "{$base}\\venv\\Scripts\\python.exe";
+            if (!file_exists($pythonPath)) {
+                $pythonPath = "{$base}\\.venv\\Scripts\\python.exe";
+            }
         } else {
             $pythonPath = "{$base}/venv/bin/python";
+            if (!file_exists($pythonPath)) {
+                $pythonPath = "{$base}/.venv/bin/python";
+            }
         }
 
         if (!file_exists($pythonPath)) {

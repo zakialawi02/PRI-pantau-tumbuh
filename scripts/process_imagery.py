@@ -123,7 +123,7 @@ with rasterio.open(INPUT_PATH) as src:
                 t0 = time.time()
 
                 bands = src.read(indexes=list(range(1, 13)), window=window).astype(np.float32)
-                print(f"   [INFO] Dibaca 12 band → shape: {bands.shape}")
+                print(f"[INFO] Dibaca 12 band - shape: {bands.shape}")
 
                 N = h * w
                 flat = bands.reshape(12, N).T
@@ -138,12 +138,12 @@ with rasterio.open(INPUT_PATH) as src:
                     yb = model.predict(Xb, batch_size=PRED_BATCH_SIZE, verbose=0)
                     yb = np.asarray(yb).reshape(-1).astype(np.float32)
                     out_flat[s:e] = yb
-                print(f"   [INFO] Prediksi selesai untuk {N} piksel")
+                print(f"[INFO] Prediksi selesai untuk {N} piksel")
 
                 out_tile = out_flat.reshape(h, w)
                 dst.write(out_tile, 1, window=window)
-                print(f"   [INFO] Ditulis ke output (durasi {time.time()-t0:.2f} dtk)")
+                print(f"[INFO] Ditulis ke output (durasi {time.time()-t0:.2f} dtk)")
 
-print(f"\n[INFO] Semua window selesai diproses → {OUT_TIF}")
+print(f"\n[INFO] Semua window selesai diproses = {OUT_TIF}")
 
 
