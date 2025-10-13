@@ -21,7 +21,7 @@ class MergeImageryChunksJob implements ShouldQueue
     /**
      * The ID of the imagery record.
      */
-    public int $imageryId;
+    public string $imageryId;
 
     /**
      * The directory containing uploaded chunks.
@@ -52,7 +52,7 @@ class MergeImageryChunksJob implements ShouldQueue
      * Create a new job instance.
      */
     public function __construct(
-        int $imageryId,
+        string $imageryId,
         string $chunkDirectory,
         string $finalPath,
         int $totalChunks,
