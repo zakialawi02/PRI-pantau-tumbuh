@@ -1,149 +1,155 @@
 #!/usr/bin/env python3
-import sys
+"""Script pemrosesan citra satelit menggunakan model TensorFlow."""
+
+import gc
 import os
 import time
-import traceback
+
+import joblib
+import matplotlib.pyplot as plt  # noqa: F401  # Dipertahankan jika diperlukan untuk debugging
+import numpy as np
+import rasterio
+from rasterio.windows import Window
+import tensorflow as tf
+from tensorflow.keras.models import load_model
+
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 os.environ.setdefault("OMP_NUM_THREADS", "4")
 os.environ.setdefault("MKL_NUM_THREADS", "4")
 os.environ.setdefault("GDAL_CACHEMAX", "512")
 
-import gc
-import tensorflow as tf
-from tensorflow.keras import backend as K
-import numpy as np
-import rasterio
-from rasterio.windows import Window
-import joblib
-import tensorflow as tf
-from tensorflow.keras.models import load_model
-import matplotlib.pyplot as plt
-import time
 
-# =====================
-# 0. KONFIGURASI
-# =====================
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+def resolve_path(env_key: str, default: str = "") -> str:
+    """Ambil path dari environment variable dengan fallback ke default."""
+    path = os.environ.get(env_key, default)
+    return path if path else default
 
-INPUT_PATH      = os.environ.get("IMAGERY_INPUT_PATH", "")
-MODEL_PATH      = os.environ.get("IMAGERY_MODEL_PATH", os.path.join(BASE_DIR, "Data Model", "Best_Model2.h5"))
-SCALER_PATH     = os.environ.get("IMAGERY_SCALER_PATH", os.path.join(BASE_DIR, "Data Model", "Best_Scaler2.pkl"))
-OUT_TIF         = os.environ.get("IMAGERY_OUTPUT_PATH", "")
 
-if not INPUT_PATH or not OUT_TIF:
-    print("[ERROR] IMAGERY_INPUT_PATH atau IMAGERY_OUTPUT_PATH belum ditetapkan.")
-    sys.exit(1)
+def main() -> None:
+    # === 1. Konfigurasi TensorFlow ===
+    print("⚙️  Konfigurasi TensorFlow...")
+    gpus = tf.config.list_physical_devices('GPU')
+    if gpus:
+        for gpu in gpus:
+            tf.config.experimental.set_memory_growth(gpu, True)
+        from tensorflow.keras import mixed_precision
 
-if not os.path.exists(MODEL_PATH):
-    print(f"[ERROR] Model tidak ditemukan pada path: {MODEL_PATH}")
-    sys.exit(1)
+        mixed_precision.set_global_policy('mixed_float16')
+        tf.config.optimizer.set_jit(True)
+        print(f"✅ GPU terdeteksi: {len(gpus)} unit, mixed precision + XLA aktif")
+    else:
+        print("⚠️ Tidak ada GPU, fallback ke CPU")
 
-if not os.path.exists(SCALER_PATH):
-    print(f"[ERROR] Scaler tidak ditemukan pada path: {SCALER_PATH}")
-    sys.exit(1)
+    # === 2. Path input/output ===
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    default_input = os.path.join(base_dir, "..", "data", "Source_citrasatelitpri.tif")
+    default_output = os.path.join(base_dir, "..", "data", "Mosaic_Predicted.tif")
+    default_model = os.path.join(base_dir, "Data Model", "Best_Model2.h5")
+    default_scaler = os.path.join(base_dir, "Data Model", "Best_Scaler2.pkl")
 
-TILE_W = 2048
-TILE_H = 2048
-BATCH_PIXELS   = 262_144
-PRED_BATCH_SIZE = 2048
+    input_path = resolve_path("IMAGERY_INPUT_PATH", default_input)
+    output_path = resolve_path("IMAGERY_OUTPUT_PATH", default_output)
+    model_path = resolve_path("IMAGERY_MODEL_PATH", default_model)
+    scaler_path = resolve_path("IMAGERY_SCALER_PATH", default_scaler)
 
-def cleanup_memory():
+    if not input_path or not os.path.exists(input_path):
+        raise FileNotFoundError(
+            f"Input raster tidak ditemukan. Set variabel lingkungan IMAGERY_INPUT_PATH. ({input_path})"
+        )
+
+    if not model_path or not os.path.exists(model_path):
+        raise FileNotFoundError(
+            f"Model tidak ditemukan. Set variabel lingkungan IMAGERY_MODEL_PATH. ({model_path})"
+        )
+
+    if not scaler_path or not os.path.exists(scaler_path):
+        raise FileNotFoundError(
+            f"Scaler tidak ditemukan. Set variabel lingkungan IMAGERY_SCALER_PATH. ({scaler_path})"
+        )
+
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    print(f"Input raster: {input_path}")
+    print(f"Output raster: {output_path}")
+
+    # === 3. Parameter tile ===
+    TILE_SIZE = int(os.environ.get("IMAGERY_TILE_SIZE", 2000))
+    print(f"📌 Ukuran tile maksimal {TILE_SIZE}x{TILE_SIZE}")
+
+    # === 4. Load model & scaler ===
+    print("\n📥 Loading model dan scaler...")
+    model = load_model(model_path, compile=False)
+    scaler = joblib.load(scaler_path)
+    print("✅ Model & scaler dimuat")
+
+    # === 5. Prediksi tile streaming langsung ke file ===
+    with rasterio.open(input_path) as src:
+        H, W = src.height, src.width
+        print(f"🗺️  Ukuran raster asli: {W} x {H}")
+
+        out_meta = src.meta.copy()
+        out_meta.update({
+            "height": H,
+            "width": W,
+            "transform": src.transform,
+            "driver": "GTiff",
+            "dtype": "float32",
+            "count": 1,
+        })
+
+        with rasterio.open(output_path, "w+", **out_meta) as dst:
+            tile_idx = 0
+            total_tiles = (H // TILE_SIZE + 1) * (W // TILE_SIZE + 1)
+
+            for row_off in range(0, H, TILE_SIZE):
+                for col_off in range(0, W, TILE_SIZE):
+                    tile_idx += 1
+                    win_width = min(TILE_SIZE, W - col_off)
+                    win_height = min(TILE_SIZE, H - row_off)
+                    window = Window(col_off, row_off, win_width, win_height)
+
+                    t0 = time.time()
+                    print(
+                        f"\n[{tile_idx}/{total_tiles}] 📍 Window (x={col_off}, y={row_off}, "
+                        f"w={win_width}, h={win_height})"
+                    )
+
+                    bands = [
+                        src.read(b, window=window)
+                        for b in range(1, 13)
+                    ]
+                    arr = np.stack(bands, axis=0)
+                    h, w = arr.shape[1:]
+                    del bands
+                    gc.collect()
+
+                    input_img = arr.reshape(12, h * w).T
+                    del arr
+                    gc.collect()
+
+                    input_img_scaled = scaler.transform(input_img)
+                    del input_img
+                    gc.collect()
+
+                    pred = model.predict(input_img_scaled, verbose=0, batch_size=1024)
+                    pred = pred.reshape(h, w).astype("float32")
+                    del input_img_scaled
+                    gc.collect()
+
+                    dst.write(pred, 1, window=window)
+
+                    elapsed = time.time() - t0
+                    print(
+                        f"   🤖 Prediksi selesai untuk {h * w:,} piksel (durasi {elapsed:.2f} dtk)"
+                    )
+
+                    del pred
+                    gc.collect()
+
+    print(f"\n✅ Mosaic final langsung tersimpan: {output_path}")
+
+    del model, scaler
     gc.collect()
-    K.clear_session()
-    tf.compat.v1.reset_default_graph()
-
-def setup_tf_acceleration():
-    print("[DEBUG]  Mengatur konfigurasi TensorFlow...")
-    try:
-        gpus = tf.config.list_physical_devices('GPU')
-        if gpus:
-            for gpu in gpus:
-                tf.config.experimental.set_memory_growth(gpu, True)
-            try:
-                from tensorflow.keras import mixed_precision
-                mixed_precision.set_global_policy('mixed_float16')
-                print("[INFO] Mixed precision diaktifkan")
-            except Exception:
-                print("[DEBUG] Mixed precision tidak tersedia")
-            tf.config.optimizer.set_jit(True)
-            print("[INFO] GPU terdeteksi: {len(gpus)} unit. XLA JIT diaktifkan.")
-        else:
-            print("[INFO] Tidak ada GPU, fallback ke CPU")
-            tf.config.threading.set_intra_op_parallelism_threads(4)
-            tf.config.threading.set_inter_op_parallelism_threads(4)
-    except Exception as e:
-        print("[ERROR] TF accel config error: {e}")
-
-setup_tf_acceleration()
-
-# =====================
-# 1. MUAT MODEL & SCALER
-# =====================
-print("[DEBUG] Memuat model dan scaler...")
-start = time.time()
-model = load_model(MODEL_PATH, compile=False)
-scaler = joblib.load(SCALER_PATH)
-print(f"[INFO] Model & scaler berhasil dimuat. ({time.time()-start:.2f} dtk)")
-
-def fast_scale(X, scaler_obj):
-    if hasattr(scaler_obj, "mean_") and hasattr(scaler_obj, "scale_"):
-        mean = np.asarray(scaler_obj.mean_, dtype=np.float32)
-        scale = np.asarray(scaler_obj.scale_, dtype=np.float32)
-        return (X - mean) / scale
-    return scaler_obj.transform(X)
-
-# =====================
-# 2. PREDIKSI STREAMING
-# =====================
-print("[DEBUG] Memulai prediksi streaming...")
-with rasterio.open(INPUT_PATH) as src:
-    src_profile = src.profile.copy()
-    height, width = src.height, src.width
-
-    out_profile = src_profile.copy()
-    out_profile.update({
-        "count": 1,
-        "dtype": "float32",
-        "driver": "GTiff",
-        "compress": "lzw"
-    })
-
-    with rasterio.open(OUT_TIF, "w", **out_profile) as dst:
-        total_windows = ((height+TILE_H-1)//TILE_H) * ((width+TILE_W-1)//TILE_W)
-        win_idx = 1
-
-        for y in range(0, height, TILE_H):
-            h = min(TILE_H, height - y)
-            for x in range(0, width, TILE_W):
-                w = min(TILE_W, width - x)
-                window = Window(x, y, w, h)
-
-                print(f"\n[{win_idx}/{total_windows}] [INFO PROCESS] Window posisi (x={x}, y={y}, w={w}, h={h})")
-                win_idx += 1
-                t0 = time.time()
-
-                bands = src.read(indexes=list(range(1, 13)), window=window).astype(np.float32)
-                print(f"[INFO] Dibaca 12 band - shape: {bands.shape}")
-
-                N = h * w
-                flat = bands.reshape(12, N).T
-                out_flat = np.empty((N,), dtype=np.float32)
-
-                # Batch processing
-                for s in range(0, N, BATCH_PIXELS):
-                    e = min(s + BATCH_PIXELS, N)
-                    Xb = flat[s:e]
-                    Xb = fast_scale(Xb, scaler)
-
-                    yb = model.predict(Xb, batch_size=PRED_BATCH_SIZE, verbose=0)
-                    yb = np.asarray(yb).reshape(-1).astype(np.float32)
-                    out_flat[s:e] = yb
-                print(f"[INFO] Prediksi selesai untuk {N} piksel")
-
-                out_tile = out_flat.reshape(h, w)
-                dst.write(out_tile, 1, window=window)
-                print(f"[INFO] Ditulis ke output (durasi {time.time()-t0:.2f} dtk)")
-
-print(f"\n[INFO] Semua window selesai diproses = {OUT_TIF}")
 
 
+if __name__ == "__main__":
+    main()
