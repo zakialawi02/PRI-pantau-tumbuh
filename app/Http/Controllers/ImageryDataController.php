@@ -360,32 +360,62 @@ class ImageryDataController extends Controller
                 File::makeDirectory(dirname($finalPath), 0777, true);
             }
 
-            // === Combine all chunks ===
-            $output = fopen($finalPath, 'ab');
-            if (!$output) {
+            // === Combine all chunks using streaming to avoid blocking other requests ===
+            $outputHandle = fopen($finalPath, 'wb');
+            if (!$outputHandle) {
                 throw new \Exception("Failed to open final file for writing.");
             }
 
-            for ($i = 0; $i < $validated['total_chunks']; $i++) {
-                $chunkFile = "{$chunkDir}/chunk_{$i}";
-                if (File::exists($chunkFile)) {
-                    $chunkData = File::get($chunkFile);
-                    if ($chunkData === false) {
-                        fclose($output);
-                        throw new \Exception("Failed to read chunk {$i}.");
-                    }
-                    fwrite($output, $chunkData);
-                } else {
-                    fclose($output);
-                    return response()->json(['success' => false, 'message' => "Chunk {$i} missing."], 500);
-                }
+            $outputLocked = flock($outputHandle, LOCK_EX);
+            if (!$outputLocked) {
+                fclose($outputHandle);
+                throw new \Exception('Unable to acquire file lock for final imagery file.');
             }
-            fclose($output);
 
-            // Clean up chunk directory
-            if (!File::deleteDirectory($chunkDir)) {
+            try {
+                for ($i = 0; $i < $validated['total_chunks']; $i++) {
+                    $chunkFile = "{$chunkDir}/chunk_{$i}";
+                    if (!File::exists($chunkFile)) {
+                        throw new \Exception("Chunk {$i} missing.");
+                    }
+
+                    $chunkHandle = fopen($chunkFile, 'rb');
+                    if (!$chunkHandle) {
+                        throw new \Exception("Failed to open chunk {$i} for reading.");
+                    }
+
+                    try {
+                        while (!feof($chunkHandle)) {
+                            $buffer = fread($chunkHandle, 1024 * 1024); // Read in 1MB blocks
+                            if ($buffer === false) {
+                                throw new \Exception("Failed to read data from chunk {$i}.");
+                            }
+
+                            if ($buffer !== '') {
+                                $bytesWritten = fwrite($outputHandle, $buffer);
+                                if ($bytesWritten === false) {
+                                    throw new \Exception("Failed to write data for chunk {$i}.");
+                                }
+                            }
+                        }
+                    } finally {
+                        fclose($chunkHandle);
+                    }
+
+                    // Remove the chunk file once it's merged to keep disk usage low.
+                    File::delete($chunkFile);
+                }
+            } finally {
+                flock($outputHandle, LOCK_UN);
+                fclose($outputHandle);
+            }
+
+            // Clean up chunk directory if it still exists (e.g., hidden files)
+            if (File::isDirectory($chunkDir) && !File::deleteDirectory($chunkDir)) {
                 Log::warning("Failed to delete chunk directory: {$chunkDir}");
             }
+
+            clearstatcache(true, $finalPath);
 
             // === Save to DB ===
             $fileSize = File::size($finalPath);
@@ -443,6 +473,8 @@ class ImageryDataController extends Controller
                     'uploaded_at' => now(),
                 ]);
             }
+
+            $user->load('credits');
 
             // === Dispatch background job for Python processing ===
             // Only dispatch if processing is not skipped

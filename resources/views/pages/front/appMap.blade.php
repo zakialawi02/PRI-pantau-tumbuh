@@ -1361,7 +1361,7 @@
                     if (state.paused || !state.file) return;
 
                     if (state.currentChunk >= state.totalChunks) {
-                        elements.progressText.textContent = '🧩 Merging file on server...';
+                        elements.progressText.textContent = '🧩 Merging file on server... Feel free to continue exploring the map.';
                         await mergeChunks();
                         return;
                     }
@@ -1401,7 +1401,7 @@
                         updateProgressDisplay(progress, speedMBps, etaText);
 
                         if (progress === 100) {
-                            MyZkToast.info('Merging file on server...');
+                            MyZkToast.info('Merging file on server... feel free to keep browsing.');
                         }
 
                         if (!state.paused) {
