@@ -433,7 +433,7 @@ class ImageryDataController extends Controller
                     'uploaded_at' => now(),
                 ]);
             } else {
-                DB::transaction(function () use (&$imagery, &$currentCredits, $user, $sourceType, $filename, $storedName, $calculatedSize, $ext, $processingStatus, $requiredCredits) {
+                DB::transaction(function () use (&$imagery, &$currentCredits, $user, $sourceType, $filename, $storedName, $calculatedSize, $ext, $processingStatus, $requiredCredits, $uploadId, $totalChunks) {
                     $userCredit = $user->credits()->lockForUpdate()->first();
 
                     if (!$userCredit) {
