@@ -59,7 +59,7 @@ PRED_BATCH_SIZE = int(os.environ.get("IMAGERY_BATCH_SIZE", 1024))
 
 def error_and_exit(message: str, *, code: int = 1) -> None:
     """Print an error message and exit the script."""
-    print(f"❌ {message}")
+    print(message)
     sys.exit(code)
 
 
@@ -85,7 +85,7 @@ os.makedirs(Path(OUTPUT_PATH).parent, exist_ok=True)
 # 1. TensorFlow configuration
 # ---------------------------------------------------------------------------
 def configure_tensorflow() -> None:
-    print("⚙️  Konfigurasi TensorFlow...")
+    print("Konfigurasi TensorFlow...")
     try:
         gpus = tf.config.list_physical_devices("GPU")
         if gpus:
@@ -95,13 +95,13 @@ def configure_tensorflow() -> None:
 
             mixed_precision.set_global_policy("mixed_float16")
             tf.config.optimizer.set_jit(True)
-            print(f"✅ GPU terdeteksi: {len(gpus)} unit, mixed precision + XLA aktif")
+            print(f"GPU terdeteksi: {len(gpus)} unit, mixed precision + XLA aktif")
         else:
-            print("⚠️ Tidak ada GPU, fallback ke CPU")
+            print("Tidak ada GPU, fallback ke CPU")
             tf.config.threading.set_intra_op_parallelism_threads(4)
             tf.config.threading.set_inter_op_parallelism_threads(4)
     except Exception as exc:  # pragma: no cover - defensive logging
-        print(f"⚠️ Gagal mengkonfigurasi TensorFlow: {exc}")
+        print(f"Gagal mengkonfigurasi TensorFlow: {exc}")
 
 
 configure_tensorflow()
@@ -111,11 +111,11 @@ configure_tensorflow()
 # 2. Load model and scaler
 # ---------------------------------------------------------------------------
 def load_resources():
-    print("\n📥 Loading model dan scaler...")
+    print("\nLoading model dan scaler...")
     start = time.time()
     model_obj = load_model(MODEL_PATH, compile=False)
     scaler_obj = joblib.load(SCALER_PATH)
-    print(f"✅ Model & scaler dimuat ({time.time() - start:.2f} dtk)")
+    print(f"Model & scaler dimuat ({time.time() - start:.2f} dtk)")
     return model_obj, scaler_obj
 
 
@@ -126,10 +126,10 @@ model, scaler = load_resources()
 # 3. Streaming prediction across tiles
 # ---------------------------------------------------------------------------
 def process_tiles() -> None:
-    print(f"\n📌 Ukuran tile maksimal {TILE_SIZE}x{TILE_SIZE}")
+    print(f"\nUkuran tile maksimal {TILE_SIZE}x{TILE_SIZE}")
     with rasterio.open(INPUT_PATH) as src:
         height, width = src.height, src.width
-        print(f"🗺️  Ukuran raster asli: {width} x {height}")
+        print(f"Ukuran raster asli: {width} x {height}")
 
         out_meta = src.meta.copy()
         out_meta.update(
@@ -156,7 +156,7 @@ def process_tiles() -> None:
 
                     t0 = time.time()
                     print(
-                        f"\n[{tile_idx}/{total_tiles}] 📍 Window (x={col_off}, y={row_off}, w={win_width}, h={win_height})"
+                        f"\n[{tile_idx}/{total_tiles}] Window (x={col_off}, y={row_off}, w={win_width}, h={win_height})"
                     )
 
                     bands = [src.read(b, window=window) for b in range(1, 13)]
@@ -181,12 +181,12 @@ def process_tiles() -> None:
                     dst.write(pred, 1, window=window)
 
                     elapsed = time.time() - t0
-                    print(f"   🤖 Prediksi selesai untuk {h * w:,} piksel (durasi {elapsed:.2f} dtk)")
+                    print(f"   Prediksi selesai untuk {h * w:,} piksel (durasi {elapsed:.2f} dtk)")
 
                     del pred
                     gc.collect()
 
-    print(f"\n✅ Mosaic final langsung tersimpan: {OUTPUT_PATH}")
+    print(f"\nMosaic final langsung tersimpan: {OUTPUT_PATH}")
 
 
 try:
