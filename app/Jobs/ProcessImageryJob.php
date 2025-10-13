@@ -100,14 +100,28 @@ class ProcessImageryJob implements ShouldQueue
             return;
         }
 
-        // Jalankan proses Python
-        $processEnv = $this->buildProcessEnvironment([
+        // Konfigurasi tambahan untuk inferensi Python (opsional via .env)
+        $tileSize = env('IMAGERY_TILE_SIZE');
+        $batchSize = env('IMAGERY_BATCH_SIZE');
+
+        $overrides = [
             'IMAGERY_INPUT_PATH' => $filePath,
             'IMAGERY_OUTPUT_PATH' => $outputPath,
             'IMAGERY_MODEL_PATH' => $modelPath,
             'IMAGERY_SCALER_PATH' => $scalerPath,
             'IMAGERY_ID' => (string) $imagery->id,
-        ]);
+        ];
+
+        if (!is_null($tileSize)) {
+            $overrides['IMAGERY_TILE_SIZE'] = (string) $tileSize;
+        }
+
+        if (!is_null($batchSize)) {
+            $overrides['IMAGERY_BATCH_SIZE'] = (string) $batchSize;
+        }
+
+        // Jalankan proses Python
+        $processEnv = $this->buildProcessEnvironment($overrides);
 
         $process = new Process([$pythonPath, $scriptPath], $base, $processEnv);
         $process->setTimeout(7200); // max 2 jam

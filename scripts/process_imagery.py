@@ -1,149 +1,198 @@
 #!/usr/bin/env python3
-import sys
+"""Process satellite imagery using a TensorFlow model.
+
+This script expects the following environment variables to be set by the caller:
+
+- IMAGERY_INPUT_PATH:  Path to the source GeoTIFF imagery file.
+- IMAGERY_OUTPUT_PATH: Path where the predicted GeoTIFF should be written.
+- IMAGERY_MODEL_PATH:  Path to the trained Keras model (.h5).
+- IMAGERY_SCALER_PATH: Path to the fitted scaler (.pkl).
+- IMAGERY_TILE_SIZE:   Optional. Tile size to use during streaming inference.
+- IMAGERY_BATCH_SIZE:  Optional. Batch size passed to ``model.predict``.
+
+The implementation is adapted from the "core" processing code provided by the
+product team while keeping the dynamic configuration driven by environment
+variables so it can be orchestrated from the Laravel job queue.
+"""
+
+from __future__ import annotations
+
+import gc
 import os
+import sys
 import time
-import traceback
+from pathlib import Path
+
+import joblib
+import numpy as np
+import rasterio
+from rasterio.windows import Window
+import tensorflow as tf
+from tensorflow.keras.models import load_model
+
+# Optional dependency; kept to stay aligned with the reference core code.
+try:  # pragma: no cover - optional dependency
+    import matplotlib.pyplot as plt  # noqa: F401
+except Exception:  # pragma: no cover - ignore if matplotlib is unavailable
+    plt = None
+
+
+# ---------------------------------------------------------------------------
+# 0. Environment configuration
+# ---------------------------------------------------------------------------
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 os.environ.setdefault("OMP_NUM_THREADS", "4")
 os.environ.setdefault("MKL_NUM_THREADS", "4")
 os.environ.setdefault("GDAL_CACHEMAX", "512")
 
-import gc
-import tensorflow as tf
-from tensorflow.keras import backend as K
-import numpy as np
-import rasterio
-from rasterio.windows import Window
-import joblib
-import tensorflow as tf
-from tensorflow.keras.models import load_model
-import matplotlib.pyplot as plt
-import time
+BASE_DIR = Path(__file__).resolve().parent
 
-# =====================
-# 0. KONFIGURASI
-# =====================
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+INPUT_PATH = os.environ.get("IMAGERY_INPUT_PATH")
+OUTPUT_PATH = os.environ.get("IMAGERY_OUTPUT_PATH")
+MODEL_PATH = Path(os.environ.get("IMAGERY_MODEL_PATH", BASE_DIR / "Data Model" / "Best_Model2.h5"))
+SCALER_PATH = Path(os.environ.get("IMAGERY_SCALER_PATH", BASE_DIR / "Data Model" / "Best_Scaler2.pkl"))
 
-INPUT_PATH      = os.environ.get("IMAGERY_INPUT_PATH", "")
-MODEL_PATH      = os.environ.get("IMAGERY_MODEL_PATH", os.path.join(BASE_DIR, "Data Model", "Best_Model2.h5"))
-SCALER_PATH     = os.environ.get("IMAGERY_SCALER_PATH", os.path.join(BASE_DIR, "Data Model", "Best_Scaler2.pkl"))
-OUT_TIF         = os.environ.get("IMAGERY_OUTPUT_PATH", "")
+DEFAULT_TILE_SIZE = 2000
+TILE_SIZE = int(os.environ.get("IMAGERY_TILE_SIZE", DEFAULT_TILE_SIZE))
+PRED_BATCH_SIZE = int(os.environ.get("IMAGERY_BATCH_SIZE", 1024))
 
-if not INPUT_PATH or not OUT_TIF:
-    print("[ERROR] IMAGERY_INPUT_PATH atau IMAGERY_OUTPUT_PATH belum ditetapkan.")
-    sys.exit(1)
 
-if not os.path.exists(MODEL_PATH):
-    print(f"[ERROR] Model tidak ditemukan pada path: {MODEL_PATH}")
-    sys.exit(1)
+def error_and_exit(message: str, *, code: int = 1) -> None:
+    """Print an error message and exit the script."""
+    print(f"❌ {message}")
+    sys.exit(code)
 
-if not os.path.exists(SCALER_PATH):
-    print(f"[ERROR] Scaler tidak ditemukan pada path: {SCALER_PATH}")
-    sys.exit(1)
 
-TILE_W = 2048
-TILE_H = 2048
-BATCH_PIXELS   = 262_144
-PRED_BATCH_SIZE = 2048
+if not INPUT_PATH:
+    error_and_exit("IMAGERY_INPUT_PATH belum ditetapkan.")
 
-def cleanup_memory():
-    gc.collect()
-    K.clear_session()
-    tf.compat.v1.reset_default_graph()
+if not OUTPUT_PATH:
+    error_and_exit("IMAGERY_OUTPUT_PATH belum ditetapkan.")
 
-def setup_tf_acceleration():
-    print("[DEBUG]  Mengatur konfigurasi TensorFlow...")
+if not Path(INPUT_PATH).exists():
+    error_and_exit(f"File input tidak ditemukan: {INPUT_PATH}")
+
+if not MODEL_PATH.exists():
+    error_and_exit(f"Model tidak ditemukan pada path: {MODEL_PATH}")
+
+if not SCALER_PATH.exists():
+    error_and_exit(f"Scaler tidak ditemukan pada path: {SCALER_PATH}")
+
+os.makedirs(Path(OUTPUT_PATH).parent, exist_ok=True)
+
+
+# ---------------------------------------------------------------------------
+# 1. TensorFlow configuration
+# ---------------------------------------------------------------------------
+def configure_tensorflow() -> None:
+    print("⚙️  Konfigurasi TensorFlow...")
     try:
-        gpus = tf.config.list_physical_devices('GPU')
+        gpus = tf.config.list_physical_devices("GPU")
         if gpus:
             for gpu in gpus:
                 tf.config.experimental.set_memory_growth(gpu, True)
-            try:
-                from tensorflow.keras import mixed_precision
-                mixed_precision.set_global_policy('mixed_float16')
-                print("[INFO] Mixed precision diaktifkan")
-            except Exception:
-                print("[DEBUG] Mixed precision tidak tersedia")
+            from tensorflow.keras import mixed_precision  # type: ignore
+
+            mixed_precision.set_global_policy("mixed_float16")
             tf.config.optimizer.set_jit(True)
-            print("[INFO] GPU terdeteksi: {len(gpus)} unit. XLA JIT diaktifkan.")
+            print(f"✅ GPU terdeteksi: {len(gpus)} unit, mixed precision + XLA aktif")
         else:
-            print("[INFO] Tidak ada GPU, fallback ke CPU")
+            print("⚠️ Tidak ada GPU, fallback ke CPU")
             tf.config.threading.set_intra_op_parallelism_threads(4)
             tf.config.threading.set_inter_op_parallelism_threads(4)
-    except Exception as e:
-        print("[ERROR] TF accel config error: {e}")
+    except Exception as exc:  # pragma: no cover - defensive logging
+        print(f"⚠️ Gagal mengkonfigurasi TensorFlow: {exc}")
 
-setup_tf_acceleration()
 
-# =====================
-# 1. MUAT MODEL & SCALER
-# =====================
-print("[DEBUG] Memuat model dan scaler...")
-start = time.time()
-model = load_model(MODEL_PATH, compile=False)
-scaler = joblib.load(SCALER_PATH)
-print(f"[INFO] Model & scaler berhasil dimuat. ({time.time()-start:.2f} dtk)")
+configure_tensorflow()
 
-def fast_scale(X, scaler_obj):
-    if hasattr(scaler_obj, "mean_") and hasattr(scaler_obj, "scale_"):
-        mean = np.asarray(scaler_obj.mean_, dtype=np.float32)
-        scale = np.asarray(scaler_obj.scale_, dtype=np.float32)
-        return (X - mean) / scale
-    return scaler_obj.transform(X)
 
-# =====================
-# 2. PREDIKSI STREAMING
-# =====================
-print("[DEBUG] Memulai prediksi streaming...")
-with rasterio.open(INPUT_PATH) as src:
-    src_profile = src.profile.copy()
-    height, width = src.height, src.width
+# ---------------------------------------------------------------------------
+# 2. Load model and scaler
+# ---------------------------------------------------------------------------
+def load_resources():
+    print("\n📥 Loading model dan scaler...")
+    start = time.time()
+    model_obj = load_model(MODEL_PATH, compile=False)
+    scaler_obj = joblib.load(SCALER_PATH)
+    print(f"✅ Model & scaler dimuat ({time.time() - start:.2f} dtk)")
+    return model_obj, scaler_obj
 
-    out_profile = src_profile.copy()
-    out_profile.update({
-        "count": 1,
-        "dtype": "float32",
-        "driver": "GTiff",
-        "compress": "lzw"
-    })
 
-    with rasterio.open(OUT_TIF, "w", **out_profile) as dst:
-        total_windows = ((height+TILE_H-1)//TILE_H) * ((width+TILE_W-1)//TILE_W)
-        win_idx = 1
+model, scaler = load_resources()
 
-        for y in range(0, height, TILE_H):
-            h = min(TILE_H, height - y)
-            for x in range(0, width, TILE_W):
-                w = min(TILE_W, width - x)
-                window = Window(x, y, w, h)
 
-                print(f"\n[{win_idx}/{total_windows}] [INFO PROCESS] Window posisi (x={x}, y={y}, w={w}, h={h})")
-                win_idx += 1
-                t0 = time.time()
+# ---------------------------------------------------------------------------
+# 3. Streaming prediction across tiles
+# ---------------------------------------------------------------------------
+def process_tiles() -> None:
+    print(f"\n📌 Ukuran tile maksimal {TILE_SIZE}x{TILE_SIZE}")
+    with rasterio.open(INPUT_PATH) as src:
+        height, width = src.height, src.width
+        print(f"🗺️  Ukuran raster asli: {width} x {height}")
 
-                bands = src.read(indexes=list(range(1, 13)), window=window).astype(np.float32)
-                print(f"[INFO] Dibaca 12 band - shape: {bands.shape}")
+        out_meta = src.meta.copy()
+        out_meta.update(
+            {
+                "height": height,
+                "width": width,
+                "transform": src.transform,
+                "driver": "GTiff",
+                "dtype": "float32",
+                "count": 1,
+            }
+        )
 
-                N = h * w
-                flat = bands.reshape(12, N).T
-                out_flat = np.empty((N,), dtype=np.float32)
+        with rasterio.open(OUTPUT_PATH, "w+", **out_meta) as dst:
+            total_tiles = (height // TILE_SIZE + 1) * (width // TILE_SIZE + 1)
+            tile_idx = 0
 
-                # Batch processing
-                for s in range(0, N, BATCH_PIXELS):
-                    e = min(s + BATCH_PIXELS, N)
-                    Xb = flat[s:e]
-                    Xb = fast_scale(Xb, scaler)
+            for row_off in range(0, height, TILE_SIZE):
+                for col_off in range(0, width, TILE_SIZE):
+                    tile_idx += 1
+                    win_width = min(TILE_SIZE, width - col_off)
+                    win_height = min(TILE_SIZE, height - row_off)
+                    window = Window(col_off, row_off, win_width, win_height)
 
-                    yb = model.predict(Xb, batch_size=PRED_BATCH_SIZE, verbose=0)
-                    yb = np.asarray(yb).reshape(-1).astype(np.float32)
-                    out_flat[s:e] = yb
-                print(f"[INFO] Prediksi selesai untuk {N} piksel")
+                    t0 = time.time()
+                    print(
+                        f"\n[{tile_idx}/{total_tiles}] 📍 Window (x={col_off}, y={row_off}, w={win_width}, h={win_height})"
+                    )
 
-                out_tile = out_flat.reshape(h, w)
-                dst.write(out_tile, 1, window=window)
-                print(f"[INFO] Ditulis ke output (durasi {time.time()-t0:.2f} dtk)")
+                    bands = [src.read(b, window=window) for b in range(1, 13)]
+                    arr = np.stack(bands, axis=0)
+                    h, w = arr.shape[1:]
+                    del bands
+                    gc.collect()
 
-print(f"\n[INFO] Semua window selesai diproses = {OUT_TIF}")
+                    input_img = arr.reshape(12, h * w).T
+                    del arr
+                    gc.collect()
 
+                    input_scaled = scaler.transform(input_img)
+                    del input_img
+                    gc.collect()
+
+                    pred = model.predict(input_scaled, verbose=0, batch_size=PRED_BATCH_SIZE)
+                    pred = pred.reshape(h, w).astype("float32")
+                    del input_scaled
+                    gc.collect()
+
+                    dst.write(pred, 1, window=window)
+
+                    elapsed = time.time() - t0
+                    print(f"   🤖 Prediksi selesai untuk {h * w:,} piksel (durasi {elapsed:.2f} dtk)")
+
+                    del pred
+                    gc.collect()
+
+    print(f"\n✅ Mosaic final langsung tersimpan: {OUTPUT_PATH}")
+
+
+try:
+    process_tiles()
+finally:
+    del model
+    del scaler
+    gc.collect()
 
