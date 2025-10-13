@@ -291,7 +291,7 @@
                     if (state.paused || !state.file) return;
 
                     if (state.currentChunk >= state.totalChunks) {
-                        elements.progressText.textContent = '🧩 Merging file on server...';
+                        elements.progressText.textContent = '🧩 Preparing file for background merge...';
                         await mergeChunks();
                         return;
                     }
@@ -331,7 +331,7 @@
                         updateProgressDisplay(progress, speedMBps, etaText);
 
                         if (progress === 100) {
-                            MyZkToast.info('Merging file on server...');
+                            MyZkToast.info('Finalising upload on server...');
                         }
 
                         if (!state.paused) {
@@ -379,18 +379,20 @@
 
                         const result = await response.json();
                         if (!response.ok || !result.success) {
-                            throw new Error(result.message || 'Failed to merge file on server.');
+                            throw new Error(result.message || 'Failed to queue merge on server.');
                         }
 
                         elements.progressBar.style.width = '100%';
-                        elements.progressText.textContent = `✅ Upload complete! ${result.message || 'Upload completed. Processing started in background.'}`;
-                        MyZkToast.success(result.message || 'Upload completed successfully!');
+                        elements.progressText.textContent = `✅ ${result.message || 'Upload received. Finalising in background.'}`;
+                        MyZkToast.success('File received! Finalising in the background.');
                         setButtonState('completed');
-                        $('#current-myCredits').text(formatNumber(result.data.currentCredits, 2));
+                        if (result.data?.currentCredits !== undefined) {
+                            $('#current-myCredits').text(formatNumber(result.data.currentCredits, 2));
+                        }
                         scheduleAutoReset();
                     } catch (error) {
                         elements.progressText.textContent = `❌ Error: ${error.message}`;
-                        MyZkToast.error(error.message || 'Server error during merge.');
+                        MyZkToast.error(error.message || 'Server error while scheduling merge.');
                         setButtonState('error');
                         scheduleAutoReset();
                     }

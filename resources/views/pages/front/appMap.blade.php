@@ -1361,7 +1361,7 @@
                     if (state.paused || !state.file) return;
 
                     if (state.currentChunk >= state.totalChunks) {
-                        elements.progressText.textContent = '🧩 Merging file on server...';
+                        elements.progressText.textContent = '🧩 Preparing file for background merge...';
                         await mergeChunks();
                         return;
                     }
@@ -1401,7 +1401,7 @@
                         updateProgressDisplay(progress, speedMBps, etaText);
 
                         if (progress === 100) {
-                            MyZkToast.info('Merging file on server...');
+                            MyZkToast.info('Finalising upload on server...');
                         }
 
                         if (!state.paused) {
@@ -1449,19 +1449,21 @@
 
                         const result = await response.json();
                         if (!response.ok || !result.success) {
-                            throw new Error(result.message || 'Failed to merge file on server.');
+                            throw new Error(result.message || 'Failed to queue merge on server.');
                         }
 
                         elements.progressBar.style.width = '100%';
-                        elements.progressText.textContent = `✅ Upload complete! ${result.message || 'Upload completed. Processing started in background.'}`;
-                        MyZkToast.success(result.message || 'Upload completed successfully!');
+                        elements.progressText.textContent = `✅ ${result.message || 'Upload received. Finalising in background.'}`;
+                        MyZkToast.success('File received! Finalising in the background.');
                         setButtonState('completed');
-                        $('#current-myCredits').text(formatNumber(result.data.currentCredits, 2));
+                        if (result.data?.currentCredits !== undefined) {
+                            $('#current-myCredits').text(formatNumber(result.data.currentCredits, 2));
+                        }
                         await loadMyData();
                         scheduleAutoReset();
                     } catch (error) {
                         elements.progressText.textContent = `❌ Error: ${error.message}`;
-                        MyZkToast.error(error.message || 'Server error during merge.');
+                        MyZkToast.error(error.message || 'Server error while scheduling merge.');
                         setButtonState('error');
                         scheduleAutoReset();
                     }
@@ -1581,17 +1583,36 @@
                         return null;
                     }
 
-                    const formatLabel = item.format.slice(0, 3).toUpperCase();
+                    const formatLabel = (item.format || '').slice(0, 3).toUpperCase() || 'N/A';
                     card.querySelector('.imagery-format').textContent = formatLabel;
-                    card.querySelector('.imagery-name').textContent = shortenFilename(item.stored_name, 25);
+                    const displayName = item.stored_name || item.original_name || 'Imagery File';
+                    card.querySelector('.imagery-name').textContent = shortenFilename(displayName, 25);
 
-                    const sizeMb = (item.size / 1024 / 1024).toFixed(2);
-                    const uploadDate = new Date(item.uploaded_at).toLocaleDateString();
-                    const statusEl = card.querySelector('.imagery-status');
-                    const statusKey = (item.processing_status || 'unknown').toLowerCase();
-                    const statusMap = {
+                    const sizeValue = Number(item.size) || 0;
+                    const sizeMb = (sizeValue / 1024 / 1024).toFixed(2);
+                    const uploadDate = item.uploaded_at ? new Date(item.uploaded_at).toLocaleString() : '—';
+
+                    const uploadStatusKey = (item.upload_status || 'unknown').toLowerCase();
+                    const processingStatusKey = (item.processing_status || 'unknown').toLowerCase();
+
+                    const uploadStatusMap = {
+                        done: {
+                            label: 'Uploaded',
+                            className: 'text-success'
+                        },
+                        merging: {
+                            label: 'Finalising Upload',
+                            className: 'text-warning'
+                        },
+                        failed: {
+                            label: 'Upload Failed',
+                            className: 'text-red-500'
+                        },
+                    };
+
+                    const processingStatusMap = {
                         completed: {
-                            label: 'Completed',
+                            label: 'Processing Complete',
                             className: 'text-success'
                         },
                         processing: {
@@ -1599,28 +1620,34 @@
                             className: 'text-warning'
                         },
                         waiting: {
-                            label: 'Waiting',
+                            label: 'Queued for Processing',
                             className: 'text-warning'
                         },
                         queued: {
                             label: 'Queued',
                             className: 'text-warning'
                         },
+                        skip: {
+                            label: 'Processing Skipped',
+                            className: 'text-foreground/60'
+                        },
                         error: {
-                            label: 'Failed',
+                            label: 'Processing Failed',
                             className: 'text-red-500'
                         },
                     };
 
-                    const statusInfo = statusMap[statusKey] || {
-                        label: statusKey.charAt(0).toUpperCase() + statusKey.slice(1),
+                    const uploadStatusInfo = uploadStatusMap[uploadStatusKey] || {
+                        label: uploadStatusKey.charAt(0).toUpperCase() + uploadStatusKey.slice(1),
                         className: 'text-foreground/60',
                     };
 
-                    statusEl.className = `imagery-status font-semibold ${statusInfo.className}`;
-                    statusEl.textContent = statusInfo.label;
+                    const processingStatusInfo = processingStatusMap[processingStatusKey] || {
+                        label: processingStatusKey.charAt(0).toUpperCase() + processingStatusKey.slice(1),
+                        className: 'text-foreground/60',
+                    };
 
-                    const meta = `${sizeMb} MB • ${uploadDate} • <span class="imagery-status font-semibold ${statusInfo.className}">${statusInfo.label}</span>`;
+                    const meta = `${sizeMb} MB • ${uploadDate} • <span class="imagery-status font-semibold ${uploadStatusInfo.className}">${uploadStatusInfo.label}</span> • <span class="imagery-status font-semibold ${processingStatusInfo.className}">${processingStatusInfo.label}</span>`;
                     card.querySelector('.imagery-meta').innerHTML = meta;
 
                     const viewBtn = card.querySelector('.view-btn');

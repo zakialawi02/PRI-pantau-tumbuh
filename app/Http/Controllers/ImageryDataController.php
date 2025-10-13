@@ -7,6 +7,7 @@ use App\Models\FieldArea;
 use App\Models\ImageryData;
 use Illuminate\Support\Str;
 use Illuminate\Http\Request;
+use App\Jobs\MergeImageryChunksJob;
 use App\Jobs\ProcessImageryJob;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
@@ -29,6 +30,8 @@ class ImageryDataController extends Controller
 
         if ($request->ajax()) {
             $user = Auth::user();
+            $user->loadMissing('credits');
+            $user->loadMissing('credits');
 
             // Build the query based on user role
             if (in_array($user->role, ['superadmin', 'admin'])) {
@@ -328,7 +331,7 @@ class ImageryDataController extends Controller
             $validated = $request->validate([
                 'upload_id' => 'required|string',
                 'filename' => 'required|string',
-                'total_chunks' => 'required|integer',
+                'total_chunks' => 'required|integer|min:1',
                 'source_type' => 'required|string|in:sentinel-2,landsat,quicksat',
             ]);
 
@@ -336,9 +339,17 @@ class ImageryDataController extends Controller
             $uploadId = $validated['upload_id'];
             $filename = $validated['filename'];
             $sourceType = $validated['source_type'];
+            $totalChunks = (int) $validated['total_chunks'];
 
-            // Check if processing should be skipped
-            $skipProcessing = $request->has('skip_processing') && $request->skip_processing === 'true';
+            $chunkDir = storage_path("app/tmp_uploads/{$uploadId}");
+            if (!File::isDirectory($chunkDir)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Chunk directory not found. Please restart the upload.',
+                ], 404);
+            }
+
+            $skipProcessing = filter_var($request->input('skip_processing'), FILTER_VALIDATE_BOOLEAN);
 
             $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
             $allowed = ['tif', 'tiff', 'ecw', 'jp2', 'zip'];
@@ -347,123 +358,120 @@ class ImageryDataController extends Controller
                 return response()->json(['success' => false, 'message' => 'Invalid file format.'], 422);
             }
 
-            // === Rename final file ===
             $timestamp = now()->format('YmdHis');
             $randomStr = Str::upper(Str::random(8));
             $cleanOriginal = Str::slug(pathinfo($filename, PATHINFO_FILENAME));
             $storedName = "{$timestamp}_{$randomStr}_{$cleanOriginal}.{$ext}";
-
-            $chunkDir = storage_path("app/tmp_uploads/{$uploadId}");
             $finalPath = storage_path("app/public/imagery/{$storedName}");
 
-            if (!File::exists(dirname($finalPath))) {
-                File::makeDirectory(dirname($finalPath), 0777, true);
+            $calculatedSize = 0;
+            for ($i = 0; $i < $totalChunks; $i++) {
+                $chunkFile = $chunkDir . DIRECTORY_SEPARATOR . "chunk_{$i}";
+
+                if (!File::exists($chunkFile)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => "Chunk {$i} missing. Please retry the upload.",
+                    ], 422);
+                }
+
+                $size = File::size($chunkFile);
+                if ($size === false) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => "Unable to read chunk {$i} size.",
+                    ], 500);
+                }
+
+                $calculatedSize += $size;
             }
 
-            // === Combine all chunks ===
-            $output = fopen($finalPath, 'ab');
-            if (!$output) {
-                throw new \Exception("Failed to open final file for writing.");
-            }
+            $requiredCredits = config('app-constants.imagery_processing_cost', 10);
 
-            for ($i = 0; $i < $validated['total_chunks']; $i++) {
-                $chunkFile = "{$chunkDir}/chunk_{$i}";
-                if (File::exists($chunkFile)) {
-                    $chunkData = File::get($chunkFile);
-                    if ($chunkData === false) {
-                        fclose($output);
-                        throw new \Exception("Failed to read chunk {$i}.");
-                    }
-                    fwrite($output, $chunkData);
-                } else {
-                    fclose($output);
-                    return response()->json(['success' => false, 'message' => "Chunk {$i} missing."], 500);
+            if (!$skipProcessing) {
+                $userCredit = $user->credits;
+                if (!$userCredit || $userCredit->credits < $requiredCredits) {
+                    $skipProcessing = true;
                 }
             }
-            fclose($output);
 
-            // Clean up chunk directory
-            if (!File::deleteDirectory($chunkDir)) {
-                Log::warning("Failed to delete chunk directory: {$chunkDir}");
-            }
-
-            // === Save to DB ===
-            $fileSize = File::size($finalPath);
-            if ($fileSize === false) {
-                throw new \Exception("Failed to get file size.");
-            }
-
-            // Determine processing status based on whether processing should be skipped
             $processingStatus = $skipProcessing ? 'skip' : 'waiting';
 
-            // Use database transaction with locking to prevent race conditions when deducting credits
             $imagery = null;
-            if (!$skipProcessing) {
-                DB::transaction(function () use (&$imagery, $user, $sourceType, $filename, $storedName, $fileSize, $ext, $processingStatus) {
-                    // Lock the user credit record to prevent race conditions
+            $currentCredits = optional($user->credits)->credits ?? 0;
+
+            if ($skipProcessing) {
+                $imagery = ImageryData::create([
+                    'user_id' => $user->id,
+                    'source_type' => $sourceType,
+                    'original_name' => $filename,
+                    'stored_name' => $storedName,
+                    'size' => $calculatedSize,
+                    'format' => $ext,
+                    'path' => "storage/imagery/{$storedName}",
+                    'upload_status' => 'merging',
+                    'processing_status' => $processingStatus,
+                    'uploaded_at' => now(),
+                ]);
+            } else {
+                DB::transaction(function () use (&$imagery, &$currentCredits, $user, $sourceType, $filename, $storedName, $calculatedSize, $ext, $processingStatus, $requiredCredits) {
                     $userCredit = $user->credits()->lockForUpdate()->first();
 
                     if (!$userCredit) {
                         throw new \Exception('User credit record not found.');
                     }
 
-                    // Get required credits for processing
-                    $requiredCredits = config('app-constants.imagery_processing_cost', 10);
+                    if ($userCredit->credits < $requiredCredits) {
+                        throw new \Exception('Insufficient credit points.');
+                    }
 
-                    // Deduct credits
                     $userCredit->credits -= $requiredCredits;
                     $userCredit->save();
 
-                    // Create imagery record
                     $imagery = ImageryData::create([
                         'user_id' => $user->id,
                         'source_type' => $sourceType,
                         'original_name' => $filename,
                         'stored_name' => $storedName,
-                        'size' => $fileSize,
+                        'size' => $calculatedSize,
                         'format' => $ext,
                         'path' => "storage/imagery/{$storedName}",
-                        'upload_status' => 'done',
+                        'upload_status' => 'merging',
                         'processing_status' => $processingStatus,
                         'uploaded_at' => now(),
                     ]);
+
+                    $currentCredits = (float) $userCredit->credits;
                 });
-            } else {
-                // If skipping processing, just create the imagery record without deducting credits
-                $imagery = ImageryData::create([
-                    'user_id' => $user->id,
-                    'source_type' => $sourceType,
-                    'original_name' => $filename,
-                    'stored_name' => $storedName,
-                    'size' => $fileSize,
-                    'format' => $ext,
-                    'path' => "storage/imagery/{$storedName}",
-                    'upload_status' => 'done',
-                    'processing_status' => $processingStatus,
-                    'uploaded_at' => now(),
-                ]);
+
+                $user->refresh();
+                $currentCredits = optional($user->credits)->credits ?? $currentCredits;
             }
 
-            // === Dispatch background job for Python processing ===
-            // Only dispatch if processing is not skipped
-            if (!$skipProcessing) {
-                ProcessImageryJob::dispatch($imagery->id);
-            }
+            MergeImageryChunksJob::dispatch(
+                $imagery->id,
+                $chunkDir,
+                $finalPath,
+                $totalChunks,
+                $skipProcessing,
+                $storedName
+            );
 
-            $message = $skipProcessing ?
-                'Upload completed. Processing skipped due to insufficient credits.' :
-                'Upload completed. Processing started in background.';
+            $message = $skipProcessing
+                ? 'Upload received. Processing skipped due to insufficient credits. File will be available after background merging.'
+                : 'Upload received. We are merging your file in the background and will start processing shortly.';
 
             return response()->json([
                 'success' => true,
                 'message' => $message,
                 'data' => [
                     'id' => $imagery->id,
-                    'path' => "storage/imagery/{$storedName}",
+                    'path' => $imagery->path,
                     'processing_status' => $processingStatus,
-                    'currentCredits' => (float) $user->credits->credits,
+                    'upload_status' => 'merging',
+                    'currentCredits' => (float) $currentCredits,
                 ],
-            ]);
+            ], 202);
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
                 'success' => false,
@@ -471,35 +479,15 @@ class ImageryDataController extends Controller
                 'errors' => $e->errors(),
             ], 422);
         } catch (\Exception $e) {
-            // Clean up any partially created files
-            if (isset($finalPath) && File::exists($finalPath)) {
-                File::delete($finalPath);
-            }
-
-            // Clean up chunk directory if it still exists
-            if (isset($chunkDir) && File::exists($chunkDir)) {
-                File::deleteDirectory($chunkDir);
-            }
-
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to merge chunks.',
+                'message' => 'Failed to queue merge operation.',
                 'error' => $e->getMessage(),
             ], 500);
         } catch (\Throwable $e) {
-            // Clean up any partially created files
-            if (isset($finalPath) && File::exists($finalPath)) {
-                File::delete($finalPath);
-            }
-
-            // Clean up chunk directory if it still exists
-            if (isset($chunkDir) && File::exists($chunkDir)) {
-                File::deleteDirectory($chunkDir);
-            }
-
             return response()->json([
                 'success' => false,
-                'message' => 'An unexpected error occurred while merging chunks.',
+                'message' => 'An unexpected error occurred while preparing the merge.',
                 'error' => $e->getMessage(),
             ], 500);
         }
