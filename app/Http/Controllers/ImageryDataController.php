@@ -87,13 +87,33 @@ class ImageryDataController extends Controller
                         return $data->processing_status ?? 'N/A';
                     }
                 })
+                ->editColumn('upload_status', function ($data) {
+                    if (!$data->upload_status) {
+                        return 'N/A';
+                    }
+
+                    $status = $data->upload_status;
+                    $label = Str::of($status)->replace('_', ' ')->title();
+                    $badgeClasses = match (true) {
+                        $status === 'pending' => 'bg-amber-100 text-amber-800 dark:bg-amber-500/10 dark:text-amber-300',
+                        $status === 'merging' => 'bg-blue-100 text-blue-800 dark:bg-blue-500/10 dark:text-blue-300',
+                        $status === 'done' => 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300',
+                        in_array($status, ['failed', 'error'], true) => 'bg-red-100 text-red-800 dark:bg-red-500/10 dark:text-red-300',
+                        default => 'bg-foreground/10 text-foreground',
+                    };
+
+                    return '<span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ' . $badgeClasses . '">' . e($label) . '</span>';
+                })
                 ->editColumn('created_at', function ($data) {
                     return $data->created_at ? $data->created_at->isoFormat('LL, HH:mm') : 'N/A';
+                })
+                ->editColumn('updated_at', function ($data) {
+                    return $data->updated_at ? $data->updated_at->isoFormat('LL, HH:mm') : 'N/A';
                 })
                 ->editColumn('user_name', function ($data) {
                     return $data->user->name ?? 'Unknown User';
                 })
-                ->rawColumns(['action', 'processing_status'])
+                ->rawColumns(['action', 'processing_status', 'upload_status'])
                 ->make(true);
         }
 

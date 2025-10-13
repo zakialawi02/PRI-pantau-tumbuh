@@ -49,10 +49,16 @@
                                 Format
                             </th>
                             <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider" scope="col">
+                                Upload Status
+                            </th>
+                            <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider" scope="col">
                                 Processing
                             </th>
                             <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider" scope="col">
                                 Uploaded At
+                            </th>
+                            <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider" scope="col">
+                                Last Updated
                             </th>
                             <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider" scope="col">
                                 Action
@@ -142,6 +148,11 @@
                             name: 'format',
                             className: "text-nowrap"
                         }, {
+                            data: 'upload_status',
+                            name: 'upload_status',
+                            width: "140px",
+                            className: "text-wrap"
+                        }, {
                             data: 'processing_status',
                             name: 'processing_status',
                             width: "150px",
@@ -149,6 +160,11 @@
                         }, {
                             data: 'created_at',
                             name: 'created_at',
+                            width: "150px",
+                            className: "text-nowrap"
+                        }, {
+                            data: 'updated_at',
+                            name: 'updated_at',
                             width: "150px",
                             className: "text-nowrap"
                         }, {
