@@ -79,6 +79,12 @@ class MergeImageryChunksJob implements ShouldQueue
             return;
         }
 
+        if ($imagery->upload_status !== 'merging') {
+            $imagery->update([
+                'upload_status' => 'merging',
+            ]);
+        }
+
         if (!File::isDirectory($this->chunkDirectory)) {
             Log::error("MergeImageryChunksJob: Chunk directory missing for imagery {$this->imageryId}.");
             $imagery->update([
