@@ -51,6 +51,7 @@ Route::prefix('dashboard')->name('admin.')->group(function () {
         Route::get('/imagery/upload', [ImageryDataController::class, 'create'])->name('imagery.upload');
         Route::delete('/imagery/{imagery}', [ImageryDataController::class, 'destroy'])->name('imagery.destroy');
         Route::post('/imagery/{imagery}/retry-processing', [ImageryDataController::class, 'retryProcessing'])->name('imagery.retry');
+        Route::post('/imagery/{imagery}/retry-merge', [ImageryDataController::class, 'retryMerge'])->name('imagery.retry-merge');
         Route::get('/imagery/{imagery}/download-source', [ImageryDataController::class, 'downloadSource'])->name('imagery.download.source');
         Route::get('/imagery/{imagery}/download-result', [ImageryDataController::class, 'downloadResult'])->name('imagery.download.result');
 

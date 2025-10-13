@@ -21,6 +21,8 @@ class ImageryData extends Model
         'size',
         'format',
         'path',
+        'chunk_id',
+        'chunk_total',
         'upload_status',
         'uploaded_at',
         'processing_status',
@@ -33,6 +35,7 @@ class ImageryData extends Model
         'size' => 'decimal:2',
         'uploaded_at' => 'datetime',
         'processed_at' => 'datetime',
+        'chunk_total' => 'integer',
         'scheduled_deletion_at' => 'datetime'
     ];
 
