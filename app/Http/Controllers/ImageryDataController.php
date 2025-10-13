@@ -52,6 +52,11 @@ class ImageryDataController extends Controller
                         $actions .= '<i class="ri-repeat-2-line mr-1"></i> Retry Processing';
                         $actions .= '</button>';
                     }
+                    if (in_array($data->upload_status, ['pending']) && !empty($data->chunk_id)) {
+                        $actions .= '<button class="btn-retry-merge bg-secondary hover:bg-secondary/80 inline-flex w-fit items-center rounded-full px-2 py-1 text-xs font-medium" data-id="' . $data->id . '" type="button" title="Retry Merge">';
+                        $actions .= '<i class="ri-refresh-line mr-1"></i> Merge Upload';
+                        $actions .= '</button>';
+                    }
                     // Download Source button - only show if upload_status is 'done'
                     if ($data->upload_status === 'done') {
                         $actions .= '<button class="btn-download-source bg-secondary hover:bg-secondary/80 inline-flex w-fit items-center rounded-full px-2 py-1 text-xs font-medium" data-id="' . $data->id . '" type="button" title="Download Source">';
@@ -239,7 +244,19 @@ class ImageryDataController extends Controller
             $user = Auth::user();
             $uploads = ImageryData::where('user_id', $user->id)
                 ->orderByDesc('uploaded_at')
-                ->get(['id', 'original_name', 'stored_name', 'size', 'format', 'path', 'processing_status', 'uploaded_at']);
+                ->get([
+                    'id',
+                    'original_name',
+                    'stored_name',
+                    'size',
+                    'format',
+                    'path',
+                    'chunk_id',
+                    'chunk_total',
+                    'upload_status',
+                    'processing_status',
+                    'uploaded_at',
+                ]);
 
             return response()->json([
                 'success' => true,
@@ -409,6 +426,8 @@ class ImageryDataController extends Controller
                     'size' => $calculatedSize,
                     'format' => $ext,
                     'path' => "storage/imagery/{$storedName}",
+                    'chunk_id' => $uploadId,
+                    'chunk_total' => $totalChunks,
                     'upload_status' => 'merging',
                     'processing_status' => $processingStatus,
                     'uploaded_at' => now(),
@@ -436,6 +455,8 @@ class ImageryDataController extends Controller
                         'size' => $calculatedSize,
                         'format' => $ext,
                         'path' => "storage/imagery/{$storedName}",
+                        'chunk_id' => $uploadId,
+                        'chunk_total' => $totalChunks,
                         'upload_status' => 'merging',
                         'processing_status' => $processingStatus,
                         'uploaded_at' => now(),
@@ -469,6 +490,8 @@ class ImageryDataController extends Controller
                     'path' => $imagery->path,
                     'processing_status' => $processingStatus,
                     'upload_status' => 'merging',
+                    'chunk_id' => $imagery->chunk_id,
+                    'chunk_total' => $imagery->chunk_total,
                     'currentCredits' => (float) $currentCredits,
                 ],
             ], 202);
@@ -624,6 +647,64 @@ class ImageryDataController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to retry processing: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function retryMerge(ImageryData $imagery)
+    {
+        try {
+            if ($imagery->upload_status !== 'pending') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Imagery is not awaiting merge.',
+                ], 400);
+            }
+
+            if (empty($imagery->chunk_id) || empty($imagery->chunk_total)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Chunk information is missing. Please re-upload the imagery.',
+                ], 400);
+            }
+
+            $chunkDir = storage_path('app/tmp_uploads/' . $imagery->chunk_id);
+            if (!File::isDirectory($chunkDir)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Chunk directory not found. Please re-upload the imagery.',
+                ], 404);
+            }
+
+            $finalPath = storage_path('app/public/imagery/' . $imagery->stored_name);
+            $skipProcessing = $imagery->processing_status === 'skip';
+
+            $imagery->update([
+                'upload_status' => 'merging',
+                'processing_status' => $skipProcessing ? 'skip' : 'waiting',
+            ]);
+
+            MergeImageryChunksJob::dispatch(
+                $imagery->id,
+                $chunkDir,
+                $finalPath,
+                (int) $imagery->chunk_total,
+                $skipProcessing,
+                $imagery->stored_name
+            );
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Merge job restarted successfully.',
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('Failed to requeue imagery merge: ' . $e->getMessage(), [
+                'imagery_id' => $imagery->id,
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to restart merge: ' . $e->getMessage(),
             ], 500);
         }
     }

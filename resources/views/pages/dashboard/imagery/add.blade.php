@@ -271,7 +271,11 @@
                 };
 
                 // Generate a lightweight identifier for coordinating chunk requests.
-                const generateUploadId = () => Math.random().toString(36).substring(2, 12);
+                const generateUploadId = () => {
+                    const timestamp = Date.now();
+                    const random = Math.random().toString(36).substring(2, 10).toUpperCase();
+                    return `${timestamp}_${random}`;
+                };
 
                 // Convert bytes remaining and elapsed seconds into a readable ETA.
                 const formatEta = (remainingBytes, elapsedSeconds) => {

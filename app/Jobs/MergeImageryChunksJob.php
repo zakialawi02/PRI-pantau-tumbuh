@@ -88,8 +88,8 @@ class MergeImageryChunksJob implements ShouldQueue
         if (!File::isDirectory($this->chunkDirectory)) {
             Log::error("MergeImageryChunksJob: Chunk directory missing for imagery {$this->imageryId}.");
             $imagery->update([
-                'upload_status' => 'failed',
-                'processing_status' => 'error',
+                'upload_status' => 'pending',
+                'processing_status' => $imagery->processing_status === 'skip' ? 'skip' : 'waiting',
             ]);
             return;
         }
@@ -163,13 +163,9 @@ class MergeImageryChunksJob implements ShouldQueue
                 File::delete($this->finalPath);
             }
 
-            if (File::isDirectory($this->chunkDirectory)) {
-                File::deleteDirectory($this->chunkDirectory);
-            }
-
             $imagery->update([
-                'upload_status' => 'failed',
-                'processing_status' => 'error',
+                'upload_status' => 'pending',
+                'processing_status' => $imagery->processing_status === 'skip' ? 'skip' : 'waiting',
             ]);
         }
     }

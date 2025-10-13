@@ -233,6 +233,33 @@
 
                 });
 
+                // Retry merging uploaded chunks
+                $('body').on('click', '.btn-retry-merge', function() {
+                    const $button = $(this);
+                    $button.attr('disabled', true);
+                    const imageryId = $button.data('id');
+
+                    $.ajax({
+                        url: "{{ route('admin.imagery.retry-merge', ':id') }}".replace(':id', imageryId),
+                        method: "POST",
+                        headers: {
+                            'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                        },
+                        success: function(response) {
+                            MyZkToast.success(response.message || 'Merge restarted.');
+                        },
+                        error: function(error) {
+                            console.log(error);
+                            const message = error.responseJSON?.message || 'Failed to restart merge.';
+                            MyZkToast.error(message);
+                        },
+                        complete: function() {
+                            $('#myTable').DataTable().ajax.reload(null, false);
+                            $button.attr('disabled', false);
+                        }
+                    });
+                });
+
                 // Download imagery source
                 $('body').on('click', '.btn-download-source', function() {
                     const imageryId = $(this).data('id');
