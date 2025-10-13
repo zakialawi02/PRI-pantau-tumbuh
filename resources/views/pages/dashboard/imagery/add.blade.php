@@ -43,7 +43,7 @@
 
                 <!-- tombol kontrol -->
                 <div class="space-x-1 space-y-1">
-                    <x-button-primary id="startBtn" type="button" size="small">🚀 Start Upload</x-button-primary>
+                    <x-button-primary id="startBtn" type="button" size="small">Start Upload</x-button-primary>
                     <x-button-danger id="pauseBtn" type="button" size="small">⏸️ Pause</x-button-danger>
                     <x-button-secondary id="resumeBtn" type="button" size="small">▶️ Resume</x-button-secondary>
                 </div>
@@ -54,276 +54,476 @@
 
     @push('javascript')
         <script>
-            const sourceInput = document.getElementById('sourceType');
-            const fileInput = document.getElementById('fileInput');
-            const fileInfo = document.getElementById('fileInfo');
-            const progressBar = document.getElementById('progressBar');
-            const progressText = document.getElementById('progressText');
-            const startBtn = document.getElementById('startBtn');
-            const pauseBtn = document.getElementById('pauseBtn');
-            const resumeBtn = document.getElementById('resumeBtn');
-            const myDataContainer = document.getElementById('myDataContainer');
+            (() => {
+                // Cache frequently used DOM references for the uploader workflow.
+                const elements = {
+                    sourceInput: document.getElementById('sourceType'),
+                    fileInput: document.getElementById('fileInput'),
+                    fileInfo: document.getElementById('fileInfo'),
+                    progressBar: document.getElementById('progressBar'),
+                    progressText: document.getElementById('progressText'),
+                    startBtn: document.getElementById('startBtn'),
+                    pauseBtn: document.getElementById('pauseBtn'),
+                    resumeBtn: document.getElementById('resumeBtn'),
+                };
 
-            // === STATE ===
-            let paused = false;
-            let uploading = false;
-            let file = null;
-            let uploadId = null;
-            let currentChunk = 0;
-            let totalChunks = 0;
-            const chunkSize = 5 * 1024 * 1024; // 5 MB per chunk
-            let startTime = null;
-            let uploadedBytes = 0;
+                const allElementsReady = Object.values(elements).every(Boolean);
 
-            // === INIT ===
-            setButtonState("idle");
-
-            // === FILE SELECT ===
-            fileInput.addEventListener("change", (e) => {
-                file = e.target.files[0];
-                if (!file) return;
-
-                const sizeMB = (file.size / 1024 / 1024).toFixed(2);
-                const shortName = shortenFilename(file.name, 40);
-
-                fileInfo.classList.remove("hidden");
-                fileInfo.innerHTML = `
-            <strong>Name:</strong> ${shortName}<br>
-            <strong>Size:</strong> ${sizeMB} MB
-        `;
-
-                progressText.textContent = "✅ File ready to upload. Click 'Start Upload' to begin.";
-                progressBar.style.width = "0%";
-                MyZkToast.info("File ready to upload, click Start to begin.");
-                setButtonState("ready");
-            });
-
-            // === START UPLOAD ===
-            startBtn.addEventListener("click", () => {
-                if (!file) {
-                    MyZkToast.warning("Please select a file first!");
+                if (!allElementsReady) {
+                    console.warn('Imagery uploader controls missing. Skipping uploader bootstrap.', {
+                        hasSourceInput: Boolean(elements.sourceInput),
+                        hasFileInput: Boolean(elements.fileInput),
+                        hasFileInfo: Boolean(elements.fileInfo),
+                        hasProgressBar: Boolean(elements.progressBar),
+                        hasProgressText: Boolean(elements.progressText),
+                        hasStartBtn: Boolean(elements.startBtn),
+                        hasPauseBtn: Boolean(elements.pauseBtn),
+                        hasResumeBtn: Boolean(elements.resumeBtn),
+                    });
                     return;
                 }
 
-                uploadId = Math.random().toString(36).substring(2, 12);
-                totalChunks = Math.ceil(file.size / chunkSize);
-                currentChunk = 0;
-                uploadedBytes = 0;
-                paused = false;
-                uploading = true;
-                startTime = performance.now();
+                // Configuration values that control chunking and retry behaviour.
+                const config = {
+                    chunkSize: 5 * 1024 * 1024,
+                    maxRetries: 3,
+                    autoResetDelay: 4000,
+                    imageryProcessingCost: {{ config('app-constants.imagery_processing_cost', 10) }}
+                };
 
-                MyZkToast.info("🚀 Upload started...");
-                progressText.textContent = `🚀 Uploading ${file.name}...`;
-                setButtonState("uploading");
-                uploadNextChunk();
-            });
+                // Endpoints required throughout the upload process.
+                const endpoints = {
+                    chunk: '{{ route('upload.chunk') }}',
+                    merge: '{{ route('upload.merge') }}',
+                };
 
-            // === PAUSE ===
-            pauseBtn.addEventListener("click", () => {
-                if (!uploading) return;
-                paused = true;
-                uploading = false;
-                progressText.textContent = "⏸️ Upload paused.";
-                MyZkToast.warning("Upload paused.");
-                setButtonState("paused");
-            });
+                // Mutable state object tracking progress and timings.
+                const state = {
+                    paused: false,
+                    uploading: false,
+                    file: null,
+                    uploadId: null,
+                    currentChunk: 0,
+                    totalChunks: 0,
+                    startTime: 0,
+                    uploadedBytes: 0
+                };
 
-            // === RESUME ===
-            resumeBtn.addEventListener("click", () => {
-                if (!file) return;
-                paused = false;
-                uploading = true;
-                progressText.textContent = "▶️ Upload resumed...";
-                MyZkToast.info("Upload resumed...");
-                setButtonState("uploading");
-                uploadNextChunk();
-            });
+                // Beforeunload handler to prevent navigation during upload
+                const beforeUnloadHandler = (e) => {
+                    if (state.uploading || (state.file && !state.paused)) {
+                        e.preventDefault();
+                        e.returnValue = 'An upload is in progress. Are you sure you want to leave?';
+                        return e.returnValue;
+                    }
+                };
 
-            // === UPLOAD CHUNK FUNCTION ===
-            async function uploadNextChunk(retryCount = 0) {
-                if (paused || !file) return;
+                // Ensure the uploader exposes hooks on the global AppMap namespace.
+                const ensureAppNamespace = () => {
+                    window.AppMap = window.AppMap || {};
+                    window.AppMap.uploader = window.AppMap.uploader || {};
+                };
 
-                if (currentChunk >= totalChunks) {
-                    progressText.textContent = "🧩 Merging file on server...";
-                    return mergeChunks();
-                }
+                // Toggle button states based on the current upload lifecycle stage.
+                const setButtonState = (mode) => {
+                    const {
+                        startBtn,
+                        pauseBtn,
+                        resumeBtn
+                    } = elements;
 
-                const start = currentChunk * chunkSize;
-                const end = Math.min(file.size, start + chunkSize);
-                const chunk = file.slice(start, end);
-                const chunkSizeBytes = end - start;
+                    const disableAll = () => {
+                        startBtn.disabled = true;
+                        pauseBtn.disabled = true;
+                        resumeBtn.disabled = true;
+                    };
 
-                const formData = new FormData();
-                formData.append("upload_id", uploadId);
-                formData.append("chunk_index", currentChunk);
-                formData.append("chunk", chunk);
+                    switch (mode) {
+                        case 'ready':
+                            startBtn.disabled = false;
+                            pauseBtn.disabled = true;
+                            resumeBtn.disabled = true;
+                            // Restore original button text if it was changed to loading state
+                            if (startBtn.innerHTML.includes('Checking')) {
+                                startBtn.innerHTML = startBtn.innerHTML.replace(/<i class="ri-loader-4-line animate-spin"><\/i> Checking.../, 'Start Upload');
+                            }
+                            break;
+                        case 'uploading':
+                            startBtn.disabled = true;
+                            pauseBtn.disabled = false;
+                            resumeBtn.disabled = true;
+                            // Add beforeunload listener when upload starts
+                            window.addEventListener('beforeunload', beforeUnloadHandler);
+                            break;
+                        case 'paused':
+                            startBtn.disabled = true;
+                            pauseBtn.disabled = true;
+                            resumeBtn.disabled = false;
+                            // Keep beforeunload listener when paused
+                            break;
+                        case 'merging':
+                        case 'completed':
+                        case 'error':
+                            disableAll();
+                            if (mode === 'error') {
+                                startBtn.disabled = false;
+                            }
+                            // Remove beforeunload listener when upload completes or errors
+                            window.removeEventListener('beforeunload', beforeUnloadHandler);
+                            // Restore original button text if it was changed to loading state
+                            if (startBtn.innerHTML.includes('Checking')) {
+                                startBtn.innerHTML = startBtn.innerHTML.replace(/<i class="ri-loader-4-line animate-spin"><\/i> Checking.../, 'Start Upload');
+                            }
+                            break;
+                        case 'loading':
+                            startBtn.disabled = true;
+                            startBtn.innerHTML = '<i class="ri-loader-4-line animate-spin"></i> Checking...';
+                            pauseBtn.disabled = true;
+                            resumeBtn.disabled = true;
+                            break;
+                        case 'idle':
+                        default:
+                            disableAll();
+                            // Remove beforeunload listener when idle
+                            window.removeEventListener('beforeunload', beforeUnloadHandler);
+                            // Restore original button text if it was changed to loading state
+                            if (startBtn.innerHTML.includes('Checking')) {
+                                startBtn.innerHTML = startBtn.innerHTML.replace(/<i class="ri-loader-4-line animate-spin"><\/i> Checking.../, 'Start Upload');
+                            }
+                            break;
+                    }
+                };
 
-                try {
-                    const res = await fetch('{{ route('upload.chunk') }}', {
-                        method: "POST",
-                        headers: {
-                            "X-CSRF-TOKEN": "{{ csrf_token() }}"
-                        },
-                        body: formData,
+                // Clear all runtime bookkeeping for a fresh upload session.
+                const resetState = () => {
+                    state.paused = false;
+                    state.uploading = false;
+                    state.file = null;
+                    state.uploadId = null;
+                    state.currentChunk = 0;
+                    state.totalChunks = 0;
+                    state.startTime = 0;
+                    state.uploadedBytes = 0;
+                    // Remove beforeunload listener when resetting state
+                    window.removeEventListener('beforeunload', beforeUnloadHandler);
+                };
+
+                // Restore the UI to an idle appearance without progress.
+                const resetUI = () => {
+                    const {
+                        fileInput,
+                        fileInfo,
+                        progressBar,
+                        progressText
+                    } = elements;
+                    fileInput.value = '';
+                    fileInfo.classList.add('hidden');
+                    fileInfo.innerHTML = '';
+                    progressBar.style.width = '0%';
+                    progressText.textContent = 'Ready for next upload.';
+                };
+
+                // Present the selected file name and size before uploading.
+                const showFileSummary = (file) => {
+                    const {
+                        fileInfo,
+                        progressBar,
+                        progressText
+                    } = elements;
+                    const sizeMB = (file.size / 1024 / 1024).toFixed(2);
+                    const shortName = shortenFilename(file.name, 40);
+
+                    fileInfo.classList.remove('hidden');
+                    fileInfo.innerHTML = `
+                    <strong>Name:</strong> ${shortName}<br>
+                    <strong>Size:</strong> ${sizeMB} MB
+                `;
+
+                    progressText.textContent = "✅ File ready to upload. Click 'Start Upload' to begin.";
+                    progressBar.style.width = '0%';
+                };
+
+                // Update progress bar width and accompanying status text.
+                const updateProgressDisplay = (percentage, speedMBps, etaText) => {
+                    const {
+                        progressBar,
+                        progressText
+                    } = elements;
+                    progressBar.style.width = `${percentage}%`;
+                    const speedText = Number.isFinite(speedMBps) ? speedMBps.toFixed(2) : '0.00';
+                    progressText.textContent = `Uploading... ${percentage}% | 🚀 ${speedText} MB/s | ⏳ ETA: ${etaText}`;
+                };
+
+                // React to new file input selections and prime the uploader.
+                const handleFileChange = (event) => {
+                    state.file = event.target.files?.[0] || null;
+
+                    if (!state.file) {
+                        resetState();
+                        resetUI();
+                        setButtonState('idle');
+                        return;
+                    }
+
+                    showFileSummary(state.file);
+                    MyZkToast.info('File ready to upload, click Start to begin.');
+                    setButtonState('ready');
+                };
+
+                // Generate a lightweight identifier for coordinating chunk requests.
+                const generateUploadId = () => Math.random().toString(36).substring(2, 12);
+
+                // Convert bytes remaining and elapsed seconds into a readable ETA.
+                const formatEta = (remainingBytes, elapsedSeconds) => {
+                    if (!Number.isFinite(elapsedSeconds) || elapsedSeconds <= 0) {
+                        return '-';
+                    }
+                    const speedBytesPerSecond = state.uploadedBytes / elapsedSeconds;
+                    if (speedBytesPerSecond <= 0) {
+                        return '-';
+                    }
+                    const remainingSeconds = remainingBytes / speedBytesPerSecond;
+                    return remainingSeconds > 0 ? formatTimeETA(remainingSeconds) : '-';
+                };
+
+                // Upload the next chunk and retry if transient errors occur.
+                const uploadNextChunk = async (retryCount = 0) => {
+                    if (state.paused || !state.file) return;
+
+                    if (state.currentChunk >= state.totalChunks) {
+                        elements.progressText.textContent = '🧩 Merging file on server...';
+                        await mergeChunks();
+                        return;
+                    }
+
+                    const start = state.currentChunk * config.chunkSize;
+                    const end = Math.min(state.file.size, start + config.chunkSize);
+                    const chunk = state.file.slice(start, end);
+
+                    const formData = new FormData();
+                    formData.append('upload_id', state.uploadId);
+                    formData.append('chunk_index', state.currentChunk);
+                    formData.append('chunk', chunk);
+
+                    try {
+                        const response = await fetch(endpoints.chunk, {
+                            method: 'POST',
+                            headers: {
+                                'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                            },
+                            body: formData
+                        });
+
+                        const payload = await response.json();
+                        if (!response.ok || !payload.success) {
+                            throw new Error(payload.message || `Chunk ${state.currentChunk} failed.`);
+                        }
+
+                        state.currentChunk += 1;
+                        state.uploadedBytes += chunk.size;
+
+                        const elapsedSeconds = Math.max((performance.now() - state.startTime) / 1000, 0.001);
+                        const speedMBps = state.uploadedBytes / 1024 / 1024 / elapsedSeconds;
+                        const remainingBytes = state.file.size - state.uploadedBytes;
+                        const etaText = formatEta(remainingBytes, elapsedSeconds);
+                        const progress = Math.round((state.currentChunk / state.totalChunks) * 100);
+
+                        updateProgressDisplay(progress, speedMBps, etaText);
+
+                        if (progress === 100) {
+                            MyZkToast.info('Merging file on server...');
+                        }
+
+                        if (!state.paused) {
+                            await uploadNextChunk();
+                        }
+                    } catch (error) {
+                        if (retryCount < config.maxRetries) {
+                            const delay = 2000 * (retryCount + 1);
+                            setTimeout(() => uploadNextChunk(retryCount + 1), delay);
+                            return;
+                        }
+
+                        elements.progressText.textContent = `❌ Chunk ${state.currentChunk} failed after ${config.maxRetries} retries. Upload paused.`;
+                        MyZkToast.error(`Chunk ${state.currentChunk} failed after ${config.maxRetries} retries.`);
+                        state.paused = true;
+                        state.uploading = false;
+                        setButtonState('paused');
+                    }
+                };
+
+                // Ask the backend to merge all uploaded chunks into a single file.
+                const mergeChunks = async () => {
+                    setButtonState('merging');
+
+                    const formData = new FormData();
+                    formData.append('upload_id', state.uploadId);
+                    formData.append('filename', state.file.name);
+                    formData.append('total_chunks', state.totalChunks);
+                    formData.append('source_type', elements.sourceInput.value);
+
+                    // Check if user has enough credits to determine processing status
+                    const creditCheck = await checkUserCredits();
+                    if (!creditCheck.hasCredits) {
+                        formData.append('skip_processing', 'true');
+                    }
+
+                    try {
+                        const response = await fetch(endpoints.merge, {
+                            method: 'POST',
+                            headers: {
+                                'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                            },
+                            body: formData
+                        });
+
+                        const result = await response.json();
+                        if (!response.ok || !result.success) {
+                            throw new Error(result.message || 'Failed to merge file on server.');
+                        }
+
+                        elements.progressBar.style.width = '100%';
+                        elements.progressText.textContent = `✅ Upload complete! ${result.message || 'Upload completed. Processing started in background.'}`;
+                        MyZkToast.success(result.message || 'Upload completed successfully!');
+                        setButtonState('completed');
+                        $('#current-myCredits').text(formatNumber(result.data.currentCredits, 2));
+                        scheduleAutoReset();
+                    } catch (error) {
+                        elements.progressText.textContent = `❌ Error: ${error.message}`;
+                        MyZkToast.error(error.message || 'Server error during merge.');
+                        setButtonState('error');
+                        scheduleAutoReset();
+                    }
+                };
+
+                // After finishing, reset the UI back to idle after a short delay.
+                const scheduleAutoReset = () => {
+                    setTimeout(() => {
+                        resetState();
+                        resetUI();
+                        setButtonState('idle');
+                    }, config.autoResetDelay);
+                };
+
+                // Validate prerequisites and kick off the chunk upload loop.
+                const startUpload = () => {
+                    if (!state.file) {
+                        MyZkToast.warning('Please select a file first!');
+                        return;
+                    }
+
+                    // Show loading state on start button while checking credits
+                    setButtonState('loading');
+
+                    // Check user credits before proceeding
+                    checkUserCredits().then(res => {
+                        // Restore ready state if user has credits
+                        setButtonState('ready');
+                        $('#current-myCredits').text(formatNumber(res.currentCredits, 2));
+
+                        // Show confirmation modal before starting upload
+                        ZkPopAlert.show({
+                            message: `${res.hasCredits ? `This upload will cost ${res.requiredCredits} credit points for processing imagery. Do you want to proceed?` : `Insufficient credit points for processing. You need ${res.requiredCredits} credits. You can still upload the file, but processing will be skipped. Please purchase more credits to continue processing.`}`,
+                            icon: '<i class="ri-upload-cloud-2-line text-2xl text-primary"></i>',
+                            confirmClass: "focus:ring-primary/80 rounded-md text-sm px-2.5 py-1.5 bg-primary text-primary-foreground border border-primary hover:bg-primary/80 focus:outline-none focus:ring-primary",
+                            confirmText: "Yes, Upload",
+                            cancelText: "Cancel",
+                            onConfirm: () => {
+                                state.uploadId = generateUploadId();
+                                state.totalChunks = Math.ceil(state.file.size / config.chunkSize);
+                                state.currentChunk = 0;
+                                state.uploadedBytes = 0;
+                                state.paused = false;
+                                state.uploading = true;
+                                state.startTime = performance.now();
+
+                                MyZkToast.info('🚀 Upload started...');
+                                elements.progressText.textContent = `🚀 Uploading ${state.file.name}...`;
+                                setButtonState('uploading');
+                                uploadNextChunk();
+                            }
+                        });
+                    }).catch(error => {
+                        // Restore ready state on error
+                        setButtonState('ready');
+                        MyZkToast.error('Failed to check credit balance: ' + error.message);
                     });
+                };
 
-                    const data = await res.json();
-                    if (!res.ok || !data.success) {
-                        throw new Error(data.message || `Chunk ${currentChunk} failed.`);
+                // Function to check user credits
+                const checkUserCredits = async () => {
+                    const response = await fetch('{{ route('user.credits.check') }}');
+                    const result = await response.json();
+
+                    if (!result.success) {
+                        MyZkToast.error(result.message || 'Failed to check credit balance.');
+                        return false;
                     }
 
-                    currentChunk++;
-                    uploadedBytes += chunkSizeBytes;
+                    const currentCredits = parseFloat(formatNumber(result.credits, 2));
+                    const requiredCredits = config.imageryProcessingCost || 10; // Default to 10 if not set
 
-                    const now = performance.now();
-                    const elapsedSec = (now - startTime) / 1000;
-                    const speedMBps = (uploadedBytes / 1024 / 1024 / elapsedSec).toFixed(2);
-                    const remainingBytes = file.size - uploadedBytes;
-                    const estRemainingSec = remainingBytes / (speedMBps * 1024 * 1024);
-                    const etaText = estRemainingSec > 0 ? formatTimeETA(estRemainingSec) : "-";
-
-                    const progress = Math.round((currentChunk / totalChunks) * 100);
-                    progressBar.style.width = `${progress}%`;
-                    progressText.textContent = `Uploading... ${progress}% | 🚀 ${speedMBps} MB/s | ⏳ ETA: ${etaText}`;
-
-                    if (progress === 100) {
-                        MyZkToast.info("Merging file on server...");
-                    }
-
-                    if (!paused) uploadNextChunk();
-
-                } catch (err) {
-                    if (retryCount < 3) {
-                        setTimeout(() => uploadNextChunk(retryCount + 1), 2000 * (retryCount + 1));
-                    } else {
-                        progressText.textContent = `❌ Chunk ${currentChunk} failed after 3 retries. Upload paused.`;
-                        MyZkToast.error(`Chunk ${currentChunk} failed after 3 retries.`);
-                        paused = true;
-                        uploading = false;
-                        setButtonState("paused");
-                    }
-                }
-            }
-
-            // === MERGE CHUNKS FUNCTION ===
-            async function mergeChunks() {
-                setButtonState("merging");
-
-                const sourceType = sourceInput.value;
-                const formData = new FormData();
-                formData.append("upload_id", uploadId);
-                formData.append("filename", file.name);
-                formData.append("total_chunks", totalChunks);
-                formData.append("source_type", sourceType); // Add source type to form data
-
-                try {
-                    const res = await fetch('{{ route('upload.merge') }}', {
-                        method: "POST",
-                        headers: {
-                            "X-CSRF-TOKEN": "{{ csrf_token() }}"
-                        },
-                        body: formData,
+                    return new Promise((resolve) => {
+                        resolve(data = {
+                            hasCredits: currentCredits >= requiredCredits,
+                            currentCredits: currentCredits,
+                            requiredCredits: requiredCredits
+                        });
                     });
+                };
 
-                    const result = await res.json();
-
-                    if (res.ok && result.success) {
-                        progressBar.style.width = "100%";
-                        progressText.textContent = `✅ Upload complete! ${result.message || "Processing started in background."} Redirecting...`;
-                        MyZkToast.success(`${result.message || "Processing started in background."} Redirecting...`);
-                        setButtonState("done");
-                        afterFinish();
-                    } else {
-                        throw new Error(result.message || "Failed to merge file on server.");
+                // Suspend ongoing uploads without losing progress state.
+                const pauseUpload = () => {
+                    if (!state.uploading) {
+                        return;
                     }
+                    state.paused = true;
+                    state.uploading = false;
+                    elements.progressText.textContent = '⏸️ Upload paused.';
+                    MyZkToast.warning('Upload paused.');
+                    setButtonState('paused');
+                };
 
-                } catch (err) {
-                    progressText.textContent = `❌ Error: ${err.message}`;
-                    MyZkToast.error(err.message || "Server error during merge.");
-                    setButtonState("error");
-                    afterFinish();
+                // Resume uploads after a pause by continuing from the current chunk.
+                const resumeUpload = () => {
+                    if (!state.file) {
+                        return;
+                    }
+                    state.paused = false;
+                    state.uploading = true;
+                    elements.progressText.textContent = '▶️ Upload resumed...';
+                    MyZkToast.info('Upload resumed...');
+                    setButtonState('uploading');
+                    uploadNextChunk();
+                };
+
+                // Attach DOM event listeners for file and control buttons.
+                const bindEventListeners = () => {
+                    elements.fileInput.addEventListener('change', handleFileChange);
+                    elements.startBtn.addEventListener('click', startUpload);
+                    elements.pauseBtn.addEventListener('click', pauseUpload);
+                    elements.resumeBtn.addEventListener('click', resumeUpload);
+                };
+
+                // Bootstrap the uploader module and fetch initial server data.
+                const initialise = () => {
+                    ensureAppNamespace();
+                    window.setButtonState = setButtonState;
+
+                    resetState();
+                    resetUI();
+                    setButtonState('idle');
+                    bindEventListeners();
+                };
+
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', initialise, {
+                        once: true
+                    });
+                } else {
+                    initialise();
                 }
-            }
-
-            // === RESET ON FINISH ===
-            function afterFinish() {
-                setTimeout(() => {
-                    window.location.href = "{{ route('admin.imagery.index') }}";
-                }, 3000);
-            }
-
-            // === HELPER FUNCTIONS ===
-            function setButtonState(state) {
-                switch (state) {
-                    case "idle":
-                        startBtn.disabled = true;
-                        pauseBtn.disabled = true;
-                        resumeBtn.disabled = true;
-                        break;
-                    case "ready": // file sudah dipilih
-                        startBtn.disabled = false;
-                        pauseBtn.disabled = true;
-                        resumeBtn.disabled = true;
-                        break;
-                    case "uploading":
-                        startBtn.disabled = true;
-                        pauseBtn.disabled = false;
-                        resumeBtn.disabled = true;
-                        break;
-                    case "paused":
-                        startBtn.disabled = true;
-                        pauseBtn.disabled = true;
-                        resumeBtn.disabled = false;
-                        break;
-                    case "merging":
-                        startBtn.disabled = true;
-                        pauseBtn.disabled = true;
-                        resumeBtn.disabled = true;
-                        break;
-                    case "done":
-                        startBtn.disabled = true;
-                        pauseBtn.disabled = true;
-                        resumeBtn.disabled = true;
-                        break;
-                    case "error":
-                        startBtn.disabled = false;
-                        pauseBtn.disabled = true;
-                        resumeBtn.disabled = true;
-                        break;
-                }
-            }
-
-            // === PREVENT NAVIGATION DURING UPLOAD ===
-            let isUploadInProgress = false;
-
-            // Update the upload state when starting/pausing/resuming
-            function setUploadState(state) {
-                isUploadInProgress = state;
-            }
-
-            // Override the setButtonState function to also update upload state
-            const originalSetButtonState = setButtonState;
-            setButtonState = function(state) {
-                // Set upload state based on button state
-                if (state === "uploading" || state === "merging") {
-                    setUploadState(true);
-                } else if (state === "done" || state === "error" || state === "idle") {
-                    setUploadState(false);
-                }
-                originalSetButtonState(state);
-            };
-
-            // Add beforeunload event listener
-            window.addEventListener('beforeunload', function(e) {
-                if (isUploadInProgress) {
-                    // For modern browsers
-                    e.preventDefault();
-                    // For older browsers
-                    e.returnValue = '';
-                    return 'Upload is in progress. Are you sure you want to leave?';
-                }
-            });
+            })();
         </script>
     @endpush
 

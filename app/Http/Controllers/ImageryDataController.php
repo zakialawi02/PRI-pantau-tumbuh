@@ -354,7 +354,7 @@ class ImageryDataController extends Controller
             $storedName = "{$timestamp}_{$randomStr}_{$cleanOriginal}.{$ext}";
 
             $chunkDir = storage_path("app/tmp_uploads/{$uploadId}");
-            $finalPath = storage_path("app/public/citra/{$storedName}");
+            $finalPath = storage_path("app/public/imagery/{$storedName}");
 
             if (!File::exists(dirname($finalPath))) {
                 File::makeDirectory(dirname($finalPath), 0777, true);
@@ -422,7 +422,7 @@ class ImageryDataController extends Controller
                         'stored_name' => $storedName,
                         'size' => $fileSize,
                         'format' => $ext,
-                        'path' => "storage/citra/{$storedName}",
+                        'path' => "storage/imagery/{$storedName}",
                         'upload_status' => 'done',
                         'processing_status' => $processingStatus,
                         'uploaded_at' => now(),
@@ -437,7 +437,7 @@ class ImageryDataController extends Controller
                     'stored_name' => $storedName,
                     'size' => $fileSize,
                     'format' => $ext,
-                    'path' => "storage/citra/{$storedName}",
+                    'path' => "storage/imagery/{$storedName}",
                     'upload_status' => 'done',
                     'processing_status' => $processingStatus,
                     'uploaded_at' => now(),
@@ -459,7 +459,7 @@ class ImageryDataController extends Controller
                 'message' => $message,
                 'data' => [
                     'id' => $imagery->id,
-                    'path' => "storage/citra/{$storedName}",
+                    'path' => "storage/imagery/{$storedName}",
                     'processing_status' => $processingStatus,
                     'currentCredits' => (float) $user->credits->credits,
                 ],

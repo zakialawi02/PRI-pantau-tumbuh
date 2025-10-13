@@ -22,6 +22,11 @@ import os
 import sys
 import time
 from pathlib import Path
+os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+os.environ.setdefault("OMP_NUM_THREADS", "4")
+os.environ.setdefault("MKL_NUM_THREADS", "4")
+os.environ.setdefault("GDAL_CACHEMAX", "512")
 
 import joblib
 import numpy as np
@@ -30,21 +35,9 @@ from rasterio.windows import Window
 import tensorflow as tf
 from tensorflow.keras.models import load_model
 
-# Optional dependency; kept to stay aligned with the reference core code.
-try:  # pragma: no cover - optional dependency
-    import matplotlib.pyplot as plt  # noqa: F401
-except Exception:  # pragma: no cover - ignore if matplotlib is unavailable
-    plt = None
-
-
 # ---------------------------------------------------------------------------
-# 0. Environment configuration
+# 0. configuration
 # ---------------------------------------------------------------------------
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
-os.environ.setdefault("OMP_NUM_THREADS", "4")
-os.environ.setdefault("MKL_NUM_THREADS", "4")
-os.environ.setdefault("GDAL_CACHEMAX", "512")
-
 BASE_DIR = Path(__file__).resolve().parent
 
 INPUT_PATH = os.environ.get("IMAGERY_INPUT_PATH")
@@ -52,7 +45,7 @@ OUTPUT_PATH = os.environ.get("IMAGERY_OUTPUT_PATH")
 MODEL_PATH = Path(os.environ.get("IMAGERY_MODEL_PATH", BASE_DIR / "Data Model" / "Best_Model2.h5"))
 SCALER_PATH = Path(os.environ.get("IMAGERY_SCALER_PATH", BASE_DIR / "Data Model" / "Best_Scaler2.pkl"))
 
-DEFAULT_TILE_SIZE = 2000
+DEFAULT_TILE_SIZE = 2048
 TILE_SIZE = int(os.environ.get("IMAGERY_TILE_SIZE", DEFAULT_TILE_SIZE))
 PRED_BATCH_SIZE = int(os.environ.get("IMAGERY_BATCH_SIZE", 1024))
 

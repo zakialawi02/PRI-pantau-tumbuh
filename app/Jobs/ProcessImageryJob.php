@@ -38,7 +38,7 @@ class ProcessImageryJob implements ShouldQueue
         // Tentukan path python & script
         $base = base_path('scripts');
         $scriptPath = "{$base}/process_imagery.py";
-        $filePath   = storage_path("app/public/citra/{$imagery->stored_name}");
+        $filePath   = storage_path("app/public/imagery/{$imagery->stored_name}");
 
         if (!File::exists($filePath)) {
             Log::error("❌ [Job] Input imagery file not found: {$filePath}");
@@ -47,7 +47,7 @@ class ProcessImageryJob implements ShouldQueue
             return;
         }
 
-        $processedDirectory = storage_path('app/public/citra/processed');
+        $processedDirectory = storage_path('app/public/imagery/processed');
         if (!File::isDirectory($processedDirectory)) {
             File::makeDirectory($processedDirectory, 0755, true, true);
         }
@@ -146,7 +146,7 @@ class ProcessImageryJob implements ShouldQueue
 
         // Cek hasil eksekusi
         if ($process->isSuccessful()) {
-            $publicPath = "storage/citra/processed/{$processedFileName}";
+            $publicPath = "storage/imagery/processed/{$processedFileName}";
 
             if (File::exists($outputPath)) {
                 $imagery->update([
