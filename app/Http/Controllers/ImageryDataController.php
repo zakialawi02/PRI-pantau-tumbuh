@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use Exception;
 use App\Models\FieldArea;
 use App\Models\ImageryData;
 use Illuminate\Support\Str;
@@ -18,7 +17,6 @@ use App\Mail\OrderImageryConfirmation;
 use Illuminate\Support\Facades\Storage;
 use Yajra\DataTables\Facades\DataTables;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 class ImageryDataController extends Controller
 {
@@ -30,7 +28,6 @@ class ImageryDataController extends Controller
 
         if ($request->ajax()) {
             $user = Auth::user();
-            $user->loadMissing('credits');
             $user->loadMissing('credits');
 
             // Build the query based on user role
@@ -53,8 +50,8 @@ class ImageryDataController extends Controller
                         $actions .= '</button>';
                     }
                     if (in_array($data->upload_status, ['pending']) && !empty($data->chunk_id)) {
-                        $actions .= '<button class="btn-retry-merge bg-secondary hover:bg-secondary/80 inline-flex w-fit items-center rounded-full px-2 py-1 text-xs font-medium" data-id="' . $data->id . '" type="button" title="Retry Merge">';
-                        $actions .= '<i class="ri-refresh-line mr-1"></i> Merge Upload';
+                        $actions .= '<button class="btn-retry-merge bg-primary hover:bg-primary/80 inline-flex w-fit items-center rounded-full px-2 py-1 text-xs font-medium" data-id="' . $data->id . '" type="button" title="Retry Merge">';
+                        $actions .= '<i class="ri-refresh-line mr-1"></i> Retry Merge Upload';
                         $actions .= '</button>';
                     }
                     // Download Source button - only show if upload_status is 'done'
@@ -87,23 +84,6 @@ class ImageryDataController extends Controller
                         return $data->processing_status ?? 'N/A';
                     }
                 })
-                ->editColumn('upload_status', function ($data) {
-                    if (!$data->upload_status) {
-                        return 'N/A';
-                    }
-
-                    $status = $data->upload_status;
-                    $label = Str::of($status)->replace('_', ' ')->title();
-                    $badgeClasses = match (true) {
-                        $status === 'pending' => 'bg-amber-100 text-amber-800 dark:bg-amber-500/10 dark:text-amber-300',
-                        $status === 'merging' => 'bg-blue-100 text-blue-800 dark:bg-blue-500/10 dark:text-blue-300',
-                        $status === 'done' => 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300',
-                        in_array($status, ['failed', 'error'], true) => 'bg-red-100 text-red-800 dark:bg-red-500/10 dark:text-red-300',
-                        default => 'bg-foreground/10 text-foreground',
-                    };
-
-                    return '<span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ' . $badgeClasses . '">' . e($label) . '</span>';
-                })
                 ->editColumn('created_at', function ($data) {
                     return $data->created_at ? $data->created_at->isoFormat('LL, HH:mm') : 'N/A';
                 })
@@ -113,7 +93,7 @@ class ImageryDataController extends Controller
                 ->editColumn('user_name', function ($data) {
                     return $data->user->name ?? 'Unknown User';
                 })
-                ->rawColumns(['action', 'processing_status', 'upload_status'])
+                ->rawColumns(['action', 'processing_status'])
                 ->make(true);
         }
 
@@ -206,6 +186,11 @@ class ImageryDataController extends Controller
         $currentCredits = $userCredit ? $userCredit->credits : 0;
 
         if ($currentCredits < $cacheData['credit_cost']) {
+            Log::warning('ImageryDataController@processCheckoutImagery: Insufficient credit points', [
+                'user_id' => Auth::id(),
+                'required_credits' => $cacheData['credit_cost'],
+                'available_credits' => $currentCredits
+            ]);
             return redirect()->back()->with('error', 'Insufficient credit points. You need ' . $cacheData['credit_cost'] . ' credits but you only have ' . $currentCredits . ' credits.');
         }
 
@@ -213,6 +198,12 @@ class ImageryDataController extends Controller
             // Deduct credit points from user
             $userCredit->credits -= $cacheData['credit_cost'];
             $userCredit->save();
+
+            Log::info('ImageryDataController@processCheckoutImagery: Credits deducted successfully', [
+                'user_id' => Auth::id(),
+                'deducted_credits' => $cacheData['credit_cost'],
+                'remaining_credits' => $userCredit->credits
+            ]);
 
             // Create field area data record
             $fieldArea = FieldArea::create([
@@ -240,7 +231,7 @@ class ImageryDataController extends Controller
                     'credit_cost' => $cacheData['credit_cost'],
                 ];
                 Mail::to($user->email)->send(new OrderImageryConfirmation($bodyMail));
-            } catch (Exception $e) {
+            } catch (\Exception $e) {
                 Log::error("Failed to send imagery confirmation email: " . $e->getMessage());
                 // Continue with the process even if email fails
             }
@@ -253,7 +244,7 @@ class ImageryDataController extends Controller
                 $userCredit->save();
             }
 
-            Log::error("Imagery checkout error: " . $e->getMessage());
+            Log::error("Imagery checkout error: " . $e->getMessage(), ['user_id' => Auth::id(), 'exception' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
             return redirect()->back()->with('error', 'An error occurred during checkout. Please try again.');
         }
     }
@@ -284,6 +275,12 @@ class ImageryDataController extends Controller
                 'data' => $uploads,
             ]);
         } catch (\Throwable $e) {
+            Log::error('ImageryDataController@listUserImagery: Failed to fetch imagery data', [
+                'user_id' => Auth::id(),
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to fetch imagery data.',
@@ -308,6 +305,12 @@ class ImageryDataController extends Controller
                 'data' => $uploads,
             ]);
         } catch (\Throwable $e) {
+            Log::error('ImageryDataController@checkProgress: Failed to fetch progress data', [
+                'user_id' => Auth::id(),
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to fetch progress data.',
@@ -336,6 +339,10 @@ class ImageryDataController extends Controller
             $file = $request->file('chunk');
             $saved = $file->move($chunkDir, "chunk_{$chunkIndex}");
             if (!$saved) {
+                Log::error('ImageryDataController@uploadChunk: Failed to save chunk to temporary directory', [
+                    'chunk_dir' => $chunkDir,
+                    'chunk_index' => $chunkIndex
+                ]);
                 throw new \Exception("Failed to save chunk to temporary directory.");
             }
 
@@ -348,12 +355,23 @@ class ImageryDataController extends Controller
                 ],
             ], 200);
         } catch (\Illuminate\Validation\ValidationException $e) {
+            Log::error('ImageryDataController@uploadChunk: Validation failed', [
+                'user_id' => Auth::id(),
+                'errors' => $e->errors()
+            ]);
+
             return response()->json([
                 'success' => false,
                 'message' => 'Validation failed.',
                 'errors' => $e->errors(),
             ], 422);
         } catch (\Throwable $e) {
+            Log::error('ImageryDataController@uploadChunk: Chunk upload failed', [
+                'user_id' => Auth::id(),
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
             return response()->json([
                 'success' => false,
                 'message' => 'Chunk upload failed.',
@@ -365,6 +383,11 @@ class ImageryDataController extends Controller
     public function mergeChunks(Request $request)
     {
         try {
+            Log::info('ImageryDataController@mergeChunks: Starting merge chunks process', [
+                'user_id' => Auth::id(),
+                'request_data' => $request->only(['upload_id', 'filename', 'total_chunks', 'source_type'])
+            ]);
+
             $validated = $request->validate([
                 'upload_id' => 'required|string',
                 'filename' => 'required|string',
@@ -380,6 +403,11 @@ class ImageryDataController extends Controller
 
             $chunkDir = storage_path("app/tmp_uploads/{$uploadId}");
             if (!File::isDirectory($chunkDir)) {
+                Log::warning('ImageryDataController@mergeChunks: Chunk directory not found', [
+                    'user_id' => Auth::id(),
+                    'chunk_dir' => $chunkDir
+                ]);
+
                 return response()->json([
                     'success' => false,
                     'message' => 'Chunk directory not found. Please restart the upload.',
@@ -392,6 +420,11 @@ class ImageryDataController extends Controller
             $allowed = ['tif', 'tiff', 'ecw', 'jp2', 'zip'];
 
             if (!in_array($ext, $allowed)) {
+                Log::warning('ImageryDataController@mergeChunks: Invalid file format', [
+                    'user_id' => Auth::id(),
+                    'file_extension' => $ext
+                ]);
+
                 return response()->json(['success' => false, 'message' => 'Invalid file format.'], 422);
             }
 
@@ -406,6 +439,12 @@ class ImageryDataController extends Controller
                 $chunkFile = $chunkDir . DIRECTORY_SEPARATOR . "chunk_{$i}";
 
                 if (!File::exists($chunkFile)) {
+                    Log::warning('ImageryDataController@mergeChunks: Chunk missing', [
+                        'user_id' => Auth::id(),
+                        'chunk_index' => $i,
+                        'chunk_file' => $chunkFile
+                    ]);
+
                     return response()->json([
                         'success' => false,
                         'message' => "Chunk {$i} missing. Please retry the upload.",
@@ -414,6 +453,12 @@ class ImageryDataController extends Controller
 
                 $size = File::size($chunkFile);
                 if ($size === false) {
+                    Log::error('ImageryDataController@mergeChunks: Unable to read chunk size', [
+                        'user_id' => Auth::id(),
+                        'chunk_index' => $i,
+                        'chunk_file' => $chunkFile
+                    ]);
+
                     return response()->json([
                         'success' => false,
                         'message' => "Unable to read chunk {$i} size.",
@@ -429,6 +474,11 @@ class ImageryDataController extends Controller
                 $userCredit = $user->credits;
                 if (!$userCredit || $userCredit->credits < $requiredCredits) {
                     $skipProcessing = true;
+                    Log::info('ImageryDataController@mergeChunks: Insufficient credits, skipping processing', [
+                        'user_id' => Auth::id(),
+                        'required_credits' => $requiredCredits,
+                        'available_credits' => optional($userCredit)->credits
+                    ]);
                 }
             }
 
@@ -457,10 +507,18 @@ class ImageryDataController extends Controller
                     $userCredit = $user->credits()->lockForUpdate()->first();
 
                     if (!$userCredit) {
+                        Log::error('ImageryDataController@mergeChunks: User credit record not found', [
+                            'user_id' => $user->id
+                        ]);
                         throw new \Exception('User credit record not found.');
                     }
 
                     if ($userCredit->credits < $requiredCredits) {
+                        Log::warning('ImageryDataController@mergeChunks: Insufficient credit points during transaction', [
+                            'user_id' => $user->id,
+                            'required_credits' => $requiredCredits,
+                            'available_credits' => $userCredit->credits
+                        ]);
                         throw new \Exception('Insufficient credit points.');
                     }
 
@@ -516,18 +574,35 @@ class ImageryDataController extends Controller
                 ],
             ], 202);
         } catch (\Illuminate\Validation\ValidationException $e) {
+            Log::error('ImageryDataController@mergeChunks: Validation failed', [
+                'user_id' => Auth::id(),
+                'errors' => $e->errors()
+            ]);
+
             return response()->json([
                 'success' => false,
                 'message' => 'Validation failed.',
                 'errors' => $e->errors(),
             ], 422);
         } catch (\Exception $e) {
+            Log::error('ImageryDataController@mergeChunks: Failed to queue merge operation', [
+                'user_id' => Auth::id(),
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to queue merge operation.',
                 'error' => $e->getMessage(),
             ], 500);
         } catch (\Throwable $e) {
+            Log::error('ImageryDataController@mergeChunks: Unexpected error during merge preparation', [
+                'user_id' => Auth::id(),
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
             return response()->json([
                 'success' => false,
                 'message' => 'An unexpected error occurred while preparing the merge.',
@@ -551,6 +626,12 @@ class ImageryDataController extends Controller
             // Check if the file exists
             $filePath = storage_path('app/public/' . str_replace('storage/', '', $imagery->path));
             if (!File::exists($filePath)) {
+                Log::warning('ImageryDataController@downloadSource: Source file not found', [
+                    'user_id' => Auth::id(),
+                    'imagery_id' => $imagery->id,
+                    'file_path' => $filePath
+                ]);
+
                 return response()->json([
                     'success' => false,
                     'message' => 'File not found.',
@@ -560,6 +641,13 @@ class ImageryDataController extends Controller
             // Return the file as a download
             return response()->download($filePath, $imagery->original_name);
         } catch (\Exception $e) {
+            Log::error('ImageryDataController@downloadSource: Failed to download file', [
+                'user_id' => Auth::id(),
+                'imagery_id' => $imagery->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to download file: ' . $e->getMessage(),
@@ -590,6 +678,12 @@ class ImageryDataController extends Controller
             // Check if the processed file exists
             $filePath = storage_path('app/public/' . str_replace('storage/', '', $imagery->processed_path));
             if (!File::exists($filePath)) {
+                Log::warning('ImageryDataController@downloadResult: Processed file not found', [
+                    'user_id' => Auth::id(),
+                    'imagery_id' => $imagery->id,
+                    'file_path' => $filePath
+                ]);
+
                 return response()->json([
                     'success' => false,
                     'message' => 'Processed file not found.',
@@ -604,6 +698,13 @@ class ImageryDataController extends Controller
             // Return the file as a download
             return response()->download($filePath, $downloadName);
         } catch (\Exception $e) {
+            Log::error('ImageryDataController@downloadResult: Failed to download processed file', [
+                'user_id' => Auth::id(),
+                'imagery_id' => $imagery->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to download processed file: ' . $e->getMessage(),
@@ -635,6 +736,10 @@ class ImageryDataController extends Controller
 
                 // If we couldn't lock the record, throw an exception
                 if (!$lockedUserCredit) {
+                    Log::error('ImageryDataController@retryProcessing: Unable to lock user credit record', [
+                        'user_id' => $user->id,
+                        'imagery_id' => $imagery->id
+                    ]);
                     throw new \Exception('Unable to lock user credit record for update.');
                 }
 
@@ -664,6 +769,13 @@ class ImageryDataController extends Controller
                 'message' => 'Credits deducted successfully. Re-processing started, queued for background processing.',
             ], 200);
         } catch (\Exception $e) {
+            Log::error('ImageryDataController@retryProcessing: Failed to retry processing', [
+                'user_id' => Auth::id(),
+                'imagery_id' => $imagery->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to retry processing: ' . $e->getMessage(),
@@ -674,6 +786,11 @@ class ImageryDataController extends Controller
     public function retryMerge(ImageryData $imagery)
     {
         try {
+            Log::info('ImageryDataController@retryMerge: Attempting to retry imagery merge', [
+                'user_id' => Auth::id(),
+                'imagery_id' => $imagery->id
+            ]);
+
             if ($imagery->upload_status !== 'pending') {
                 return response()->json([
                     'success' => false,
@@ -682,6 +799,13 @@ class ImageryDataController extends Controller
             }
 
             if (empty($imagery->chunk_id) || empty($imagery->chunk_total)) {
+                Log::warning('ImageryDataController@retryMerge: Chunk information is missing', [
+                    'user_id' => Auth::id(),
+                    'imagery_id' => $imagery->id,
+                    'chunk_id' => $imagery->chunk_id,
+                    'chunk_total' => $imagery->chunk_total
+                ]);
+
                 return response()->json([
                     'success' => false,
                     'message' => 'Chunk information is missing. Please re-upload the imagery.',
@@ -690,6 +814,12 @@ class ImageryDataController extends Controller
 
             $chunkDir = storage_path('app/tmp_uploads/' . $imagery->chunk_id);
             if (!File::isDirectory($chunkDir)) {
+                Log::warning('ImageryDataController@retryMerge: Chunk directory not found', [
+                    'user_id' => Auth::id(),
+                    'imagery_id' => $imagery->id,
+                    'chunk_dir' => $chunkDir
+                ]);
+
                 return response()->json([
                     'success' => false,
                     'message' => 'Chunk directory not found. Please re-upload the imagery.',
@@ -750,6 +880,13 @@ class ImageryDataController extends Controller
                 'message' => 'Imagery deleted successfully.',
             ], 200);
         } catch (\Exception $e) {
+            Log::error('ImageryDataController@destroy: Failed to delete imagery', [
+                'user_id' => Auth::id(),
+                'imagery_id' => $imagery->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to delete imagery: ' . $e->getMessage(),

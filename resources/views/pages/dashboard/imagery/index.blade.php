@@ -150,23 +150,33 @@
                         }, {
                             data: 'upload_status',
                             name: 'upload_status',
-                            width: "140px",
-                            className: "text-wrap"
+                            render: function(data, type, row) {
+                                if (!data) {
+                                    return 'N/A';
+                                }
+                                const status = data;
+                                const label = status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                                let badgeClasses = 'bg-foreground/10 text-foreground';
+                                if (status === 'pending') {
+                                    badgeClasses = 'bg-amber-100 text-amber-800 dark:bg-amber-500/10 dark:text-amber-300';
+                                } else if (status === 'merging') {
+                                    badgeClasses = 'bg-blue-100 text-blue-800 dark:bg-blue-500/10 dark:text-blue-300';
+                                } else if (status === 'done') {
+                                    badgeClasses = 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300';
+                                } else if (status === 'failed' || status === 'error') {
+                                    badgeClasses = 'bg-red-100 text-red-800 dark:bg-red-500/10 dark:text-red-300';
+                                }
+                                return `<span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${badgeClasses}">${label}</span>`;
+                            }
                         }, {
                             data: 'processing_status',
                             name: 'processing_status',
-                            width: "150px",
-                            className: "text-wrap",
                         }, {
                             data: 'created_at',
                             name: 'created_at',
-                            width: "150px",
-                            className: "text-nowrap"
                         }, {
                             data: 'updated_at',
                             name: 'updated_at',
-                            width: "150px",
-                            className: "text-nowrap"
                         }, {
                             data: 'action',
                             name: 'action',

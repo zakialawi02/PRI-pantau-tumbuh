@@ -131,7 +131,7 @@ class ProcessImageryJob implements ShouldQueue
         $stdout = trim($process->getOutput());
         $stderr = trim($process->getErrorOutput());
 
-        Log::info("🐍 [Python STDOUT]: " . ($stdout ?: '[empty]'));
+        // Log::info("🐍 [Python STDOUT]: " . ($stdout ?: '[empty]'));
         if (!empty($stderr)) {
             Log::error("🐍 [Python STDERR]: " . $stderr);
         }
