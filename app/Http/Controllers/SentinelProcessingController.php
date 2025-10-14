@@ -105,7 +105,18 @@ class SentinelProcessingController extends Controller
 
     private function sanitizeDisplayName(string $value): string
     {
-        $cleaned = preg_replace('/[\\\\/:"*?<>|]+/', ' ', $value) ?? '';
+        $cleaned = str_replace([
+            '\\',
+            '/',
+            ':',
+            "\"",
+            '*',
+            '?',
+            '<',
+            '>',
+            '|',
+        ], ' ', $value);
+
         $normalized = trim(preg_replace('/\s+/', ' ', $cleaned) ?? '');
         $fallback = $normalized !== '' ? $normalized : 'Sentinel Scene';
 
