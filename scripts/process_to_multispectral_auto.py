@@ -19,6 +19,7 @@ resampling, serta opsi penimpaan file sebelum menjalankan script:
 
 from __future__ import annotations
 
+import os
 import sys
 import tempfile
 import zipfile
@@ -97,6 +98,49 @@ USER_CONFIG = {
 }
 
 
+def parse_bool(value) -> Optional[bool]:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return None
+
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "on"}:
+        return True
+    if text in {"0", "false", "no", "off"}:
+        return False
+    return None
+
+
+def load_env_overrides() -> Dict[str, object]:
+    overrides: Dict[str, object] = {}
+
+    source = os.environ.get("S2_SOURCE") or os.environ.get("SENTINEL_SOURCE")
+    output = os.environ.get("S2_OUTPUT") or os.environ.get("SENTINEL_OUTPUT")
+    overwrite = os.environ.get("S2_OVERWRITE") or os.environ.get("SENTINEL_OVERWRITE")
+    resampling = os.environ.get("S2_RESAMPLING") or os.environ.get("SENTINEL_RESAMPLING")
+
+    if source:
+        overrides["source"] = source
+    if output:
+        overrides["output"] = output
+    if resampling:
+        overrides["resampling"] = resampling
+
+    parsed_overwrite = parse_bool(overwrite)
+    if parsed_overwrite is not None:
+        overrides["overwrite"] = parsed_overwrite
+
+    return overrides
+
+
+def coerce_bool(value, default=False) -> bool:
+    parsed = parse_bool(value)
+    if parsed is None:
+        return bool(value) if value not in (None, "", 0) else default
+    return parsed
+
+
 def build_config(config_data: Optional[Dict[str, object]] = None) -> ProcessingConfig:
     """Bangun :class:`ProcessingConfig` dari konfigurasi manual."""
 
@@ -112,7 +156,10 @@ def build_config(config_data: Optional[Dict[str, object]] = None) -> ProcessingC
     else:
         output = Path(str(output_raw)).expanduser().resolve()
 
-    if output.exists() and not cfg.get("overwrite", False):
+    overwrite_flag = coerce_bool(cfg.get("overwrite", False))
+    cfg["overwrite"] = overwrite_flag
+
+    if output.exists() and not overwrite_flag:
         raise FileExistsError(
             f"Berkas keluaran {output} sudah ada. Set 'overwrite' ke True untuk menimpa."
         )
@@ -134,7 +181,7 @@ def build_config(config_data: Optional[Dict[str, object]] = None) -> ProcessingC
     return ProcessingConfig(
         source=source,
         output=output,
-        overwrite=bool(cfg.get("overwrite", False)),
+        overwrite=overwrite_flag,
         resampling=resampling,
     )
 
@@ -486,7 +533,7 @@ def main() -> int:
     """Fungsi utama script."""
 
     try:
-        config = build_config()
+        config = build_config(load_env_overrides())
         safe_dir, temp_dir = ensure_safe_dir(config.source)
         detect_product_level(safe_dir)
         band_map = collect_band_files(safe_dir)

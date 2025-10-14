@@ -230,7 +230,14 @@
             </section>
 
             <!-- ========== SENTINEL COLLECTION PANEL ========== -->
-            <section class="flex hidden h-full flex-col shadow-xl" id="sentinel-panel" data-sentinel-token="{{ $copernicusAccessToken ?? '' }}" data-sentinel-credentials="{{ $copernicusCredentialsConfigured ?? false ? 'true' : 'false' }}">
+            <section
+                class="flex hidden h-full flex-col shadow-xl"
+                id="sentinel-panel"
+                data-sentinel-token="{{ $copernicusAccessToken ?? '' }}"
+                data-sentinel-credentials="{{ $copernicusCredentialsConfigured ?? false ? 'true' : 'false' }}"
+                data-sentinel-process-url="{{ auth()->check() ? route('sentinel.process') : '' }}"
+                data-sentinel-auth="{{ auth()->check() ? 'true' : 'false' }}"
+            >
                 <div class="bg-background border-foreground/10 sticky top-0 z-20 flex items-center justify-between border-b p-2">
                     <h2 class="text-lg font-bold">🛰️ Sentinel-2 Collections</h2>
                     <button class="hover:bg-foreground/20 bg-foreground/10 rounded px-2 py-1 text-sm" onclick="closePanels()">✖</button>
@@ -324,6 +331,10 @@
                                 <i class="ri-download-cloud-2-line"></i>
                                 <span>Download Scene</span>
                             </a>
+                            <button class="bg-success/10 text-success hover:bg-success/20 inline-flex hidden items-center space-x-1 rounded-lg px-2 py-1 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-60" data-sentinel-process type="button">
+                                <i class="ri-cpu-line"></i>
+                                <span>Process Imagery</span>
+                            </button>
                             <button class="hover:bg-primary/10 text-primary border-primary/40 inline-flex items-center space-x-1 rounded-lg border px-2 py-1 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50" data-sentinel-preview type="button">
                                 <i class="ri-image-line"></i>
                                 <span>Preview on Map</span>
@@ -1783,7 +1794,9 @@
                     defaultStartIso: '',
                     defaultEndIso: '',
                     token: sanitizeToken(panelEl?.dataset?.sentinelToken ?? ''),
-                    tokenConfigured: (panelEl?.dataset?.sentinelCredentials ?? '').toLowerCase() === 'true'
+                    tokenConfigured: (panelEl?.dataset?.sentinelCredentials ?? '').toLowerCase() === 'true',
+                    processUrl: panelEl?.dataset?.sentinelProcessUrl || '',
+                    isAuthenticated: (panelEl?.dataset?.sentinelAuth ?? '').toLowerCase() === 'true'
                 };
 
                 const ignoredDownloadKeywords = ['quicklook', 'thumbnail', 'thumb', 'overview', 'browse', 'preview', 'allorigins'];
@@ -2953,6 +2966,97 @@
                     }
                 };
 
+                const getCsrfToken = () => document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+
+                const queueSentinelProcessing = async (options = {}) => {
+                    const {
+                        button = null,
+                        feature = null,
+                        title = '',
+                        productId = null,
+                        collection = null,
+                        acquisition = null,
+                        downloadUrl = '',
+                        downloadBase = null,
+                        downloadFilename = null
+                    } = options;
+
+                    if (!state.isAuthenticated) {
+                        window.MyZkToast?.warning?.('Please sign in to process Sentinel imagery.');
+                        return;
+                    }
+
+                    if (!state.processUrl) {
+                        window.MyZkToast?.error?.('Processing endpoint is unavailable. Please try again later.');
+                        return;
+                    }
+
+                    if (!downloadUrl) {
+                        window.MyZkToast?.error?.('Unable to determine the Sentinel download URL.');
+                        return;
+                    }
+
+                    const props = feature?.properties ?? {};
+                    const payload = {
+                        title: title || productId || props.title || feature?.id || 'Sentinel-2 Scene',
+                        product_id: productId || props.productIdentifier || feature?.id || null,
+                        collection: collection || props.collection || null,
+                        acquisition_date: acquisition || props.completionDate || props.startDate || props.endPosition || null,
+                        download_url: downloadUrl,
+                        download_base: downloadBase || null,
+                        download_filename: downloadFilename || null
+                    };
+
+                    const labelEl = button?.querySelector('span');
+                    const initialLabel = labelEl?.textContent;
+
+                    if (button) {
+                        button.disabled = true;
+                        button.setAttribute('aria-disabled', 'true');
+                        button.dataset.processing = 'true';
+                        if (labelEl) {
+                            labelEl.textContent = 'Queuing...';
+                        }
+                    }
+
+                    try {
+                        const response = await fetch(state.processUrl, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/json',
+                                'X-CSRF-TOKEN': getCsrfToken()
+                            },
+                            body: JSON.stringify(payload)
+                        });
+
+                        const result = await response.json().catch(() => ({}));
+
+                        if (response.ok) {
+                            const message = result?.message || 'Sentinel scene queued for processing.';
+                            window.MyZkToast?.success?.(message);
+                            if (typeof window.AppMap?.uploader?.reload === 'function') {
+                                window.AppMap.uploader.reload();
+                            }
+                        } else {
+                            const errorMessage = result?.message || 'Failed to queue Sentinel processing. Please try again later.';
+                            window.MyZkToast?.error?.(errorMessage);
+                        }
+                    } catch (error) {
+                        console.error('Failed to queue Sentinel processing', error);
+                        window.MyZkToast?.error?.('Unexpected error while starting Sentinel processing.');
+                    } finally {
+                        if (button) {
+                            button.disabled = false;
+                            button.setAttribute('aria-disabled', 'false');
+                            delete button.dataset.processing;
+                            if (labelEl && initialLabel) {
+                                labelEl.textContent = initialLabel;
+                            }
+                        }
+                    }
+                };
+
                 // Create a UI card summarizing a single Sentinel catalogue feature.
                 const renderCard = (feature) => {
                     if (!templateEl?.content) return null;
@@ -2967,6 +3071,7 @@
                     const detailEl = clone.querySelector('[data-sentinel-details]');
                     const previewButton = clone.querySelector('[data-sentinel-preview]');
                     const downloadButton = clone.querySelector('[data-sentinel-download]');
+                    const processButton = clone.querySelector('[data-sentinel-process]');
                     const thumbnailImg = clone.querySelector('[data-sentinel-thumbnail]');
                     const thumbnailPlaceholder = clone.querySelector('[data-sentinel-placeholder]');
 
@@ -3029,6 +3134,28 @@
                             downloadButton.removeAttribute('download');
                             delete downloadButton.dataset.downloadBase;
                             downloadButton.tabIndex = -1;
+                        }
+                    }
+
+                    if (processButton) {
+                        const canProcess = Boolean(downloadUrlWithToken && state.processUrl && state.isAuthenticated);
+                        processButton.classList.toggle('hidden', !state.isAuthenticated);
+                        processButton.disabled = !canProcess;
+                        processButton.setAttribute('aria-disabled', canProcess ? 'false' : 'true');
+                        if (canProcess) {
+                            processButton.addEventListener('click', () => {
+                                queueSentinelProcessing({
+                                    button: processButton,
+                                    feature,
+                                    title: titleText,
+                                    productId,
+                                    collection: props.collection || null,
+                                    acquisition: acquisitionDate,
+                                    downloadUrl: downloadUrlWithToken,
+                                    downloadBase: downloadUrl,
+                                    downloadFilename
+                                });
+                            });
                         }
                     }
 

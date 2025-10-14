@@ -11,6 +11,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\FieldAreaController;
 use App\Http\Controllers\ImageryDataController;
 use App\Http\Controllers\UserCreditsController;
+use App\Http\Controllers\SentinelProcessingController;
 use App\Http\Controllers\Socialite\ProviderCallbackController;
 use App\Http\Controllers\Socialite\ProviderRedirectController;
 
@@ -75,6 +76,7 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/imagery-check-progress', [ImageryDataController::class, 'checkProgress'])->name('upload.progress');
     Route::get('/imagery/list', [ImageryDataController::class, 'listUserImagery'])->name('imagery.list');
     Route::get('/user/credits/check', [UserCreditsController::class, 'checkUserCredits'])->name('user.credits.check');
+    Route::post('/sentinel/process', [SentinelProcessingController::class, 'store'])->name('sentinel.process');
 
     Route::post('/imagery-order', [ImageryDataController::class, 'imageryOrder'])->name('imageryOrder');
     Route::get('/imagery-checkout', [ImageryDataController::class, 'imageryCheckout'])->name('imageryCheckout');
