@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Mail;
 use Yajra\DataTables\Facades\DataTables;
 use App\Mail\OrderCreditConfirmation;
 use App\Mail\PaymentCreditConfirmation;
+use App\Services\CreditService;
 use App\Services\PaymentGatewayFactory;
 use Exception;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -20,6 +21,12 @@ use Illuminate\Support\Facades\Log;
 
 class PaymentController extends Controller
 {
+    protected $creditService;
+
+    public function __construct(CreditService $creditService)
+    {
+        $this->creditService = $creditService;
+    }
 
     public function index()
     {
@@ -175,7 +182,7 @@ class PaymentController extends Controller
 
         // If payment status is changed to paid, add credits to user
         if ($payment->status === 'paid' && $payment->credit_points > 0) {
-            $this->addCreditsToUser($payment->user_id, $payment->credit_points);
+            $this->creditService->addCreditsToUser($payment->user_id, $payment->credit_points);
         }
 
         return response()->json([
@@ -438,7 +445,7 @@ class PaymentController extends Controller
 
                     // If this payment was for credit purchase, add credits to user
                     if ($payment->credit_points > 0) {
-                        $this->addCreditsToUser($payment->user_id, $payment->credit_points);
+                        $this->creditService->addCreditsToUser($payment->user_id, $payment->credit_points);
                     }
 
                     // Send payment credit confirmation email for successful payments
@@ -475,7 +482,7 @@ class PaymentController extends Controller
 
                     // If this payment was for credit purchase, add credits to user
                     if ($payment->credit_points > 0) {
-                        $this->addCreditsToUser($payment->user_id, $payment->credit_points);
+                        $this->creditService->addCreditsToUser($payment->user_id, $payment->credit_points);
                     }
 
                     // Send payment credit confirmation email for successful payments
@@ -502,13 +509,5 @@ class PaymentController extends Controller
             Log::error("Payment callback error: " . $e->getMessage());
             return redirect()->route('admin.payment.index')->with('error', 'Payment processing error.');
         }
-    }
-
-    // Method to add credits to user
-    private function addCreditsToUser($userId, $credits)
-    {
-        $userCredit = UserCredit::where('user_id', $userId)->first();
-        $userCredit->credits += $credits;
-        $userCredit->save();
     }
 }

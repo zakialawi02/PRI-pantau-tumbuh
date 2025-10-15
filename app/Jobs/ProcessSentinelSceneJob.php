@@ -2,17 +2,19 @@
 
 namespace App\Jobs;
 
+use Throwable;
 use App\Models\ImageryData;
 use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Foundation\Bus\Dispatchable;
-use Illuminate\Queue\InteractsWithQueue;
-use Illuminate\Queue\SerializesModels;
+use App\Services\CreditService;
+use App\Services\PythonService;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
+use Illuminate\Queue\SerializesModels;
 use Symfony\Component\Process\Process;
-use Throwable;
+use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Foundation\Bus\Dispatchable;
 
 class ProcessSentinelSceneJob implements ShouldQueue
 {
@@ -46,7 +48,14 @@ class ProcessSentinelSceneJob implements ShouldQueue
 
     public function handle(): void
     {
+        $creditService = new CreditService();
+        $pythonService = new PythonService();
         $imagery = ImageryData::find($this->imageryId);
+
+        Log::info('ProcessSentinelSceneJob started.', [
+            'imagery_id' => $this->imageryId,
+            'metadata' => $this->metadata ?? "null",
+        ]);
 
         if (!$imagery) {
             Log::error('ProcessSentinelSceneJob: Imagery record not found.', [
@@ -80,18 +89,40 @@ class ProcessSentinelSceneJob implements ShouldQueue
             $response = Http::withOptions([
                 'sink' => $zipPath,
                 'timeout' => 0,
-                'connect_timeout' => 30,
+                'connect_timeout' => 300,
             ])->get($this->downloadUrl);
 
             if ($response->failed()) {
+                Log::error('ProcessSentinelSceneJob: Sentinel scene download failed.', [
+                    'imagery_id' => $this->imageryId,
+                    'zip_path' => $zipPath,
+                    'status' => $response->status(),
+                ]);
+                $creditService->refundCreditsForFailure($imagery, "Job");
+                $imagery->update(['processing_status' => 'error']);
                 throw new \RuntimeException('Unable to download Sentinel scene. HTTP status: ' . $response->status());
             }
 
             if (!File::exists($zipPath)) {
+                Log::error('ProcessSentinelSceneJob: Sentinel scene download failed.');
+                $creditService->refundCreditsForFailure($imagery, "Job");
+                $imagery->update(['processing_status' => 'error']);
                 throw new \RuntimeException('Sentinel scene download missing after request.');
             }
 
-            $downloadedSize = File::size($zipPath) ?: 0;
+            $downloadedSize = File::size($zipPath) / 1024 ?: 0;
+
+            Log::info('ProcessSentinelSceneJob: Sentinel scene downloaded.', [
+                'imagery_id' => $this->imageryId,
+                'zip_path' => $zipPath,
+                'size' => $downloadedSize,
+            ]);
+
+            $imagery->update([
+                'format' => "zip",
+                'upload_status' => 'done',
+                'size' => $downloadedSize,
+            ]);
 
             if (File::exists($outputPath)) {
                 File::delete($outputPath);
@@ -99,13 +130,19 @@ class ProcessSentinelSceneJob implements ShouldQueue
 
             $scriptsBase = base_path('scripts');
             $scriptPath = $scriptsBase . DIRECTORY_SEPARATOR . 'process_to_multispectral_auto.py';
-            $pythonPath = $this->resolvePythonPath($scriptsBase);
+            $pythonPath = $pythonService->resolvePythonPath($scriptsBase);
 
             if (!$pythonPath) {
+                Log::error('ProcessSentinelSceneJob: Python executable for Sentinel processing not found.');
+                $creditService->refundCreditsForFailure($imagery, "Job");
+                $imagery->update(['processing_status' => 'error']);
                 throw new \RuntimeException('Python executable for Sentinel processing not found.');
             }
 
             if (!File::exists($scriptPath)) {
+                Log::error('ProcessSentinelSceneJob: Multispectral processing script not found.');
+                $creditService->refundCreditsForFailure($imagery, "Job");
+                $imagery->update(['processing_status' => 'error']);
                 throw new \RuntimeException('Multispectral processing script not found.');
             }
 
@@ -120,7 +157,7 @@ class ProcessSentinelSceneJob implements ShouldQueue
                 $overrides['S2_RESAMPLING'] = (string) $resampling;
             }
 
-            $processEnv = $this->buildProcessEnvironment($overrides);
+            $processEnv = $pythonService->buildProcessEnvironment($overrides);
 
             $process = new Process([$pythonPath, $scriptPath], $scriptsBase, $processEnv);
             $process->setTimeout(7200);
@@ -134,14 +171,20 @@ class ProcessSentinelSceneJob implements ShouldQueue
             $stderr = trim($process->getErrorOutput());
             if ($stderr !== '') {
                 Log::error('[Sentinel Multispectral STDERR] ' . $stderr);
+                $creditService->refundCreditsForFailure($imagery, "Job");
+                $imagery->update(['processing_status' => 'error']);
             }
 
             if (!$process->isSuccessful()) {
                 throw new \RuntimeException('Sentinel multispectral processing failed.');
+                $creditService->refundCreditsForFailure($imagery, "Job");
+                $imagery->update(['processing_status' => 'error']);
             }
 
             if (!File::exists($outputPath)) {
                 throw new \RuntimeException('Multispectral output was not created.');
+                $creditService->refundCreditsForFailure($imagery, "Job");
+                $imagery->update(['processing_status' => 'error']);
             }
 
             $outputSize = File::size($outputPath) ?: $downloadedSize;
@@ -171,51 +214,11 @@ class ProcessSentinelSceneJob implements ShouldQueue
                 File::delete($outputPath);
             }
 
+            $creditService->refundCreditsForFailure($imagery, "Job");
             $imagery->update([
                 'upload_status' => 'failed',
                 'processing_status' => 'error',
             ]);
         }
     }
-
-    private function resolvePythonPath(string $basePath): ?string
-    {
-        if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
-            $candidates = [
-                $basePath . '\\venv\\Scripts\\python.exe',
-                $basePath . '\\.venv\\Scripts\\python.exe',
-            ];
-        } else {
-            $candidates = [
-                $basePath . '/venv/bin/python',
-                $basePath . '/.venv/bin/python',
-            ];
-        }
-
-        foreach ($candidates as $candidate) {
-            if (is_file($candidate)) {
-                return $candidate;
-            }
-        }
-
-        return null;
-    }
-
-    private function buildProcessEnvironment(array $overrides = []): array
-    {
-        $baseEnv = [];
-
-        foreach (array_merge($_ENV, $_SERVER) as $key => $value) {
-            if (is_string($key) && !array_key_exists($key, $baseEnv)) {
-                $baseEnv[$key] = $value;
-            }
-        }
-
-        foreach ($overrides as $key => $value) {
-            $baseEnv[$key] = $value;
-        }
-
-        return $baseEnv;
-    }
 }
-

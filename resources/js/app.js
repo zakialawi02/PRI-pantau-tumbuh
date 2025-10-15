@@ -124,7 +124,8 @@ function formatISODate(date) {
  * @returns {{start: Date, end: Date}} An object containing start and end Date instances.
  */
 function getDefaultDateRange(monthsBack = 1) {
-    const months = Number.isFinite(monthsBack) && monthsBack > 0 ? monthsBack : 1;
+    const months =
+        Number.isFinite(monthsBack) && monthsBack > 0 ? monthsBack : 1;
     const end = new Date();
     const endClone = new Date(end.getTime());
     endClone.setHours(23, 59, 59, 999);
@@ -361,3 +362,29 @@ function formatTimeETA(seconds) {
     return `${hrs}h ${remMins}m`;
 }
 window.formatTimeETA = formatTimeETA;
+
+// Function to check user credits
+async function checkUserCredits() {
+    const response = await fetch("/user/credits/check");
+    const result = await response.json();
+
+    if (!result.success) {
+        MyZkToast.error(result.message || "Failed to check credit balance.");
+        return false;
+    }
+
+    const currentCredits = parseFloat(formatNumber(result.credits, 2));
+    const requiredCredits =
+        parseFloat("{{ config('app.imagery_processing_cost') }}") || 10; // Default to 10 if not set
+
+    const data = {
+        hasCredits: currentCredits >= requiredCredits,
+        currentCredits: currentCredits,
+        requiredCredits: requiredCredits,
+    };
+
+    return new Promise((resolve) => {
+        resolve(data);
+    });
+}
+window.checkUserCredits = checkUserCredits;

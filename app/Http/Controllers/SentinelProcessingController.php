@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Jobs\ProcessSentinelSceneJob;
 use App\Models\ImageryData;
+use App\Services\CreditService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -12,7 +13,14 @@ use Throwable;
 
 class SentinelProcessingController extends Controller
 {
-    public function store(Request $request)
+    protected $creditService;
+
+    public function __construct(CreditService $creditService)
+    {
+        $this->creditService = $creditService;
+    }
+
+    public function processScene(Request $request)
     {
         $user = $request->user();
 
@@ -25,24 +33,18 @@ class SentinelProcessingController extends Controller
             'download_filename' => ['nullable', 'string', 'max:255'],
         ]);
 
-        $rawTitle = trim($validated['title'] ?? '') ?: 'Sentinel Scene';
-        $displayTitle = $this->sanitizeDisplayName($rawTitle);
-        $finalDisplayName = $this->buildDisplayName($displayTitle, 'tif');
-
-        $slugBase = Str::slug(Str::limit($rawTitle, 120, ''));
-        if ($slugBase === '') {
-            $slugBase = 'sentinel-scene';
-        }
+        $rawTitle = trim($validated['title'] ?? '') ?: now()->format('YmdHis') . '_Sentinel_Scene';
+        $displayTitle = $this->sanitizeDisplayName($rawTitle . '_' . now()->format('YmdHis'));
+        $finalDisplayName = $displayTitle . '.tif';
 
         $disk = Storage::disk('public');
         $imageryDirectory = 'imagery';
-        $sentinelDirectory = 'imagery/sentinel';
+        $sentinelDirectory = 'imagery/download/sentinel';
 
         $disk->makeDirectory($imageryDirectory);
         $disk->makeDirectory($sentinelDirectory);
-
-        $zipFilename = $this->ensureUniqueFilename($sentinelDirectory, $slugBase, 'zip');
-        $outputBase = Str::limit($slugBase . '-multispectral', 160, '');
+        $zipFilename = $this->ensureUniqueFilename($sentinelDirectory, $displayTitle, 'zip');
+        $outputBase = Str::limit($displayTitle . '_multispectral', 160, '');
         $outputFilename = $this->ensureUniqueFilename($imageryDirectory, $outputBase, 'tif');
 
         try {
@@ -74,6 +76,8 @@ class SentinelProcessingController extends Controller
                 ]
             );
 
+            $this->creditService->deductCreditsForProcessing($user->id, config('app-constants.imagery_processing_cost', 10));
+
             return response()->json([
                 'success' => true,
                 'message' => 'Sentinel scene queued for processing.',
@@ -81,6 +85,7 @@ class SentinelProcessingController extends Controller
                     'id' => $imagery->id,
                     'upload_status' => $imagery->upload_status,
                     'processing_status' => $imagery->processing_status,
+                    'current_credits' => $this->creditService->getRemainingCredits($user->id),
                 ],
             ], 202);
         } catch (Throwable $exception) {
@@ -99,6 +104,7 @@ class SentinelProcessingController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Unable to queue Sentinel imagery processing at this time.',
+                'current_credits' => $this->creditService->getRemainingCredits($user->id),
             ], 500);
         }
     }
@@ -106,6 +112,7 @@ class SentinelProcessingController extends Controller
     private function sanitizeDisplayName(string $value): string
     {
         $cleaned = str_replace([
+            ' ',
             '\\',
             '/',
             ':',
@@ -115,20 +122,16 @@ class SentinelProcessingController extends Controller
             '<',
             '>',
             '|',
+            'SAFE',
+            '.'
         ], ' ', $value);
 
-        $normalized = trim(preg_replace('/\s+/', ' ', $cleaned) ?? '');
-        $fallback = $normalized !== '' ? $normalized : 'Sentinel Scene';
+        $normalized = trim(preg_replace('/\s+/', '', $cleaned) ?? '');
+        $fallback = $normalized !== '' ? $normalized : 'Sentinel_Scene';
 
         return Str::limit($fallback, 120, '');
     }
 
-    private function buildDisplayName(string $base, string $extension): string
-    {
-        $extension = ltrim($extension, '.');
-
-        return sprintf('%s.%s', $base, $extension);
-    }
 
     private function ensureUniqueFilename(string $directory, string $baseName, string $extension): string
     {
@@ -150,4 +153,3 @@ class SentinelProcessingController extends Controller
         return $filename;
     }
 }
-

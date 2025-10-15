@@ -21,6 +21,11 @@ from __future__ import annotations
 
 import os
 import sys
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+os.environ.setdefault("OMP_NUM_THREADS", "2")
+os.environ.setdefault("MKL_NUM_THREADS", "2")
+os.environ.setdefault("GDAL_CACHEMAX", "512")
+import gc
 import tempfile
 import zipfile
 from dataclasses import dataclass
@@ -75,7 +80,7 @@ COG_PROFILE = dict(
     BIGTIFF="IF_SAFER",
     blockxsize=512,
     blockysize=512,
-    NUM_THREADS="ALL_CPUS",
+    NUM_THREADS="2",
     OVERVIEWS="AUTO",
 )
 
@@ -172,11 +177,11 @@ def build_config(config_data: Optional[Dict[str, object]] = None) -> ProcessingC
         )
     resampling = Resampling[resampling_name]
 
-    print("📝 Konfigurasi aktif:")
-    print(f"  • sumber: {source}")
-    print(f"  • keluaran: {output}")
-    print(f"  • overwrite: {cfg.get('overwrite', False)}")
-    print(f"  • resampling: {resampling_name}")
+    print("[INFO] Konfigurasi aktif:")
+    print(f" sumber: {source}")
+    print(f" keluaran: {output}")
+    print(f" overwrite: {cfg.get('overwrite', False)}")
+    print(f" resampling: {resampling_name}")
 
     return ProcessingConfig(
         source=source,
@@ -194,7 +199,7 @@ def ensure_safe_dir(source: Path) -> tuple[Path, Optional[tempfile.TemporaryDire
     """
 
     if source.is_dir():
-        print(f"📂 Sumber adalah direktori: {source}")
+        print(f"[INFO] Sumber adalah direktori: {source}")
         if source.suffix.upper() == ".SAFE":
             return source, None
         # Cari direktori .SAFE di dalamnya
@@ -203,24 +208,24 @@ def ensure_safe_dir(source: Path) -> tuple[Path, Optional[tempfile.TemporaryDire
             raise FileNotFoundError(
                 "Tidak menemukan direktori .SAFE di dalam sumber yang diberikan."
             )
-        print(f"🔍 Menemukan direktori .SAFE di dalam: {safe_candidates[0]}")
+        print(f"[INFO] Menemukan direktori .SAFE di dalam: {safe_candidates[0]}")
         return safe_candidates[0], None
 
     if source.suffix.lower() != ".zip":
         raise ValueError("Sumber harus berupa arsip .zip atau direktori .SAFE.")
 
-    print(f"📦 Mengekstrak arsip: {source}")
+    print(f"[INFO] Mengekstrak arsip: {source}")
     temp_dir = tempfile.TemporaryDirectory(prefix="s2_safe_", dir=str(source.parent))
     with zipfile.ZipFile(source, "r") as zf:
         zf.extractall(temp_dir.name)
-    print(f"✅ Ekstraksi selesai ke: {temp_dir.name}")
+    print(f"[INFO] Ekstraksi selesai ke: {temp_dir.name}")
 
     safe_candidates = list(Path(temp_dir.name).glob("*.SAFE"))
     if not safe_candidates:
         raise FileNotFoundError("Arsip tidak mengandung direktori .SAFE yang valid.")
 
     safe_dir = safe_candidates[0]
-    print(f"📁 Menggunakan direktori produk: {safe_dir}")
+    print(f"[INFO] Menggunakan direktori produk: {safe_dir}")
     return safe_dir, temp_dir
 
 
@@ -234,14 +239,14 @@ def detect_product_level(safe_dir: Path) -> str:
     else:
         level = "UNKNOWN"
 
-    print(f"ℹ️  Level produk terdeteksi: {level}")
+    print(f"[INFO]  Level produk terdeteksi: {level}")
     return level
 
 
 def collect_band_files(safe_dir: Path) -> Dict[str, Path]:
     """Kumpulkan path file JP2 untuk setiap band yang tersedia."""
 
-    print("🔍 Mencari file band JP2...")
+    print("[INFO] Mencari file band JP2...")
     jp2_files = sorted(safe_dir.glob("**/*.jp2"))
     band_map: Dict[str, Path] = {}
 
@@ -262,9 +267,9 @@ def collect_band_files(safe_dir: Path) -> Dict[str, Path]:
         band_file = next((c for c in candidates if c is not None), None)
         if band_file:
             band_map[band] = band_file
-            print(f"  ✅ {band} → {band_file.relative_to(safe_dir)}")
+            print(f"  [INFO] {band} -> {band_file.relative_to(safe_dir)}")
         else:
-            print(f"  ⚠️ {band} tidak ditemukan.")
+            print(f"  [WARN] {band} tidak ditemukan.")
 
     return band_map
 
@@ -274,7 +279,7 @@ def select_reference_band(band_map: Dict[str, Path]) -> Path:
 
     for candidate in ("B04", "B02", "B08"):
         if candidate in band_map:
-            print(f"🎯 Menggunakan {candidate} sebagai referensi grid 10 m.")
+            print(f"[INFO] Menggunakan {candidate} sebagai referensi grid 10 m.")
             return band_map[candidate]
     raise RuntimeError("Tidak menemukan band referensi 10 m (B04/B02/B08).")
 
@@ -285,38 +290,38 @@ def determine_output_crs(band_map: Dict[str, Path], safe_dir: Path) -> CRS:
     sample_band = next(iter(band_map.values()))
     with rasterio.open(sample_band) as ds:
         if ds.crs:
-            print(f"📐 CRS keluaran (langsung dari band): {ds.crs}")
+            print(f"[INFO] CRS keluaran (langsung dari band): {ds.crs}")
             return ds.crs
 
-    print("⚠️ CRS tidak ditemukan langsung pada band. Mencari dari metadata...")
+    print("[WARN] CRS tidak ditemukan langsung pada band. Mencari dari metadata...")
     metadata_file = locate_metadata_file(safe_dir)
     if metadata_file is not None:
         epsg_from_meta = epsg_from_metadata(metadata_file)
         if epsg_from_meta is not None:
             crs = build_crs_from_epsg(epsg_from_meta)
             if crs is not None:
-                print(f"📐 CRS keluaran (metadata EPSG:{epsg_from_meta}): {crs}")
+                print(f"[INFO] CRS keluaran (metadata EPSG:{epsg_from_meta}): {crs}")
                 return crs
             print(
-                "⚠️ Kode EPSG dari metadata ditemukan tetapi tidak dapat dibangun dari referensi lokal."
+                "[WARN] Kode EPSG dari metadata ditemukan tetapi tidak dapat dibangun dari referensi lokal."
             )
         else:
-            print("⚠️ Metadata tidak mengandung kode EPSG eksplisit.")
+            print("[WARN] Metadata tidak mengandung kode EPSG eksplisit.")
     else:
-        print("⚠️ Metadata utama tidak ditemukan, melanjutkan ke heuristik nama file.")
+        print("[WARN] Metadata utama tidak ditemukan, melanjutkan ke heuristik nama file.")
 
-    print("🔤 Mencoba menurunkan EPSG dari nama file JP2...")
+    print("[INFO] Mencoba menurunkan EPSG dari nama file JP2...")
     epsg_from_name = infer_epsg_from_band_name(sample_band.name)
     if epsg_from_name is not None:
         crs = build_crs_from_epsg(epsg_from_name)
         if crs is not None:
-            print(f"📐 CRS keluaran (nama file EPSG:{epsg_from_name}): {crs}")
+            print(f"[INFO] CRS keluaran (nama file EPSG:{epsg_from_name}): {crs}")
             return crs
-        print("⚠️ EPSG dari nama file diketahui tetapi gagal dibangun.")
+        print("[WARN] EPSG dari nama file diketahui tetapi gagal dibangun.")
     else:
-        print("⚠️ Tidak dapat menurunkan kode EPSG dari nama file.")
+        print("[WARN] Tidak dapat menurunkan kode EPSG dari nama file.")
 
-    print("ℹ️  Menggunakan fallback EPSG:4326 (WGS84 lat/lon).")
+    print("[INFO]|[WARN]  Menggunakan fallback EPSG:4326 (WGS84 lat/lon).")
     fallback = build_crs_from_epsg(4326)
     if fallback is None:
         raise RuntimeError("Tidak dapat membangun CRS fallback EPSG:4326.")
@@ -332,14 +337,14 @@ def locate_metadata_file(safe_dir: Path) -> Optional[Path]:
     ]
     for candidate in preferred:
         if candidate.exists():
-            print(f"🔎 Menggunakan metadata: {candidate.name}")
+            print(f"[INFO] Menggunakan metadata: {candidate.name}")
             return candidate
 
     for candidate in safe_dir.rglob("MTD_*.xml"):
-        print(f"🔎 Menggunakan metadata: {candidate.name}")
+        print(f"[INFO] Menggunakan metadata: {candidate.name}")
         return candidate
 
-    print("⚠️ Metadata utama tidak ditemukan di direktori produk.")
+    print("[WARN] Metadata utama tidak ditemukan di direktori produk.")
     return None
 
 
@@ -349,7 +354,7 @@ def epsg_from_metadata(metadata_file: Path) -> Optional[int]:
     try:
         root = ET.parse(metadata_file).getroot()
     except ET.ParseError as exc:
-        print(f"⚠️ Gagal membaca metadata {metadata_file.name}: {exc}")
+        print(f"[ERROR] Gagal membaca metadata {metadata_file.name}: {exc}")
         return None
 
     def extract_epsg(text: str) -> Optional[int]:
@@ -379,7 +384,7 @@ def epsg_from_metadata(metadata_file: Path) -> Optional[int]:
                 possible_codes.append(epsg)
 
     if not possible_codes:
-        print("⚠️ Tidak menemukan kode EPSG di metadata.")
+        print("[WARN] Tidak menemukan kode EPSG di metadata.")
         return None
 
     return possible_codes[0]
@@ -390,30 +395,30 @@ def build_crs_from_epsg(epsg_code: int) -> Optional[CRS]:
 
     try:
         crs = CRS.from_epsg(epsg_code)
-        print(f"   ↪️  CRS dibangun dari proj.db (EPSG:{epsg_code}).")
+        print(f"[INFO]  CRS dibangun dari proj.db (EPSG:{epsg_code}).")
         return crs
     except Exception as exc:  # pylint: disable=broad-except
-        print(f"⚠️ Gagal memuat EPSG:{epsg_code} dari proj.db: {exc}")
+        print(f"[WARN] Gagal memuat EPSG:{epsg_code} dari proj.db: {exc}")
 
-    print("   ↪️  Mencoba mengambil definisi dari epsg.io...")
+    print(" [INFO] Mencoba mengambil definisi dari epsg.io...")
     try:
         with urlopen(f"https://epsg.io/{epsg_code}.proj4", timeout=10) as response:
             proj_string = response.read().decode("utf-8").strip()
         if proj_string:
             crs = CRS.from_proj4(proj_string)
-            print("   ↪️  CRS dibangun dari definisi epsg.io.")
+            print("[INFO] CRS dibangun dari definisi epsg.io.")
             return crs
     except (URLError, TimeoutError, ValueError) as exc:
-        print(f"⚠️ Tidak dapat mengambil definisi EPSG:{epsg_code} dari internet: {exc}")
+        print(f"[WARN] Tidak dapat mengambil definisi EPSG:{epsg_code} dari internet: {exc}")
     except Exception as exc:  # pylint: disable=broad-except
-        print(f"⚠️ Kesalahan tidak terduga saat mengambil EPSG:{epsg_code}: {exc}")
+        print(f"[ERROR] Kesalahan tidak terduga saat mengambil EPSG:{epsg_code}: {exc}")
 
     hardcoded = hardcoded_epsg_definition(epsg_code)
     if hardcoded is not None:
-        print("   ↪️  Menggunakan definisi CRS hardcode.")
+        print("[INFO] Menggunakan definisi CRS hardcode.")
         return hardcoded
 
-    print(f"⚠️ Tidak ada definisi CRS yang tersedia untuk EPSG:{epsg_code}.")
+    print("[WARN] Tidak ada definisi CRS yang tersedia untuk EPSG:{epsg_code}.")
     return None
 
 
@@ -484,7 +489,7 @@ def prepare_output_profile(ref_band_path: Path, band_count: int, output_crs: CRS
             height=ref.height,
             **COG_PROFILE,
         )
-    print("🧾 Profil keluaran siap disiapkan.")
+    print("[INFO] Profil keluaran siap disiapkan.")
     return profile
 
 
@@ -501,10 +506,10 @@ def write_multispectral(
         for band in ORDERED_BANDS:
             src_path = band_map.get(band)
             if src_path is None:
-                print(f"⚠️ Melewati band {band} karena tidak tersedia.")
+                print(f"[WARN] Melewati band {band} karena tidak tersedia.")
                 continue
 
-            print(f"✏️  Menulis band {band} (sumber: {src_path.name})")
+            print(f"[INFO]  Menulis band {band} (sumber: {src_path.name})")
             with rasterio.open(src_path) as src:
                 with WarpedVRT(
                     src,
@@ -519,14 +524,17 @@ def write_multispectral(
                         dst.write(data, out_index, window=window)
 
             dst.set_band_description(out_index, band)
-            print(f"  ✅ Band {band} selesai ditulis ke layer {out_index}.")
+            print(f"[INFO] Band {band} selesai ditulis ke layer {out_index}.")
             out_index += 1
+
+            #release memory
+            gc.collect()
 
         dst.update_tags(
             BAND_ORDER=",".join([band for band in ORDERED_BANDS if band in band_map]),
             NOTE="Produk Sentinel-2 multiband 10 m",
         )
-    print(f"🎉 Penulisan selesai: {output_path}")
+    print(f"[INFO]|[FINISH] Penulisan selesai: {output_path}")
 
 
 def main() -> int:
@@ -543,21 +551,29 @@ def main() -> int:
         output_crs = determine_output_crs(band_map, safe_dir)
         profile = prepare_output_profile(ref_band, len(band_map), output_crs)
 
-        print(f"🛠  Menulis COG multispektral ke: {config.output}")
+        print(f"[INFO]  Menulis COG multispektral ke: {config.output}")
         write_multispectral(config.output, profile, band_map, config.resampling)
 
-        print("🧹 Membersihkan sumber sementara...")
+        print("[INFO] Membersihkan sumber sementara...")
         if temp_dir is not None:
             temp_dir.cleanup()
-            print("✅ Direktori sementara dihapus.")
+            print("[INFO] Direktori sementara dihapus.")
         else:
-            print("ℹ️  Tidak ada direktori sementara yang perlu dibersihkan.")
+            print("[INFO] Tidak ada direktori sementara yang perlu dibersihkan.")
 
-        print("✨ Proses selesai tanpa error.")
+        # Hapus file ZIP sumber setelah processing selesai
+        if config.source.suffix.lower() == ".zip" and config.source.exists():
+            try:
+                config.source.unlink()
+                print(f"[INFO] File sumber ZIP dihapus: {config.source}")
+            except Exception as e:
+                print(f"[WARN] Gagal menghapus file sumber ZIP: {e}")
+
+        print("[INFO]|[FINISH] Proses selesai tanpa error.")
         return 0
 
     except Exception as exc:  # pylint: disable=broad-except
-        print(f"❌ Terjadi kesalahan: {exc}")
+        print(f"[ERROR] Terjadi kesalahan: {exc}")
         return 1
 
 

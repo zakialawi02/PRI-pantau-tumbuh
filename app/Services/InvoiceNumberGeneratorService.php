@@ -3,9 +3,8 @@
 namespace App\Services;
 
 use App\Models\Payment;
-use Illuminate\Support\Facades\DB;
 
-class InvoiceNumberGenerator
+class InvoiceNumberGeneratorService
 {
     /**
      * Generate a custom invoice number with the pattern IPRI{yyyymmdd}{4-digit sequence}

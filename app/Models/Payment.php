@@ -3,7 +3,7 @@
 namespace App\Models;
 
 use App\Models\User;
-use App\Services\InvoiceNumberGenerator;
+use App\Services\InvoiceNumberGeneratorService;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -59,7 +59,7 @@ class Payment extends Model
         // Generate invoice number when creating a new payment
         static::creating(function ($payment) {
             if (empty($payment->invoice_number)) {
-                $payment->invoice_number = InvoiceNumberGenerator::generate();
+                $payment->invoice_number = InvoiceNumberGeneratorService::generate();
             }
         });
     }

@@ -55,6 +55,7 @@ Route::prefix('dashboard')->name('admin.')->group(function () {
         Route::post('/imagery/{imagery}/retry-merge', [ImageryDataController::class, 'retryMerge'])->name('imagery.retry-merge');
         Route::get('/imagery/{imagery}/download-source', [ImageryDataController::class, 'downloadSource'])->name('imagery.download.source');
         Route::get('/imagery/{imagery}/download-result', [ImageryDataController::class, 'downloadResult'])->name('imagery.download.result');
+        Route::post('/sentinel/process', [SentinelProcessingController::class, 'processScene'])->name('sentinel.process');
 
         // Credit Purchase
         Route::get('/purchase-credits', [UserCreditsController::class, 'purchase'])->name('purchase-credits');
@@ -76,7 +77,6 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/imagery-check-progress', [ImageryDataController::class, 'checkProgress'])->name('upload.progress');
     Route::get('/imagery/list', [ImageryDataController::class, 'listUserImagery'])->name('imagery.list');
     Route::get('/user/credits/check', [UserCreditsController::class, 'checkUserCredits'])->name('user.credits.check');
-    Route::post('/sentinel/process', [SentinelProcessingController::class, 'store'])->name('sentinel.process');
 
     Route::post('/imagery-order', [ImageryDataController::class, 'imageryOrder'])->name('imageryOrder');
     Route::get('/imagery-checkout', [ImageryDataController::class, 'imageryCheckout'])->name('imageryCheckout');
