@@ -136,8 +136,8 @@
                         }, {
                             data: 'stored_name',
                             name: 'stored_name',
-                            width: "120px",
-                            className: "text-wrap"
+                            width: "250px",
+                            className: "text-wrap break-all"
                         }, {
                             data: 'size',
                             name: 'size',
@@ -154,23 +154,81 @@
                                 if (!data) {
                                     return 'N/A';
                                 }
+
+                                const uploadStatusMap = {
+                                    done: {
+                                        label: 'Uploaded',
+                                        className: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300'
+                                    },
+                                    merging: {
+                                        label: 'Finalising Upload',
+                                        className: 'bg-blue-100 text-blue-800 dark:bg-blue-500/10 dark:text-blue-300'
+                                    },
+                                    pending: {
+                                        label: 'Awaiting Merge',
+                                        className: 'bg-amber-100 text-amber-800 dark:bg-amber-500/10 dark:text-amber-300'
+                                    },
+                                    failed: {
+                                        label: 'Upload Failed',
+                                        className: 'bg-red-100 text-red-800 dark:bg-red-500/10 dark:text-red-300'
+                                    },
+                                    error: {
+                                        label: 'Upload Failed',
+                                        className: 'bg-red-100 text-red-800 dark:bg-red-500/10 dark:text-red-300'
+                                    }
+                                };
+
                                 const status = data;
-                                const label = status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-                                let badgeClasses = 'bg-foreground/10 text-foreground';
-                                if (status === 'pending') {
-                                    badgeClasses = 'bg-amber-100 text-amber-800 dark:bg-amber-500/10 dark:text-amber-300';
-                                } else if (status === 'merging') {
-                                    badgeClasses = 'bg-blue-100 text-blue-800 dark:bg-blue-500/10 dark:text-blue-300';
-                                } else if (status === 'done') {
-                                    badgeClasses = 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300';
-                                } else if (status === 'failed' || status === 'error') {
-                                    badgeClasses = 'bg-red-100 text-red-800 dark:bg-red-500/10 dark:text-red-300';
-                                }
-                                return `<span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${badgeClasses}">${label}</span>`;
+                                const statusInfo = uploadStatusMap[status] || {
+                                    label: status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+                                    className: 'bg-foreground/10 text-foreground'
+                                };
+
+                                return `<span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${statusInfo.className}">${statusInfo.label}</span>`;
                             }
                         }, {
                             data: 'processing_status',
                             name: 'processing_status',
+                            render: function(data, type, row) {
+                                if (!data) {
+                                    return 'N/A';
+                                }
+
+                                const processingStatusMap = {
+                                    completed: {
+                                        label: 'Processing Complete',
+                                        className: 'text-success'
+                                    },
+                                    processing: {
+                                        label: 'Processing',
+                                        className: 'text-warning'
+                                    },
+                                    waiting: {
+                                        label: 'Queued for Processing',
+                                        className: 'text-warning'
+                                    },
+                                    queued: {
+                                        label: 'Queued',
+                                        className: 'text-warning'
+                                    },
+                                    skip: {
+                                        label: 'Processing Skipped',
+                                        className: 'text-foreground/60'
+                                    },
+                                    error: {
+                                        label: 'Processing Failed',
+                                        className: 'text-red-500'
+                                    }
+                                };
+
+                                const status = data;
+                                const statusInfo = processingStatusMap[status] || {
+                                    label: status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+                                    className: 'text-foreground'
+                                };
+
+                                return `<span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${statusInfo.className}">${statusInfo.label}</span>`;
+                            }
                         }, {
                             data: 'created_at',
                             name: 'created_at',

@@ -61,7 +61,9 @@
                 </div>
             @endauth
 
-            <x-button-primary href="{{ route('login') }}" size="small" variant="outline">Login</x-button-primary>
+            @guest
+                <x-button-primary href="{{ route('login') }}" size="small" variant="outline">Login</x-button-primary>
+            @endguest
 
             <!-- Nav Menu -->
             <div class="text-foreground bg-background z-51 fixed inset-0 hidden w-full flex-col items-center justify-center space-y-6 whitespace-nowrap text-center uppercase opacity-0 transition-all duration-500 ease-in-out" id="navbar">
@@ -84,7 +86,7 @@
         <aside class="bg-background hidden shadow-lg md:flex md:w-20 md:flex-col md:items-center md:py-4">
             <nav class="flex flex-1 flex-col items-center space-y-6">
                 <button class="sidebar-btn hover:text-primary flex flex-col items-center text-xs" onclick="showPanel('data-panel', this)">
-                    <span class="text-xl">🛰️</span>
+                    <span class="text-xl">🗺️</span>
                     <span>My Data</span>
                 </button>
                 <button class="sidebar-btn hover:text-primary flex flex-col items-center text-xs" onclick="showPanel('uploads-panel', this)">
@@ -105,6 +107,7 @@
                 </button>
             </nav>
             <div class="text-foreground/70 mt-auto text-xs">© 2025</div>
+            <div class="text-foreground/70 mt-auto text-xs">v0.1.156</div>
         </aside>
 
         <!-- MOBILE SIDEBAR HORIZONTAL -->
@@ -115,7 +118,7 @@
 
             <div class="flex space-x-2 overflow-x-hidden scroll-smooth" id="scroll-container">
                 <button class="sidebar-btn bg-neutral inline-flex items-center space-x-2 rounded-full border border-gray-300 px-3 py-1 text-sm font-medium" onclick="showPanel('data-panel', this)">
-                    <span class="text-xl">🛰️</span>
+                    <span class="text-xl">🗺️</span>
                     <span>My Data</span>
                 </button>
                 <button class="sidebar-btn bg-neutral inline-flex items-center space-x-2 rounded-full border border-gray-300 px-3 py-1 text-sm font-medium" onclick="showPanel('uploads-panel', this)">
@@ -148,22 +151,24 @@
             <!-- ========== MY DATA PANEL ========== -->
             <section class="flex hidden h-full flex-col shadow-xl" id="data-panel">
                 <div class="bg-background border-foreground/10 sticky top-0 z-20 flex items-center justify-between border-b p-2">
-                    <h2 class="text-lg font-bold">📡 My Data Imagery</h2>
+                    <h2 class="text-lg font-bold">🗺️ My Data Imagery</h2>
                     <button class="hover:bg-foreground/20 bg-foreground/10 rounded px-2 py-1 text-sm" onclick="closePanels()">✖</button>
                 </div>
 
                 <!-- content -->
                 <div class="panel-content flex-1 space-y-3 overflow-y-auto p-3">
                     <div class="space-y-2">
-                        <div class="flex items-center justify-between space-x-1">
-                            <x-button-primary class="px-2! py-1!" href="{{ route('admin.imagery.index') }}" size="small" variant="outline">
-                                <i class="ri-dashboard-line"></i>
-                                <span class="ml-1">Go to Dashboard</span>
-                            </x-button-primary>
-                            <button class="hover:bg-foreground/20 bg-foreground/10 rounded px-2 py-1 text-sm" onclick="window.AppMap.uploader.reload()">
-                                <i class="ri-refresh-line"></i>
-                            </button>
-                        </div>
+                        @auth
+                            <div class="flex items-center justify-between space-x-1">
+                                <x-button-primary class="px-2! py-1!" href="{{ route('admin.imagery.index') }}" size="small" variant="outline">
+                                    <i class="ri-dashboard-line"></i>
+                                    <span class="ml-1">Go to Dashboard</span>
+                                </x-button-primary>
+                                <button class="hover:bg-foreground/20 bg-foreground/10 rounded px-2 py-1 text-sm" onclick="window.AppMap.uploader.reload()">
+                                    <i class="ri-refresh-line"></i>
+                                </button>
+                            </div>
+                        @endauth
                         <div class="space-y-2">
                             @auth
                                 <div class="space-y-2" id="myDataContainer">
@@ -230,67 +235,139 @@
             </section>
 
             <!-- ========== SENTINEL COLLECTION PANEL ========== -->
-            <section class="flex hidden h-full flex-col shadow-xl" id="sentinel-panel" data-sentinel-token="{{ $copernicusAccessToken ?? '' }}" data-sentinel-credentials="{{ $copernicusCredentialsConfigured ?? false ? 'true' : 'false' }}">
+            <section class="flex hidden h-full flex-col shadow-xl" id="sentinel-panel" data-sentinel-token="{{ $copernicusAccessToken ?? '' }}" data-sentinel-credentials="{{ $copernicusCredentialsConfigured ?? false ? 'true' : 'false' }}" data-sentinel-process-url="{{ auth()->check() ? route('admin.sentinel.process') : '' }}">
                 <div class="bg-background border-foreground/10 sticky top-0 z-20 flex items-center justify-between border-b p-2">
                     <h2 class="text-lg font-bold">🛰️ Sentinel-2 Collections</h2>
                     <button class="hover:bg-foreground/20 bg-foreground/10 rounded px-2 py-1 text-sm" onclick="closePanels()">✖</button>
                 </div>
 
                 <div class="panel-content flex-1 space-y-1 overflow-y-auto p-2">
-                    <form class="bg-background/60 border-foreground/10 rounded-lg border p-2 shadow-sm" id="sentinelFilterForm">
-                        <div class="mb-1.5 flex items-center justify-between">
-                            <h3 class="text-foreground text-sm font-semibold">Filter Collections</h3>
-                            <button class="text-foreground/60 hover:text-primary text-xs font-medium transition" id="sentinelFilterResetButton" type="button">
-                                Reset
-                            </button>
+                    <!-- Tab Navigation -->
+                    <div class="flex">
+                        <div class="bg-foreground/10 hover:bg-foreground/20 flex rounded-lg p-1 transition">
+                            <nav class="flex gap-x-1" role="tablist" aria-label="Tabs" aria-orientation="horizontal">
+                                <button class="hs-tab-active:bg-neutral hs-tab-active:text-foreground/80 text-foreground/50 hover:text-foreground/80 focus:outline-hidden focus:text-foreground/80 hover:hover:text-primary active inline-flex items-center gap-x-2 rounded-lg bg-transparent px-2 py-1 text-sm font-medium disabled:pointer-events-none disabled:opacity-50" id="sentinel-collection-tab" data-hs-tab="#sentinel-collection-panel" type="button" role="tab" aria-selected="true" aria-controls="sentinel-collection-panel">
+                                    Data Collection (Scene)
+                                </button>
+                                <button class="hs-tab-active:bg-neutral hs-tab-active:text-foreground/80 text-foreground/50 hover:text-foreground/80 focus:outline-hidden focus:text-foreground/80 hover:hover:text-primary inline-flex items-center gap-x-2 rounded-lg bg-transparent px-2 py-1 text-sm font-medium disabled:pointer-events-none disabled:opacity-50" id="sentinel-clip-tab" data-hs-tab="#sentinel-clip-panel" type="button" role="tab" aria-selected="false" aria-controls="sentinel-clip-panel">
+                                    Imagery by Clip
+                                </button>
+                            </nav>
                         </div>
-                        <div class="flex flex-col space-y-1">
-                            <div class="grid grid-cols-2 gap-1">
-                                <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="sentinelCloudFilter">
-                                    <span>Max Cloud Cover (%)</span>
-                                    <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-1.5 py-0.5 text-sm focus:outline-none focus:ring" id="sentinelCloudFilter" name="cloud-cover" type="number" value="40" max="100" min="0" placeholder="e.g. 30" step="1" />
-                                </label>
-                                <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="sentinelProductLevel">
-                                    <span>Product Level</span>
-                                    <select class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-1.5 py-0.5 text-sm focus:outline-none focus:ring" id="sentinelProductLevel" name="product-level">
-                                        <option value="S2MSI2A" selected>Level-2A (Surface Reflectance)</option>
-                                        <option value="S2MSI1C">Level-1C (Top-of-Atmosphere)</option>
-                                    </select>
-                                </label>
-                            </div>
-                            <div class="grid grid-cols-1 gap-1 sm:grid-cols-2">
-                                <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="sentinelStartDate">
-                                    <span>Start Date</span>
-                                    <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-1.5 py-0.5 text-sm focus:outline-none focus:ring" id="sentinelStartDate" name="start-date" type="date" autocomplete="off" />
-                                </label>
-                                <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="sentinelEndDate">
-                                    <span>End Date</span>
-                                    <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-1.5 py-0.5 text-sm focus:outline-none focus:ring" id="sentinelEndDate" name="end-date" type="date" autocomplete="off" />
-                                </label>
-                            </div>
-                            <div class="grid grid-cols-1 gap-1">
-                                <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="sentinelLatFilter">
-                                    <span>Latitude</span>
-                                    <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-1.5 py-0.5 text-sm focus:outline-none focus:ring" id="sentinelLatFilter" name="latitude" type="number" value="-1.24536" max="90" min="-90" placeholder="e.g. -6.2" step="0.000001" />
-                                </label>
-                                <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="sentinelLonFilter">
-                                    <span>Longitude</span>
-                                    <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-1.5 py-0.5 text-sm focus:outline-none focus:ring" id="sentinelLonFilter" name="longitude" type="number" value="114.54535" max="180" min="-180" placeholder="e.g. 106.8" step="0.000001" />
-                                </label>
-                            </div>
-                        </div>
-                        <p class="text-foreground/60 text-[11px]">Provide both latitude and longitude to focus on a specific location, or clear both fields to search globally.</p>
-                        <div class="mt-1 flex flex-wrap gap-1.5">
-                            <button class="bg-primary hover:bg-primary/90 text-background inline-flex items-center justify-center rounded-lg px-3 py-1.5 text-xs font-semibold transition" type="submit">
-                                Apply Filters
-                            </button>
-                        </div>
-                    </form>
-
-                    <div class="text-foreground/70 mt-4 text-sm" id="sentinelCollectionStatus">
-                        Loading latest Sentinel-2 acquisitions...
                     </div>
-                    <div class="mt-2 space-y-2" id="sentinelCollectionList"></div>
+
+                    <!-- Data Tab Content -->
+                    <div class="tab-content" id="sentinel-collection-panel" role="tabpanel" aria-labelledby="sentinel-collection-tab">
+                        <form class="bg-background/60 border-foreground/10 rounded-lg border p-2 shadow-sm" id="sentinelFilterForm">
+                            <div class="mb-1.5 flex items-center justify-between">
+                                <h3 class="text-foreground text-sm font-semibold">Filter Collections</h3>
+                                <button class="text-foreground/60 hover:text-primary text-xs font-medium transition" id="sentinelFilterResetButton" type="button">
+                                    Reset
+                                </button>
+                            </div>
+                            <div class="flex flex-col space-y-1">
+                                <div class="grid grid-cols-2 gap-1">
+                                    <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="sentinelCloudFilter">
+                                        <span>Max Cloud Cover (%)</span>
+                                        <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-1.5 py-0.5 text-sm focus:outline-none focus:ring" id="sentinelCloudFilter" name="cloud-cover" type="number" value="40" max="100" min="0" placeholder="e.g. 30" step="1" />
+                                    </label>
+                                    <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="sentinelProductLevel">
+                                        <span>Product Level</span>
+                                        <select class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-1.5 py-0.5 text-sm focus:outline-none focus:ring" id="sentinelProductLevel" name="product-level">
+                                            <option value="S2MSI2A" selected>Level-2A (Surface Reflectance)</option>
+                                            <option value="S2MSI1C">Level-1C (Top-of-Atmosphere)</option>
+                                        </select>
+                                    </label>
+                                </div>
+                                <div class="grid grid-cols-1 gap-1 sm:grid-cols-2">
+                                    <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="sentinelStartDate">
+                                        <span>Start Date</span>
+                                        <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-1.5 py-0.5 text-sm focus:outline-none focus:ring" id="sentinelStartDate" name="start-date" type="date" autocomplete="off" />
+                                    </label>
+                                    <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="sentinelEndDate">
+                                        <span>End Date</span>
+                                        <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-1.5 py-0.5 text-sm focus:outline-none focus:ring" id="sentinelEndDate" name="end-date" type="date" autocomplete="off" />
+                                    </label>
+                                </div>
+                                <div class="grid grid-cols-1 gap-1">
+                                    <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="sentinelLatFilter">
+                                        <span>Latitude</span>
+                                        <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-1.5 py-0.5 text-sm focus:outline-none focus:ring" id="sentinelLatFilter" name="latitude" type="number" value="-1.24536" max="90" min="-90" placeholder="e.g. -6.2" step="0.000001" />
+                                    </label>
+                                    <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="sentinelLonFilter">
+                                        <span>Longitude</span>
+                                        <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-1.5 py-0.5 text-sm focus:outline-none focus:ring" id="sentinelLonFilter" name="longitude" type="number" value="114.54535" max="180" min="-180" placeholder="e.g. 106.8" step="0.000001" />
+                                    </label>
+                                </div>
+                            </div>
+                            <p class="text-foreground/60 text-[11px]">Provide both latitude and longitude to focus on a specific location, or clear both fields to search globally.</p>
+                            <div class="mt-1 flex flex-wrap gap-1.5">
+                                <button class="bg-primary hover:bg-primary/90 text-background inline-flex items-center justify-center rounded-lg px-3 py-1.5 text-xs font-semibold transition" type="submit">
+                                    Apply Filters
+                                </button>
+                            </div>
+                        </form>
+
+                        <div class="text-foreground/70 mt-4 text-sm" id="sentinelCollectionStatus">
+                            Loading latest Sentinel-2 acquisitions...
+                        </div>
+                        <div class="mt-2 space-y-2" id="sentinelCollectionList"></div>
+                    </div>
+
+                    <!-- Clip Tab Content -->
+                    <div class="tab-content hidden" class="hidden" id="sentinel-clip-panel" role="tabpanel" aria-labelledby="sentinel-clip-tab">
+                        <div class="bg-primary/10 space-y-2 rounded-lg p-2">
+                            <h4 class="text-foreground flex items-center text-lg font-semibold">
+                                <i class="ri-shopping-bag-line text-primary mr-2"></i>
+                                Clip from Our Collection
+                            </h4>
+                            <p class="text-foreground/80 text-sm">
+                                Don't have satellite data? Purchase clipped high-resolution imagery directly from our platform, captured by leading satellite constellations.
+                            </p>
+
+                            <div class="bg-primary/20 rounded-lg p-2">
+                                <h5 class="text-foreground mb-2 font-medium">What You Get</h5>
+                                <ul class="text-foreground/70 space-y-1 text-sm">
+                                    <li class="flex items-start">
+                                        <i class="ri-check-line text-success mr-2 mt-0.5 text-xs"></i>
+                                        <span>Access to daily updated satellite imagery</span>
+                                    </li>
+                                    <li class="flex items-start">
+                                        <i class="ri-check-line text-success mr-2 mt-0.5 text-xs"></i>
+                                        <span>Global coverage</span>
+                                    </li>
+                                    <li class="flex items-start">
+                                        <i class="ri-check-line text-success mr-2 mt-0.5 text-xs"></i>
+                                        <span>Automatic PRI analysis and health reports included</span>
+                                    </li>
+                                </ul>
+                            </div>
+
+                            <div class="bg-primary/20 rounded-lg p-2">
+                                <h5 class="text-foreground mb-2 font-medium">Satellite Sources</h5>
+                                <div class="grid grid-cols-2 gap-2 text-sm">
+                                    <div class="flex items-center">
+                                        <i class="ri-satellite-line text-success mr-2"></i>
+                                        <span>Sentinel-2</span>
+                                    </div>
+                                    {{-- <div class="flex items-center">
+                                        <i class="ri-satellite-line text-success mr-2"></i>
+                                        <span>Landsat 8/9</span>
+                                    </div>
+                                    <div class="flex items-center">
+                                        <i class="ri-satellite-line text-success mr-2"></i>
+                                        <span>Quicksat</span>
+                                    </div> --}}
+                                </div>
+                            </div>
+                            <div class="">
+                                <x-button-primary id="buySatelliteBtn" type="button" size="small">
+                                    <i class="ri-shopping-cart-line"></i>
+                                    <span>Buy Satellite Imagery</span>
+                                </x-button-primary>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="bg-background border-foreground/10 sticky bottom-0 border-t p-3">
@@ -320,11 +397,22 @@
                             </div>
                         </div>
                         <div class="mt-2 flex flex-wrap gap-1" data-sentinel-actions>
-                            <a class="bg-primary text-background hover:bg-primary/90 inline-flex hidden items-center space-x-1 rounded-lg px-2 py-1 text-xs font-semibold transition" data-sentinel-download href="#" aria-disabled="true" target="_blank" rel="noopener noreferrer">
+                            <a class="bg-primary text-background enabled:hover:bg-primary/90 inline-flex hidden items-center space-x-1 rounded-lg px-2 py-1 text-xs font-semibold transition" data-sentinel-download href="#" aria-disabled="true" target="_blank" rel="noopener noreferrer">
                                 <i class="ri-download-cloud-2-line"></i>
                                 <span>Download Scene</span>
                             </a>
-                            <button class="hover:bg-primary/10 text-primary border-primary/40 inline-flex items-center space-x-1 rounded-lg border px-2 py-1 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50" data-sentinel-preview type="button">
+                            @auth
+                                <button class="bg-success/10 text-success enabled:hover:bg-success/20 inline-flex hidden items-center space-x-1 rounded-lg px-2 py-1 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-60" data-sentinel-process type="button">
+                                    <i class="ri-cpu-line"></i>
+                                    <span>Process Imagery</span>
+                                </button>
+                            @else
+                                <button class="bg-success/10 text-success enabled:hover:bg-success/20 inline-flex hidden items-center space-x-1 rounded-lg px-2 py-1 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-60" type="button" title="Log in to process imagery" disabled>
+                                    <i class="ri-cpu-line"></i>
+                                    <span>Process This Imagery</span>
+                                </button>
+                            @endauth
+                            <button class="enabled:hover:bg-primary/10 text-primary border-primary/40 inline-flex items-center space-x-1 rounded-lg border px-2 py-1 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50" data-sentinel-preview type="button">
                                 <i class="ri-image-line"></i>
                                 <span>Preview on Map</span>
                             </button>
@@ -336,7 +424,7 @@
             <!-- ========== Upload PANEL ========== -->
             <section class="flex hidden h-full flex-col shadow-xl" id="uploads-panel">
                 <div class="bg-background border-foreground/10 sticky top-0 z-20 flex items-center justify-between border-b p-2">
-                    <h2 class="text-lg font-bold">⬆️ Imagery Collection</h2>
+                    <h2 class="text-lg font-bold">⬆️ Imagery Upload</h2>
                     <button class="hover:bg-foreground/20 bg-foreground/10 rounded px-2 py-1 text-sm" onclick="closePanels()">✖</button>
                 </div>
 
@@ -344,151 +432,84 @@
                 <div class="panel-content flex-1 space-y-3 overflow-y-auto p-3">
                     <div class="space-y-2">
                         @auth
-                            <!-- Tab Navigation -->
-                            <div class="flex">
-                                <div class="bg-foreground/10 hover:bg-foreground/20 flex rounded-lg p-1 transition">
-                                    <nav class="flex gap-x-1" role="tablist" aria-label="Tabs" aria-orientation="horizontal">
-                                        <button class="hs-tab-active:bg-neutral hs-tab-active:text-foreground/80 text-foreground/50 hover:text-foreground/80 focus:outline-hidden focus:text-foreground/80 hover:hover:text-primary inline-flex items-center gap-x-2 rounded-lg bg-transparent px-2 py-1 text-sm font-medium disabled:pointer-events-none disabled:opacity-50" id="buy-tab" data-hs-tab="#buy-panel" type="button" role="tab" aria-selected="false" aria-controls="buy-panel">
-                                            Buy Imagery
-                                        </button>
-                                        <button class="hs-tab-active:bg-neutral hs-tab-active:text-foreground/80 text-foreground/50 hover:text-foreground/80 focus:outline-hidden focus:text-foreground/80 hover:hover:text-primary active inline-flex items-center gap-x-2 rounded-lg bg-transparent px-2 py-1 text-sm font-medium disabled:pointer-events-none disabled:opacity-50" id="upload-tab" data-hs-tab="#upload-panel" type="button" role="tab" aria-selected="true" aria-controls="upload-panel">
-                                            Upload Imagery
-                                        </button>
-                                    </nav>
+                            <div class="bg-primary/10 space-y-2 rounded-lg p-2">
+                                <h4 class="text-foreground flex items-center text-lg font-semibold">
+                                    <i class="ri-upload-cloud-line text-primary mr-2"></i>
+                                    Upload Your Own Imagery
+                                </h4>
+                                <p class="text-foreground/80 text-sm">
+                                    Have your own satellite imagery? Upload it directly to our platform for advanced PRI analysis and crop health monitoring.
+                                </p>
+                                <p class="text-foreground/80 text-sm font-bold">Follow the instructions.</p>
+
+                                <div class="bg-primary/20 space-y-2 rounded-lg p-2">
+                                    <h5 class="text-foreground font-medium">Supported Formats</h5>
+                                    <ul class="text-foreground/70 space-y-1 text-sm">
+                                        <li class="flex items-center">
+                                            <i class="ri-check-line text-success mr-2 text-xs"></i>
+                                            <span>GeoTIFF (.tif, .tiff, .geotif)</span>
+                                        </li>
+                                        {{-- <li class="flex items-center">
+                                            <i class="ri-check-line text-success mr-2 text-xs"></i>
+                                            <span>Enhanced Compressed Wavelet (.ecw)</span>
+                                        </li>
+                                        <li class="flex items-center">
+                                            <i class="ri-check-line text-success mr-2 text-xs"></i>
+                                            <span>ZIP Archives (.zip)</span>
+                                        </li> --}}
+                                    </ul>
                                 </div>
-                            </div>
 
-                            <!-- Upload Tab Content -->
-                            <div class="tab-content" id="upload-panel" role="tabpanel" aria-labelledby="upload-tab">
-                                <div class="bg-primary/10 space-y-2 rounded-lg p-2">
-                                    <h4 class="text-foreground flex items-center text-lg font-semibold">
-                                        <i class="ri-upload-cloud-line text-primary mr-2"></i>
-                                        Upload Your Own Imagery
-                                    </h4>
-                                    <p class="text-foreground/80 text-sm">
-                                        Have your own satellite imagery? Upload it directly to our platform for advanced PRI analysis and crop health monitoring.
-                                    </p>
-
-                                    <div class="bg-primary/20 space-y-2 rounded-lg p-2">
-                                        <h5 class="text-foreground font-medium">Supported Formats</h5>
-                                        <ul class="text-foreground/70 grid grid-cols-2 gap-2 text-sm">
-                                            <li class="flex items-center">
-                                                <i class="ri-check-line text-success mr-2 text-xs"></i>
-                                                <span>GeoTIFF (.tif, .tiff)</span>
-                                            </li>
-                                            <li class="flex items-center">
-                                                <i class="ri-check-line text-success mr-2 text-xs"></i>
-                                                <span>Enhanced Compressed Wavelet (.ecw)</span>
-                                            </li>
-                                            <li class="flex items-center">
-                                                <i class="ri-check-line text-success mr-2 text-xs"></i>
-                                                <span>ZIP Archives (.zip)</span>
-                                            </li>
-                                        </ul>
-                                    </div>
-
-                                    <div class="bg-primary/20 space-y-2 rounded-lg p-2">
-                                        <h5 class="text-foreground font-medium">Compatible Sources</h5>
-                                        <ul class="text-foreground/70 space-y-1 text-sm">
-                                            <li class="flex items-start">
-                                                <i class="ri-check-line text-success mr-2 mt-0.5 text-xs"></i>
-                                                <span>Sentinel-2, Landsat, and QuickSat</span>
-                                            </li>
-                                            <li class="flex items-start">
-                                                <i class="ri-check-line text-success mr-2 mt-0.5 text-xs"></i>
-                                                <span>Get detailed plant stress analysis with our AI-powered engine</span>
-                                            </li>
-                                        </ul>
-                                    </div>
-
-                                    <div class="space-y-3">
-                                        <h5 class="text-lg font-semibold">Upload Your File</h5>
-
-                                        <!-- input form -->
-                                        <form class="space-y-2">
-                                            <x-input-label class="text-sm font-medium" for="source-type">Source Type</x-input-label>
-                                            <x-select-input class="px-2! py-1!" id="sourceType" name="source-type" required>
-                                                <option value="sentinel-2">Sentinel-2</option>
-                                                <option value="landsat">Landsat</option>
-                                                <option value="quicksat">Quicksat</option>
-                                            </x-select-input>
-                                            <x-input-error class="mt-2" :messages="$errors->get('source-type')" />
-
-                                            <x-input-label class="text-sm font-medium" for="imagery-upload">Upload your imagery file</x-input-label>
-                                            <input class="border-foreground/30 bg-neutral file:bg-foreground/10 focus:border-primary focus:ring-primary block w-full rounded-lg border text-sm shadow-sm file:me-4 file:border-0 file:px-4 file:py-2 focus:z-10 disabled:pointer-events-none disabled:opacity-50" id="fileInput" name="imagery-upload" type="file" accept=".tif,.tiff,.ecw,.zip">
-                                            <x-input-error class="mt-2" :messages="$errors->get('imagery-upload')" />
-                                        </form>
-
-                                        <!-- info file -->
-                                        <div class="text-foreground-70 mt-2 hidden text-sm" id="fileInfo"></div>
-
-                                        <!-- progress bar -->
-                                        <div class="bg-foreground/20 mt-2 h-4 w-full rounded">
-                                            <div class="bg-primary h-4 rounded" id="progressBar" style="width: 0%;"></div>
-                                        </div>
-                                        <p class="text-foreground/100 mt-1 text-sm" id="progressText">Belum ada upload.</p>
-
-                                        <!-- tombol kontrol -->
-                                        <div class="flex flex-wrap gap-2">
-                                            <x-button-primary id="startBtn" type="button" size="small">Start Upload</x-button-primary>
-                                            <x-button-danger id="pauseBtn" type="button" size="small">⏸️ Pause</x-button-danger>
-                                            <x-button-secondary id="resumeBtn" type="button" size="small">▶️ Resume</x-button-secondary>
-                                        </div>
-                                    </div>
+                                <div class="bg-primary/20 space-y-2 rounded-lg p-2">
+                                    <h5 class="text-foreground font-medium">Compatible Sources</h5>
+                                    <ul class="text-foreground/70 space-y-1 text-sm">
+                                        <li class="flex items-start">
+                                            <i class="ri-check-line text-success mr-2 mt-0.5 text-xs"></i>
+                                            <span>Sentinel-2 [band order: 1, 2, 3, 4, 5, 6, 7, 8, 8A, 9, 11, 12]</span>
+                                        </li>
+                                        {{-- <li class="flex items-start">
+                                            <i class="ri-check-line text-success mr-2 mt-0.5 text-xs"></i>
+                                            <span>Landsat 8/7</span>
+                                        </li> --}}
+                                        <li class="flex items-start">
+                                            <i class="ri-check-line text-success mr-2 mt-0.5 text-xs"></i>
+                                            <span>Get detailed plant stress analysis with our AI-powered engine</span>
+                                        </li>
+                                    </ul>
                                 </div>
-                            </div>
 
-                            <!-- Buy Tab Content -->
-                            <div class="tab-content hidden" class="hidden" id="buy-panel" role="tabpanel" aria-labelledby="buy-tab">
-                                <div class="bg-primary/10 space-y-2 rounded-lg p-2">
-                                    <h4 class="text-foreground flex items-center text-lg font-semibold">
-                                        <i class="ri-shopping-bag-line text-primary mr-2"></i>
-                                        Buy from Our Collection
-                                    </h4>
-                                    <p class="text-foreground/80 text-sm">
-                                        Don't have satellite data? Purchase high-resolution imagery directly from our platform, captured by leading satellite constellations.
-                                    </p>
+                                <div class="space-y-3">
+                                    <h5 class="text-lg font-semibold">Upload Your File</h5>
 
-                                    <div class="bg-primary/20 rounded-lg p-2">
-                                        <h5 class="text-foreground mb-2 font-medium">What You Get</h5>
-                                        <ul class="text-foreground/70 space-y-1 text-sm">
-                                            <li class="flex items-start">
-                                                <i class="ri-check-line text-success mr-2 mt-0.5 text-xs"></i>
-                                                <span>Access to daily updated satellite imagery</span>
-                                            </li>
-                                            <li class="flex items-start">
-                                                <i class="ri-check-line text-success mr-2 mt-0.5 text-xs"></i>
-                                                <span>Global coverage</span>
-                                            </li>
-                                            <li class="flex items-start">
-                                                <i class="ri-check-line text-success mr-2 mt-0.5 text-xs"></i>
-                                                <span>Automatic PRI analysis and health reports included</span>
-                                            </li>
-                                        </ul>
+                                    <!-- input form -->
+                                    <form class="space-y-2">
+                                        <x-input-label class="text-sm font-medium" for="source-type">Source Type</x-input-label>
+                                        <x-select-input class="px-2! py-1!" id="sourceType" name="source-type" required>
+                                            <option value="sentinel-2">Sentinel-2</option>
+                                            <option value="landsat">Landsat</option>
+                                            <option value="quicksat">Quicksat</option>
+                                        </x-select-input>
+                                        <x-input-error class="mt-2" :messages="$errors->get('source-type')" />
+
+                                        <x-input-label class="text-sm font-medium" for="imagery-upload">Upload your imagery file</x-input-label>
+                                        <input class="border-foreground/30 bg-neutral file:bg-foreground/10 focus:border-primary focus:ring-primary block w-full rounded-lg border text-sm shadow-sm file:me-4 file:border-0 file:px-4 file:py-2 focus:z-10 disabled:pointer-events-none disabled:opacity-50" id="fileInput" name="imagery-upload" type="file" accept=".tif,.tiff,.ecw,.zip">
+                                        <x-input-error class="mt-2" :messages="$errors->get('imagery-upload')" />
+                                    </form>
+
+                                    <!-- info file -->
+                                    <div class="text-foreground-70 mt-2 hidden text-sm" id="fileInfo"></div>
+
+                                    <!-- progress bar -->
+                                    <div class="bg-foreground/20 mt-2 h-4 w-full rounded">
+                                        <div class="bg-primary h-4 rounded" id="progressBar" style="width: 0%;"></div>
                                     </div>
+                                    <p class="text-foreground/100 mt-1 text-sm" id="progressText">Belum ada upload.</p>
 
-                                    <div class="bg-primary/20 rounded-lg p-2">
-                                        <h5 class="text-foreground mb-2 font-medium">Satellite Sources</h5>
-                                        <div class="grid grid-cols-2 gap-2 text-sm">
-                                            <div class="flex items-center">
-                                                <i class="ri-satellite-line text-success mr-2"></i>
-                                                <span>Sentinel-2</span>
-                                            </div>
-                                            <div class="flex items-center">
-                                                <i class="ri-satellite-line text-success mr-2"></i>
-                                                <span>Landsat 8/9</span>
-                                            </div>
-                                            <div class="flex items-center">
-                                                <i class="ri-satellite-line text-success mr-2"></i>
-                                                <span>Quicksat</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div class="">
-                                        <x-button-primary id="buySatelliteBtn" type="button" size="small">
-                                            <i class="ri-shopping-cart-line"></i>
-                                            <span>Buy Satellite Imagery</span>
-                                        </x-button-primary>
+                                    <!-- tombol kontrol -->
+                                    <div class="flex flex-wrap gap-2">
+                                        <x-button-primary id="startBtn" type="button" size="small">Start Upload</x-button-primary>
+                                        <x-button-danger id="pauseBtn" type="button" size="small">⏸️ Pause</x-button-danger>
+                                        <x-button-secondary id="resumeBtn" type="button" size="small">▶️ Resume</x-button-secondary>
                                     </div>
                                 </div>
                             </div>
@@ -646,7 +667,7 @@
             </div>
 
             <!-- Info panel -->
-            <div class="shadow-soft bottom-22 pointer-events-none absolute left-0 z-40 mx-auto hidden max-w-xl rounded-lg bg-white/90 p-2 ring-1 ring-black/5 backdrop-blur supports-[backdrop-filter]:bg-white/60 sm:right-auto sm:w-[380px] md:left-20" id="panel">
+            {{-- <div class="shadow-soft bottom-22 pointer-events-none absolute left-0 z-40 mx-auto hidden max-w-xl rounded-lg bg-white/90 p-2 ring-1 ring-black/5 backdrop-blur supports-[backdrop-filter]:bg-white/60 sm:right-auto sm:w-[380px] md:left-20" id="panel">
                 <div class="pointer-events-auto">
                     <div class="flex items-start justify-between gap-2">
                         <div>
@@ -663,7 +684,7 @@
                         </div>
                     </div>
                 </div>
-            </div>
+            </div> --}}
 
             <!-- Info map controls -->
             <div class="absolute bottom-11 left-0 flex items-end space-x-2 text-xs md:left-2 md:text-base">
@@ -702,7 +723,7 @@
                         <!-- Draw Polygon Section -->
                         <div class="flex flex-col items-center justify-center py-2 text-center">
                             <div class="mb-2">
-                                <h3 class="text-foreground/70 mb-3 text-lg font-semibold">Purchase Satellite Imagery</h3>
+                                <h3 class="text-foreground/70 mb-3 text-lg font-semibold">Clip Satellite Imagery</h3>
                                 <p class="text-foreground-70 mb-3 text-xs">Draw a polygon on the map to define your area of interest for satellite imagery analysis.</p>
                                 <x-button-primary id="drawPolygonBtn" type="button" size="small">
                                     <i class="ri-pencil-line"></i>
@@ -1136,603 +1157,584 @@
         </script>
     @endpush
     @push('javascript')
-        <script>
-            (() => {
-                // Cache frequently used DOM references for the uploader workflow.
-                const elements = {
-                    sourceInput: document.getElementById('sourceType'),
-                    fileInput: document.getElementById('fileInput'),
-                    fileInfo: document.getElementById('fileInfo'),
-                    progressBar: document.getElementById('progressBar'),
-                    progressText: document.getElementById('progressText'),
-                    startBtn: document.getElementById('startBtn'),
-                    pauseBtn: document.getElementById('pauseBtn'),
-                    resumeBtn: document.getElementById('resumeBtn'),
-                    myDataContainer: document.getElementById('myDataContainer'),
-                    cardTemplate: document.getElementById('imageryCardTemplate')
-                };
-
-                const allElementsReady = Object.values(elements).every(Boolean);
-
-                if (!allElementsReady) {
-                    console.warn('Imagery uploader controls missing. Skipping uploader bootstrap.', {
-                        hasSourceInput: Boolean(elements.sourceInput),
-                        hasFileInput: Boolean(elements.fileInput),
-                        hasFileInfo: Boolean(elements.fileInfo),
-                        hasProgressBar: Boolean(elements.progressBar),
-                        hasProgressText: Boolean(elements.progressText),
-                        hasStartBtn: Boolean(elements.startBtn),
-                        hasPauseBtn: Boolean(elements.pauseBtn),
-                        hasResumeBtn: Boolean(elements.resumeBtn),
-                        hasMyDataContainer: Boolean(elements.myDataContainer),
-                        hasTemplate: Boolean(elements.cardTemplate)
-                    });
-                    return;
-                }
-
-                // Configuration values that control chunking and retry behaviour.
-                const config = {
-                    chunkSize: 5 * 1024 * 1024,
-                    maxRetries: 3,
-                    autoResetDelay: 4000,
-                    imageryProcessingCost: {{ config('app-constants.imagery_processing_cost', 10) }}
-                };
-
-                // Endpoints required throughout the upload process.
-                const endpoints = {
-                    chunk: '{{ route('upload.chunk') }}',
-                    merge: '{{ route('upload.merge') }}',
-                    list: '{{ route('imagery.list') }}'
-                };
-
-                // Mutable state object tracking progress and timings.
-                const state = {
-                    paused: false,
-                    uploading: false,
-                    file: null,
-                    uploadId: null,
-                    currentChunk: 0,
-                    totalChunks: 0,
-                    startTime: 0,
-                    uploadedBytes: 0
-                };
-
-                // Ensure the uploader exposes hooks on the global AppMap namespace.
-                const ensureAppNamespace = () => {
-                    window.AppMap = window.AppMap || {};
-                    window.AppMap.uploader = window.AppMap.uploader || {};
-                };
-
-                // Toggle button states based on the current upload lifecycle stage.
-                const setButtonState = (mode) => {
-                    const {
-                        startBtn,
-                        pauseBtn,
-                        resumeBtn
-                    } = elements;
-
-                    const disableAll = () => {
-                        startBtn.disabled = true;
-                        pauseBtn.disabled = true;
-                        resumeBtn.disabled = true;
+        @auth
+            <script>
+                (() => {
+                    // Cache frequently used DOM references for the uploader workflow.
+                    const elements = {
+                        sourceInput: document.getElementById('sourceType'),
+                        fileInput: document.getElementById('fileInput'),
+                        fileInfo: document.getElementById('fileInfo'),
+                        progressBar: document.getElementById('progressBar'),
+                        progressText: document.getElementById('progressText'),
+                        startBtn: document.getElementById('startBtn'),
+                        pauseBtn: document.getElementById('pauseBtn'),
+                        resumeBtn: document.getElementById('resumeBtn'),
+                        myDataContainer: document.getElementById('myDataContainer'),
+                        cardTemplate: document.getElementById('imageryCardTemplate')
                     };
 
-                    switch (mode) {
-                        case 'ready':
-                            startBtn.disabled = false;
-                            pauseBtn.disabled = true;
-                            resumeBtn.disabled = true;
-                            // Restore original button text if it was changed to loading state
-                            if (startBtn.innerHTML.includes('Checking')) {
-                                startBtn.innerHTML = startBtn.innerHTML.replace(/<i class="ri-loader-4-line animate-spin"><\/i> Checking.../, 'Start Upload');
-                            }
-                            break;
-                        case 'uploading':
-                            startBtn.disabled = true;
-                            pauseBtn.disabled = false;
-                            resumeBtn.disabled = true;
-                            break;
-                        case 'paused':
-                            startBtn.disabled = true;
-                            pauseBtn.disabled = true;
-                            resumeBtn.disabled = false;
-                            break;
-                        case 'merging':
-                        case 'completed':
-                        case 'error':
-                            disableAll();
-                            if (mode === 'error') {
-                                startBtn.disabled = false;
-                            }
-                            // Restore original button text if it was changed to loading state
-                            if (startBtn.innerHTML.includes('Checking')) {
-                                startBtn.innerHTML = startBtn.innerHTML.replace(/<i class="ri-loader-4-line animate-spin"><\/i> Checking.../, 'Start Upload');
-                            }
-                            break;
-                        case 'loading':
-                            startBtn.disabled = true;
-                            startBtn.innerHTML = '<i class="ri-loader-4-line animate-spin"></i> Checking...';
-                            pauseBtn.disabled = true;
-                            resumeBtn.disabled = true;
-                            break;
-                        case 'idle':
-                        default:
-                            disableAll();
-                            // Restore original button text if it was changed to loading state
-                            if (startBtn.innerHTML.includes('Checking')) {
-                                startBtn.innerHTML = startBtn.innerHTML.replace(/<i class="ri-loader-4-line animate-spin"><\/i> Checking.../, 'Start Upload');
-                            }
-                            break;
+                    const allElementsReady = Object.values(elements).every(Boolean);
+
+                    if (!allElementsReady) {
+                        console.warn('Imagery uploader controls missing. Skipping uploader bootstrap.', {
+                            hasSourceInput: Boolean(elements.sourceInput),
+                            hasFileInput: Boolean(elements.fileInput),
+                            hasFileInfo: Boolean(elements.fileInfo),
+                            hasProgressBar: Boolean(elements.progressBar),
+                            hasProgressText: Boolean(elements.progressText),
+                            hasStartBtn: Boolean(elements.startBtn),
+                            hasPauseBtn: Boolean(elements.pauseBtn),
+                            hasResumeBtn: Boolean(elements.resumeBtn),
+                            hasMyDataContainer: Boolean(elements.myDataContainer),
+                            hasTemplate: Boolean(elements.cardTemplate)
+                        });
+                        return;
                     }
-                };
 
-                // Clear all runtime bookkeeping for a fresh upload session.
-                const resetState = () => {
-                    state.paused = false;
-                    state.uploading = false;
-                    state.file = null;
-                    state.uploadId = null;
-                    state.currentChunk = 0;
-                    state.totalChunks = 0;
-                    state.startTime = 0;
-                    state.uploadedBytes = 0;
-                };
+                    // Configuration values that control chunking and retry behaviour.
+                    const config = {
+                        chunkSize: 5 * 1024 * 1024,
+                        maxRetries: 3,
+                        autoResetDelay: 4000,
+                        imageryProcessingCost: {{ config('app-constants.imagery_processing_cost', 10) }}
+                    };
 
-                // Restore the UI to an idle appearance without progress.
-                const resetUI = () => {
-                    const {
-                        fileInput,
-                        fileInfo,
-                        progressBar,
-                        progressText
-                    } = elements;
-                    fileInput.value = '';
-                    fileInfo.classList.add('hidden');
-                    fileInfo.innerHTML = '';
-                    progressBar.style.width = '0%';
-                    progressText.textContent = 'Ready for next upload.';
-                };
+                    // Endpoints required throughout the upload process.
+                    const endpoints = {
+                        chunk: '{{ route('upload.chunk') }}',
+                        merge: '{{ route('upload.merge') }}',
+                        list: '{{ route('imagery.list') }}'
+                    };
 
-                // Present the selected file name and size before uploading.
-                const showFileSummary = (file) => {
-                    const {
-                        fileInfo,
-                        progressBar,
-                        progressText
-                    } = elements;
-                    const sizeMB = (file.size / 1024 / 1024).toFixed(2);
-                    const shortName = shortenFilename(file.name, 40);
+                    // Mutable state object tracking progress and timings.
+                    const state = {
+                        paused: false,
+                        uploading: false,
+                        file: null,
+                        uploadId: null,
+                        currentChunk: 0,
+                        totalChunks: 0,
+                        startTime: 0,
+                        uploadedBytes: 0
+                    };
 
-                    fileInfo.classList.remove('hidden');
-                    fileInfo.innerHTML = `
+                    // Ensure the uploader exposes hooks on the global AppMap namespace.
+                    const ensureAppNamespace = () => {
+                        window.AppMap = window.AppMap || {};
+                        window.AppMap.uploader = window.AppMap.uploader || {};
+                    };
+
+                    // Toggle button states based on the current upload lifecycle stage.
+                    const setButtonState = (mode) => {
+                        const {
+                            startBtn,
+                            pauseBtn,
+                            resumeBtn
+                        } = elements;
+
+                        const disableAll = () => {
+                            startBtn.disabled = true;
+                            pauseBtn.disabled = true;
+                            resumeBtn.disabled = true;
+                        };
+
+                        switch (mode) {
+                            case 'ready':
+                                startBtn.disabled = false;
+                                pauseBtn.disabled = true;
+                                resumeBtn.disabled = true;
+                                // Restore original button text if it was changed to loading state
+                                if (startBtn.innerHTML.includes('Checking')) {
+                                    startBtn.innerHTML = startBtn.innerHTML.replace(/<i class="ri-loader-4-line animate-spin"><\/i> Checking.../, 'Start Upload');
+                                }
+                                break;
+                            case 'uploading':
+                                startBtn.disabled = true;
+                                pauseBtn.disabled = false;
+                                resumeBtn.disabled = true;
+                                break;
+                            case 'paused':
+                                startBtn.disabled = true;
+                                pauseBtn.disabled = true;
+                                resumeBtn.disabled = false;
+                                break;
+                            case 'merging':
+                            case 'completed':
+                            case 'error':
+                                disableAll();
+                                if (mode === 'error') {
+                                    startBtn.disabled = false;
+                                }
+                                // Restore original button text if it was changed to loading state
+                                if (startBtn.innerHTML.includes('Checking')) {
+                                    startBtn.innerHTML = startBtn.innerHTML.replace(/<i class="ri-loader-4-line animate-spin"><\/i> Checking.../, 'Start Upload');
+                                }
+                                break;
+                            case 'loading':
+                                startBtn.disabled = true;
+                                startBtn.innerHTML = '<i class="ri-loader-4-line animate-spin"></i> Checking...';
+                                pauseBtn.disabled = true;
+                                resumeBtn.disabled = true;
+                                break;
+                            case 'idle':
+                            default:
+                                disableAll();
+                                // Restore original button text if it was changed to loading state
+                                if (startBtn.innerHTML.includes('Checking')) {
+                                    startBtn.innerHTML = startBtn.innerHTML.replace(/<i class="ri-loader-4-line animate-spin"><\/i> Checking.../, 'Start Upload');
+                                }
+                                break;
+                        }
+                    };
+
+                    // Clear all runtime bookkeeping for a fresh upload session.
+                    const resetState = () => {
+                        state.paused = false;
+                        state.uploading = false;
+                        state.file = null;
+                        state.uploadId = null;
+                        state.currentChunk = 0;
+                        state.totalChunks = 0;
+                        state.startTime = 0;
+                        state.uploadedBytes = 0;
+                    };
+
+                    // Restore the UI to an idle appearance without progress.
+                    const resetUI = () => {
+                        const {
+                            fileInput,
+                            fileInfo,
+                            progressBar,
+                            progressText
+                        } = elements;
+                        fileInput.value = '';
+                        fileInfo.classList.add('hidden');
+                        fileInfo.innerHTML = '';
+                        progressBar.style.width = '0%';
+                        progressText.textContent = 'Ready for next upload.';
+                    };
+
+                    // Present the selected file name and size before uploading.
+                    const showFileSummary = (file) => {
+                        const {
+                            fileInfo,
+                            progressBar,
+                            progressText
+                        } = elements;
+                        const sizeMB = (file.size / 1024 / 1024).toFixed(2);
+                        const shortName = shortenFilename(file.name, 40);
+
+                        fileInfo.classList.remove('hidden');
+                        fileInfo.innerHTML = `
                     <strong>Name:</strong> ${shortName}<br>
                     <strong>Size:</strong> ${sizeMB} MB
-                `;
+                    `;
 
-                    progressText.textContent = "✅ File ready to upload. Click 'Start Upload' to begin.";
-                    progressBar.style.width = '0%';
-                };
+                        progressText.textContent = "✅ File ready to upload. Click 'Start Upload' to begin.";
+                        progressBar.style.width = '0%';
+                    };
 
-                // Update progress bar width and accompanying status text.
-                const updateProgressDisplay = (percentage, speedMBps, etaText) => {
-                    const {
-                        progressBar,
-                        progressText
-                    } = elements;
-                    progressBar.style.width = `${percentage}%`;
-                    const speedText = Number.isFinite(speedMBps) ? speedMBps.toFixed(2) : '0.00';
-                    progressText.textContent = `Uploading... ${percentage}% | 🚀 ${speedText} MB/s | ⏳ ETA: ${etaText}`;
-                };
+                    // Update progress bar width and accompanying status text.
+                    const updateProgressDisplay = (percentage, speedMBps, etaText) => {
+                        const {
+                            progressBar,
+                            progressText
+                        } = elements;
+                        progressBar.style.width = `${percentage}%`;
+                        const speedText = Number.isFinite(speedMBps) ? speedMBps.toFixed(2) : '0.00';
+                        progressText.textContent = `Uploading... ${percentage}% | 🚀 ${speedText} MB/s | ⏳ ETA: ${etaText}`;
+                    };
 
-                // React to new file input selections and prime the uploader.
-                const handleFileChange = (event) => {
-                    state.file = event.target.files?.[0] || null;
+                    // React to new file input selections and prime the uploader.
+                    const handleFileChange = (event) => {
+                        state.file = event.target.files?.[0] || null;
 
-                    if (!state.file) {
-                        resetState();
-                        resetUI();
-                        setButtonState('idle');
-                        return;
-                    }
-
-                    showFileSummary(state.file);
-                    MyZkToast.info('File ready to upload, click Start to begin.');
-                    setButtonState('ready');
-                };
-
-                // Generate a lightweight identifier for coordinating chunk requests.
-                const generateUploadId = () => {
-                    const timestamp = Date.now();
-                    const random = Math.random().toString(36).substring(2, 10).toUpperCase();
-                    return `${timestamp}_${random}`;
-                };
-
-                // Convert bytes remaining and elapsed seconds into a readable ETA.
-                const formatEta = (remainingBytes, elapsedSeconds) => {
-                    if (!Number.isFinite(elapsedSeconds) || elapsedSeconds <= 0) {
-                        return '-';
-                    }
-                    const speedBytesPerSecond = state.uploadedBytes / elapsedSeconds;
-                    if (speedBytesPerSecond <= 0) {
-                        return '-';
-                    }
-                    const remainingSeconds = remainingBytes / speedBytesPerSecond;
-                    return remainingSeconds > 0 ? formatTimeETA(remainingSeconds) : '-';
-                };
-
-                // Upload the next chunk and retry if transient errors occur.
-                const uploadNextChunk = async (retryCount = 0) => {
-                    if (state.paused || !state.file) return;
-
-                    if (state.currentChunk >= state.totalChunks) {
-                        elements.progressText.textContent = '🧩 Preparing file for background merge...';
-                        await mergeChunks();
-                        return;
-                    }
-
-                    const start = state.currentChunk * config.chunkSize;
-                    const end = Math.min(state.file.size, start + config.chunkSize);
-                    const chunk = state.file.slice(start, end);
-
-                    const formData = new FormData();
-                    formData.append('upload_id', state.uploadId);
-                    formData.append('chunk_index', state.currentChunk);
-                    formData.append('chunk', chunk);
-
-                    try {
-                        const response = await fetch(endpoints.chunk, {
-                            method: 'POST',
-                            headers: {
-                                'X-CSRF-TOKEN': '{{ csrf_token() }}'
-                            },
-                            body: formData
-                        });
-
-                        const payload = await response.json();
-                        if (!response.ok || !payload.success) {
-                            throw new Error(payload.message || `Chunk ${state.currentChunk} failed.`);
-                        }
-
-                        state.currentChunk += 1;
-                        state.uploadedBytes += chunk.size;
-
-                        const elapsedSeconds = Math.max((performance.now() - state.startTime) / 1000, 0.001);
-                        const speedMBps = state.uploadedBytes / 1024 / 1024 / elapsedSeconds;
-                        const remainingBytes = state.file.size - state.uploadedBytes;
-                        const etaText = formatEta(remainingBytes, elapsedSeconds);
-                        const progress = Math.round((state.currentChunk / state.totalChunks) * 100);
-
-                        updateProgressDisplay(progress, speedMBps, etaText);
-
-                        if (progress === 100) {
-                            MyZkToast.info('Finalising upload on server...');
-                        }
-
-                        if (!state.paused) {
-                            await uploadNextChunk();
-                        }
-                    } catch (error) {
-                        if (retryCount < config.maxRetries) {
-                            const delay = 2000 * (retryCount + 1);
-                            setTimeout(() => uploadNextChunk(retryCount + 1), delay);
+                        if (!state.file) {
+                            resetState();
+                            resetUI();
+                            setButtonState('idle');
                             return;
                         }
 
-                        elements.progressText.textContent = `❌ Chunk ${state.currentChunk} failed after ${config.maxRetries} retries. Upload paused.`;
-                        MyZkToast.error(`Chunk ${state.currentChunk} failed after ${config.maxRetries} retries.`);
+                        showFileSummary(state.file);
+                        MyZkToast.info('File ready to upload, click Start to begin.');
+                        setButtonState('ready');
+                    };
+
+                    // Generate a lightweight identifier for coordinating chunk requests.
+                    const generateUploadId = () => {
+                        const timestamp = Date.now();
+                        const random = Math.random().toString(36).substring(2, 10).toUpperCase();
+                        return `${timestamp}_${random}`;
+                    };
+
+                    // Convert bytes remaining and elapsed seconds into a readable ETA.
+                    const formatEta = (remainingBytes, elapsedSeconds) => {
+                        if (!Number.isFinite(elapsedSeconds) || elapsedSeconds <= 0) {
+                            return '-';
+                        }
+                        const speedBytesPerSecond = state.uploadedBytes / elapsedSeconds;
+                        if (speedBytesPerSecond <= 0) {
+                            return '-';
+                        }
+                        const remainingSeconds = remainingBytes / speedBytesPerSecond;
+                        return remainingSeconds > 0 ? formatTimeETA(remainingSeconds) : '-';
+                    };
+
+                    // Upload the next chunk and retry if transient errors occur.
+                    const uploadNextChunk = async (retryCount = 0) => {
+                        if (state.paused || !state.file) return;
+
+                        if (state.currentChunk >= state.totalChunks) {
+                            elements.progressText.textContent = '🧩 Preparing file for background merge...';
+                            await mergeChunks();
+                            return;
+                        }
+
+                        const start = state.currentChunk * config.chunkSize;
+                        const end = Math.min(state.file.size, start + config.chunkSize);
+                        const chunk = state.file.slice(start, end);
+
+                        const formData = new FormData();
+                        formData.append('upload_id', state.uploadId);
+                        formData.append('chunk_index', state.currentChunk);
+                        formData.append('chunk', chunk);
+
+                        try {
+                            const response = await fetch(endpoints.chunk, {
+                                method: 'POST',
+                                headers: {
+                                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                                },
+                                body: formData
+                            });
+
+                            const payload = await response.json();
+                            if (!response.ok || !payload.success) {
+                                throw new Error(payload.message || `Chunk ${state.currentChunk} failed.`);
+                            }
+
+                            state.currentChunk += 1;
+                            state.uploadedBytes += chunk.size;
+
+                            const elapsedSeconds = Math.max((performance.now() - state.startTime) / 1000, 0.001);
+                            const speedMBps = state.uploadedBytes / 1024 / 1024 / elapsedSeconds;
+                            const remainingBytes = state.file.size - state.uploadedBytes;
+                            const etaText = formatEta(remainingBytes, elapsedSeconds);
+                            const progress = Math.round((state.currentChunk / state.totalChunks) * 100);
+
+                            updateProgressDisplay(progress, speedMBps, etaText);
+
+                            if (progress === 100) {
+                                MyZkToast.info('Finalising upload on server...');
+                            }
+
+                            if (!state.paused) {
+                                await uploadNextChunk();
+                            }
+                        } catch (error) {
+                            if (retryCount < config.maxRetries) {
+                                const delay = 2000 * (retryCount + 1);
+                                setTimeout(() => uploadNextChunk(retryCount + 1), delay);
+                                return;
+                            }
+
+                            elements.progressText.textContent = `❌ Chunk ${state.currentChunk} failed after ${config.maxRetries} retries. Upload paused.`;
+                            MyZkToast.error(`Chunk ${state.currentChunk} failed after ${config.maxRetries} retries.`);
+                            state.paused = true;
+                            state.uploading = false;
+                            setButtonState('paused');
+                        }
+                    };
+
+                    // Ask the backend to merge all uploaded chunks into a single file.
+                    const mergeChunks = async () => {
+                        setButtonState('merging');
+
+                        const formData = new FormData();
+                        formData.append('upload_id', state.uploadId);
+                        formData.append('filename', state.file.name);
+                        formData.append('total_chunks', state.totalChunks);
+                        formData.append('source_type', elements.sourceInput.value);
+
+                        // Check if user has enough credits to determine processing status
+                        const creditCheck = await checkUserCredits();
+                        if (!creditCheck.hasCredits) {
+                            formData.append('skip_processing', 'true');
+                        }
+
+                        try {
+                            const response = await fetch(endpoints.merge, {
+                                method: 'POST',
+                                headers: {
+                                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                                },
+                                body: formData
+                            });
+
+                            const result = await response.json();
+                            if (!response.ok || !result.success) {
+                                throw new Error(result.message || 'Failed to queue merge on server.');
+                            }
+
+                            elements.progressBar.style.width = '100%';
+                            elements.progressText.textContent = `✅ ${result.message || 'Upload received. Finalising in background.'}`;
+                            MyZkToast.success('File received! Finalising in the background.');
+                            setButtonState('completed');
+                            if (result.data?.currentCredits !== undefined) {
+                                $('#current-myCredits').text(formatNumber(result.data.currentCredits, 2));
+                            }
+                            await loadMyData();
+                            scheduleAutoReset();
+                        } catch (error) {
+                            elements.progressText.textContent = `❌ Error: ${error.message}`;
+                            MyZkToast.error(error.message || 'Server error while scheduling merge.');
+                            setButtonState('error');
+                            scheduleAutoReset();
+                        }
+                    };
+
+                    // After finishing, reset the UI back to idle after a short delay.
+                    const scheduleAutoReset = () => {
+                        setTimeout(() => {
+                            resetState();
+                            resetUI();
+                            setButtonState('idle');
+                        }, config.autoResetDelay);
+                    };
+
+                    // Validate prerequisites and kick off the chunk upload loop.
+                    const startUpload = () => {
+                        if (!state.file) {
+                            MyZkToast.warning('Please select a file first!');
+                            return;
+                        }
+
+                        // Show loading state on start button while checking credits
+                        setButtonState('loading');
+
+                        // Check user credits before proceeding
+                        checkUserCredits().then(res => {
+                            // Restore ready state if user has credits
+                            setButtonState('ready');
+                            $('#current-myCredits').text(formatNumber(res.currentCredits, 2));
+
+                            // Show confirmation modal before starting upload
+                            ZkPopAlert.show({
+                                message: `${res.hasCredits ? `This upload will cost ${res.requiredCredits} credit points for processing imagery. Do you want to proceed?` : `Insufficient credit points for processing. You need ${res.requiredCredits} credits. You can still upload the file, but processing will be skipped. Please purchase more credits to continue processing.`}`,
+                                icon: '<i class="ri-upload-cloud-2-line text-2xl text-primary"></i>',
+                                confirmClass: "focus:ring-primary/80 rounded-md text-sm px-2.5 py-1.5 bg-primary text-primary-foreground border border-primary hover:bg-primary/80 focus:outline-none focus:ring-primary",
+                                confirmText: "Yes, Upload",
+                                cancelText: "Cancel",
+                                onConfirm: () => {
+                                    state.uploadId = generateUploadId();
+                                    state.totalChunks = Math.ceil(state.file.size / config.chunkSize);
+                                    state.currentChunk = 0;
+                                    state.uploadedBytes = 0;
+                                    state.paused = false;
+                                    state.uploading = true;
+                                    state.startTime = performance.now();
+
+                                    MyZkToast.info('🚀 Upload started...');
+                                    elements.progressText.textContent = `🚀 Uploading ${state.file.name}...`;
+                                    setButtonState('uploading');
+                                    uploadNextChunk();
+                                }
+                            });
+                        }).catch(error => {
+                            // Restore ready state on error
+                            setButtonState('ready');
+                            MyZkToast.error('Failed to check credit balance: ' + error.message);
+                        });
+                    };
+
+                    // Suspend ongoing uploads without losing progress state.
+                    const pauseUpload = () => {
+                        if (!state.uploading) {
+                            return;
+                        }
                         state.paused = true;
                         state.uploading = false;
+                        elements.progressText.textContent = '⏸️ Upload paused.';
+                        MyZkToast.warning('Upload paused.');
                         setButtonState('paused');
-                    }
-                };
+                    };
 
-                // Ask the backend to merge all uploaded chunks into a single file.
-                const mergeChunks = async () => {
-                    setButtonState('merging');
+                    // Resume uploads after a pause by continuing from the current chunk.
+                    const resumeUpload = () => {
+                        if (!state.file) {
+                            return;
+                        }
+                        state.paused = false;
+                        state.uploading = true;
+                        elements.progressText.textContent = '▶️ Upload resumed...';
+                        MyZkToast.info('Upload resumed...');
+                        setButtonState('uploading');
+                        uploadNextChunk();
+                    };
 
-                    const formData = new FormData();
-                    formData.append('upload_id', state.uploadId);
-                    formData.append('filename', state.file.name);
-                    formData.append('total_chunks', state.totalChunks);
-                    formData.append('source_type', elements.sourceInput.value);
+                    // Create a DOM fragment describing a single imagery record.
+                    const renderImageryCard = (item) => {
+                        const template = elements.cardTemplate;
+                        if (!template?.content) {
+                            return null;
+                        }
 
-                    // Check if user has enough credits to determine processing status
-                    const creditCheck = await checkUserCredits();
-                    if (!creditCheck.hasCredits) {
-                        formData.append('skip_processing', 'true');
-                    }
+                        const fragment = template.content.cloneNode(true);
+                        const card = fragment.querySelector('.imagery-card');
+                        if (!card) {
+                            return null;
+                        }
 
-                    try {
-                        const response = await fetch(endpoints.merge, {
-                            method: 'POST',
-                            headers: {
-                                'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                        const formatLabel = (item.format || '').slice(0, 3).toUpperCase() || 'N/A';
+                        card.querySelector('.imagery-format').textContent = formatLabel;
+                        const displayName = item.stored_name || item.original_name || 'Imagery File';
+                        card.querySelector('.imagery-name').textContent = shortenFilename(displayName, 26);
+
+                        const sizeValue = Number(item.size) || 0;
+                        const sizeMb = (sizeValue / 1024 / 1024).toFixed(2);
+                        const uploadDate = item.uploaded_at ? new Date(item.uploaded_at).toLocaleString() : '—';
+
+                        const uploadStatusKey = (item.upload_status || 'unknown').toLowerCase();
+                        const processingStatusKey = (item.processing_status || 'unknown').toLowerCase();
+
+                        const uploadStatusMap = {
+                            done: {
+                                label: 'Uploaded',
+                                className: 'text-success'
                             },
-                            body: formData
-                        });
+                            merging: {
+                                label: 'Finalising Upload',
+                                className: 'text-warning'
+                            },
+                            pending: {
+                                label: 'Awaiting Merge',
+                                className: 'text-warning'
+                            },
+                            failed: {
+                                label: 'Upload Failed',
+                                className: 'text-red-500'
+                            },
+                        };
 
-                        const result = await response.json();
-                        if (!response.ok || !result.success) {
-                            throw new Error(result.message || 'Failed to queue merge on server.');
-                        }
+                        const processingStatusMap = {
+                            completed: {
+                                label: 'Processing Complete',
+                                className: 'text-success'
+                            },
+                            processing: {
+                                label: 'Processing',
+                                className: 'text-warning'
+                            },
+                            waiting: {
+                                label: 'Queued for Processing',
+                                className: 'text-warning'
+                            },
+                            queued: {
+                                label: 'Queued',
+                                className: 'text-warning'
+                            },
+                            skip: {
+                                label: 'Processing Skipped',
+                                className: 'text-foreground/60'
+                            },
+                            error: {
+                                label: 'Processing Failed',
+                                className: 'text-red-500'
+                            },
+                        };
 
-                        elements.progressBar.style.width = '100%';
-                        elements.progressText.textContent = `✅ ${result.message || 'Upload received. Finalising in background.'}`;
-                        MyZkToast.success('File received! Finalising in the background.');
-                        setButtonState('completed');
-                        if (result.data?.currentCredits !== undefined) {
-                            $('#current-myCredits').text(formatNumber(result.data.currentCredits, 2));
-                        }
-                        await loadMyData();
-                        scheduleAutoReset();
-                    } catch (error) {
-                        elements.progressText.textContent = `❌ Error: ${error.message}`;
-                        MyZkToast.error(error.message || 'Server error while scheduling merge.');
-                        setButtonState('error');
-                        scheduleAutoReset();
-                    }
-                };
+                        const uploadStatusInfo = uploadStatusMap[uploadStatusKey] || {
+                            label: uploadStatusKey.charAt(0).toUpperCase() + uploadStatusKey.slice(1),
+                            className: 'text-foreground/60',
+                        };
 
-                // After finishing, reset the UI back to idle after a short delay.
-                const scheduleAutoReset = () => {
-                    setTimeout(() => {
-                        resetState();
-                        resetUI();
-                        setButtonState('idle');
-                    }, config.autoResetDelay);
-                };
+                        const processingStatusInfo = processingStatusMap[processingStatusKey] || {
+                            label: processingStatusKey.charAt(0).toUpperCase() + processingStatusKey.slice(1),
+                            className: 'text-foreground/60',
+                        };
 
-                // Validate prerequisites and kick off the chunk upload loop.
-                const startUpload = () => {
-                    if (!state.file) {
-                        MyZkToast.warning('Please select a file first!');
-                        return;
-                    }
+                        const meta = `${sizeMb} MB • ${uploadDate} • <span class="imagery-status font-semibold ${uploadStatusInfo.className}">${uploadStatusInfo.label}</span> • <span class="imagery-status font-semibold ${processingStatusInfo.className}">${processingStatusInfo.label}</span>`;
+                        card.querySelector('.imagery-meta').innerHTML = meta;
 
-                    // Show loading state on start button while checking credits
-                    setButtonState('loading');
+                        const viewBtn = card.querySelector('.view-btn');
+                        viewBtn?.addEventListener('click', () => viewImagery(item));
 
-                    // Check user credits before proceeding
-                    checkUserCredits().then(res => {
-                        // Restore ready state if user has credits
-                        setButtonState('ready');
-                        $('#current-myCredits').text(formatNumber(res.currentCredits, 2));
-
-                        // Show confirmation modal before starting upload
-                        ZkPopAlert.show({
-                            message: `${res.hasCredits ? `This upload will cost ${res.requiredCredits} credit points for processing imagery. Do you want to proceed?` : `Insufficient credit points for processing. You need ${res.requiredCredits} credits. You can still upload the file, but processing will be skipped. Please purchase more credits to continue processing.`}`,
-                            icon: '<i class="ri-upload-cloud-2-line text-2xl text-primary"></i>',
-                            confirmClass: "focus:ring-primary/80 rounded-md text-sm px-2.5 py-1.5 bg-primary text-primary-foreground border border-primary hover:bg-primary/80 focus:outline-none focus:ring-primary",
-                            confirmText: "Yes, Upload",
-                            cancelText: "Cancel",
-                            onConfirm: () => {
-                                state.uploadId = generateUploadId();
-                                state.totalChunks = Math.ceil(state.file.size / config.chunkSize);
-                                state.currentChunk = 0;
-                                state.uploadedBytes = 0;
-                                state.paused = false;
-                                state.uploading = true;
-                                state.startTime = performance.now();
-
-                                MyZkToast.info('🚀 Upload started...');
-                                elements.progressText.textContent = `🚀 Uploading ${state.file.name}...`;
-                                setButtonState('uploading');
-                                uploadNextChunk();
-                            }
-                        });
-                    }).catch(error => {
-                        // Restore ready state on error
-                        setButtonState('ready');
-                        MyZkToast.error('Failed to check credit balance: ' + error.message);
-                    });
-                };
-
-                // Function to check user credits
-                const checkUserCredits = async () => {
-                    const response = await fetch('{{ route('user.credits.check') }}');
-                    const result = await response.json();
-
-                    if (!result.success) {
-                        MyZkToast.error(result.message || 'Failed to check credit balance.');
-                        return false;
-                    }
-
-                    const currentCredits = parseFloat(formatNumber(result.credits, 2));
-                    const requiredCredits = config.imageryProcessingCost || 10; // Default to 10 if not set
-
-                    return new Promise((resolve) => {
-                        resolve(data = {
-                            hasCredits: currentCredits >= requiredCredits,
-                            currentCredits: currentCredits,
-                            requiredCredits: requiredCredits
-                        });
-                    });
-                };
-
-                // Suspend ongoing uploads without losing progress state.
-                const pauseUpload = () => {
-                    if (!state.uploading) {
-                        return;
-                    }
-                    state.paused = true;
-                    state.uploading = false;
-                    elements.progressText.textContent = '⏸️ Upload paused.';
-                    MyZkToast.warning('Upload paused.');
-                    setButtonState('paused');
-                };
-
-                // Resume uploads after a pause by continuing from the current chunk.
-                const resumeUpload = () => {
-                    if (!state.file) {
-                        return;
-                    }
-                    state.paused = false;
-                    state.uploading = true;
-                    elements.progressText.textContent = '▶️ Upload resumed...';
-                    MyZkToast.info('Upload resumed...');
-                    setButtonState('uploading');
-                    uploadNextChunk();
-                };
-
-                // Create a DOM fragment describing a single imagery record.
-                const renderImageryCard = (item) => {
-                    const template = elements.cardTemplate;
-                    if (!template?.content) {
-                        return null;
-                    }
-
-                    const fragment = template.content.cloneNode(true);
-                    const card = fragment.querySelector('.imagery-card');
-                    if (!card) {
-                        return null;
-                    }
-
-                    const formatLabel = (item.format || '').slice(0, 3).toUpperCase() || 'N/A';
-                    card.querySelector('.imagery-format').textContent = formatLabel;
-                    const displayName = item.stored_name || item.original_name || 'Imagery File';
-                    card.querySelector('.imagery-name').textContent = shortenFilename(displayName, 25);
-
-                    const sizeValue = Number(item.size) || 0;
-                    const sizeMb = (sizeValue / 1024 / 1024).toFixed(2);
-                    const uploadDate = item.uploaded_at ? new Date(item.uploaded_at).toLocaleString() : '—';
-
-                    const uploadStatusKey = (item.upload_status || 'unknown').toLowerCase();
-                    const processingStatusKey = (item.processing_status || 'unknown').toLowerCase();
-
-                    const uploadStatusMap = {
-                        done: {
-                            label: 'Uploaded',
-                            className: 'text-success'
-                        },
-                        merging: {
-                            label: 'Finalising Upload',
-                            className: 'text-warning'
-                        },
-                        pending: {
-                            label: 'Awaiting Merge',
-                            className: 'text-warning'
-                        },
-                        failed: {
-                            label: 'Upload Failed',
-                            className: 'text-red-500'
-                        },
+                        return fragment;
                     };
 
-                    const processingStatusMap = {
-                        completed: {
-                            label: 'Processing Complete',
-                            className: 'text-success'
-                        },
-                        processing: {
-                            label: 'Processing',
-                            className: 'text-warning'
-                        },
-                        waiting: {
-                            label: 'Queued for Processing',
-                            className: 'text-warning'
-                        },
-                        queued: {
-                            label: 'Queued',
-                            className: 'text-warning'
-                        },
-                        skip: {
-                            label: 'Processing Skipped',
-                            className: 'text-foreground/60'
-                        },
-                        error: {
-                            label: 'Processing Failed',
-                            className: 'text-red-500'
-                        },
-                    };
-
-                    const uploadStatusInfo = uploadStatusMap[uploadStatusKey] || {
-                        label: uploadStatusKey.charAt(0).toUpperCase() + uploadStatusKey.slice(1),
-                        className: 'text-foreground/60',
-                    };
-
-                    const processingStatusInfo = processingStatusMap[processingStatusKey] || {
-                        label: processingStatusKey.charAt(0).toUpperCase() + processingStatusKey.slice(1),
-                        className: 'text-foreground/60',
-                    };
-
-                    const meta = `${sizeMb} MB • ${uploadDate} • <span class="imagery-status font-semibold ${uploadStatusInfo.className}">${uploadStatusInfo.label}</span> • <span class="imagery-status font-semibold ${processingStatusInfo.className}">${processingStatusInfo.label}</span>`;
-                    card.querySelector('.imagery-meta').innerHTML = meta;
-
-                    const viewBtn = card.querySelector('.view-btn');
-                    viewBtn?.addEventListener('click', () => viewImagery(item));
-
-                    return fragment;
-                };
-
-                // Retrieve the user's imagery list and render it into the panel.
-                const loadMyData = async () => {
-                    const container = elements.myDataContainer;
-                    container.innerHTML = `
+                    // Retrieve the user's imagery list and render it into the panel.
+                    const loadMyData = async () => {
+                        const container = elements.myDataContainer;
+                        container.innerHTML = `
                     <div class="flex justify-center py-4">
                         <p class="text-sm text-foreground/60 animate-pulse">Loading your imagery list...</p>
                     </div>
-                `;
+                    `;
 
-                    try {
-                        const response = await fetch(endpoints.list);
-                        const payload = await response.json();
-                        if (!response.ok || !payload.success) {
-                            throw new Error(payload.message || 'Failed to fetch imagery data.');
-                        }
-
-                        const data = payload.data || [];
-                        container.innerHTML = '';
-
-                        if (data.length === 0) {
-                            container.innerHTML = '<p class="text-sm text-gray-400 text-center py-4">No imagery uploaded yet.</p>';
-                            return;
-                        }
-
-                        data.forEach((item) => {
-                            const fragment = renderImageryCard(item);
-                            if (fragment) {
-                                container.appendChild(fragment);
+                        try {
+                            const response = await fetch(endpoints.list);
+                            const payload = await response.json();
+                            if (!response.ok || !payload.success) {
+                                throw new Error(payload.message || 'Failed to fetch imagery data.');
                             }
-                        });
-                    } catch (error) {
-                        container.innerHTML = `
+
+                            const data = payload.data || [];
+                            container.innerHTML = '';
+
+                            if (data.length === 0) {
+                                container.innerHTML = '<p class="text-sm text-gray-400 text-center py-4">No imagery uploaded yet.</p>';
+                                return;
+                            }
+
+                            data.forEach((item) => {
+                                const fragment = renderImageryCard(item);
+                                if (fragment) {
+                                    container.appendChild(fragment);
+                                }
+                            });
+                        } catch (error) {
+                            container.innerHTML = `
                         <div class="text-sm text-red-500 bg-red-50 border border-red-200 rounded p-3">
                             ❌ ${error.message}
                         </div>
                     `;
+                        }
+                    };
+
+                    // Attach DOM event listeners for file and control buttons.
+                    const bindEventListeners = () => {
+                        elements.fileInput.addEventListener('change', handleFileChange);
+                        elements.startBtn.addEventListener('click', startUpload);
+                        elements.pauseBtn.addEventListener('click', pauseUpload);
+                        elements.resumeBtn.addEventListener('click', resumeUpload);
+                    };
+
+                    // Bootstrap the uploader module and fetch initial server data.
+                    const initialise = () => {
+                        ensureAppNamespace();
+                        window.setButtonState = setButtonState;
+                        window.AppMap.uploader.reload = loadMyData;
+
+                        resetState();
+                        resetUI();
+                        setButtonState('idle');
+                        bindEventListeners();
+                        loadMyData();
+                    };
+
+                    if (document.readyState === 'loading') {
+                        document.addEventListener('DOMContentLoaded', initialise, {
+                            once: true
+                        });
+                    } else {
+                        initialise();
                     }
-                };
-
-                // Attach DOM event listeners for file and control buttons.
-                const bindEventListeners = () => {
-                    elements.fileInput.addEventListener('change', handleFileChange);
-                    elements.startBtn.addEventListener('click', startUpload);
-                    elements.pauseBtn.addEventListener('click', pauseUpload);
-                    elements.resumeBtn.addEventListener('click', resumeUpload);
-                };
-
-                // Bootstrap the uploader module and fetch initial server data.
-                const initialise = () => {
-                    ensureAppNamespace();
-                    window.setButtonState = setButtonState;
-                    window.AppMap.uploader.reload = loadMyData;
-
-                    resetState();
-                    resetUI();
-                    setButtonState('idle');
-                    bindEventListeners();
-                    loadMyData();
-                };
-
-                if (document.readyState === 'loading') {
-                    document.addEventListener('DOMContentLoaded', initialise, {
-                        once: true
-                    });
-                } else {
-                    initialise();
-                }
-            })();
-        </script>
+                })
+                ();
+            </script>
+        @endauth
     @endpush
     @push('javascript')
         <script>
@@ -1771,7 +1773,7 @@
 
                 const config = {
                     endpoint: 'https://catalogue.dataspace.copernicus.eu/resto/api/collections/Sentinel2/search.json',
-                    defaultMonthsBack: 1,
+                    defaultMonthsBack: 2,
                     defaultCloudCover: 40,
                     defaultLatitude: -1.24536,
                     defaultLongitude: 114.54535,
@@ -1783,7 +1785,8 @@
                     defaultStartIso: '',
                     defaultEndIso: '',
                     token: sanitizeToken(panelEl?.dataset?.sentinelToken ?? ''),
-                    tokenConfigured: (panelEl?.dataset?.sentinelCredentials ?? '').toLowerCase() === 'true'
+                    tokenConfigured: (panelEl?.dataset?.sentinelCredentials ?? '').toLowerCase() === 'true',
+                    processUrl: panelEl?.dataset?.sentinelProcessUrl || '',
                 };
 
                 const ignoredDownloadKeywords = ['quicklook', 'thumbnail', 'thumb', 'overview', 'browse', 'preview', 'allorigins'];
@@ -2953,6 +2956,86 @@
                     }
                 };
 
+                const queueSentinelProcessing = async (options = {}) => {
+                    const {
+                        button = null,
+                            feature = null,
+                            title = '',
+                            productId = null,
+                            collection = null,
+                            acquisition = null,
+                            downloadUrl = '',
+                            downloadBase = null,
+                            downloadFilename = null
+                    } = options;
+
+                    if (!state.processUrl) {
+                        window.MyZkToast?.error?.('Processing endpoint is unavailable. Please try again later.');
+                        return;
+                    }
+
+                    if (!downloadUrl) {
+                        window.MyZkToast?.error?.('Unable to determine the Sentinel download URL.');
+                        return;
+                    }
+
+                    const props = feature?.properties ?? {};
+                    const payload = {
+                        title: title || productId || props.title || feature?.id || 'Sentinel-2 Scene',
+                        product_id: productId || props.productIdentifier || feature?.id || null,
+                        collection: collection || props.collection || null,
+                        acquisition_date: acquisition || props.completionDate || props.startDate || props.endPosition || null,
+                        download_url: downloadUrl,
+                        download_base: downloadBase || null,
+                        download_filename: downloadFilename || null
+                    };
+
+                    const buttonClone = button?.cloneNode(true);
+
+                    if (button) {
+                        button.disabled = true;
+                        button.setAttribute('aria-disabled', 'true');
+                        button.dataset.processing = 'true';
+                        button.innerHTML = '<i class="ri-loader-4-line animate-spin"></i> Queuing...';
+                    }
+
+                    try {
+                        const response = await fetch(state.processUrl, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/json',
+                                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+                            },
+                            body: JSON.stringify(payload)
+                        });
+
+                        const result = await response.json().catch(() => ({}));
+
+                        if (response.ok) {
+                            $('#current-myCredits')?.text(formatNumber(result?.data?.current_credits, 2));
+                            const message = result?.message || 'Sentinel scene queued for processing.';
+                            window.MyZkToast?.success?.(message);
+                            if (typeof window.AppMap?.uploader?.reload === 'function') {
+                                window.AppMap.uploader.reload();
+                            }
+                        } else {
+                            const errorMessage = result?.message || 'Failed to queue Sentinel processing. Please try again later.';
+                            window.MyZkToast?.error?.(errorMessage);
+                        }
+                    } catch (error) {
+                        console.error('Failed to queue Sentinel processing', error);
+                        window.MyZkToast?.error?.('Unexpected error while starting Sentinel processing.');
+                    } finally {
+                        if (button) {
+                            button.disabled = false;
+                            button.setAttribute('aria-disabled', 'false');
+                            delete button.dataset.processing;
+                            button.innerHTML = buttonClone.innerHTML;
+                        }
+                    }
+                };
+
                 // Create a UI card summarizing a single Sentinel catalogue feature.
                 const renderCard = (feature) => {
                     if (!templateEl?.content) return null;
@@ -2967,6 +3050,7 @@
                     const detailEl = clone.querySelector('[data-sentinel-details]');
                     const previewButton = clone.querySelector('[data-sentinel-preview]');
                     const downloadButton = clone.querySelector('[data-sentinel-download]');
+                    const processButton = clone.querySelector('[data-sentinel-process]');
                     const thumbnailImg = clone.querySelector('[data-sentinel-thumbnail]');
                     const thumbnailPlaceholder = clone.querySelector('[data-sentinel-placeholder]');
 
@@ -3030,6 +3114,45 @@
                             delete downloadButton.dataset.downloadBase;
                             downloadButton.tabIndex = -1;
                         }
+                    }
+
+                    if (processButton) {
+                        processButton.addEventListener('click', () => {
+                            const buttonClone = processButton.cloneNode(true);
+                            processButton.disabled = true;
+                            processButton.innerHTML = '<i class="ri-loader-4-line animate-spin"></i> Processing...';
+                            // Check user credits before proceeding
+                            checkUserCredits().then(res => {
+                                $('#current-myCredits').text(formatNumber(res.currentCredits, 2));
+                                // Show confirmation modal before starting upload
+                                ZkPopAlert.show({
+                                    message: `${res.hasCredits ? `This action will cost ${res.requiredCredits} credit points for processing imagery. Do you want to proceed?` : `Insufficient credit points for processing. You need ${res.requiredCredits} credits. You can still upload the file, but processing will be skipped. Please purchase more credits to continue processing.`}`,
+                                    icon: '<i class="ri-cpu-line text-2xl text-primary"></i>',
+                                    confirmClass: "focus:ring-primary/80 rounded-md text-sm px-2.5 py-1.5 bg-primary text-primary-foreground border border-primary hover:bg-primary/80 focus:outline-none focus:ring-primary",
+                                    confirmText: "Yes, Continue",
+                                    cancelText: "Cancel",
+                                    onConfirm: () => {
+                                        queueSentinelProcessing({
+                                            button: processButton,
+                                            feature,
+                                            title: titleText,
+                                            productId,
+                                            collection: props.collection || null,
+                                            acquisition: acquisitionDate,
+                                            downloadUrl: downloadUrlWithToken,
+                                            downloadBase: downloadUrl,
+                                            downloadFilename
+                                        });
+                                    }
+                                });
+                            }).catch(error => {
+                                // Restore ready state on error
+                                MyZkToast.error('Failed to check credit balance: ' + error.message);
+                            }).finally(() => {
+                                processButton.disabled = false;
+                                processButton.innerHTML = buttonClone.innerHTML;
+                            });
+                        });
                     }
 
                     if (thumbnailImg) {
