@@ -518,6 +518,7 @@ def write_multispectral(
                     width=profile["width"],
                     height=profile["height"],
                     resampling=resampling,
+                    warp_mem_limit = 256*1024*1024
                 ) as vrt:
                     for _, window in dst.block_windows(out_index):
                         data = vrt.read(1, window=window, out_dtype=profile["dtype"])
