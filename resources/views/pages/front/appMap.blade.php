@@ -86,7 +86,7 @@
         <aside class="bg-background hidden shadow-lg md:flex md:w-20 md:flex-col md:items-center md:py-4">
             <nav class="flex flex-1 flex-col items-center space-y-6">
                 <button class="sidebar-btn hover:text-primary flex flex-col items-center text-xs" onclick="showPanel('data-panel', this)">
-                    <span class="text-xl">🛰️</span>
+                    <span class="text-xl">🗺️</span>
                     <span>My Data</span>
                 </button>
                 <button class="sidebar-btn hover:text-primary flex flex-col items-center text-xs" onclick="showPanel('uploads-panel', this)">
@@ -107,6 +107,7 @@
                 </button>
             </nav>
             <div class="text-foreground/70 mt-auto text-xs">© 2025</div>
+            <div class="text-foreground/70 mt-auto text-xs">v0.1.156</div>
         </aside>
 
         <!-- MOBILE SIDEBAR HORIZONTAL -->
@@ -117,7 +118,7 @@
 
             <div class="flex space-x-2 overflow-x-hidden scroll-smooth" id="scroll-container">
                 <button class="sidebar-btn bg-neutral inline-flex items-center space-x-2 rounded-full border border-gray-300 px-3 py-1 text-sm font-medium" onclick="showPanel('data-panel', this)">
-                    <span class="text-xl">🛰️</span>
+                    <span class="text-xl">🗺️</span>
                     <span>My Data</span>
                 </button>
                 <button class="sidebar-btn bg-neutral inline-flex items-center space-x-2 rounded-full border border-gray-300 px-3 py-1 text-sm font-medium" onclick="showPanel('uploads-panel', this)">
@@ -150,22 +151,24 @@
             <!-- ========== MY DATA PANEL ========== -->
             <section class="flex hidden h-full flex-col shadow-xl" id="data-panel">
                 <div class="bg-background border-foreground/10 sticky top-0 z-20 flex items-center justify-between border-b p-2">
-                    <h2 class="text-lg font-bold">📡 My Data Imagery</h2>
+                    <h2 class="text-lg font-bold">🗺️ My Data Imagery</h2>
                     <button class="hover:bg-foreground/20 bg-foreground/10 rounded px-2 py-1 text-sm" onclick="closePanels()">✖</button>
                 </div>
 
                 <!-- content -->
                 <div class="panel-content flex-1 space-y-3 overflow-y-auto p-3">
                     <div class="space-y-2">
-                        <div class="flex items-center justify-between space-x-1">
-                            <x-button-primary class="px-2! py-1!" href="{{ route('admin.imagery.index') }}" size="small" variant="outline">
-                                <i class="ri-dashboard-line"></i>
-                                <span class="ml-1">Go to Dashboard</span>
-                            </x-button-primary>
-                            <button class="hover:bg-foreground/20 bg-foreground/10 rounded px-2 py-1 text-sm" onclick="window.AppMap.uploader.reload()">
-                                <i class="ri-refresh-line"></i>
-                            </button>
-                        </div>
+                        @auth
+                            <div class="flex items-center justify-between space-x-1">
+                                <x-button-primary class="px-2! py-1!" href="{{ route('admin.imagery.index') }}" size="small" variant="outline">
+                                    <i class="ri-dashboard-line"></i>
+                                    <span class="ml-1">Go to Dashboard</span>
+                                </x-button-primary>
+                                <button class="hover:bg-foreground/20 bg-foreground/10 rounded px-2 py-1 text-sm" onclick="window.AppMap.uploader.reload()">
+                                    <i class="ri-refresh-line"></i>
+                                </button>
+                            </div>
+                        @endauth
                         <div class="space-y-2">
                             @auth
                                 <div class="space-y-2" id="myDataContainer">
@@ -239,60 +242,132 @@
                 </div>
 
                 <div class="panel-content flex-1 space-y-1 overflow-y-auto p-2">
-                    <form class="bg-background/60 border-foreground/10 rounded-lg border p-2 shadow-sm" id="sentinelFilterForm">
-                        <div class="mb-1.5 flex items-center justify-between">
-                            <h3 class="text-foreground text-sm font-semibold">Filter Collections</h3>
-                            <button class="text-foreground/60 hover:text-primary text-xs font-medium transition" id="sentinelFilterResetButton" type="button">
-                                Reset
-                            </button>
+                    <!-- Tab Navigation -->
+                    <div class="flex">
+                        <div class="bg-foreground/10 hover:bg-foreground/20 flex rounded-lg p-1 transition">
+                            <nav class="flex gap-x-1" role="tablist" aria-label="Tabs" aria-orientation="horizontal">
+                                <button class="hs-tab-active:bg-neutral hs-tab-active:text-foreground/80 text-foreground/50 hover:text-foreground/80 focus:outline-hidden focus:text-foreground/80 hover:hover:text-primary active inline-flex items-center gap-x-2 rounded-lg bg-transparent px-2 py-1 text-sm font-medium disabled:pointer-events-none disabled:opacity-50" id="sentinel-collection-tab" data-hs-tab="#sentinel-collection-panel" type="button" role="tab" aria-selected="true" aria-controls="sentinel-collection-panel">
+                                    Data Collection (Scene)
+                                </button>
+                                <button class="hs-tab-active:bg-neutral hs-tab-active:text-foreground/80 text-foreground/50 hover:text-foreground/80 focus:outline-hidden focus:text-foreground/80 hover:hover:text-primary inline-flex items-center gap-x-2 rounded-lg bg-transparent px-2 py-1 text-sm font-medium disabled:pointer-events-none disabled:opacity-50" id="sentinel-clip-tab" data-hs-tab="#sentinel-clip-panel" type="button" role="tab" aria-selected="false" aria-controls="sentinel-clip-panel">
+                                    Imagery by Clip
+                                </button>
+                            </nav>
                         </div>
-                        <div class="flex flex-col space-y-1">
-                            <div class="grid grid-cols-2 gap-1">
-                                <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="sentinelCloudFilter">
-                                    <span>Max Cloud Cover (%)</span>
-                                    <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-1.5 py-0.5 text-sm focus:outline-none focus:ring" id="sentinelCloudFilter" name="cloud-cover" type="number" value="40" max="100" min="0" placeholder="e.g. 30" step="1" />
-                                </label>
-                                <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="sentinelProductLevel">
-                                    <span>Product Level</span>
-                                    <select class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-1.5 py-0.5 text-sm focus:outline-none focus:ring" id="sentinelProductLevel" name="product-level">
-                                        <option value="S2MSI2A" selected>Level-2A (Surface Reflectance)</option>
-                                        <option value="S2MSI1C">Level-1C (Top-of-Atmosphere)</option>
-                                    </select>
-                                </label>
-                            </div>
-                            <div class="grid grid-cols-1 gap-1 sm:grid-cols-2">
-                                <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="sentinelStartDate">
-                                    <span>Start Date</span>
-                                    <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-1.5 py-0.5 text-sm focus:outline-none focus:ring" id="sentinelStartDate" name="start-date" type="date" autocomplete="off" />
-                                </label>
-                                <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="sentinelEndDate">
-                                    <span>End Date</span>
-                                    <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-1.5 py-0.5 text-sm focus:outline-none focus:ring" id="sentinelEndDate" name="end-date" type="date" autocomplete="off" />
-                                </label>
-                            </div>
-                            <div class="grid grid-cols-1 gap-1">
-                                <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="sentinelLatFilter">
-                                    <span>Latitude</span>
-                                    <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-1.5 py-0.5 text-sm focus:outline-none focus:ring" id="sentinelLatFilter" name="latitude" type="number" value="-1.24536" max="90" min="-90" placeholder="e.g. -6.2" step="0.000001" />
-                                </label>
-                                <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="sentinelLonFilter">
-                                    <span>Longitude</span>
-                                    <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-1.5 py-0.5 text-sm focus:outline-none focus:ring" id="sentinelLonFilter" name="longitude" type="number" value="114.54535" max="180" min="-180" placeholder="e.g. 106.8" step="0.000001" />
-                                </label>
-                            </div>
-                        </div>
-                        <p class="text-foreground/60 text-[11px]">Provide both latitude and longitude to focus on a specific location, or clear both fields to search globally.</p>
-                        <div class="mt-1 flex flex-wrap gap-1.5">
-                            <button class="bg-primary hover:bg-primary/90 text-background inline-flex items-center justify-center rounded-lg px-3 py-1.5 text-xs font-semibold transition" type="submit">
-                                Apply Filters
-                            </button>
-                        </div>
-                    </form>
-
-                    <div class="text-foreground/70 mt-4 text-sm" id="sentinelCollectionStatus">
-                        Loading latest Sentinel-2 acquisitions...
                     </div>
-                    <div class="mt-2 space-y-2" id="sentinelCollectionList"></div>
+
+                    <!-- Data Tab Content -->
+                    <div class="tab-content" id="sentinel-collection-panel" role="tabpanel" aria-labelledby="sentinel-collection-tab">
+                        <form class="bg-background/60 border-foreground/10 rounded-lg border p-2 shadow-sm" id="sentinelFilterForm">
+                            <div class="mb-1.5 flex items-center justify-between">
+                                <h3 class="text-foreground text-sm font-semibold">Filter Collections</h3>
+                                <button class="text-foreground/60 hover:text-primary text-xs font-medium transition" id="sentinelFilterResetButton" type="button">
+                                    Reset
+                                </button>
+                            </div>
+                            <div class="flex flex-col space-y-1">
+                                <div class="grid grid-cols-2 gap-1">
+                                    <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="sentinelCloudFilter">
+                                        <span>Max Cloud Cover (%)</span>
+                                        <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-1.5 py-0.5 text-sm focus:outline-none focus:ring" id="sentinelCloudFilter" name="cloud-cover" type="number" value="40" max="100" min="0" placeholder="e.g. 30" step="1" />
+                                    </label>
+                                    <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="sentinelProductLevel">
+                                        <span>Product Level</span>
+                                        <select class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-1.5 py-0.5 text-sm focus:outline-none focus:ring" id="sentinelProductLevel" name="product-level">
+                                            <option value="S2MSI2A" selected>Level-2A (Surface Reflectance)</option>
+                                            <option value="S2MSI1C">Level-1C (Top-of-Atmosphere)</option>
+                                        </select>
+                                    </label>
+                                </div>
+                                <div class="grid grid-cols-1 gap-1 sm:grid-cols-2">
+                                    <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="sentinelStartDate">
+                                        <span>Start Date</span>
+                                        <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-1.5 py-0.5 text-sm focus:outline-none focus:ring" id="sentinelStartDate" name="start-date" type="date" autocomplete="off" />
+                                    </label>
+                                    <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="sentinelEndDate">
+                                        <span>End Date</span>
+                                        <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-1.5 py-0.5 text-sm focus:outline-none focus:ring" id="sentinelEndDate" name="end-date" type="date" autocomplete="off" />
+                                    </label>
+                                </div>
+                                <div class="grid grid-cols-1 gap-1">
+                                    <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="sentinelLatFilter">
+                                        <span>Latitude</span>
+                                        <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-1.5 py-0.5 text-sm focus:outline-none focus:ring" id="sentinelLatFilter" name="latitude" type="number" value="-1.24536" max="90" min="-90" placeholder="e.g. -6.2" step="0.000001" />
+                                    </label>
+                                    <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="sentinelLonFilter">
+                                        <span>Longitude</span>
+                                        <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-1.5 py-0.5 text-sm focus:outline-none focus:ring" id="sentinelLonFilter" name="longitude" type="number" value="114.54535" max="180" min="-180" placeholder="e.g. 106.8" step="0.000001" />
+                                    </label>
+                                </div>
+                            </div>
+                            <p class="text-foreground/60 text-[11px]">Provide both latitude and longitude to focus on a specific location, or clear both fields to search globally.</p>
+                            <div class="mt-1 flex flex-wrap gap-1.5">
+                                <button class="bg-primary hover:bg-primary/90 text-background inline-flex items-center justify-center rounded-lg px-3 py-1.5 text-xs font-semibold transition" type="submit">
+                                    Apply Filters
+                                </button>
+                            </div>
+                        </form>
+
+                        <div class="text-foreground/70 mt-4 text-sm" id="sentinelCollectionStatus">
+                            Loading latest Sentinel-2 acquisitions...
+                        </div>
+                        <div class="mt-2 space-y-2" id="sentinelCollectionList"></div>
+                    </div>
+
+                    <!-- Clip Tab Content -->
+                    <div class="tab-content hidden" class="hidden" id="sentinel-clip-panel" role="tabpanel" aria-labelledby="sentinel-clip-tab">
+                        <div class="bg-primary/10 space-y-2 rounded-lg p-2">
+                            <h4 class="text-foreground flex items-center text-lg font-semibold">
+                                <i class="ri-shopping-bag-line text-primary mr-2"></i>
+                                Clip from Our Collection
+                            </h4>
+                            <p class="text-foreground/80 text-sm">
+                                Don't have satellite data? Purchase clipped high-resolution imagery directly from our platform, captured by leading satellite constellations.
+                            </p>
+
+                            <div class="bg-primary/20 rounded-lg p-2">
+                                <h5 class="text-foreground mb-2 font-medium">What You Get</h5>
+                                <ul class="text-foreground/70 space-y-1 text-sm">
+                                    <li class="flex items-start">
+                                        <i class="ri-check-line text-success mr-2 mt-0.5 text-xs"></i>
+                                        <span>Access to daily updated satellite imagery</span>
+                                    </li>
+                                    <li class="flex items-start">
+                                        <i class="ri-check-line text-success mr-2 mt-0.5 text-xs"></i>
+                                        <span>Global coverage</span>
+                                    </li>
+                                    <li class="flex items-start">
+                                        <i class="ri-check-line text-success mr-2 mt-0.5 text-xs"></i>
+                                        <span>Automatic PRI analysis and health reports included</span>
+                                    </li>
+                                </ul>
+                            </div>
+
+                            <div class="bg-primary/20 rounded-lg p-2">
+                                <h5 class="text-foreground mb-2 font-medium">Satellite Sources</h5>
+                                <div class="grid grid-cols-2 gap-2 text-sm">
+                                    <div class="flex items-center">
+                                        <i class="ri-satellite-line text-success mr-2"></i>
+                                        <span>Sentinel-2</span>
+                                    </div>
+                                    {{-- <div class="flex items-center">
+                                        <i class="ri-satellite-line text-success mr-2"></i>
+                                        <span>Landsat 8/9</span>
+                                    </div>
+                                    <div class="flex items-center">
+                                        <i class="ri-satellite-line text-success mr-2"></i>
+                                        <span>Quicksat</span>
+                                    </div> --}}
+                                </div>
+                            </div>
+                            <div class="">
+                                <x-button-primary id="buySatelliteBtn" type="button" size="small">
+                                    <i class="ri-shopping-cart-line"></i>
+                                    <span>Buy Satellite Imagery</span>
+                                </x-button-primary>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="bg-background border-foreground/10 sticky bottom-0 border-t p-3">
@@ -331,6 +406,11 @@
                                     <i class="ri-cpu-line"></i>
                                     <span>Process Imagery</span>
                                 </button>
+                            @else
+                                <button class="bg-success/10 text-success enabled:hover:bg-success/20 inline-flex hidden items-center space-x-1 rounded-lg px-2 py-1 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-60" type="button" title="Log in to process imagery" disabled>
+                                    <i class="ri-cpu-line"></i>
+                                    <span>Process This Imagery</span>
+                                </button>
                             @endauth
                             <button class="enabled:hover:bg-primary/10 text-primary border-primary/40 inline-flex items-center space-x-1 rounded-lg border px-2 py-1 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50" data-sentinel-preview type="button">
                                 <i class="ri-image-line"></i>
@@ -344,7 +424,7 @@
             <!-- ========== Upload PANEL ========== -->
             <section class="flex hidden h-full flex-col shadow-xl" id="uploads-panel">
                 <div class="bg-background border-foreground/10 sticky top-0 z-20 flex items-center justify-between border-b p-2">
-                    <h2 class="text-lg font-bold">⬆️ Imagery Collection</h2>
+                    <h2 class="text-lg font-bold">⬆️ Imagery Upload</h2>
                     <button class="hover:bg-foreground/20 bg-foreground/10 rounded px-2 py-1 text-sm" onclick="closePanels()">✖</button>
                 </div>
 
@@ -352,151 +432,84 @@
                 <div class="panel-content flex-1 space-y-3 overflow-y-auto p-3">
                     <div class="space-y-2">
                         @auth
-                            <!-- Tab Navigation -->
-                            <div class="flex">
-                                <div class="bg-foreground/10 hover:bg-foreground/20 flex rounded-lg p-1 transition">
-                                    <nav class="flex gap-x-1" role="tablist" aria-label="Tabs" aria-orientation="horizontal">
-                                        <button class="hs-tab-active:bg-neutral hs-tab-active:text-foreground/80 text-foreground/50 hover:text-foreground/80 focus:outline-hidden focus:text-foreground/80 hover:hover:text-primary inline-flex items-center gap-x-2 rounded-lg bg-transparent px-2 py-1 text-sm font-medium disabled:pointer-events-none disabled:opacity-50" id="buy-tab" data-hs-tab="#buy-panel" type="button" role="tab" aria-selected="false" aria-controls="buy-panel">
-                                            Buy Imagery
-                                        </button>
-                                        <button class="hs-tab-active:bg-neutral hs-tab-active:text-foreground/80 text-foreground/50 hover:text-foreground/80 focus:outline-hidden focus:text-foreground/80 hover:hover:text-primary active inline-flex items-center gap-x-2 rounded-lg bg-transparent px-2 py-1 text-sm font-medium disabled:pointer-events-none disabled:opacity-50" id="upload-tab" data-hs-tab="#upload-panel" type="button" role="tab" aria-selected="true" aria-controls="upload-panel">
-                                            Upload Imagery
-                                        </button>
-                                    </nav>
+                            <div class="bg-primary/10 space-y-2 rounded-lg p-2">
+                                <h4 class="text-foreground flex items-center text-lg font-semibold">
+                                    <i class="ri-upload-cloud-line text-primary mr-2"></i>
+                                    Upload Your Own Imagery
+                                </h4>
+                                <p class="text-foreground/80 text-sm">
+                                    Have your own satellite imagery? Upload it directly to our platform for advanced PRI analysis and crop health monitoring.
+                                </p>
+                                <p class="text-foreground/80 text-sm font-bold">Follow the instructions.</p>
+
+                                <div class="bg-primary/20 space-y-2 rounded-lg p-2">
+                                    <h5 class="text-foreground font-medium">Supported Formats</h5>
+                                    <ul class="text-foreground/70 space-y-1 text-sm">
+                                        <li class="flex items-center">
+                                            <i class="ri-check-line text-success mr-2 text-xs"></i>
+                                            <span>GeoTIFF (.tif, .tiff, .geotif)</span>
+                                        </li>
+                                        {{-- <li class="flex items-center">
+                                            <i class="ri-check-line text-success mr-2 text-xs"></i>
+                                            <span>Enhanced Compressed Wavelet (.ecw)</span>
+                                        </li>
+                                        <li class="flex items-center">
+                                            <i class="ri-check-line text-success mr-2 text-xs"></i>
+                                            <span>ZIP Archives (.zip)</span>
+                                        </li> --}}
+                                    </ul>
                                 </div>
-                            </div>
 
-                            <!-- Upload Tab Content -->
-                            <div class="tab-content" id="upload-panel" role="tabpanel" aria-labelledby="upload-tab">
-                                <div class="bg-primary/10 space-y-2 rounded-lg p-2">
-                                    <h4 class="text-foreground flex items-center text-lg font-semibold">
-                                        <i class="ri-upload-cloud-line text-primary mr-2"></i>
-                                        Upload Your Own Imagery
-                                    </h4>
-                                    <p class="text-foreground/80 text-sm">
-                                        Have your own satellite imagery? Upload it directly to our platform for advanced PRI analysis and crop health monitoring.
-                                    </p>
-
-                                    <div class="bg-primary/20 space-y-2 rounded-lg p-2">
-                                        <h5 class="text-foreground font-medium">Supported Formats</h5>
-                                        <ul class="text-foreground/70 grid grid-cols-2 gap-2 text-sm">
-                                            <li class="flex items-center">
-                                                <i class="ri-check-line text-success mr-2 text-xs"></i>
-                                                <span>GeoTIFF (.tif, .tiff)</span>
-                                            </li>
-                                            <li class="flex items-center">
-                                                <i class="ri-check-line text-success mr-2 text-xs"></i>
-                                                <span>Enhanced Compressed Wavelet (.ecw)</span>
-                                            </li>
-                                            <li class="flex items-center">
-                                                <i class="ri-check-line text-success mr-2 text-xs"></i>
-                                                <span>ZIP Archives (.zip)</span>
-                                            </li>
-                                        </ul>
-                                    </div>
-
-                                    <div class="bg-primary/20 space-y-2 rounded-lg p-2">
-                                        <h5 class="text-foreground font-medium">Compatible Sources</h5>
-                                        <ul class="text-foreground/70 space-y-1 text-sm">
-                                            <li class="flex items-start">
-                                                <i class="ri-check-line text-success mr-2 mt-0.5 text-xs"></i>
-                                                <span>Sentinel-2, Landsat, and QuickSat</span>
-                                            </li>
-                                            <li class="flex items-start">
-                                                <i class="ri-check-line text-success mr-2 mt-0.5 text-xs"></i>
-                                                <span>Get detailed plant stress analysis with our AI-powered engine</span>
-                                            </li>
-                                        </ul>
-                                    </div>
-
-                                    <div class="space-y-3">
-                                        <h5 class="text-lg font-semibold">Upload Your File</h5>
-
-                                        <!-- input form -->
-                                        <form class="space-y-2">
-                                            <x-input-label class="text-sm font-medium" for="source-type">Source Type</x-input-label>
-                                            <x-select-input class="px-2! py-1!" id="sourceType" name="source-type" required>
-                                                <option value="sentinel-2">Sentinel-2</option>
-                                                <option value="landsat">Landsat</option>
-                                                <option value="quicksat">Quicksat</option>
-                                            </x-select-input>
-                                            <x-input-error class="mt-2" :messages="$errors->get('source-type')" />
-
-                                            <x-input-label class="text-sm font-medium" for="imagery-upload">Upload your imagery file</x-input-label>
-                                            <input class="border-foreground/30 bg-neutral file:bg-foreground/10 focus:border-primary focus:ring-primary block w-full rounded-lg border text-sm shadow-sm file:me-4 file:border-0 file:px-4 file:py-2 focus:z-10 disabled:pointer-events-none disabled:opacity-50" id="fileInput" name="imagery-upload" type="file" accept=".tif,.tiff,.ecw,.zip">
-                                            <x-input-error class="mt-2" :messages="$errors->get('imagery-upload')" />
-                                        </form>
-
-                                        <!-- info file -->
-                                        <div class="text-foreground-70 mt-2 hidden text-sm" id="fileInfo"></div>
-
-                                        <!-- progress bar -->
-                                        <div class="bg-foreground/20 mt-2 h-4 w-full rounded">
-                                            <div class="bg-primary h-4 rounded" id="progressBar" style="width: 0%;"></div>
-                                        </div>
-                                        <p class="text-foreground/100 mt-1 text-sm" id="progressText">Belum ada upload.</p>
-
-                                        <!-- tombol kontrol -->
-                                        <div class="flex flex-wrap gap-2">
-                                            <x-button-primary id="startBtn" type="button" size="small">Start Upload</x-button-primary>
-                                            <x-button-danger id="pauseBtn" type="button" size="small">⏸️ Pause</x-button-danger>
-                                            <x-button-secondary id="resumeBtn" type="button" size="small">▶️ Resume</x-button-secondary>
-                                        </div>
-                                    </div>
+                                <div class="bg-primary/20 space-y-2 rounded-lg p-2">
+                                    <h5 class="text-foreground font-medium">Compatible Sources</h5>
+                                    <ul class="text-foreground/70 space-y-1 text-sm">
+                                        <li class="flex items-start">
+                                            <i class="ri-check-line text-success mr-2 mt-0.5 text-xs"></i>
+                                            <span>Sentinel-2 [band order: 1, 2, 3, 4, 5, 6, 7, 8, 8A, 9, 11, 12]</span>
+                                        </li>
+                                        {{-- <li class="flex items-start">
+                                            <i class="ri-check-line text-success mr-2 mt-0.5 text-xs"></i>
+                                            <span>Landsat 8/7</span>
+                                        </li> --}}
+                                        <li class="flex items-start">
+                                            <i class="ri-check-line text-success mr-2 mt-0.5 text-xs"></i>
+                                            <span>Get detailed plant stress analysis with our AI-powered engine</span>
+                                        </li>
+                                    </ul>
                                 </div>
-                            </div>
 
-                            <!-- Buy Tab Content -->
-                            <div class="tab-content hidden" class="hidden" id="buy-panel" role="tabpanel" aria-labelledby="buy-tab">
-                                <div class="bg-primary/10 space-y-2 rounded-lg p-2">
-                                    <h4 class="text-foreground flex items-center text-lg font-semibold">
-                                        <i class="ri-shopping-bag-line text-primary mr-2"></i>
-                                        Buy from Our Collection
-                                    </h4>
-                                    <p class="text-foreground/80 text-sm">
-                                        Don't have satellite data? Purchase high-resolution imagery directly from our platform, captured by leading satellite constellations.
-                                    </p>
+                                <div class="space-y-3">
+                                    <h5 class="text-lg font-semibold">Upload Your File</h5>
 
-                                    <div class="bg-primary/20 rounded-lg p-2">
-                                        <h5 class="text-foreground mb-2 font-medium">What You Get</h5>
-                                        <ul class="text-foreground/70 space-y-1 text-sm">
-                                            <li class="flex items-start">
-                                                <i class="ri-check-line text-success mr-2 mt-0.5 text-xs"></i>
-                                                <span>Access to daily updated satellite imagery</span>
-                                            </li>
-                                            <li class="flex items-start">
-                                                <i class="ri-check-line text-success mr-2 mt-0.5 text-xs"></i>
-                                                <span>Global coverage</span>
-                                            </li>
-                                            <li class="flex items-start">
-                                                <i class="ri-check-line text-success mr-2 mt-0.5 text-xs"></i>
-                                                <span>Automatic PRI analysis and health reports included</span>
-                                            </li>
-                                        </ul>
+                                    <!-- input form -->
+                                    <form class="space-y-2">
+                                        <x-input-label class="text-sm font-medium" for="source-type">Source Type</x-input-label>
+                                        <x-select-input class="px-2! py-1!" id="sourceType" name="source-type" required>
+                                            <option value="sentinel-2">Sentinel-2</option>
+                                            <option value="landsat">Landsat</option>
+                                            <option value="quicksat">Quicksat</option>
+                                        </x-select-input>
+                                        <x-input-error class="mt-2" :messages="$errors->get('source-type')" />
+
+                                        <x-input-label class="text-sm font-medium" for="imagery-upload">Upload your imagery file</x-input-label>
+                                        <input class="border-foreground/30 bg-neutral file:bg-foreground/10 focus:border-primary focus:ring-primary block w-full rounded-lg border text-sm shadow-sm file:me-4 file:border-0 file:px-4 file:py-2 focus:z-10 disabled:pointer-events-none disabled:opacity-50" id="fileInput" name="imagery-upload" type="file" accept=".tif,.tiff,.ecw,.zip">
+                                        <x-input-error class="mt-2" :messages="$errors->get('imagery-upload')" />
+                                    </form>
+
+                                    <!-- info file -->
+                                    <div class="text-foreground-70 mt-2 hidden text-sm" id="fileInfo"></div>
+
+                                    <!-- progress bar -->
+                                    <div class="bg-foreground/20 mt-2 h-4 w-full rounded">
+                                        <div class="bg-primary h-4 rounded" id="progressBar" style="width: 0%;"></div>
                                     </div>
+                                    <p class="text-foreground/100 mt-1 text-sm" id="progressText">Belum ada upload.</p>
 
-                                    <div class="bg-primary/20 rounded-lg p-2">
-                                        <h5 class="text-foreground mb-2 font-medium">Satellite Sources</h5>
-                                        <div class="grid grid-cols-2 gap-2 text-sm">
-                                            <div class="flex items-center">
-                                                <i class="ri-satellite-line text-success mr-2"></i>
-                                                <span>Sentinel-2</span>
-                                            </div>
-                                            <div class="flex items-center">
-                                                <i class="ri-satellite-line text-success mr-2"></i>
-                                                <span>Landsat 8/9</span>
-                                            </div>
-                                            <div class="flex items-center">
-                                                <i class="ri-satellite-line text-success mr-2"></i>
-                                                <span>Quicksat</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div class="">
-                                        <x-button-primary id="buySatelliteBtn" type="button" size="small">
-                                            <i class="ri-shopping-cart-line"></i>
-                                            <span>Buy Satellite Imagery</span>
-                                        </x-button-primary>
+                                    <!-- tombol kontrol -->
+                                    <div class="flex flex-wrap gap-2">
+                                        <x-button-primary id="startBtn" type="button" size="small">Start Upload</x-button-primary>
+                                        <x-button-danger id="pauseBtn" type="button" size="small">⏸️ Pause</x-button-danger>
+                                        <x-button-secondary id="resumeBtn" type="button" size="small">▶️ Resume</x-button-secondary>
                                     </div>
                                 </div>
                             </div>
@@ -710,7 +723,7 @@
                         <!-- Draw Polygon Section -->
                         <div class="flex flex-col items-center justify-center py-2 text-center">
                             <div class="mb-2">
-                                <h3 class="text-foreground/70 mb-3 text-lg font-semibold">Purchase Satellite Imagery</h3>
+                                <h3 class="text-foreground/70 mb-3 text-lg font-semibold">Clip Satellite Imagery</h3>
                                 <p class="text-foreground-70 mb-3 text-xs">Draw a polygon on the map to define your area of interest for satellite imagery analysis.</p>
                                 <x-button-primary id="drawPolygonBtn" type="button" size="small">
                                     <i class="ri-pencil-line"></i>
@@ -1577,7 +1590,7 @@
                         const formatLabel = (item.format || '').slice(0, 3).toUpperCase() || 'N/A';
                         card.querySelector('.imagery-format').textContent = formatLabel;
                         const displayName = item.stored_name || item.original_name || 'Imagery File';
-                        card.querySelector('.imagery-name').textContent = shortenFilename(displayName, 25);
+                        card.querySelector('.imagery-name').textContent = shortenFilename(displayName, 26);
 
                         const sizeValue = Number(item.size) || 0;
                         const sizeMb = (sizeValue / 1024 / 1024).toFixed(2);
@@ -1760,7 +1773,7 @@
 
                 const config = {
                     endpoint: 'https://catalogue.dataspace.copernicus.eu/resto/api/collections/Sentinel2/search.json',
-                    defaultMonthsBack: 1,
+                    defaultMonthsBack: 2,
                     defaultCloudCover: 40,
                     defaultLatitude: -1.24536,
                     defaultLongitude: 114.54535,
@@ -3113,10 +3126,10 @@
                                 $('#current-myCredits').text(formatNumber(res.currentCredits, 2));
                                 // Show confirmation modal before starting upload
                                 ZkPopAlert.show({
-                                    message: `${res.hasCredits ? `This upload will cost ${res.requiredCredits} credit points for processing imagery. Do you want to proceed?` : `Insufficient credit points for processing. You need ${res.requiredCredits} credits. You can still upload the file, but processing will be skipped. Please purchase more credits to continue processing.`}`,
-                                    icon: '<i class="ri-upload-cloud-2-line text-2xl text-primary"></i>',
+                                    message: `${res.hasCredits ? `This action will cost ${res.requiredCredits} credit points for processing imagery. Do you want to proceed?` : `Insufficient credit points for processing. You need ${res.requiredCredits} credits. You can still upload the file, but processing will be skipped. Please purchase more credits to continue processing.`}`,
+                                    icon: '<i class="ri-cpu-line text-2xl text-primary"></i>',
                                     confirmClass: "focus:ring-primary/80 rounded-md text-sm px-2.5 py-1.5 bg-primary text-primary-foreground border border-primary hover:bg-primary/80 focus:outline-none focus:ring-primary",
-                                    confirmText: "Yes, Upload",
+                                    confirmText: "Yes, Continue",
                                     cancelText: "Cancel",
                                     onConfirm: () => {
                                         queueSentinelProcessing({

@@ -22,9 +22,9 @@ from __future__ import annotations
 import os
 import sys
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
-os.environ.setdefault("OMP_NUM_THREADS", "2")
-os.environ.setdefault("MKL_NUM_THREADS", "2")
-os.environ.setdefault("GDAL_CACHEMAX", "512")
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("MKL_NUM_THREADS", "1")
+os.environ.setdefault("GDAL_CACHEMAX", "256")
 import gc
 import tempfile
 import zipfile
