@@ -216,9 +216,6 @@ class ImageryDataController extends Controller
             // Clear cache
             Cache::forget($request->order_id);
 
-            // Dispatch job get imagery data
-            // GetImageryDataJob::dispatch($fieldArea);
-
             try {
                 $bodyMail = [
                     'name' => $user->name,
@@ -554,7 +551,7 @@ class ImageryDataController extends Controller
                 $totalChunks,
                 $skipProcessing,
                 $storedName
-            );
+            )->onQueue('download');
 
             $message = $skipProcessing
                 ? 'Upload received. Processing skipped due to insufficient credits. File will be available after background merging.'
@@ -761,7 +758,7 @@ class ImageryDataController extends Controller
                 Log::info("Retrying processing for imagery {$imagery->id}. Credits deducted: {$requiredCredits}");
 
                 // Dispatch processing job
-                ProcessImageryJob::dispatch($imagery->id);
+                ProcessImageryJob::dispatch($imagery->id)->onQueue('processing');
             });
 
             return response()->json([
@@ -841,7 +838,7 @@ class ImageryDataController extends Controller
                 (int) $imagery->chunk_total,
                 $skipProcessing,
                 $imagery->stored_name
-            );
+            )->onQueue('download');
 
             return response()->json([
                 'success' => true,

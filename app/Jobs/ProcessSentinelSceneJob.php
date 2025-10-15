@@ -203,7 +203,7 @@ class ProcessSentinelSceneJob implements ShouldQueue
                 'output_path' => $outputPath,
             ]);
 
-            ProcessImageryJob::dispatch($imagery->id);
+            ProcessImageryJob::dispatch($imagery->id)->onQueue('processing');
         } catch (Throwable $exception) {
             Log::error('ProcessSentinelSceneJob failed: ' . $exception->getMessage(), [
                 'imagery_id' => $this->imageryId,

@@ -74,7 +74,7 @@ class SentinelProcessingController extends Controller
                     'acquisition_date' => $validated['acquisition_date'] ?? null,
                     'download_filename' => $validated['download_filename'] ?? null,
                 ]
-            );
+            )->onQueue('download');
 
             $this->creditService->deductCreditsForProcessing($user->id, config('app-constants.imagery_processing_cost', 10));
 
