@@ -787,6 +787,110 @@
                                 </div>
                             </div>
 
+                            <!-- Clip Scene Selection Module -->
+                            <div class="space-y-3" id="clipSceneModule">
+                                <div class="flex flex-col gap-2 rounded-lg border border-foreground/10 bg-foreground/5 p-3">
+                                    <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                        <div>
+                                            <h4 class="text-sm font-semibold text-foreground">Scene Selection</h4>
+                                            <p class="text-xs text-foreground/60" id="clipModeDescription">Auto Mode will pick the best scene using your drawing and filters.</p>
+                                        </div>
+                                        <div class="inline-flex rounded-full border border-primary/40 bg-background p-0.5" role="group" aria-label="Clip mode selector">
+                                            <button class="clip-mode-btn rounded-full px-3 py-1 text-xs font-semibold text-primary shadow-sm transition data-[active='false']:text-foreground/70 data-[active='false']:shadow-none" type="button" data-clip-mode="auto" data-active="true">Auto Mode</button>
+                                            <button class="clip-mode-btn rounded-full px-3 py-1 text-xs font-semibold text-primary shadow-sm transition data-[active='false']:text-foreground/70 data-[active='false']:shadow-none" type="button" data-clip-mode="manual" data-active="false">Manual Mode</button>
+                                        </div>
+                                    </div>
+
+                                    <div class="rounded-lg border border-foreground/10 bg-background/60 p-2 text-xs" id="clipCreditSummary">
+                                        <div class="flex items-center justify-between">
+                                            <span class="text-foreground/70">Area (ha)</span>
+                                            <span class="font-semibold text-foreground" data-clip-area>–</span>
+                                        </div>
+                                        <div class="mt-1 flex items-center justify-between">
+                                            <span class="text-foreground/70">Estimated Credits</span>
+                                            <span class="font-semibold text-primary" data-clip-credits>–</span>
+                                        </div>
+                                    </div>
+
+                                    <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                        <div class="space-y-1">
+                                            <x-input-label class="text-xs font-medium" for="clipStartDate">Start date</x-input-label>
+                                            <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-2 py-1 text-sm focus:outline-none focus:ring" id="clipStartDate" type="date" autocomplete="off">
+                                        </div>
+                                        <div class="space-y-1">
+                                            <x-input-label class="text-xs font-medium" for="clipEndDate">End date</x-input-label>
+                                            <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-2 py-1 text-sm focus:outline-none focus:ring" id="clipEndDate" type="date" autocomplete="off">
+                                        </div>
+                                        <div class="space-y-1 sm:col-span-1">
+                                            <x-input-label class="text-xs font-medium" for="clipCloudCover">Max cloud cover (%)</x-input-label>
+                                            <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-2 py-1 text-sm focus:outline-none focus:ring" id="clipCloudCover" type="number" min="0" max="100" step="1" value="30" />
+                                        </div>
+                                        <div class="space-y-1 sm:col-span-1">
+                                            <x-input-label class="text-xs font-medium" for="clipProductLevel">Product level</x-input-label>
+                                            <select class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-2 py-1 text-sm focus:outline-none focus:ring" id="clipProductLevel">
+                                                <option value="S2MSI2A" selected>Level-2A (Surface Reflectance)</option>
+                                                <option value="S2MSI1C">Level-1C (Top of Atmosphere)</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div class="flex flex-col gap-2 sm:flex-row">
+                                        <x-button-primary class="flex-1" id="clipAutoButton" type="button" size="small">
+                                            <i class="ri-magic-line mr-1"></i>
+                                            <span>Auto Pick Scene</span>
+                                        </x-button-primary>
+                                        <x-button-secondary class="flex-1" id="clipSearchButton" type="button" size="small">
+                                            <i class="ri-search-eye-line mr-1"></i>
+                                            <span>Search Scenes</span>
+                                        </x-button-secondary>
+                                    </div>
+
+                                    <p class="text-xs text-foreground/60" id="clipSceneStatus">Draw an area and choose a mode to search for intersecting Sentinel-2 scenes.</p>
+
+                                    <div class="max-h-60 space-y-2 overflow-y-auto" id="clipSceneList"></div>
+
+                                    <div class="hidden rounded-lg border border-primary/20 bg-primary/5 p-2" id="clipSelectedScene">
+                                        <p class="text-xs font-semibold text-primary">Selected Scene</p>
+                                        <p class="text-sm font-semibold text-foreground" data-clip-selected-title>–</p>
+                                        <p class="text-xs text-foreground/70" data-clip-selected-meta>–</p>
+                                    </div>
+
+                                    <x-button-primary class="w-full" id="clipProcessButton" type="button" size="small" disabled>
+                                        <i class="ri-play-circle-line mr-1"></i>
+                                        <span>Process &amp; Continue</span>
+                                    </x-button-primary>
+                                </div>
+                                <template id="clipSceneCardTemplate">
+                                    <div class="clip-scene-card border-foreground/20 bg-background flex flex-col rounded-xl border p-2 shadow-sm transition">
+                                        <div class="flex items-start space-x-2">
+                                            <div class="border-foreground/10 bg-muted text-foreground/50 h-16 w-16 flex flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border" data-clip-thumb>
+                                                <img class="hidden h-full w-full object-cover" data-clip-thumbnail alt="Sentinel-2 preview" />
+                                                <div class="flex flex-col items-center text-[10px] font-medium" data-clip-placeholder>
+                                                    <i class="ri-landscape-line text-lg"></i>
+                                                    <span>Preview</span>
+                                                </div>
+                                            </div>
+                                            <div class="flex min-w-0 flex-1 flex-col space-y-1">
+                                                <p class="text-sm font-semibold text-foreground" data-clip-title>Sentinel Scene</p>
+                                                <p class="text-xs text-foreground/70" data-clip-product>Product ID</p>
+                                                <p class="text-xs text-foreground/80" data-clip-datetime>Acquired: –</p>
+                                                <p class="text-xs text-foreground/60" data-clip-details>Tile • Cloud cover</p>
+                                            </div>
+                                        </div>
+                                        <div class="mt-2 flex flex-wrap gap-1">
+                                            <button class="enabled:hover:bg-primary/10 text-primary border border-primary/40 inline-flex items-center space-x-1 rounded-lg px-2 py-1 text-xs font-semibold transition" data-clip-preview type="button">
+                                                <i class="ri-image-line"></i>
+                                                <span>Preview on Map</span>
+                                            </button>
+                                            <button class="enabled:hover:bg-success/20 bg-success/10 text-success inline-flex items-center space-x-1 rounded-lg px-2 py-1 text-xs font-semibold transition" data-clip-select type="button">
+                                                <i class="ri-checkbox-circle-line"></i>
+                                                <span>Use This Scene</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+
                             <!-- Action Buttons -->
                             <div class="flex flex-col gap-2 pt-2 sm:flex-row">
                                 <x-button-primary class="flex-1" id="saveFeatureProperties" type="submit" role="button" size="small">
@@ -847,6 +951,8 @@
                 }
 
                 window.AppMap = window.AppMap || {};
+
+                const CLIP_CREDIT_COST = {{ config('app-constants.imagery_credit_cost_per_hectare', 0) }};
 
                 // Track the currently visible panel via a getter/setter for clarity.
                 const state = {
@@ -1137,6 +1243,850 @@
                     window.calculateTotalPrice = calculateTotalPrice;
                 };
 
+                const initialiseClipperModule = () => {
+                    const moduleContainer = document.getElementById('clipSceneModule');
+                    if (!moduleContainer) {
+                        return;
+                    }
+
+                    const sentinelPanelEl = document.getElementById('sentinel-panel');
+
+                    const elements = {
+                        modeButtons: Array.from(moduleContainer.querySelectorAll('[data-clip-mode]')),
+                        modeDescription: moduleContainer.querySelector('#clipModeDescription'),
+                        areaValue: moduleContainer.querySelector('[data-clip-area]'),
+                        creditValue: moduleContainer.querySelector('[data-clip-credits]'),
+                        startDate: document.getElementById('clipStartDate'),
+                        endDate: document.getElementById('clipEndDate'),
+                        cloudCover: document.getElementById('clipCloudCover'),
+                        productLevel: document.getElementById('clipProductLevel'),
+                        autoButton: document.getElementById('clipAutoButton'),
+                        searchButton: document.getElementById('clipSearchButton'),
+                        status: document.getElementById('clipSceneStatus'),
+                        list: document.getElementById('clipSceneList'),
+                        template: document.getElementById('clipSceneCardTemplate'),
+                        selectedPanel: document.getElementById('clipSelectedScene'),
+                        selectedTitle: moduleContainer.querySelector('[data-clip-selected-title]'),
+                        selectedMeta: moduleContainer.querySelector('[data-clip-selected-meta]'),
+                        processButton: document.getElementById('clipProcessButton'),
+                    };
+
+                    const config = {
+                        endpoint: 'https://catalogue.dataspace.copernicus.eu/resto/api/collections/Sentinel2/search.json',
+                    };
+
+                    const state = {
+                        mode: 'auto',
+                        geometryFeature: null,
+                        geometry: null,
+                        area: 0,
+                        sceneMeta: new Map(),
+                        cardRegistry: new Map(),
+                        selectedSceneId: null,
+                        selectedMeta: null,
+                        sentinelModule: window.AppMap?.sentinel ?? null,
+                        loading: false,
+                    };
+
+                    const refreshSentinelModule = (module) => {
+                        if (module) {
+                            state.sentinelModule = module;
+                        } else if (window.AppMap?.sentinel) {
+                            state.sentinelModule = window.AppMap.sentinel;
+                        }
+                        return state.sentinelModule;
+                    };
+
+                    document.addEventListener('app:sentinel:ready', (event) => {
+                        refreshSentinelModule(event.detail);
+                        updateProcessButtonState();
+                    });
+
+                    const formatNumberSafe = (value, fraction = 2) => {
+                        if (typeof window.formatNumber === 'function') {
+                            return window.formatNumber(value, fraction);
+                        }
+                        const numeric = Number(value);
+                        return Number.isFinite(numeric) ? numeric.toFixed(fraction) : '-';
+                    };
+
+                    const statusClasses = ['text-success', 'text-error', 'text-amber-500', 'text-foreground/60'];
+
+                    const setStatus = (message, tone = 'info') => {
+                        if (!elements.status) return;
+                        elements.status.textContent = message;
+                        elements.status.classList.remove(...statusClasses);
+                        switch (tone) {
+                            case 'success':
+                                elements.status.classList.add('text-success');
+                                break;
+                            case 'warning':
+                                elements.status.classList.add('text-amber-500');
+                                break;
+                            case 'error':
+                                elements.status.classList.add('text-error');
+                                break;
+                            default:
+                                elements.status.classList.add('text-foreground/60');
+                                break;
+                        }
+                    };
+
+                    const updateModeUI = () => {
+                        elements.modeButtons.forEach((button) => {
+                            const mode = button.dataset.clipMode === 'manual' ? 'manual' : 'auto';
+                            const isActive = mode === state.mode;
+                            button.dataset.active = isActive ? 'true' : 'false';
+                            button.classList.toggle('bg-primary', isActive);
+                            button.classList.toggle('text-primary-foreground', isActive);
+                            button.classList.toggle('text-primary', !isActive);
+                            button.classList.toggle('text-foreground/70', !isActive);
+                            button.classList.toggle('shadow-sm', isActive);
+                            button.classList.toggle('shadow-none', !isActive);
+                        });
+                        if (elements.modeDescription) {
+                            elements.modeDescription.textContent = state.mode === 'manual'
+                                ? 'Manual Mode lets you choose a scene from the intersecting results below.'
+                                : 'Auto Mode will pick the best scene using your drawing and filters.';
+                        }
+                    };
+
+                    const updateSummary = () => {
+                        const areaSqm = Number(state.area) || 0;
+                        const areaHa = areaSqm > 0 ? areaSqm / 10000 : 0;
+                        if (elements.areaValue) {
+                            elements.areaValue.textContent = areaHa > 0 ? formatNumberSafe(areaHa, 2) : '–';
+                        }
+                        const estimatedCredits = areaHa * CLIP_CREDIT_COST;
+                        if (elements.creditValue) {
+                            elements.creditValue.textContent = areaHa > 0
+                                ? `${formatNumberSafe(estimatedCredits, 2)} pts`
+                                : '–';
+                        }
+                    };
+
+                    const clearSceneList = () => {
+                        if (elements.list) {
+                            elements.list.innerHTML = '';
+                        }
+                        state.cardRegistry.clear();
+                    };
+
+                    const clearSelection = () => {
+                        state.selectedSceneId = null;
+                        state.selectedMeta = null;
+                        if (elements.selectedPanel) {
+                            elements.selectedPanel.classList.add('hidden');
+                        }
+                        if (elements.selectedTitle) {
+                            elements.selectedTitle.textContent = '–';
+                        }
+                        if (elements.selectedMeta) {
+                            elements.selectedMeta.textContent = '–';
+                        }
+                        updateProcessButtonState();
+                        updateCardSelection();
+                    };
+
+                    const clearScenes = ({ keepStatus = false } = {}) => {
+                        clearSceneList();
+                        state.sceneMeta.clear();
+                        clearSelection();
+                        if (!keepStatus) {
+                            setStatus('Draw an area and choose a mode to search for intersecting Sentinel-2 scenes.', 'info');
+                        }
+                    };
+
+                    const ensureGeometryObject = (input) => {
+                        if (!input) return null;
+                        if (input.type === 'Feature') {
+                            return ensureGeometryObject(input.geometry);
+                        }
+                        if (input.type === 'FeatureCollection' && Array.isArray(input.features)) {
+                            const feature = input.features.find((item) => item && item.type === 'Feature' && item.geometry);
+                            return ensureGeometryObject(feature ? feature.geometry : null);
+                        }
+                        if (input.type === 'Polygon' || input.type === 'MultiPolygon') {
+                            return input;
+                        }
+                        if (input.geometry) {
+                            return ensureGeometryObject(input.geometry);
+                        }
+                        return null;
+                    };
+
+                    const collectCoordinates = (geometry) => {
+                        const coords = [];
+                        if (!geometry) return coords;
+                        const pushCoord = (coord) => {
+                            if (!Array.isArray(coord) || coord.length < 2) return;
+                            const lon = Number(coord[0]);
+                            const lat = Number(coord[1]);
+                            if (Number.isFinite(lon) && Number.isFinite(lat)) {
+                                coords.push([lon, lat]);
+                            }
+                        };
+                        if (geometry.type === 'Polygon') {
+                            geometry.coordinates?.forEach((ring) => ring?.forEach(pushCoord));
+                        } else if (geometry.type === 'MultiPolygon') {
+                            geometry.coordinates?.forEach((polygon) => polygon?.forEach((ring) => ring?.forEach(pushCoord)));
+                        }
+                        return coords;
+                    };
+
+                    const computeBoundingBox = (coords) => {
+                        if (!Array.isArray(coords) || coords.length === 0) return null;
+                        let minLon = Infinity;
+                        let minLat = Infinity;
+                        let maxLon = -Infinity;
+                        let maxLat = -Infinity;
+                        coords.forEach(([lon, lat]) => {
+                            if (lon < minLon) minLon = lon;
+                            if (lon > maxLon) maxLon = lon;
+                            if (lat < minLat) minLat = lat;
+                            if (lat > maxLat) maxLat = lat;
+                        });
+                        if (!Number.isFinite(minLon) || !Number.isFinite(minLat) || !Number.isFinite(maxLon) || !Number.isFinite(maxLat)) {
+                            return null;
+                        }
+                        return [minLon, minLat, maxLon, maxLat];
+                    };
+
+                    const computeCentroid = (coords) => {
+                        if (!Array.isArray(coords) || coords.length === 0) return null;
+                        const sum = coords.reduce((acc, [lon, lat]) => {
+                            acc.lon += lon;
+                            acc.lat += lat;
+                            return acc;
+                        }, { lon: 0, lat: 0 });
+                        return {
+                            lon: sum.lon / coords.length,
+                            lat: sum.lat / coords.length,
+                        };
+                    };
+
+                    const ensureIsoDateString = (date) => {
+                        if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '';
+                        const year = date.getFullYear();
+                        const month = String(date.getMonth() + 1).padStart(2, '0');
+                        const day = String(date.getDate()).padStart(2, '0');
+                        return `${year}-${month}-${day}`;
+                    };
+
+                    const applyDefaultDates = () => {
+                        const end = new Date();
+                        end.setHours(23, 59, 59, 999);
+                        const start = new Date(end.getTime());
+                        start.setDate(start.getDate() - 30);
+                        start.setHours(0, 0, 0, 0);
+                        if (elements.startDate && !elements.startDate.value) {
+                            elements.startDate.value = ensureIsoDateString(start);
+                        }
+                        if (elements.endDate && !elements.endDate.value) {
+                            elements.endDate.value = ensureIsoDateString(end);
+                        }
+                        if (elements.startDate && elements.endDate) {
+                            elements.startDate.max = elements.endDate.value || '';
+                            elements.endDate.min = elements.startDate.value || '';
+                        }
+                    };
+
+                    const ensureClosedRing = (ring) => {
+                        if (!Array.isArray(ring) || ring.length === 0) return [];
+                        const normalized = ring
+                            .map((coord) => {
+                                const lon = Number(coord?.[0]);
+                                const lat = Number(coord?.[1]);
+                                return Number.isFinite(lon) && Number.isFinite(lat) ? [lon, lat] : null;
+                            })
+                            .filter(Boolean);
+                        if (!normalized.length) return [];
+                        const first = normalized[0];
+                        const last = normalized[normalized.length - 1];
+                        if (first[0] !== last[0] || first[1] !== last[1]) {
+                            normalized.push([first[0], first[1]]);
+                        }
+                        return normalized;
+                    };
+
+                    const formatCoordinate = (coord) => `${coord[0].toFixed(6)} ${coord[1].toFixed(6)}`;
+
+                    const polygonToWkt = (coordinates) => {
+                        if (!Array.isArray(coordinates) || !coordinates.length) return null;
+                        const rings = coordinates
+                            .map((ring) => {
+                                const closed = ensureClosedRing(ring);
+                                if (!closed.length) return null;
+                                return `(${closed.map(formatCoordinate).join(', ')})`;
+                            })
+                            .filter(Boolean);
+                        if (!rings.length) return null;
+                        return `(${rings.join(', ')})`;
+                    };
+
+                    const geometryToWkt = (geometry) => {
+                        if (!geometry) return null;
+                        if (geometry.type === 'Polygon') {
+                            const polygon = polygonToWkt(geometry.coordinates);
+                            return polygon ? `POLYGON${polygon}` : null;
+                        }
+                        if (geometry.type === 'MultiPolygon') {
+                            const parts = geometry.coordinates
+                                ?.map((polygon) => polygonToWkt(polygon))
+                                .filter(Boolean);
+                            if (!parts || !parts.length) return null;
+                            return `MULTIPOLYGON(${parts.join(', ')})`;
+                        }
+                        return null;
+                    };
+
+                    const getToken = () => {
+                        const module = refreshSentinelModule();
+                        if (typeof module?.getToken === 'function') {
+                            return module.getToken();
+                        }
+                        const raw = sentinelPanelEl?.dataset?.sentinelToken ?? '';
+                        return typeof raw === 'string' ? raw.trim() : '';
+                    };
+
+                    const applyToken = (url) => {
+                        if (!url) return null;
+                        const module = refreshSentinelModule();
+                        if (typeof module?.applyTokenToUrl === 'function') {
+                            return module.applyTokenToUrl(url);
+                        }
+                        const token = getToken();
+                        if (!token) return null;
+                        const pattern = /([?&])token=[^&#]*/i;
+                        if (pattern.test(url)) {
+                            return url.replace(pattern, `$1token=${encodeURIComponent(token)}`);
+                        }
+                        const separator = url.includes('?') ? '&' : '?';
+                        return `${url}${separator}token=${encodeURIComponent(token)}`;
+                    };
+
+                    const resolveDownload = (feature) => {
+                        const module = refreshSentinelModule();
+                        if (typeof module?.resolveDownloadUrl === 'function') {
+                            return module.resolveDownloadUrl(feature);
+                        }
+                        const props = feature?.properties ?? {};
+                        if (typeof props.downloadUrl === 'string') return props.downloadUrl;
+                        if (typeof props.dataUrl === 'string') return props.dataUrl;
+                        const links = Array.isArray(feature?.links) ? feature.links : [];
+                        const downloadLink = links.find((link) => {
+                            if (!link || typeof link.href !== 'string') return false;
+                            const rel = String(link.rel ?? '').toLowerCase();
+                            return ['enclosure', 'download', 'data'].includes(rel);
+                        });
+                        return downloadLink?.href ?? null;
+                    };
+
+                    const buildFilename = (primary, fallback) => {
+                        const module = refreshSentinelModule();
+                        if (typeof module?.buildDownloadName === 'function') {
+                            return module.buildDownloadName(primary, fallback);
+                        }
+                        const base = String(primary ?? fallback ?? 'sentinel-scene').trim();
+                        const normalized = base.replace(/[\s]+/g, '_').replace(/[^A-Za-z0-9._-]+/g, '_');
+                        return normalized || 'sentinel-scene';
+                    };
+
+                    const extractMeta = (feature) => {
+                        if (!feature) return null;
+                        const props = feature.properties ?? {};
+                        const productId = props.productIdentifier || props.title || feature.id || 'Sentinel-2 Scene';
+                        const title = props.title || productId;
+                        const acquisition = props.completionDate
+                            || props.endPosition
+                            || props.beginPosition
+                            || props.datatakeTime
+                            || props.startDate
+                            || null;
+                        const mgrs = props.mgrsId || props.tileId || props.MGRS || null;
+                        const cloudRaw = props.cloudCover ?? props.cloudcoverpercentage ?? props.cloudCoverageAssessment;
+                        const cloud = Number.isFinite(Number(cloudRaw)) ? Number(cloudRaw) : null;
+                        const collection = props.collection || null;
+                        const assets = feature.assets ?? {};
+                        const links = Array.isArray(feature.links) ? feature.links : [];
+                        const quicklook = props.thumbnail
+                            || props.quicklook
+                            || assets?.thumbnail?.href
+                            || assets?.overview?.href
+                            || links.find((link) => link.rel === 'preview')?.href
+                            || null;
+                        const downloadUrl = resolveDownload(feature);
+                        const downloadUrlWithToken = applyToken(downloadUrl);
+                        const downloadFilename = buildFilename(productId, title);
+                        const bbox = Array.isArray(feature?.bbox) ? feature.bbox : null;
+                        return {
+                            id: feature.id || productId,
+                            feature,
+                            title,
+                            productId,
+                            acquisition,
+                            collection,
+                            cloud,
+                            mgrs,
+                            quicklook,
+                            downloadUrl,
+                            downloadUrlWithToken,
+                            downloadFilename,
+                            bbox,
+                            properties: props,
+                        };
+                    };
+
+                    const updateCardSelection = () => {
+                        state.cardRegistry.forEach((card, id) => {
+                            if (!card) return;
+                            const isActive = id === state.selectedSceneId;
+                            card.classList.toggle('ring-2', isActive);
+                            card.classList.toggle('ring-primary', isActive);
+                            card.classList.toggle('shadow-md', isActive);
+                        });
+                    };
+
+                    const updateSelectedSummary = () => {
+                        const meta = state.selectedMeta;
+                        if (!meta) {
+                            if (elements.selectedPanel) {
+                                elements.selectedPanel.classList.add('hidden');
+                            }
+                            return;
+                        }
+                        if (elements.selectedPanel) {
+                            elements.selectedPanel.classList.remove('hidden');
+                        }
+                        if (elements.selectedTitle) {
+                            elements.selectedTitle.textContent = meta.title;
+                        }
+                        if (elements.selectedMeta) {
+                            const detailParts = [];
+                            if (meta.acquisition) {
+                                detailParts.push(typeof window.formatReadableDate === 'function'
+                                    ? window.formatReadableDate(meta.acquisition)
+                                    : String(meta.acquisition));
+                            }
+                            if (Number.isFinite(meta.cloud)) {
+                                detailParts.push(`Cloud: ${formatNumberSafe(meta.cloud, 1)}%`);
+                            }
+                            if (meta.collection) {
+                                detailParts.push(meta.collection);
+                            }
+                            elements.selectedMeta.textContent = detailParts.length
+                                ? detailParts.join(' • ')
+                                : 'No additional metadata available';
+                        }
+                    };
+
+                    const updateProcessButtonState = () => {
+                        if (!elements.processButton) return;
+                        const processUrl = String(sentinelPanelEl?.dataset?.sentinelProcessUrl ?? '').trim();
+                        const canProcess = Boolean(state.selectedMeta && processUrl);
+                        elements.processButton.disabled = !canProcess;
+                        elements.processButton.setAttribute('aria-disabled', canProcess ? 'false' : 'true');
+                        if (!processUrl) {
+                            elements.processButton.title = 'Login to process Sentinel scenes.';
+                        } else {
+                            elements.processButton.removeAttribute('title');
+                        }
+                    };
+
+                    const selectSceneById = (sceneId, { silent = false } = {}) => {
+                        if (!sceneId || !state.sceneMeta.has(sceneId)) {
+                            if (!silent) {
+                                window.MyZkToast?.info?.('Scene not available for selection.');
+                            }
+                            return;
+                        }
+                        state.selectedSceneId = sceneId;
+                        state.selectedMeta = state.sceneMeta.get(sceneId);
+                        updateSelectedSummary();
+                        updateCardSelection();
+                        updateProcessButtonState();
+                    };
+
+                    const renderSceneCard = (meta) => {
+                        if (!meta || !elements.template?.content) return null;
+                        const fragment = elements.template.content.cloneNode(true);
+                        const card = fragment.querySelector('.clip-scene-card');
+                        if (!card) return null;
+                        card.dataset.sceneId = meta.id;
+                        const titleEl = fragment.querySelector('[data-clip-title]');
+                        if (titleEl) {
+                            titleEl.textContent = meta.title;
+                            titleEl.title = meta.title;
+                        }
+                        const productEl = fragment.querySelector('[data-clip-product]');
+                        if (productEl) {
+                            productEl.textContent = meta.productId;
+                            productEl.title = meta.productId;
+                        }
+                        const datetimeEl = fragment.querySelector('[data-clip-datetime]');
+                        if (datetimeEl) {
+                            datetimeEl.textContent = meta.acquisition
+                                ? `Acquired: ${typeof window.formatReadableDate === 'function'
+                                    ? window.formatReadableDate(meta.acquisition)
+                                    : meta.acquisition}`
+                                : 'Acquired: –';
+                        }
+                        const detailEl = fragment.querySelector('[data-clip-details]');
+                        if (detailEl) {
+                            const detailParts = [];
+                            if (meta.mgrs) detailParts.push(`Tile ${meta.mgrs}`);
+                            if (Number.isFinite(meta.cloud)) detailParts.push(`Cloud cover: ${formatNumberSafe(meta.cloud, 1)}%`);
+                            if (meta.collection) detailParts.push(meta.collection);
+                            detailEl.textContent = detailParts.length
+                                ? detailParts.join(' • ')
+                                : 'No additional metadata available';
+                        }
+                        const thumbnailImg = fragment.querySelector('[data-clip-thumbnail]');
+                        const placeholderEl = fragment.querySelector('[data-clip-placeholder]');
+                        if (thumbnailImg) {
+                            if (meta.quicklook) {
+                                thumbnailImg.classList.add('hidden');
+                                placeholderEl?.classList.remove('hidden');
+                                thumbnailImg.src = meta.quicklook;
+                                thumbnailImg.alt = `Quicklook preview for ${meta.title}`;
+                                thumbnailImg.addEventListener('load', () => {
+                                    thumbnailImg.classList.remove('hidden');
+                                    placeholderEl?.classList.add('hidden');
+                                }, { once: true });
+                                thumbnailImg.addEventListener('error', () => {
+                                    thumbnailImg.classList.add('hidden');
+                                    thumbnailImg.removeAttribute('src');
+                                    placeholderEl?.classList.remove('hidden');
+                                }, { once: true });
+                            } else {
+                                thumbnailImg.classList.add('hidden');
+                                thumbnailImg.removeAttribute('src');
+                                placeholderEl?.classList.remove('hidden');
+                            }
+                        }
+                        const previewButton = fragment.querySelector('[data-clip-preview]');
+                        if (previewButton) {
+                            const canPreview = typeof window.showSentinelPreviewOnMap === 'function'
+                                && (meta.feature?.geometry || meta.feature?.bbox || meta.quicklook);
+                            if (canPreview) {
+                                previewButton.addEventListener('click', () => {
+                                    window.showSentinelPreviewOnMap?.({
+                                        title: meta.title,
+                                        productId: meta.productId,
+                                        quicklookUrl: meta.quicklook,
+                                        downloadUrl: meta.downloadUrlWithToken || meta.downloadUrl,
+                                        downloadUrlBase: meta.downloadUrl,
+                                        downloadFilename: meta.downloadFilename,
+                                        geometry: meta.feature?.geometry ?? null,
+                                        bbox: meta.feature?.bbox ?? meta.bbox ?? null,
+                                        acquisitionDate: meta.acquisition,
+                                        tileText: meta.mgrs ? `Tile ${meta.mgrs}` : null,
+                                        cloudCover: meta.cloud,
+                                        featureProperties: meta.properties ?? {},
+                                        feature: meta.feature ?? null,
+                                    });
+                                });
+                            } else {
+                                previewButton.disabled = true;
+                                previewButton.classList.add('opacity-50', 'cursor-not-allowed');
+                            }
+                        }
+                        const selectButton = fragment.querySelector('[data-clip-select]');
+                        if (selectButton) {
+                            selectButton.addEventListener('click', () => selectSceneById(meta.id));
+                        }
+                        return card;
+                    };
+
+                    const renderScenes = (metas) => {
+                        clearSceneList();
+                        if (!Array.isArray(metas) || !metas.length) {
+                            return;
+                        }
+                        const fragment = document.createDocumentFragment();
+                        metas.forEach((meta) => {
+                            const card = renderSceneCard(meta);
+                            if (!card) return;
+                            fragment.appendChild(card);
+                            state.cardRegistry.set(meta.id, card);
+                        });
+                        elements.list?.appendChild(fragment);
+                        updateCardSelection();
+                    };
+
+                    const chooseBestScene = (metas) => {
+                        if (!Array.isArray(metas) || !metas.length) return null;
+                        const ranked = metas.slice().sort((a, b) => {
+                            const cloudA = Number.isFinite(a.cloud) ? a.cloud : 101;
+                            const cloudB = Number.isFinite(b.cloud) ? b.cloud : 101;
+                            if (cloudA !== cloudB) {
+                                return cloudA - cloudB;
+                            }
+                            const dateA = a.acquisition ? new Date(a.acquisition).getTime() : 0;
+                            const dateB = b.acquisition ? new Date(b.acquisition).getTime() : 0;
+                            return dateB - dateA;
+                        });
+                        return ranked[0];
+                    };
+
+                    const parseDateInput = (input) => {
+                        if (!input || !input.value) return null;
+                        const parsed = new Date(input.value);
+                        return Number.isNaN(parsed.getTime()) ? null : parsed;
+                    };
+
+                    const validateDateRange = () => {
+                        const start = parseDateInput(elements.startDate);
+                        const end = parseDateInput(elements.endDate);
+                        if (!start || !end) {
+                            throw new Error('Please specify both start and end dates.');
+                        }
+                        start.setHours(0, 0, 0, 0);
+                        end.setHours(23, 59, 59, 999);
+                        if (start > end) {
+                            throw new Error('Start date must be earlier than or equal to end date.');
+                        }
+                        return { start, end };
+                    };
+
+                    const buildQueryParams = (range, geometry, coords) => {
+                        const params = new URLSearchParams({ maxRecords: '30', sortParam: 'startDate', sortOrder: 'descending' });
+                        params.set('startDate', ensureIsoDateString(range.start));
+                        params.set('completionDate', ensureIsoDateString(range.end));
+                        const levelValue = String(elements.productLevel?.value ?? '').trim();
+                        const productType = ['S2MSI2A', 'S2MSI1C'].includes(levelValue) ? levelValue : 'S2MSI2A';
+                        params.set('productType', productType);
+                        const cloudValue = elements.cloudCover?.value;
+                        if (cloudValue !== undefined && cloudValue !== '') {
+                            const numeric = Number(cloudValue);
+                            if (!Number.isNaN(numeric)) {
+                                const clamped = Math.min(100, Math.max(0, numeric));
+                                params.set('cloudCover', `[0,${Math.round(clamped)}]`);
+                            }
+                        }
+                        const wkt = geometryToWkt(geometry);
+                        const bbox = computeBoundingBox(coords);
+                        if (wkt) {
+                            params.set('geometry', wkt);
+                        } else if (bbox) {
+                            params.set('bbox', bbox.map((value) => value.toFixed(6)).join(','));
+                        }
+                        const centroid = computeCentroid(coords);
+                        if (centroid) {
+                            params.set('lat', centroid.lat.toFixed(6));
+                            params.set('lon', centroid.lon.toFixed(6));
+                        }
+                        return params;
+                    };
+
+                    const fetchScenes = async (mode) => {
+                        if (state.loading) {
+                            return;
+                        }
+                        const geometry = ensureGeometryObject(state.geometryFeature);
+                        if (!geometry) {
+                            setStatus('Draw a polygon on the map before searching for Sentinel scenes.', 'warning');
+                            return;
+                        }
+                        if (!Number(state.area) || state.area <= 0) {
+                            setStatus('Area must be greater than zero. Please draw a larger polygon.', 'warning');
+                            return;
+                        }
+                        let range;
+                        try {
+                            range = validateDateRange();
+                        } catch (error) {
+                            setStatus(error.message || 'Invalid date range provided.', 'error');
+                            return;
+                        }
+                        const coords = collectCoordinates(geometry);
+                        if (!coords.length) {
+                            setStatus('Unable to determine the polygon coordinates for searching scenes.', 'error');
+                            return;
+                        }
+                        const token = getToken();
+                        if (!token) {
+                            setStatus('Copernicus access token unavailable. Configure credentials to search scenes.', 'error');
+                            return;
+                        }
+                        const params = buildQueryParams(range, geometry, coords);
+                        const requestUrl = `${config.endpoint}?${params.toString()}`;
+                        state.loading = true;
+                        elements.autoButton?.setAttribute('disabled', 'true');
+                        elements.searchButton?.setAttribute('disabled', 'true');
+                        setStatus('Searching Sentinel-2 catalogue...', 'info');
+                        try {
+                            const response = await fetch(requestUrl, {
+                                headers: {
+                                    Authorization: `Bearer ${token}`,
+                                },
+                            });
+                            if (!response.ok) {
+                                if (response.status === 401 || response.status === 403) {
+                                    throw new Error('Access denied. Please verify Copernicus API credentials.');
+                                }
+                                throw new Error(`Failed to fetch scenes (HTTP ${response.status}).`);
+                            }
+                            const payload = await response.json();
+                            const features = Array.isArray(payload?.features) ? payload.features : [];
+                            const metas = features
+                                .map((feature) => extractMeta(feature))
+                                .filter(Boolean);
+                            state.sceneMeta.clear();
+                            metas.forEach((meta) => {
+                                state.sceneMeta.set(meta.id, meta);
+                            });
+                            renderScenes(metas);
+                            if (!metas.length) {
+                                clearSelection();
+                                setStatus('No Sentinel-2 scenes found for the selected filters and area.', 'warning');
+                                return;
+                            }
+                            if (mode === 'auto') {
+                                const best = chooseBestScene(metas);
+                                if (best) {
+                                    selectSceneById(best.id, { silent: true });
+                                    const cloudText = Number.isFinite(best.cloud) ? ` • Cloud ${formatNumberSafe(best.cloud, 1)}%` : '';
+                                    setStatus(`Auto-selected ${best.title}${cloudText}.`, 'success');
+                                } else {
+                                    clearSelection();
+                                    setStatus('Unable to auto-select a scene. Please use Manual Mode.', 'warning');
+                                }
+                            } else {
+                                clearSelection();
+                                setStatus('Select a scene from the list below to continue.', 'info');
+                            }
+                        } catch (error) {
+                            console.error('Clip scene search failed', error);
+                            clearSelection();
+                            setStatus(error.message || 'Failed to search Sentinel scenes. Please try again.', 'error');
+                        } finally {
+                            state.loading = false;
+                            elements.autoButton?.removeAttribute('disabled');
+                            elements.searchButton?.removeAttribute('disabled');
+                        }
+                    };
+
+                    const handleGeometryUpdate = (event) => {
+                        const detail = event?.detail ?? {};
+                        state.geometryFeature = detail.geometry ?? null;
+                        state.geometry = ensureGeometryObject(state.geometryFeature);
+                        state.area = Number(detail.area) || 0;
+                        updateSummary();
+                        clearScenes({ keepStatus: false });
+                    };
+
+                    const handleSearch = (mode) => {
+                        state.mode = mode === 'manual' ? 'manual' : 'auto';
+                        updateModeUI();
+                        fetchScenes(state.mode);
+                    };
+
+                    const handleProcess = () => {
+                        const meta = state.selectedMeta;
+                        if (!meta) {
+                            window.MyZkToast?.info?.('Select a scene to process first.');
+                            return;
+                        }
+                        const processUrl = String(sentinelPanelEl?.dataset?.sentinelProcessUrl ?? '').trim();
+                        if (!processUrl) {
+                            window.MyZkToast?.error?.('Please sign in to process Sentinel scenes.');
+                            return;
+                        }
+                        const button = elements.processButton;
+                        if (!button) return;
+                        const buttonClone = button.cloneNode(true);
+                        button.disabled = true;
+                        button.setAttribute('aria-disabled', 'true');
+                        button.innerHTML = '<i class="ri-loader-4-line animate-spin"></i> Processing...';
+                        checkUserCredits().then((res) => {
+                            $('#current-myCredits').text(formatNumberSafe(res.currentCredits, 2));
+                            ZkPopAlert.show({
+                                message: `${res.hasCredits ? `This action will cost ${res.requiredCredits} credit points for processing imagery. Do you want to proceed?` : `Insufficient credit points for processing. You need ${res.requiredCredits} credits.`}`,
+                                icon: '<i class="ri-cpu-line text-2xl text-primary"></i>',
+                                confirmClass: "focus:ring-primary/80 rounded-md text-sm px-2.5 py-1.5 bg-primary text-primary-foreground border border-primary hover:bg-primary/80 focus:outline-none focus:ring-primary",
+                                confirmText: 'Yes, Continue',
+                                cancelText: 'Cancel',
+                                onConfirm: () => {
+                                    const module = refreshSentinelModule();
+                                    if (typeof module?.queueProcessing === 'function') {
+                                        module.queueProcessing({
+                                            button,
+                                            feature: meta.feature,
+                                            title: meta.title,
+                                            productId: meta.productId,
+                                            collection: meta.collection,
+                                            acquisition: meta.acquisition,
+                                            downloadUrl: meta.downloadUrlWithToken || meta.downloadUrl,
+                                            downloadBase: meta.downloadUrl,
+                                            downloadFilename: meta.downloadFilename,
+                                        });
+                                    } else {
+                                        window.MyZkToast?.error?.('Sentinel processing module is not ready. Please try again.');
+                                    }
+                                },
+                            });
+                        }).catch((error) => {
+                            console.error('Failed to check credits before processing', error);
+                            window.MyZkToast?.error?.('Unable to verify credit balance. Please try again.');
+                        }).finally(() => {
+                            if (!button.dataset.processing) {
+                                button.disabled = false;
+                                button.setAttribute('aria-disabled', 'false');
+                                button.innerHTML = buttonClone.innerHTML;
+                            }
+                        });
+                    };
+
+                    elements.startDate?.addEventListener('change', () => {
+                        if (elements.endDate && elements.startDate.value && elements.endDate.value && elements.endDate.value < elements.startDate.value) {
+                            elements.endDate.value = elements.startDate.value;
+                        }
+                        if (elements.endDate) {
+                            elements.endDate.min = elements.startDate.value || '';
+                        }
+                    });
+
+                    elements.endDate?.addEventListener('change', () => {
+                        if (elements.startDate && elements.endDate.value && elements.startDate.value && elements.startDate.value > elements.endDate.value) {
+                            elements.startDate.value = elements.endDate.value;
+                        }
+                        if (elements.startDate) {
+                            elements.startDate.max = elements.endDate.value || '';
+                        }
+                    });
+
+                    elements.modeButtons.forEach((button) => {
+                        button.addEventListener('click', () => {
+                            const mode = button.dataset.clipMode === 'manual' ? 'manual' : 'auto';
+                            state.mode = mode;
+                            updateModeUI();
+                        });
+                    });
+
+                    elements.autoButton?.addEventListener('click', () => handleSearch('auto'));
+                    elements.searchButton?.addEventListener('click', () => handleSearch('manual'));
+                    elements.processButton?.addEventListener('click', handleProcess);
+
+                    document.addEventListener('app:clip:geometry-updated', handleGeometryUpdate);
+
+                    applyDefaultDates();
+                    updateModeUI();
+                    updateSummary();
+                    clearScenes();
+                    updateProcessButtonState();
+
+                    if (window.geojsonArea || window.geojsonFeature) {
+                        handleGeometryUpdate({
+                            detail: {
+                                geometry: window.geojsonFeature ?? null,
+                                area: window.geojsonArea ?? 0,
+                            },
+                        });
+                    }
+                };
+
+
                 // Bootstrap the panel experience once the DOM has finished loading.
                 document.addEventListener('DOMContentLoaded', () => {
                     window.showPanel = showPanel;
@@ -1146,6 +2096,7 @@
                     initialiseDefaultPanel();
                     registerEventListeners();
                     initialisePriceCalculator();
+                    initialiseClipperModule();
                     syncPanelLayoutWithViewport();
 
                     const sentinelModule = window.AppMap?.sentinel;
@@ -3415,6 +4366,11 @@
                     ensureAppNamespace();
                     window.AppMap.sentinel.loadedOnce = state.loadedOnce;
                     window.AppMap.sentinel.loadCollections = loadCollections;
+                    window.AppMap.sentinel.queueProcessing = queueSentinelProcessing;
+                    window.AppMap.sentinel.applyTokenToUrl = applyTokenToUrl;
+                    window.AppMap.sentinel.resolveDownloadUrl = resolveDownloadUrl;
+                    window.AppMap.sentinel.buildDownloadName = buildDownloadName;
+                    window.AppMap.sentinel.getToken = () => sanitizeToken(state.token);
 
                     if (cloudInputEl && cloudInputEl.value === '') {
                         cloudInputEl.value = config.defaultCloudCover;

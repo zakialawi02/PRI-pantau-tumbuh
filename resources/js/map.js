@@ -901,6 +901,15 @@ function addInteraction(type = "Polygon") {
             "drawerGeojson"
         ).innerHTML = `<pre>${JSON.stringify(geojsonFeature, null, 1)}</pre>`;
 
+        document.dispatchEvent(
+            new CustomEvent("app:clip:geometry-updated", {
+                detail: {
+                    geometry: geojsonFeature,
+                    area: geojsonArea,
+                },
+            })
+        );
+
         // Display measurement result in the #measurementOutput div
         document.getElementById("measurementOutput").innerHTML =
             formatNumber(geojsonArea / 10000) + " ha"; // Convert m² to hectares;
@@ -930,6 +939,14 @@ function drawingStart() {
     buttonStateDrawing();
     $("#featureProperties").addClass("hidden");
     $("#drawerGeojson").html("");
+    document.dispatchEvent(
+        new CustomEvent("app:clip:geometry-updated", {
+            detail: {
+                geometry: null,
+                area: 0,
+            },
+        })
+    );
 }
 
 /**
@@ -1040,6 +1057,14 @@ $("#cancelFeatureProperties").click(function (e) {
         map.removeLayer(vectorLayerDrawing);
         vectorSourceDrawing.clear();
     }
+    document.dispatchEvent(
+        new CustomEvent("app:clip:geometry-updated", {
+            detail: {
+                geometry: null,
+                area: 0,
+            },
+        })
+    );
 });
 
 $("#saveFeatureProperties").click(function () {
