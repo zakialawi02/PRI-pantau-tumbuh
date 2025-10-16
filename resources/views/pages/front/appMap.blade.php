@@ -326,10 +326,6 @@
                                         <p class="text-foreground/70 text-sm">Draw a polygon on the map to clip Sentinel-2 imagery for your field.</p>
                                     </div>
                                     <div class="flex items-center gap-2">
-                                        <x-button-secondary id="clipResetBtn" type="button" size="small">
-                                            <i class="ri-refresh-line"></i>
-                                            <span>Reset</span>
-                                        </x-button-secondary>
                                         <x-button-primary id="clipDrawPolygonBtn" type="button" size="small">
                                             <i class="ri-pencil-line"></i>
                                             <span>Draw Polygon</span>
@@ -1020,7 +1016,6 @@
                         selectionSummary: document.getElementById('clipSelectionSummary'),
                         processBtn: document.getElementById('clipProcessBtn'),
                         processNotice: document.getElementById('clipProcessNotice'),
-                        resetBtn: document.getElementById('clipResetBtn'),
                         processUrl: moduleEl.dataset.processUrl || '',
                     };
 
@@ -1529,13 +1524,6 @@
                     });
 
                     elements.autoBtn?.addEventListener('click', handleAutoSearch);
-                    elements.resetBtn?.addEventListener('click', () => {
-                        window.AppMap?.clip?.clearDrawing?.();
-                        state.autoScene = null;
-                        state.selectedScene = null;
-                        resetAutoResult();
-                        updateSelectionSummary();
-                    });
                     elements.fieldInput?.addEventListener('input', updateProcessAvailability);
                     elements.processBtn?.addEventListener('click', handleProcess);
 
