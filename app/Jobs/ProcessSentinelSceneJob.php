@@ -21,7 +21,7 @@ class ProcessSentinelSceneJob implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public string $imageryId;
-    public string $downloadUrl;
+    public ?string $downloadUrl;
     public string $zipDirectory;
     public string $zipFilename;
     public string $outputFilename;
@@ -30,7 +30,7 @@ class ProcessSentinelSceneJob implements ShouldQueue
 
     public function __construct(
         string $imageryId,
-        string $downloadUrl,
+        ?string $downloadUrl,
         string $zipDirectory,
         string $zipFilename,
         string $outputFilename,
@@ -61,6 +61,22 @@ class ProcessSentinelSceneJob implements ShouldQueue
             Log::error('ProcessSentinelSceneJob: Imagery record not found.', [
                 'imagery_id' => $this->imageryId,
             ]);
+            return;
+        }
+
+        $imagery->update(['processing_status' => 'processing']);
+
+        if (!empty($this->metadata['clip_mode'])) {
+            $this->handleClipProcessing($imagery, $creditService, $pythonService);
+            return;
+        }
+
+        if (empty($this->downloadUrl)) {
+            Log::error('ProcessSentinelSceneJob: Download URL missing for non-clip processing.', [
+                'imagery_id' => $this->imageryId,
+            ]);
+            $this->refundCredits($creditService, $imagery, 'Job');
+            $imagery->update(['processing_status' => 'error']);
             return;
         }
 
@@ -98,14 +114,14 @@ class ProcessSentinelSceneJob implements ShouldQueue
                     'zip_path' => $zipPath,
                     'status' => $response->status(),
                 ]);
-                $creditService->refundCreditsForFailure($imagery, "Job");
+                $this->refundCredits($creditService, $imagery, 'Job');
                 $imagery->update(['processing_status' => 'error']);
                 throw new \RuntimeException('Unable to download Sentinel scene. HTTP status: ' . $response->status());
             }
 
             if (!File::exists($zipPath)) {
                 Log::error('ProcessSentinelSceneJob: Sentinel scene download failed.');
-                $creditService->refundCreditsForFailure($imagery, "Job");
+                $this->refundCredits($creditService, $imagery, 'Job');
                 $imagery->update(['processing_status' => 'error']);
                 throw new \RuntimeException('Sentinel scene download missing after request.');
             }
@@ -134,14 +150,14 @@ class ProcessSentinelSceneJob implements ShouldQueue
 
             if (!$pythonPath) {
                 Log::error('ProcessSentinelSceneJob: Python executable for Sentinel processing not found.');
-                $creditService->refundCreditsForFailure($imagery, "Job");
+                $this->refundCredits($creditService, $imagery, 'Job');
                 $imagery->update(['processing_status' => 'error']);
                 throw new \RuntimeException('Python executable for Sentinel processing not found.');
             }
 
             if (!File::exists($scriptPath)) {
                 Log::error('ProcessSentinelSceneJob: Multispectral processing script not found.');
-                $creditService->refundCreditsForFailure($imagery, "Job");
+                $this->refundCredits($creditService, $imagery, 'Job');
                 $imagery->update(['processing_status' => 'error']);
                 throw new \RuntimeException('Multispectral processing script not found.');
             }
@@ -171,20 +187,20 @@ class ProcessSentinelSceneJob implements ShouldQueue
             $stderr = trim($process->getErrorOutput());
             if ($stderr !== '') {
                 Log::error('[Sentinel Multispectral STDERR] ' . $stderr);
-                $creditService->refundCreditsForFailure($imagery, "Job");
+                $this->refundCredits($creditService, $imagery, 'Job');
                 $imagery->update(['processing_status' => 'error']);
             }
 
             if (!$process->isSuccessful()) {
-                throw new \RuntimeException('Sentinel multispectral processing failed.');
-                $creditService->refundCreditsForFailure($imagery, "Job");
+                $this->refundCredits($creditService, $imagery, 'Job');
                 $imagery->update(['processing_status' => 'error']);
+                throw new \RuntimeException('Sentinel multispectral processing failed.');
             }
 
             if (!File::exists($outputPath)) {
-                throw new \RuntimeException('Multispectral output was not created.');
-                $creditService->refundCreditsForFailure($imagery, "Job");
+                $this->refundCredits($creditService, $imagery, 'Job');
                 $imagery->update(['processing_status' => 'error']);
+                throw new \RuntimeException('Multispectral output was not created.');
             }
 
             $outputSize = File::size($outputPath) ?: $downloadedSize;
@@ -214,11 +230,177 @@ class ProcessSentinelSceneJob implements ShouldQueue
                 File::delete($outputPath);
             }
 
-            $creditService->refundCreditsForFailure($imagery, "Job");
+            $this->refundCredits($creditService, $imagery, 'Job');
             $imagery->update([
                 'upload_status' => 'failed',
                 'processing_status' => 'error',
             ]);
         }
+    }
+
+    /**
+     * Handle Sentinel Hub clipping workflow.
+     */
+    protected function handleClipProcessing(ImageryData $imagery, CreditService $creditService, PythonService $pythonService): void
+    {
+        $scriptsBase = base_path('scripts');
+        $scriptPath = $scriptsBase . DIRECTORY_SEPARATOR . 'process_clipped_multispectral_auto.py';
+        $pythonPath = $pythonService->resolvePythonPath($scriptsBase);
+
+        if (!$pythonPath) {
+            Log::error('ProcessSentinelSceneJob: Python executable for clip processing not found.');
+            $this->refundCredits($creditService, $imagery, 'ClipJob');
+            $imagery->update(['processing_status' => 'error']);
+            return;
+        }
+
+        if (!File::exists($scriptPath)) {
+            Log::error('ProcessSentinelSceneJob: Clip processing script not found.', [
+                'script_path' => $scriptPath,
+            ]);
+            $this->refundCredits($creditService, $imagery, 'ClipJob');
+            $imagery->update(['processing_status' => 'error']);
+            return;
+        }
+
+        $geometry = $this->metadata['clip_geometry'] ?? null;
+        $dateFrom = $this->metadata['clip_date_from'] ?? null;
+        $dateTo = $this->metadata['clip_date_to'] ?? null;
+
+        if (empty($geometry) || empty($dateFrom) || empty($dateTo)) {
+            Log::error('ProcessSentinelSceneJob: Missing clip parameters.', [
+                'geometry' => $geometry,
+                'date_from' => $dateFrom,
+                'date_to' => $dateTo,
+            ]);
+            $this->refundCredits($creditService, $imagery, 'ClipJob');
+            $imagery->update(['processing_status' => 'error']);
+            return;
+        }
+
+        $publicStorage = storage_path('app/public');
+        $imageryDir = $publicStorage . DIRECTORY_SEPARATOR . 'imagery';
+        if (!File::isDirectory($imageryDir)) {
+            File::makeDirectory($imageryDir, 0755, true);
+        }
+
+        $tilesDir = $imageryDir . DIRECTORY_SEPARATOR . 'tiles' . DIRECTORY_SEPARATOR . $this->imageryId;
+        if (File::isDirectory($tilesDir)) {
+            File::deleteDirectory($tilesDir);
+        }
+        File::makeDirectory($tilesDir, 0755, true);
+
+        $mergedPath = $tilesDir . DIRECTORY_SEPARATOR . 'merged_fixed.tif';
+        $outputPath = $imageryDir . DIRECTORY_SEPARATOR . $this->outputFilename;
+
+        if (File::exists($outputPath)) {
+            File::delete($outputPath);
+        }
+
+        $collection = $this->mapProductLevelToCollection($this->metadata['clip_product_level'] ?? null);
+        $sceneId = $this->metadata['clip_scene_id'] ?? $this->metadata['clip_selected_product_id'] ?? null;
+        $acquisition = $this->metadata['clip_selected_acquisition'] ?? null;
+
+        $env = [
+            'CLIP_GEOMETRY' => is_string($geometry) ? $geometry : json_encode($geometry),
+            'CLIP_DATE_FROM' => (string) $dateFrom,
+            'CLIP_DATE_TO' => (string) $dateTo,
+            'CLIP_MAX_CLOUD' => (string) ($this->metadata['clip_max_cloud'] ?? 60),
+            'CLIP_LIMIT' => (string) ($this->metadata['clip_limit'] ?? 50),
+            'CLIP_RESOLUTION' => (string) ($this->metadata['clip_resolution'] ?? 10),
+            'CLIP_NODATA' => (string) ($this->metadata['clip_nodata'] ?? -9999),
+            'CLIP_TILE_DIR' => $tilesDir,
+            'CLIP_MERGED_TIF' => $mergedPath,
+            'CLIP_MASKED_TIF' => $outputPath,
+            'CLIP_DATA_COLLECTION' => $collection,
+        ];
+
+        if (!empty($sceneId)) {
+            $env['CLIP_SCENE_ID'] = (string) $sceneId;
+        }
+
+        if (!empty($acquisition)) {
+            $env['CLIP_ACQUISITION'] = (string) $acquisition;
+        }
+
+        $processEnv = $pythonService->buildProcessEnvironment($env);
+
+        $process = new Process([$pythonPath, $scriptPath], $scriptsBase, $processEnv);
+        $process->setTimeout(7200);
+
+        try {
+            $process->run();
+
+            $stdout = trim($process->getOutput());
+            if ($stdout !== '') {
+                Log::info('[Sentinel Clip STDOUT] ' . $stdout);
+            }
+
+            $stderr = trim($process->getErrorOutput());
+            if ($stderr !== '') {
+                Log::warning('[Sentinel Clip STDERR] ' . $stderr);
+            }
+
+            if (!$process->isSuccessful()) {
+                throw new \RuntimeException('Sentinel clip processing failed.');
+            }
+
+            if (!File::exists($outputPath)) {
+                throw new \RuntimeException('Clip output was not generated.');
+            }
+
+            $outputSize = File::size($outputPath) ?: 0;
+
+            $imagery->update([
+                'upload_status' => 'done',
+                'format' => pathinfo($this->outputFilename, PATHINFO_EXTENSION) ?: 'tif',
+                'size' => $outputSize,
+                'original_name' => $this->displayName,
+                'path' => 'storage/imagery/' . $this->outputFilename,
+                'processing_status' => 'completed',
+            ]);
+
+            Log::info('ProcessSentinelSceneJob clip completed successfully.', [
+                'imagery_id' => $this->imageryId,
+                'output_path' => $outputPath,
+            ]);
+
+            ProcessImageryJob::dispatch($imagery->id)->onQueue('processing');
+        } catch (Throwable $exception) {
+            Log::error('ProcessSentinelSceneJob clip failed: ' . $exception->getMessage(), [
+                'imagery_id' => $this->imageryId,
+                'metadata' => $this->metadata,
+            ]);
+
+            if (File::exists($outputPath)) {
+                File::delete($outputPath);
+            }
+
+            $this->refundCredits($creditService, $imagery, 'ClipJob');
+            $imagery->update([
+                'upload_status' => 'failed',
+                'processing_status' => 'error',
+            ]);
+        }
+    }
+
+    protected function refundCredits(CreditService $creditService, ImageryData $imagery, string $context): void
+    {
+        $charge = (float) ($this->metadata['credit_charge'] ?? 0);
+        if ($charge > 0) {
+            $creditService->addCreditsToUser($imagery->user_id, $charge, $context);
+            return;
+        }
+
+        $creditService->refundCreditsForFailure($imagery, $context);
+    }
+
+    protected function mapProductLevelToCollection(?string $level): string
+    {
+        $level = strtoupper((string) $level);
+        return match ($level) {
+            'S2MSI1C' => 'SENTINEL2_L1C',
+            default => 'SENTINEL2_L2A',
+        };
     }
 }

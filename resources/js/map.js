@@ -756,6 +756,10 @@ map.getViewport().addEventListener("mouseout", function () {
     }
 });
 
+window.AppMap = window.AppMap || {};
+window.AppMap.clip = window.AppMap.clip || {};
+window.AppMap.clip.clearGeometry = resetClipGeometry;
+
 /**
  * Format length output.
  * @param {LineString} line The line.
@@ -895,27 +899,20 @@ function addInteraction(type = "Polygon") {
             featureProjection: "EPSG:3857", // Map's projection (assuming EPSG:3857)
         });
         geojsonFeature = JSON.parse(geojson);
+        window.geojsonFeature = geojsonFeature;
+        window.geojsonArea = geojsonArea;
 
-        // Display the GeoJSON string in the #drawerGeojson element
-        document.getElementById(
-            "drawerGeojson"
-        ).innerHTML = `<pre>${JSON.stringify(geojsonFeature, null, 1)}</pre>`;
+        const detail = {
+            geometry: geojsonFeature,
+            areaSquareMeters: geojsonArea,
+            areaHectares: geojsonArea / 10000,
+        };
 
-        // Display measurement result in the #measurementOutput div
-        document.getElementById("measurementOutput").innerHTML =
-            formatNumber(geojsonArea / 10000) + " ha"; // Convert m² to hectares;
+        document.dispatchEvent(
+            new CustomEvent("app:clip:drawing-complete", { detail })
+        );
 
         drawingEnd();
-
-        // Show feature properties after drawing
-        if (draw) {
-            $("#featureProperties").removeClass("hidden");
-        }
-
-        // Calculate total price after drawing
-        if (typeof window.calculateTotalPrice === "function") {
-            window.calculateTotalPrice();
-        }
     });
 }
 
@@ -924,12 +921,12 @@ function addInteraction(type = "Polygon") {
  * @returns {void}
  */
 function drawingStart() {
+    resetClipGeometry();
     addInteraction();
     drawingRunning = true;
     drawed = null;
     buttonStateDrawing();
-    $("#featureProperties").addClass("hidden");
-    $("#drawerGeojson").html("");
+    document.dispatchEvent(new CustomEvent("app:clip:drawing-start"));
 }
 
 /**
@@ -967,6 +964,18 @@ function drawingEnd() {
     }
 
     buttonStateDrawing();
+}
+
+function resetClipGeometry() {
+    if (vectorLayerDrawing) {
+        map.removeLayer(vectorLayerDrawing);
+    }
+    vectorSourceDrawing.clear();
+    geojsonFeature = null;
+    geojsonArea = null;
+    window.geojsonFeature = null;
+    window.geojsonArea = null;
+    document.dispatchEvent(new CustomEvent("app:clip:geometry-cleared"));
 }
 
 /**
@@ -1012,43 +1021,34 @@ function createMeasureTooltip() {
  * @returns {void}
  */
 function buttonStateDrawing() {
-    $("#drawPolygonBtn").html(
-        drawingRunning
-            ? "Cancel Drawing"
-            : "<i class='ri-pencil-line'></i>&nbsp; Draw Polygon"
-    );
-    $("#drawPolygonBtn")
-        .removeClass()
-        .addClass(
-            drawingRunning ? "btn btn-sm btn-danger" : "btn btn-sm btn-primary"
-        );
+    const button = $("#drawPolygonBtn");
+    if (!button.length) {
+        return;
+    }
+
+    if (drawingRunning) {
+        button
+            .html("<i class='ri-close-line mr-1'></i>Cancel Drawing")
+            .removeClass()
+            .addClass(
+                "inline-flex items-center rounded-md bg-red-600 px-3 py-1 text-sm font-semibold text-white shadow-sm transition hover:bg-red-500 focus:outline-none focus:ring-2 focus:ring-red-400"
+            );
+    } else {
+        button
+            .html("<i class='ri-pencil-line mr-1'></i>Draw Polygon")
+            .removeClass()
+            .addClass(
+                "inline-flex items-center rounded-md bg-primary px-3 py-1 text-sm font-semibold text-primary-foreground shadow-sm transition hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary/50"
+            );
+    }
 }
 
 // Button to start/cancel the draw/measurement
-$("#drawPolygonBtn").click(function (e) {
+$("#drawPolygonBtn").click(function () {
     if (drawingRunning) {
         drawingEnd();
     } else {
         drawingStart();
-        $("#featurePropertiesForm")[0].reset();
-    }
-});
-$("#cancelFeatureProperties").click(function (e) {
-    $("#featureProperties").addClass("hidden");
-    $("#drawerGeojson").html("");
-    if (vectorLayerDrawing) {
-        map.removeLayer(vectorLayerDrawing);
-        vectorSourceDrawing.clear();
-    }
-});
-
-$("#saveFeatureProperties").click(function () {
-    const geojson = geojsonFeature;
-    const area_hectares = geojsonArea;
-
-    if (geojson) {
-        $("#geometryInput").val(JSON.stringify(geojson.geometry));
-        $("#areaInput").val(area_hectares);
     }
 });
 
