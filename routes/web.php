@@ -12,6 +12,7 @@ use App\Http\Controllers\FieldAreaController;
 use App\Http\Controllers\ImageryDataController;
 use App\Http\Controllers\UserCreditsController;
 use App\Http\Controllers\SentinelProcessingController;
+use App\Http\Controllers\SentinelClipController;
 use App\Http\Controllers\Socialite\ProviderCallbackController;
 use App\Http\Controllers\Socialite\ProviderRedirectController;
 
@@ -81,6 +82,8 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/imagery-order', [ImageryDataController::class, 'imageryOrder'])->name('imageryOrder');
     Route::get('/imagery-checkout', [ImageryDataController::class, 'imageryCheckout'])->name('imageryCheckout');
     Route::post('/imagery-checkout', [ImageryDataController::class, 'processCheckoutImagery'])->name('processImageryCheckout');
+
+    Route::post('/sentinel/clip/process', [SentinelClipController::class, 'processClip'])->name('sentinel.clip.process');
 
     Route::post('/checkout/purchase-credits', [UserCreditsController::class, 'orderCredit'])->name('orderCredit');
     Route::get('/checkout', [UserCreditsController::class, 'checkoutOrder'])->name('checkoutOrder');
