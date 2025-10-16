@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Jobs\ProcessSentinelSceneJob;
+use App\Models\FieldArea;
 use App\Models\ImageryData;
 use App\Services\CreditService;
 use Illuminate\Http\Request;
@@ -31,7 +32,39 @@ class SentinelProcessingController extends Controller
             'collection' => ['nullable', 'string', 'max:255'],
             'acquisition_date' => ['nullable', 'string', 'max:255'],
             'download_filename' => ['nullable', 'string', 'max:255'],
+            'field_name' => ['nullable', 'string', 'max:255'],
+            'geometry' => ['nullable'],
+            'area_hectares' => ['nullable', 'numeric', 'min:0'],
+            'area_square_meters' => ['nullable', 'numeric', 'min:0'],
+            'clip_mode' => ['nullable', 'in:auto,manual'],
+            'credit_cost' => ['nullable', 'numeric', 'min:0'],
+            'clip_feature' => ['nullable', 'array'],
         ]);
+
+        if (isset($validated['geometry']) && is_string($validated['geometry'])) {
+            $decodedGeometry = json_decode($validated['geometry'], true);
+            if (json_last_error() === JSON_ERROR_NONE) {
+                $validated['geometry'] = $decodedGeometry;
+            }
+        }
+
+        $fieldArea = null;
+        $areaHectares = $validated['area_hectares'] ?? null;
+        if ((!$areaHectares || $areaHectares <= 0) && isset($validated['area_square_meters'])) {
+            $sqm = (float) $validated['area_square_meters'];
+            if ($sqm > 0) {
+                $areaHectares = round($sqm / 10000, 4);
+            }
+        }
+
+        if (!empty($validated['geometry']) && is_array($validated['geometry']) && $user) {
+            $fieldArea = FieldArea::create([
+                'user_id' => $user->id,
+                'name' => $validated['field_name'] ?? $validated['title'],
+                'geom' => $validated['geometry'],
+                'area_ha' => $areaHectares,
+            ]);
+        }
 
         $rawTitle = trim($validated['title'] ?? '') ?: now()->format('YmdHis') . '_Sentinel_Scene';
         $displayTitle = $this->sanitizeDisplayName($rawTitle . '_' . now()->format('YmdHis'));
@@ -73,6 +106,14 @@ class SentinelProcessingController extends Controller
                     'collection' => $validated['collection'] ?? null,
                     'acquisition_date' => $validated['acquisition_date'] ?? null,
                     'download_filename' => $validated['download_filename'] ?? null,
+                    'field_name' => $validated['field_name'] ?? null,
+                    'geometry' => $validated['geometry'] ?? null,
+                    'clip_mode' => $validated['clip_mode'] ?? null,
+                    'clip_feature' => $validated['clip_feature'] ?? null,
+                    'credit_cost' => $validated['credit_cost'] ?? null,
+                    'area_hectares' => $areaHectares,
+                    'area_square_meters' => $validated['area_square_meters'] ?? null,
+                    'field_area_id' => $fieldArea?->id,
                 ]
             )->onQueue('download');
 
@@ -86,6 +127,7 @@ class SentinelProcessingController extends Controller
                     'upload_status' => $imagery->upload_status,
                     'processing_status' => $imagery->processing_status,
                     'current_credits' => $this->creditService->getRemainingCredits($user->id),
+                    'field_area_id' => $fieldArea?->id,
                 ],
             ], 202);
         } catch (Throwable $exception) {

@@ -1,4 +1,5 @@
 import os
+import json
 from datetime import timedelta
 from dateutil import parser as dateparser
 import numpy as np
@@ -13,8 +14,11 @@ from sentinelhub import (
 from sentinelhub.areas import BBoxSplitter
 
 # ====== KONFIGURASI ======
-SH_CLIENT_ID =
-SH_CLIENT_SECRET =
+SH_CLIENT_ID = os.getenv("COPERNICUS_CLIENT_ID")
+SH_CLIENT_SECRET = os.getenv("COPERNICUS_CLIENT_SECRET")
+
+if not SH_CLIENT_ID or not SH_CLIENT_SECRET:
+    raise RuntimeError("Missing COPERNICUS_CLIENT_ID or COPERNICUS_CLIENT_SECRET environment variables.")
 
 config = SHConfig()
 config.sh_client_id = SH_CLIENT_ID
@@ -29,25 +33,52 @@ masked_tif = "merged_masked.tif"
 os.makedirs(tiles_dir, exist_ok=True)
 
 # ====== PARAMETER ======
-DATE_FROM = "2025-08-01"
-DATE_TO   = "2025-08-31"
-MAX_CLOUD = 60
-LIMIT     = 100
-RES       = 10
-NODATA_VAL = 0   # ganti ke -9999 kalau lebih cocok
+DATE_FROM = os.getenv("CLIP_DATE_FROM", "2025-08-01")
+DATE_TO = os.getenv("CLIP_DATE_TO", DATE_FROM)
+MAX_CLOUD = float(os.getenv("CLIP_MAX_CLOUD", "60"))
+LIMIT = int(os.getenv("CLIP_LIMIT", "100"))
+RES = int(os.getenv("CLIP_RESOLUTION", "10"))
+NODATA_VAL = float(os.getenv("CLIP_NODATA", "0"))  # ganti ke -9999 kalau lebih cocok
+COLLECTION_KEY = os.getenv("CLIP_COLLECTION", "SENTINEL2_L1C").upper()
+
+try:
+    DATA_COLLECTION = getattr(DataCollection, COLLECTION_KEY)
+except AttributeError:
+    raise RuntimeError(f"Unsupported data collection '{COLLECTION_KEY}'. Set CLIP_COLLECTION to a valid SentinelHub collection.")
 
 # ====== AOI dari GEOJSON ======
-AOI_GEOJSON = {}
+AOI_RAW = os.getenv("CLIP_AOI_GEOJSON")
+if not AOI_RAW:
+    raise RuntimeError("CLIP_AOI_GEOJSON environment variable is required and must contain GeoJSON geometry.")
+
+try:
+    AOI_GEOJSON = json.loads(AOI_RAW)
+except json.JSONDecodeError as exc:
+    raise RuntimeError("CLIP_AOI_GEOJSON contains invalid JSON") from exc
+
+if AOI_GEOJSON.get("type") == "Feature":
+    geom_dict = AOI_GEOJSON.get("geometry")
+elif AOI_GEOJSON.get("type") == "FeatureCollection":
+    features = AOI_GEOJSON.get("features") or []
+    if not features:
+        raise RuntimeError("CLIP_AOI_GEOJSON FeatureCollection must include at least one feature.")
+    geom_dict = features[0].get("geometry")
+elif AOI_GEOJSON.get("type") in {"Polygon", "MultiPolygon"}:
+    geom_dict = AOI_GEOJSON
+else:
+    raise RuntimeError("CLIP_AOI_GEOJSON must be a Feature, FeatureCollection, or Polygon geometry.")
+
+if not geom_dict:
+    raise RuntimeError("Unable to determine geometry from CLIP_AOI_GEOJSON.")
 
 # Geometry untuk query & masking
-geom_dict = AOI_GEOJSON["features"][0]["geometry"]
 geometry = Geometry(geom_dict, crs=CRS.WGS84)
 bbox = geometry.bbox
 
 # ====== CARI SCENE ======
 catalog = SentinelHubCatalog(config=config)
 search_iter = catalog.search(
-    DataCollection.SENTINEL2_L1C,
+    DATA_COLLECTION,
     geometry=geometry,
     time=(DATE_FROM, DATE_TO),
     limit=LIMIT
@@ -112,7 +143,7 @@ for idx, tile_bb in enumerate(tile_bboxes):
     request = SentinelHubRequest(
         evalscript=evalscript_all_bands,
         input_data=[{
-            "type": "sentinel-2-l1c",
+            "dataCollection": DATA_COLLECTION,
             "dataFilter": {
                 "timeRange": {"from": t_from, "to": t_to},
                 "mosaickingOrder": "mostRecent",

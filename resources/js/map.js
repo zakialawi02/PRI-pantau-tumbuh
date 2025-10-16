@@ -905,6 +905,11 @@ function addInteraction(type = "Polygon") {
         document.getElementById("measurementOutput").innerHTML =
             formatNumber(geojsonArea / 10000) + " ha"; // Convert m² to hectares;
 
+        const clipModule = window.AppMap?.sentinel?.clip;
+        if (clipModule?.setGeometry) {
+            clipModule.setGeometry(geojsonFeature, geojsonArea);
+        }
+
         drawingEnd();
 
         // Show feature properties after drawing
@@ -930,6 +935,16 @@ function drawingStart() {
     buttonStateDrawing();
     $("#featureProperties").addClass("hidden");
     $("#drawerGeojson").html("");
+    const clipModule = window.AppMap?.sentinel?.clip;
+    if (clipModule?.clearGeometry) {
+        clipModule.clearGeometry();
+    }
+    geojsonFeature = null;
+    geojsonArea = 0;
+    window.geojsonArea = 0;
+    if (typeof window.calculateTotalPrice === "function") {
+        window.calculateTotalPrice();
+    }
 }
 
 /**
@@ -1030,7 +1045,10 @@ $("#drawPolygonBtn").click(function (e) {
         drawingEnd();
     } else {
         drawingStart();
-        $("#featurePropertiesForm")[0].reset();
+        const formEl = document.getElementById("featurePropertiesForm");
+        if (formEl) {
+            formEl.reset();
+        }
     }
 });
 $("#cancelFeatureProperties").click(function (e) {
@@ -1040,15 +1058,19 @@ $("#cancelFeatureProperties").click(function (e) {
         map.removeLayer(vectorLayerDrawing);
         vectorSourceDrawing.clear();
     }
-});
-
-$("#saveFeatureProperties").click(function () {
-    const geojson = geojsonFeature;
-    const area_hectares = geojsonArea;
-
-    if (geojson) {
-        $("#geometryInput").val(JSON.stringify(geojson.geometry));
-        $("#areaInput").val(area_hectares);
+    geojsonFeature = null;
+    geojsonArea = 0;
+    window.geojsonArea = 0;
+    const clipModule = window.AppMap?.sentinel?.clip;
+    if (clipModule?.clearGeometry) {
+        clipModule.clearGeometry();
+    }
+    const form = document.getElementById("featurePropertiesForm");
+    if (form) {
+        form.reset();
+    }
+    if (typeof window.calculateTotalPrice === "function") {
+        window.calculateTotalPrice();
     }
 });
 
