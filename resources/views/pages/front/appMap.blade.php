@@ -235,7 +235,7 @@
             </section>
 
             <!-- ========== SENTINEL COLLECTION PANEL ========== -->
-            <section class="flex hidden h-full flex-col shadow-xl" id="sentinel-panel" data-sentinel-token="{{ $copernicusAccessToken ?? '' }}" data-sentinel-credentials="{{ $copernicusCredentialsConfigured ?? false ? 'true' : 'false' }}" data-sentinel-process-url="{{ auth()->check() ? route('admin.sentinel.process') : '' }}">
+            <section class="flex hidden h-full flex-col shadow-xl" id="sentinel-panel" data-sentinel-token="{{ $copernicusAccessToken ?? '' }}" data-sentinel-credentials="{{ $copernicusCredentialsConfigured ?? false ? 'true' : 'false' }}" data-sentinel-process-url="{{ auth()->check() ? route('admin.sentinel.process') : '' }}" data-sentinel-clip-search-url="{{ auth()->check() ? route('admin.sentinel.clip.search') : '' }}" data-sentinel-clip-process-url="{{ auth()->check() ? route('admin.sentinel.clip.process') : '' }}" data-clip-credit-rate="{{ config('app-constants.imagery_credit_cost_per_hectare') }}">
                 <div class="bg-background border-foreground/10 sticky top-0 z-20 flex items-center justify-between border-b p-2">
                     <h2 class="text-lg font-bold">🛰️ Sentinel-2 Collections</h2>
                     <button class="hover:bg-foreground/20 bg-foreground/10 rounded px-2 py-1 text-sm" onclick="closePanels()">✖</button>
@@ -315,56 +315,119 @@
                     </div>
 
                     <!-- Clip Tab Content -->
-                    <div class="tab-content hidden" class="hidden" id="sentinel-clip-panel" role="tabpanel" aria-labelledby="sentinel-clip-tab">
-                        <div class="bg-primary/10 space-y-2 rounded-lg p-2">
-                            <h4 class="text-foreground flex items-center text-lg font-semibold">
-                                <i class="ri-shopping-bag-line text-primary mr-2"></i>
-                                Clip from Our Collection
-                            </h4>
-                            <p class="text-foreground/80 text-sm">
-                                Don't have satellite data? Purchase clipped high-resolution imagery directly from our platform, captured by leading satellite constellations.
-                            </p>
-
-                            <div class="bg-primary/20 rounded-lg p-2">
-                                <h5 class="text-foreground mb-2 font-medium">What You Get</h5>
-                                <ul class="text-foreground/70 space-y-1 text-sm">
-                                    <li class="flex items-start">
-                                        <i class="ri-check-line text-success mr-2 mt-0.5 text-xs"></i>
-                                        <span>Access to daily updated satellite imagery</span>
-                                    </li>
-                                    <li class="flex items-start">
-                                        <i class="ri-check-line text-success mr-2 mt-0.5 text-xs"></i>
-                                        <span>Global coverage</span>
-                                    </li>
-                                    <li class="flex items-start">
-                                        <i class="ri-check-line text-success mr-2 mt-0.5 text-xs"></i>
-                                        <span>Automatic PRI analysis and health reports included</span>
-                                    </li>
-                                </ul>
-                            </div>
-
-                            <div class="bg-primary/20 rounded-lg p-2">
-                                <h5 class="text-foreground mb-2 font-medium">Satellite Sources</h5>
-                                <div class="grid grid-cols-2 gap-2 text-sm">
-                                    <div class="flex items-center">
-                                        <i class="ri-satellite-line text-success mr-2"></i>
-                                        <span>Sentinel-2</span>
+                    <div class="tab-content hidden" id="sentinel-clip-panel" role="tabpanel" aria-labelledby="sentinel-clip-tab">
+                        <div class="space-y-3">
+                            <div class="bg-background/60 border-foreground/10 space-y-2 rounded-lg border p-2 shadow-sm">
+                                <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                    <div class="flex-1">
+                                        <h4 class="text-foreground text-sm font-semibold">Area of Interest</h4>
+                                        <p class="text-foreground/70 text-xs">Draw a polygon on the map to define the clipping extent. The system will use this geometry for pricing, scene filtering, and clipping.</p>
                                     </div>
-                                    {{-- <div class="flex items-center">
-                                        <i class="ri-satellite-line text-success mr-2"></i>
-                                        <span>Landsat 8/9</span>
+                                    <x-button-primary id="drawPolygonBtn" type="button" size="small" class="shrink-0">
+                                        <i class="ri-pencil-line"></i>
+                                        <span>Draw Polygon</span>
+                                    </x-button-primary>
+                                </div>
+                                <div class="grid gap-2">
+                                    <div>
+                                        <span class="text-foreground/70 text-xs font-medium">GeoJSON Geometry</span>
+                                        <div class="border-foreground/10 bg-muted/40 max-h-28 overflow-auto rounded border p-2 text-[11px] text-foreground/70" id="clipGeojsonOutput">
+                                            <span>Draw a polygon to populate GeoJSON coordinates.</span>
+                                        </div>
                                     </div>
-                                    <div class="flex items-center">
-                                        <i class="ri-satellite-line text-success mr-2"></i>
-                                        <span>Quicksat</span>
-                                    </div> --}}
+                                    <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                        <div class="border-foreground/10 rounded-lg border p-2">
+                                            <span class="text-foreground/70 text-xs font-medium">Area</span>
+                                            <p class="text-foreground text-sm font-semibold" id="clipAreaOutput">–</p>
+                                        </div>
+                                        <div class="border-foreground/10 rounded-lg border p-2" id="clipCreditContainer">
+                                            <span class="text-foreground/70 text-xs font-medium">Estimated Credit Cost</span>
+                                            <p class="text-success text-sm font-semibold" id="clipCreditValue">–</p>
+                                            <p class="text-foreground/60 mt-1 text-[11px]" id="clipCreditDetails"></p>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
-                            <div class="">
-                                <x-button-primary id="buySatelliteBtn" type="button" size="small">
-                                    <i class="ri-shopping-cart-line"></i>
-                                    <span>Buy Satellite Imagery</span>
-                                </x-button-primary>
+
+                            <div class="bg-background/60 border-foreground/10 space-y-2 rounded-lg border p-2 shadow-sm">
+                                <div>
+                                    <h4 class="text-foreground text-sm font-semibold">Scene Selection Mode</h4>
+                                    <p class="text-foreground/70 text-xs">Choose how Sentinel-2 scenes will be selected for clipping. Auto Mode evaluates the catalogue automatically, while Manual Mode lets you pick a specific scene.</p>
+                                </div>
+                                <div class="flex flex-wrap gap-2" role="radiogroup" aria-label="Scene selection mode">
+                                    <label class="clip-mode-option hs-tab-active:bg-primary/10 hs-tab-active:text-primary flex cursor-pointer items-center gap-1 rounded-full border border-foreground/20 px-3 py-1 text-xs font-semibold text-foreground/70 transition" data-mode="auto">
+                                        <input class="sr-only" type="radio" name="clipMode" id="clipModeAuto" value="auto" checked>
+                                        <span>Auto Mode</span>
+                                    </label>
+                                    <label class="clip-mode-option flex cursor-pointer items-center gap-1 rounded-full border border-foreground/20 px-3 py-1 text-xs font-semibold text-foreground/70 transition" data-mode="manual">
+                                        <input class="sr-only" type="radio" name="clipMode" id="clipModeManual" value="manual">
+                                        <span>Manual Mode</span>
+                                    </label>
+                                </div>
+                                <div class="border border-primary/20 bg-primary/5 rounded-lg p-2 text-[11px] text-foreground/70" id="clipModeDescription">
+                                    Draw a polygon and pick a date range. The system will evaluate the best scene automatically based on cloud coverage and recency.
+                                </div>
+                                <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                    <label class="text-foreground/80 flex flex-col space-y-1 text-xs font-medium" for="clipTitleInput">
+                                        <span>Imagery Title</span>
+                                        <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-2 py-1 text-sm focus:outline-none focus:ring" id="clipTitleInput" name="clip-title" type="text" placeholder="e.g. Dry-season monitoring" maxlength="120" />
+                                    </label>
+                                    <label class="text-foreground/80 flex flex-col space-y-1 text-xs font-medium" for="clipMaxCloud">
+                                        <span>Max Cloud Cover (%)</span>
+                                        <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-2 py-1 text-sm focus:outline-none focus:ring" id="clipMaxCloud" name="max-cloud" type="number" min="0" max="100" step="1" value="40" />
+                                    </label>
+                                    <label class="text-foreground/80 flex flex-col space-y-1 text-xs font-medium" for="clipStartDate">
+                                        <span>Start Date</span>
+                                        <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-2 py-1 text-sm focus:outline-none focus:ring" id="clipStartDate" name="start-date" type="date" autocomplete="off" />
+                                    </label>
+                                    <label class="text-foreground/80 flex flex-col space-y-1 text-xs font-medium" for="clipEndDate">
+                                        <span>End Date</span>
+                                        <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-2 py-1 text-sm focus:outline-none focus:ring" id="clipEndDate" name="end-date" type="date" autocomplete="off" />
+                                    </label>
+                                    <label class="text-foreground/80 flex flex-col space-y-1 text-xs font-medium" for="clipLimit">
+                                        <span>Result Limit</span>
+                                        <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-2 py-1 text-sm focus:outline-none focus:ring" id="clipLimit" name="limit" type="number" min="1" max="50" value="12" />
+                                    </label>
+                                    <label class="text-foreground/80 flex flex-col space-y-1 text-xs font-medium" for="clipResolution">
+                                        <span>Target Resolution (m)</span>
+                                        <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-2 py-1 text-sm focus:outline-none focus:ring" id="clipResolution" name="resolution" type="number" min="10" max="60" step="10" value="10" />
+                                    </label>
+                                </div>
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <x-button-primary id="clipFindScenesBtn" type="button" size="small" class="inline-flex items-center gap-1">
+                                        <i class="ri-search-2-line"></i>
+                                        <span>Find Scenes</span>
+                                    </x-button-primary>
+                                    <button class="hover:text-primary/80 text-foreground/60 text-xs font-semibold transition" id="clipClearSelectionBtn" type="button">Reset Selection</button>
+                                </div>
+                                <div class="text-foreground/60 text-[11px]" id="clipSearchStatus"></div>
+                            </div>
+
+                            <div class="bg-background/60 border-foreground/10 space-y-2 rounded-lg border p-2 shadow-sm">
+                                <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                                    <h4 class="text-foreground text-sm font-semibold">Matching Scenes</h4>
+                                    <span class="text-foreground/60 text-[11px]" id="clipModeHint">Auto Mode will automatically pick the most recent scene with the lowest cloud cover.</span>
+                                </div>
+                                <div class="text-foreground/60 text-xs" id="clipScenesStatus">Draw a polygon and apply filters to discover scenes intersecting your area.</div>
+                                <div class="space-y-2" id="clipSceneList"></div>
+                            </div>
+
+                            <div class="bg-background/60 border-foreground/10 space-y-3 rounded-lg border p-2 shadow-sm">
+                                <div>
+                                    <h4 class="text-foreground text-sm font-semibold">Queue Clip Processing</h4>
+                                    <p class="text-foreground/70 text-xs" id="clipSelectionSummary">Auto Mode will queue processing with the best available scene after you click the button below.</p>
+                                </div>
+                                @auth
+                                    <x-button-primary id="clipProcessBtn" type="button" size="small" class="inline-flex items-center gap-1">
+                                        <i class="ri-cpu-line"></i>
+                                        <span>Process &amp; Queue Clip</span>
+                                    </x-button-primary>
+                                @else
+                                    <x-button-primary href="{{ route('login') }}" size="small">
+                                        <i class="ri-login-circle-line"></i>
+                                        <span>Login to Process Clip</span>
+                                    </x-button-primary>
+                                @endauth
                             </div>
                         </div>
                     </div>
@@ -416,6 +479,35 @@
                                 <i class="ri-image-line"></i>
                                 <span>Preview on Map</span>
                             </button>
+                        </div>
+                    </div>
+                </template>
+
+                <template id="clipSceneCardTemplate">
+                    <div class="clip-scene-card border-foreground/15 bg-background/70 flex flex-col rounded-lg border p-2 shadow-sm transition hover:border-primary/40 hover:shadow">
+                        <div class="flex items-start gap-2">
+                            <div class="border-foreground/10 bg-muted text-foreground/50 h-14 w-14 flex flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border" data-clip-thumb>
+                                <img class="hidden h-full w-full object-cover" data-clip-thumbnail alt="Scene preview" />
+                                <div class="flex flex-col items-center text-[10px] font-medium" data-clip-placeholder>
+                                    <i class="ri-landscape-line text-base"></i>
+                                    <span>Preview</span>
+                                </div>
+                            </div>
+                            <div class="flex min-w-0 flex-1 flex-col space-y-1">
+                                <p class="text-foreground truncate text-sm font-semibold" data-clip-title>Sentinel-2 Scene</p>
+                                <p class="text-foreground/70 truncate text-xs" data-clip-datetime>–</p>
+                                <p class="text-foreground/60 text-xs" data-clip-details>–</p>
+                            </div>
+                        </div>
+                        <div class="mt-2 flex flex-wrap items-center gap-1">
+                            <button class="clip-select-button enabled:hover:bg-primary/90 bg-primary/80 text-background inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-semibold transition" data-clip-select type="button">
+                                <i class="ri-check-line"></i>
+                                <span>Use this Scene</span>
+                            </button>
+                            <a class="enabled:hover:bg-primary/10 text-primary border-primary/40 inline-flex items-center gap-1 rounded border px-2 py-1 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50" data-clip-download href="#" target="_blank" rel="noopener noreferrer">
+                                <i class="ri-download-cloud-2-line"></i>
+                                <span>Download Source</span>
+                            </a>
                         </div>
                     </div>
                 </template>
@@ -709,123 +801,6 @@
         </div>
 
 
-        <!-- Right/Overlay Panel -->
-        <div class="bg-background absolute bottom-0 left-0 z-50 hidden max-h-[60%] w-full max-w-full overflow-hidden rounded-t-xl shadow-xl transition-all duration-300 ease-in-out md:bottom-auto md:left-auto md:right-2 md:top-1/2 md:max-w-[30rem] md:-translate-y-1/2 md:transform md:rounded-xl" id="buyingPanel">
-            <div class="flex h-full w-full min-w-full flex-col p-2" id="drawer-sidebar-left-panel1-label">
-                <!-- Header drawer -->
-                <div class="mb-2 flex items-center justify-between">
-                    <h2 class="text-lg font-semibold">Purchase a field</h2>
-                    <button class="hover:text-primary/80 close-panel-btn text-foreground/50" id="buyingPanelCloseBtn" data-drawer-hide="drawer-sidebar-left-panel1" type="button">✕</button>
-                </div>
-                <!-- Drawer content -->
-                <div class="flex h-full max-h-96 flex-1 flex-col overflow-hidden">
-                    <div class="mb-8 flex-1 space-y-3 overflow-y-auto px-1">
-                        <!-- Draw Polygon Section -->
-                        <div class="flex flex-col items-center justify-center py-2 text-center">
-                            <div class="mb-2">
-                                <h3 class="text-foreground/70 mb-3 text-lg font-semibold">Clip Satellite Imagery</h3>
-                                <p class="text-foreground-70 mb-3 text-xs">Draw a polygon on the map to define your area of interest for satellite imagery analysis.</p>
-                                <x-button-primary id="drawPolygonBtn" type="button" size="small">
-                                    <i class="ri-pencil-line"></i>
-                                    <span>Draw Polygon</span>
-                                </x-button-primary>
-                            </div>
-
-                            <!-- GeoJSON Output -->
-                            <div class="w-full">
-                                <div class="border-muted bg-foreground/10 mt-3 max-h-11 w-full overflow-auto rounded border p-2 text-xs" id="drawerGeojson">
-                                    <span class="text-foreground/50">Polygon coordinates will appear here...</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <hr class="border-gray-300">
-
-                        <!-- Feature Properties Form -->
-                        <form class="space-y-4" id="featurePropertiesForm" action="{{ route('imageryOrder') }}" method="POST">
-                            @csrf
-                            @method('POST')
-
-                            <input id="geometryInput" name="geometry" type="hidden">
-                            <input id="areaInput" name="area_hectares" type="hidden">
-
-                            <!-- Feature Name -->
-                            <div class="space-y-2">
-                                <x-input-label class="text-sm font-medium" for="name_feature">Field Name</x-input-label>
-                                <x-text-input class="w-full" id="name_feature" name="name_feature" size="small" placeholder="Enter field/region name" required />
-                            </div>
-
-                            <!-- Area Information -->
-                            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                                <div class="space-y-2">
-                                    <x-input-label class="text-sm font-medium" for="luas">Area</x-input-label>
-                                    <div class="border-muted bg-foreground/10 rounded border p-2 text-sm" id="measurementOutput">
-                                        <div class="text-foreground/50 flex items-center">
-                                            <i class="ri-crop-line mr-2"></i>
-                                            <span>Calculate area...</span>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- Credit Points Information -->
-                                <div class="space-y-2">
-                                    <x-input-label class="text-sm font-medium" for="credit_info">Credit Points</x-input-label>
-                                    <div class="border-muted rounded border p-2 text-sm">
-                                        <div class="text-foreground/50 flex items-center">
-                                            <i class="ri-coins-line mr-2"></i>
-                                            <span>{{ Number::format(config('app-constants.imagery_credit_cost_per_hectare'), locale: app()->getLocale()) }} Credit Points per hectare</span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Total Price -->
-                            <div class="space-y-2">
-                                <x-input-label class="text-sm font-medium" for="harga">Total Credit Points Needed</x-input-label>
-                                <div class="border-muted bg-muted/60 rounded border p-2 text-sm" id="priceOutput">
-                                    <span class="text-primary font-semibold" id="total_price">Total will be calculated...</span>
-                                </div>
-                            </div>
-
-                            <!-- Action Buttons -->
-                            <div class="flex flex-col gap-2 pt-2 sm:flex-row">
-                                <x-button-primary class="flex-1" id="saveFeatureProperties" type="submit" role="button" size="small">
-                                    <i class="ri-arrow-right-line mr-1"></i>
-                                    Continue to Checkout
-                                </x-button-primary>
-                                <x-button-secondary class="flex-1" id="cancelFeatureProperties" type="reset" role="button" size="small">
-                                    <i class="ri-close-line mr-1"></i>
-                                    Cancel
-                                </x-button-secondary>
-                            </div>
-                        </form>
-
-                        <!-- Additional Information -->
-                        <div class="bg-primary/60 rounded-lg p-3">
-                            <h4 class="text-primary-foreground mb-2 text-sm font-medium">What you'll get:</h4>
-                            <ul class="text-primary-foreground/80 space-y-1 text-xs">
-                                <li class="flex items-center">
-                                    <i class="ri-check-line text-success mr-1"></i>
-                                    High-resolution satellite imagery
-                                </li>
-                                <li class="flex items-center">
-                                    <i class="ri-check-line text-success mr-1"></i>
-                                    PRI stress analysis
-                                </li>
-                                <li class="flex items-center">
-                                    <i class="ri-check-line text-success mr-1"></i>
-                                    Detailed crop health reports
-                                </li>
-                                <li class="flex items-center">
-                                    <i class="ri-check-line text-success mr-1"></i>
-                                    Historical data comparison
-                                </li>
-                            </ul>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
     </div>
     @push('javascript')
         <script>
@@ -1073,68 +1048,6 @@
                 // Connect resize handlers and modal toggles relevant to the dashboard.
                 const registerEventListeners = () => {
                     window.addEventListener('resize', syncPanelLayoutWithViewport);
-
-                    document.getElementById('buySatelliteBtn')?.addEventListener('click', () => {
-                        document.getElementById('buyingPanel')?.classList.remove('hidden');
-                    });
-
-                    document.getElementById('buyingPanelCloseBtn')?.addEventListener('click', () => {
-                        document.getElementById('buyingPanel')?.classList.add('hidden');
-                    });
-                };
-
-                const initialisePriceCalculator = () => {
-                    // Convert area from square meters to hectares.
-                    const toHectares = (squareMeters) => squareMeters / 10000;
-                    // Provide a subtle animation whenever the price updates.
-                    const highlightContainer = (container) => {
-                        container.style.transform = 'scale(1.02)';
-                        setTimeout(() => {
-                            container.style.transform = 'scale(1)';
-                        }, 200);
-                    };
-
-                    // Compute total credit points needed and update the display widget.
-                    const calculateTotalPrice = () => {
-                        const areaInSquareMeters = window.geojsonArea || 0;
-                        const areaInHectares = toHectares(areaInSquareMeters);
-                        const totalPriceElement = document.getElementById('total_price');
-
-                        if (!totalPriceElement) {
-                            return;
-                        }
-
-                        const priceContainer = totalPriceElement.parentElement;
-                        const creditPointsNeeded = areaInHectares * {{ config('app-constants.imagery_credit_cost_per_hectare') }};
-
-                        if (areaInHectares > 0) {
-                            totalPriceElement.innerHTML = `
-                            <div class="flex justify-between items-center">
-                                <span class="text-lg font-bold text-green-700">${formatNumber(creditPointsNeeded.toFixed(2), 2)} Credit Points</span>
-                                <i class="ri-coins-line font-base text-success text-xl"></i>
-                            </div>
-                            <div class="text-xs text-foreground-70 mt-1">
-                                ${formatNumber(areaInHectares)} hectares × {{ Number::format(config('app-constants.imagery_credit_cost_per_hectare'), locale: app()->getLocale()) }} credit points/hectare
-                            </div>
-                        `;
-                            priceContainer.classList.remove('bg-muted/60', 'border-muted', 'bg-amber-50', 'border-amber-300');
-                            priceContainer.classList.add('bg-green-50', 'border-green-300', 'shadow-sm');
-                            highlightContainer(priceContainer);
-                        } else {
-                            totalPriceElement.innerHTML = `
-                            <div class="flex items-center text-foreground/50">
-                                <i class="ri-information-line mr-2"></i>
-                                Draw an area to calculate credit points
-                            </div>
-                        `;
-                            priceContainer.classList.remove('bg-green-50', 'border-green-300', 'shadow-sm');
-                            priceContainer.classList.add('bg-muted/60', 'border-muted');
-                        }
-
-                        priceContainer.style.transition = 'all 0.3s ease-in-out';
-                    };
-
-                    window.calculateTotalPrice = calculateTotalPrice;
                 };
 
                 // Bootstrap the panel experience once the DOM has finished loading.
@@ -1145,7 +1058,6 @@
                     initialiseHorizontalScroll();
                     initialiseDefaultPanel();
                     registerEventListeners();
-                    initialisePriceCalculator();
                     syncPanelLayoutWithViewport();
 
                     const sentinelModule = window.AppMap?.sentinel;
@@ -1153,6 +1065,584 @@
                         sentinelModule.loadCollections();
                     }
                 });
+            })();
+        </script>
+    @endpush
+    @push('javascript')
+        <script>
+            (() => {
+                const sentinelPanel = document.getElementById('sentinel-panel');
+                const clipPanel = document.getElementById('sentinel-clip-panel');
+
+                if (!sentinelPanel || !clipPanel) {
+                    return;
+                }
+
+                const config = {
+                    searchUrl: sentinelPanel.dataset.sentinelClipSearchUrl || '',
+                    processUrl: sentinelPanel.dataset.sentinelClipProcessUrl || '',
+                    creditRate: Number.parseFloat(sentinelPanel.dataset.clipCreditRate || '0') || 0,
+                    csrf: document.querySelector('meta[name="csrf-token"]')?.content || '',
+                };
+
+                const elements = {
+                    geojsonOutput: document.getElementById('clipGeojsonOutput'),
+                    areaOutput: document.getElementById('clipAreaOutput'),
+                    creditContainer: document.getElementById('clipCreditContainer'),
+                    creditValue: document.getElementById('clipCreditValue'),
+                    creditDetails: document.getElementById('clipCreditDetails'),
+                    startDate: document.getElementById('clipStartDate'),
+                    endDate: document.getElementById('clipEndDate'),
+                    maxCloud: document.getElementById('clipMaxCloud'),
+                    limit: document.getElementById('clipLimit'),
+                    resolution: document.getElementById('clipResolution'),
+                    title: document.getElementById('clipTitleInput'),
+                    findScenes: document.getElementById('clipFindScenesBtn'),
+                    clearSelection: document.getElementById('clipClearSelectionBtn'),
+                    modeOptions: Array.from(clipPanel.querySelectorAll('.clip-mode-option')),
+                    modeDescription: document.getElementById('clipModeDescription'),
+                    scenesStatus: document.getElementById('clipScenesStatus'),
+                    scenesList: document.getElementById('clipSceneList'),
+                    searchStatus: document.getElementById('clipSearchStatus'),
+                    modeHint: document.getElementById('clipModeHint'),
+                    processBtn: document.getElementById('clipProcessBtn'),
+                    selectionSummary: document.getElementById('clipSelectionSummary'),
+                };
+
+                const state = {
+                    geojson: null,
+                    area: 0,
+                    mode: 'auto',
+                    scenes: [],
+                    selectedSceneId: null,
+                    loadingScenes: false,
+                    queueing: false,
+                };
+
+                const formatNumber = (value, decimals = 2) => {
+                    const number = Number(value);
+                    if (!Number.isFinite(number)) {
+                        return '0';
+                    }
+                    return number.toLocaleString(document.documentElement.lang || 'en', {
+                        minimumFractionDigits: decimals,
+                        maximumFractionDigits: decimals,
+                    });
+                };
+
+                const formatDateTime = (value) => {
+                    if (!value) {
+                        return 'Date unavailable';
+                    }
+                    const date = new Date(value);
+                    if (Number.isNaN(date.getTime())) {
+                        return value;
+                    }
+                    return date.toLocaleString(document.documentElement.lang || 'en', {
+                        dateStyle: 'medium',
+                        timeStyle: 'short',
+                    });
+                };
+
+                const notify = (type, message) => {
+                    if (window.MyZkToast && typeof window.MyZkToast[type] === 'function') {
+                        window.MyZkToast[type](message);
+                        return;
+                    }
+
+                    if (type === 'error') {
+                        console.error(message);
+                    } else {
+                        console.log(message);
+                    }
+                };
+
+                const parseNumber = (value) => {
+                    if (value === null || value === undefined || value === '') {
+                        return null;
+                    }
+                    const parsed = Number(value);
+                    return Number.isFinite(parsed) ? parsed : null;
+                };
+
+                const setMode = (mode) => {
+                    state.mode = mode;
+                    if (mode === 'auto') {
+                        state.selectedSceneId = null;
+                    }
+
+                    elements.modeOptions.forEach((label) => {
+                        const matches = label.dataset.mode === mode;
+                        label.classList.toggle('bg-primary/10', matches);
+                        label.classList.toggle('text-primary', matches);
+                        label.classList.toggle('border-primary/60', matches);
+                        label.classList.toggle('border-foreground/20', !matches);
+                        const input = label.querySelector('input[type="radio"]');
+                        if (input) {
+                            input.checked = matches;
+                        }
+                    });
+
+                    if (elements.modeDescription) {
+                        elements.modeDescription.textContent = mode === 'manual'
+                            ? 'Manually pick a scene from the list. The system will clip and process the selected acquisition only.'
+                            : 'Draw a polygon and pick a date range. The system will evaluate the best scene automatically based on cloud coverage and recency.';
+                    }
+
+                    if (elements.modeHint) {
+                        elements.modeHint.textContent = mode === 'manual'
+                            ? 'Manual Mode requires you to select one of the matching scenes below before processing.'
+                            : 'Auto Mode will automatically pick the most recent scene with the lowest cloud cover.';
+                    }
+
+                    updateSelectionSummary();
+                    updateProcessButtonState();
+                    highlightSelectedCard();
+                };
+
+                const updateProcessButtonState = () => {
+                    if (!elements.processBtn) {
+                        return;
+                    }
+
+                    const requiresSelection = state.mode === 'manual';
+                    const hasSelection = Boolean(state.selectedSceneId);
+                    const hasGeometry = state.area > 0 && state.geojson;
+                    const disabled = state.queueing || !config.processUrl || !hasGeometry || (requiresSelection && !hasSelection);
+
+                    elements.processBtn.disabled = disabled;
+                    elements.processBtn.classList.toggle('opacity-60', disabled);
+                    elements.processBtn.classList.toggle('cursor-not-allowed', disabled);
+                };
+
+                const updateSelectionSummary = () => {
+                    if (!elements.selectionSummary) {
+                        return;
+                    }
+
+                    if (!state.geojson || state.area <= 0) {
+                        elements.selectionSummary.textContent = 'Draw your area of interest to enable clip processing.';
+                        return;
+                    }
+
+                    if (state.mode === 'manual') {
+                        if (state.selectedSceneId) {
+                            const selected = state.scenes.find((scene) => scene.id === state.selectedSceneId);
+                            const label = selected?.title || state.selectedSceneId;
+                            elements.selectionSummary.textContent = `Manual Mode active. Selected scene: ${label}.`;
+                        } else {
+                            elements.selectionSummary.textContent = 'Manual Mode active. Select a scene from the list before processing.';
+                        }
+                    } else {
+                        elements.selectionSummary.textContent = 'Auto Mode active. The system will pick the best scene automatically when processing starts.';
+                    }
+                };
+
+                const highlightSelectedCard = () => {
+                    if (!elements.scenesList) {
+                        return;
+                    }
+
+                    const cards = elements.scenesList.querySelectorAll('.clip-scene-card');
+                    cards.forEach((card) => {
+                        const isSelected = state.mode === 'manual' && card.dataset.sceneId === state.selectedSceneId;
+                        card.classList.toggle('ring-2', isSelected);
+                        card.classList.toggle('ring-primary', isSelected);
+                        card.classList.toggle('border-primary/40', isSelected);
+                    });
+                };
+
+                const updateCreditDisplay = () => {
+                    if (!elements.creditValue || !elements.creditContainer) {
+                        return;
+                    }
+
+                    const areaHa = state.area / 10000;
+                    if (areaHa > 0) {
+                        const credits = areaHa * config.creditRate;
+                        elements.areaOutput.textContent = `${formatNumber(areaHa, 2)} ha`;
+                        elements.creditValue.textContent = `${formatNumber(credits, 2)} credit points`;
+                        if (elements.creditDetails) {
+                            elements.creditDetails.textContent = `${formatNumber(areaHa, 2)} ha × ${formatNumber(config.creditRate, 2)} credit points/ha`;
+                        }
+                        elements.creditContainer.classList.add('bg-green-50', 'border-green-300', 'shadow-sm');
+                        elements.creditContainer.classList.remove('border-foreground/10');
+                    } else {
+                        elements.areaOutput.textContent = '–';
+                        elements.creditValue.textContent = 'Draw an area';
+                        if (elements.creditDetails) {
+                            elements.creditDetails.textContent = '';
+                        }
+                        elements.creditContainer.classList.remove('bg-green-50', 'border-green-300', 'shadow-sm');
+                        elements.creditContainer.classList.add('border-foreground/10');
+                    }
+                };
+
+                const updateGeojsonOutput = (geojson) => {
+                    if (!elements.geojsonOutput) {
+                        return;
+                    }
+
+                    if (!geojson) {
+                        elements.geojsonOutput.innerHTML = '<span>Draw a polygon to populate GeoJSON coordinates.</span>';
+                        return;
+                    }
+
+                    const featureString = JSON.stringify(geojson, null, 2);
+                    elements.geojsonOutput.innerHTML = `<pre class="text-[11px] whitespace-pre-wrap">${featureString}</pre>`;
+                };
+
+                const updateGeometry = (geojson, area) => {
+                    state.geojson = geojson;
+                    state.area = Number(area) || 0;
+
+                    updateGeojsonOutput(geojson);
+                    updateCreditDisplay();
+                    updateSelectionSummary();
+                    updateProcessButtonState();
+                };
+
+                const applyDefaultDates = () => {
+                    const now = new Date();
+                    const endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                    const startDate = new Date(endDate);
+                    startDate.setMonth(startDate.getMonth() - 1);
+
+                    if (elements.endDate && !elements.endDate.value) {
+                        elements.endDate.value = endDate.toISOString().slice(0, 10);
+                    }
+                    if (elements.startDate && !elements.startDate.value) {
+                        elements.startDate.value = startDate.toISOString().slice(0, 10);
+                    }
+                };
+
+                const setLoadingScenes = (loading) => {
+                    state.loadingScenes = loading;
+                    if (elements.findScenes) {
+                        elements.findScenes.disabled = loading;
+                        elements.findScenes.classList.toggle('opacity-60', loading);
+                        elements.findScenes.classList.toggle('cursor-not-allowed', loading);
+                    }
+                };
+
+                const setQueueing = (queueing) => {
+                    state.queueing = queueing;
+                    if (elements.processBtn) {
+                        const label = elements.processBtn.querySelector('span');
+                        if (label) {
+                            label.textContent = queueing ? 'Queuing…' : 'Process & Queue Clip';
+                        }
+                        elements.processBtn.classList.toggle('cursor-wait', queueing);
+                    }
+                    updateProcessButtonState();
+                };
+
+                const clearScenes = () => {
+                    state.scenes = [];
+                    state.selectedSceneId = null;
+                    if (elements.scenesList) {
+                        elements.scenesList.innerHTML = '';
+                    }
+                    if (elements.scenesStatus) {
+                        elements.scenesStatus.textContent = 'Draw a polygon and apply filters to discover scenes intersecting your area.';
+                    }
+                    if (elements.searchStatus) {
+                        elements.searchStatus.textContent = '';
+                    }
+                    updateSelectionSummary();
+                    highlightSelectedCard();
+                };
+
+                const renderScenes = () => {
+                    if (!elements.scenesList) {
+                        return;
+                    }
+
+                    elements.scenesList.innerHTML = '';
+
+                    if (!state.scenes.length) {
+                        if (elements.scenesStatus) {
+                            elements.scenesStatus.textContent = 'No scenes found for the selected filters. Try expanding the date range or relaxing the cloud cover threshold.';
+                        }
+                        highlightSelectedCard();
+                        updateSelectionSummary();
+                        return;
+                    }
+
+                    if (elements.scenesStatus) {
+                        elements.scenesStatus.textContent = `${state.scenes.length} scene(s) found.`;
+                    }
+
+                    const template = document.getElementById('clipSceneCardTemplate');
+                    state.scenes.forEach((scene) => {
+                        const clone = template?.content?.cloneNode(true);
+                        if (!clone) {
+                            return;
+                        }
+
+                        const card = clone.querySelector('.clip-scene-card');
+                        if (card) {
+                            card.dataset.sceneId = scene.id || '';
+                        }
+
+                        const titleEl = clone.querySelector('[data-clip-title]');
+                        if (titleEl) {
+                            titleEl.textContent = scene.title || scene.id || 'Sentinel-2 Scene';
+                        }
+
+                        const dateEl = clone.querySelector('[data-clip-datetime]');
+                        if (dateEl) {
+                            dateEl.textContent = formatDateTime(scene.acquisition_date || scene.begin_position || scene.end_position);
+                        }
+
+                        const detailsEl = clone.querySelector('[data-clip-details]');
+                        if (detailsEl) {
+                            const cloud = scene.cloud_cover !== null && scene.cloud_cover !== undefined
+                                ? `${formatNumber(scene.cloud_cover, 1)}% cloud`
+                                : 'Cloud cover unavailable';
+                            const collection = scene.collection || 'Sentinel-2';
+                            detailsEl.textContent = `${collection} • ${cloud}`;
+                        }
+
+                        const thumbContainer = clone.querySelector('[data-clip-thumb]');
+                        const placeholder = clone.querySelector('[data-clip-placeholder]');
+                        const thumbnail = clone.querySelector('[data-clip-thumbnail]');
+                        if (thumbnail && scene.thumbnail) {
+                            thumbnail.src = scene.thumbnail;
+                            thumbnail.classList.remove('hidden');
+                            if (placeholder) {
+                                placeholder.classList.add('hidden');
+                            }
+                        }
+
+                        const downloadButton = clone.querySelector('[data-clip-download]');
+                        if (downloadButton) {
+                            if (scene.download_url) {
+                                downloadButton.href = scene.download_url;
+                                downloadButton.classList.remove('disabled', 'opacity-60', 'cursor-not-allowed');
+                            } else {
+                                downloadButton.href = '#';
+                                downloadButton.classList.add('opacity-60', 'cursor-not-allowed');
+                                downloadButton.setAttribute('aria-disabled', 'true');
+                            }
+                        }
+
+                        const selectButton = clone.querySelector('[data-clip-select]');
+                        if (selectButton) {
+                            selectButton.addEventListener('click', (event) => {
+                                event.preventDefault();
+                                if (state.mode !== 'manual') {
+                                    setMode('manual');
+                                }
+                                state.selectedSceneId = scene.id;
+                                highlightSelectedCard();
+                                updateSelectionSummary();
+                                updateProcessButtonState();
+                            });
+                        }
+
+                        elements.scenesList.appendChild(clone);
+                    });
+
+                    highlightSelectedCard();
+                    updateSelectionSummary();
+                    updateProcessButtonState();
+                };
+
+                const fetchScenes = async () => {
+                    if (!config.searchUrl) {
+                        notify('error', 'Please log in to search for Sentinel-2 scenes.');
+                        return;
+                    }
+
+                    if (!state.geojson || state.area <= 0) {
+                        notify('error', 'Draw your area of interest before searching for scenes.');
+                        return;
+                    }
+
+                    if (!elements.startDate?.value || !elements.endDate?.value) {
+                        notify('error', 'Please provide both a start date and an end date.');
+                        return;
+                    }
+
+                    const geometry = state.geojson.geometry || state.geojson;
+                    const payload = {
+                        geometry,
+                        date_from: elements.startDate.value,
+                        date_to: elements.endDate.value,
+                    };
+
+                    const maxCloud = parseNumber(elements.maxCloud?.value);
+                    if (maxCloud !== null) {
+                        payload.max_cloud = maxCloud;
+                    }
+
+                    const limit = parseNumber(elements.limit?.value);
+                    if (limit !== null) {
+                        payload.limit = limit;
+                    }
+
+                    setLoadingScenes(true);
+                    elements.searchStatus.textContent = 'Searching for scenes that intersect your area of interest…';
+
+                    try {
+                        const response = await fetch(config.searchUrl, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/json',
+                                'X-CSRF-TOKEN': config.csrf,
+                            },
+                            credentials: 'same-origin',
+                            body: JSON.stringify(payload),
+                        });
+
+                        if (!response.ok) {
+                            throw new Error('Unable to fetch Sentinel-2 scenes.');
+                        }
+
+                        const data = await response.json();
+                        if (!data?.success) {
+                            throw new Error(data?.message || 'No scenes returned.');
+                        }
+
+                        state.scenes = Array.isArray(data.scenes) ? data.scenes : [];
+                        state.selectedSceneId = null;
+                        renderScenes();
+                        elements.searchStatus.textContent = state.scenes.length
+                            ? `Found ${state.scenes.length} scene(s).`
+                            : 'No scenes matched your criteria.';
+                    } catch (error) {
+                        notify('error', error.message || 'Unable to fetch Sentinel-2 scenes.');
+                        elements.searchStatus.textContent = error.message || 'Unable to fetch Sentinel-2 scenes. Please try again later.';
+                        clearScenes();
+                    } finally {
+                        setLoadingScenes(false);
+                    }
+                };
+
+                const processClip = async () => {
+                    if (!config.processUrl) {
+                        notify('error', 'Please log in to queue clip processing.');
+                        return;
+                    }
+
+                    if (!state.geojson || state.area <= 0) {
+                        notify('error', 'Draw your area of interest before processing.');
+                        return;
+                    }
+
+                    if (!elements.startDate?.value || !elements.endDate?.value) {
+                        notify('error', 'Please provide both a start date and an end date.');
+                        return;
+                    }
+
+                    if (state.mode === 'manual' && !state.selectedSceneId) {
+                        notify('error', 'Select a scene in Manual Mode before processing.');
+                        return;
+                    }
+
+                    const geometry = state.geojson.geometry || state.geojson;
+                    const payload = {
+                        geometry,
+                        area_square_meters: state.area,
+                        mode: state.mode,
+                        date_from: elements.startDate.value,
+                        date_to: elements.endDate.value,
+                        title: elements.title?.value?.trim() || null,
+                    };
+
+                    const maxCloud = parseNumber(elements.maxCloud?.value);
+                    if (maxCloud !== null) {
+                        payload.max_cloud = maxCloud;
+                    }
+
+                    const limit = parseNumber(elements.limit?.value);
+                    if (limit !== null) {
+                        payload.limit = limit;
+                    }
+
+                    const resolution = parseNumber(elements.resolution?.value);
+                    if (resolution !== null) {
+                        payload.resolution = resolution;
+                    }
+
+                    if (state.mode === 'manual') {
+                        payload.scene_id = state.selectedSceneId;
+                    }
+
+                    setQueueing(true);
+
+                    try {
+                        const response = await fetch(config.processUrl, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/json',
+                                'X-CSRF-TOKEN': config.csrf,
+                            },
+                            credentials: 'same-origin',
+                            body: JSON.stringify(payload),
+                        });
+
+                        const data = await response.json();
+                        if (!response.ok || !data?.success) {
+                            const message = data?.message || 'Unable to queue clip processing.';
+                            throw new Error(message);
+                        }
+
+                        notify('success', 'Clip processing has been queued successfully.');
+
+                        const creditsDisplay = document.getElementById('current-myCredits');
+                        if (creditsDisplay && data.current_credits !== undefined) {
+                            creditsDisplay.textContent = formatNumber(data.current_credits, 2);
+                        }
+
+                        if (window.AppMap?.uploader?.reload) {
+                            window.AppMap.uploader.reload();
+                        }
+                    } catch (error) {
+                        notify('error', error.message || 'Unable to queue clip processing.');
+                    } finally {
+                        setQueueing(false);
+                    }
+                };
+
+                elements.modeOptions.forEach((label) => {
+                    label.addEventListener('click', (event) => {
+                        event.preventDefault();
+                        const mode = label.dataset.mode === 'manual' ? 'manual' : 'auto';
+                        setMode(mode);
+                    });
+                });
+
+                elements.findScenes?.addEventListener('click', fetchScenes);
+                elements.clearSelection?.addEventListener('click', () => {
+                    clearScenes();
+                });
+                elements.processBtn?.addEventListener('click', processClip);
+
+                elements.startDate?.addEventListener('change', () => {
+                    if (elements.endDate && elements.endDate.value && elements.endDate.value < elements.startDate.value) {
+                        elements.endDate.value = elements.startDate.value;
+                    }
+                });
+
+                elements.endDate?.addEventListener('change', () => {
+                    if (elements.startDate && elements.startDate.value && elements.startDate.value > elements.endDate.value) {
+                        elements.startDate.value = elements.endDate.value;
+                    }
+                });
+
+                window.addEventListener('map:clip:geometry', (event) => {
+                    const detail = event.detail || {};
+                    updateGeometry(detail.geojson || null, detail.area || 0);
+                });
+
+                applyDefaultDates();
+                setMode(state.mode);
+                updateGeometry(null, 0);
+                clearScenes();
             })();
         </script>
     @endpush

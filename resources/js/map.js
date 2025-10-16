@@ -896,25 +896,27 @@ function addInteraction(type = "Polygon") {
         });
         geojsonFeature = JSON.parse(geojson);
 
-        // Display the GeoJSON string in the #drawerGeojson element
-        document.getElementById(
-            "drawerGeojson"
-        ).innerHTML = `<pre>${JSON.stringify(geojsonFeature, null, 1)}</pre>`;
+        // Display the GeoJSON string in the clip GeoJSON output element
+        const geojsonTarget = document.getElementById("clipGeojsonOutput");
+        if (geojsonTarget) {
+            geojsonTarget.innerHTML = `<pre>${JSON.stringify(geojsonFeature, null, 1)}</pre>`;
+        }
 
-        // Display measurement result in the #measurementOutput div
-        document.getElementById("measurementOutput").innerHTML =
-            formatNumber(geojsonArea / 10000) + " ha"; // Convert m² to hectares;
+        const areaTarget = document.getElementById("clipAreaOutput");
+        if (areaTarget) {
+            areaTarget.textContent = `${formatNumber(geojsonArea / 10000)} ha`;
+        }
 
         drawingEnd();
 
-        // Show feature properties after drawing
-        if (draw) {
-            $("#featureProperties").removeClass("hidden");
-        }
-
-        // Calculate total price after drawing
-        if (typeof window.calculateTotalPrice === "function") {
-            window.calculateTotalPrice();
+        try {
+            window.dispatchEvent(
+                new CustomEvent("map:clip:geometry", {
+                    detail: { geojson: geojsonFeature, area: geojsonArea },
+                })
+            );
+        } catch (error) {
+            console.warn("Unable to dispatch clip geometry event", error);
         }
     });
 }
@@ -928,8 +930,20 @@ function drawingStart() {
     drawingRunning = true;
     drawed = null;
     buttonStateDrawing();
-    $("#featureProperties").addClass("hidden");
-    $("#drawerGeojson").html("");
+    const geojsonTarget = document.getElementById("clipGeojsonOutput");
+    if (geojsonTarget) {
+        geojsonTarget.innerHTML = "<span>Draw a polygon to populate GeoJSON coordinates.</span>";
+    }
+
+    try {
+        window.dispatchEvent(
+            new CustomEvent("map:clip:geometry", {
+                detail: { geojson: null, area: 0 },
+            })
+        );
+    } catch (error) {
+        console.warn("Unable to dispatch clip geometry reset", error);
+    }
 }
 
 /**
@@ -944,8 +958,12 @@ function drawingEnd() {
         map.removeOverlay(measureTooltip);
     }
 
-    measureTooltipElement.className = "ol-tooltip ol-tooltip-static";
-    measureTooltip.setOffset([0, -7]);
+    if (measureTooltipElement) {
+        measureTooltipElement.className = "ol-tooltip ol-tooltip-static";
+    }
+    if (measureTooltip) {
+        measureTooltip.setOffset([0, -7]);
+    }
     sketch = null;
     measureTooltipElement = null;
 
@@ -1030,25 +1048,6 @@ $("#drawPolygonBtn").click(function (e) {
         drawingEnd();
     } else {
         drawingStart();
-        $("#featurePropertiesForm")[0].reset();
-    }
-});
-$("#cancelFeatureProperties").click(function (e) {
-    $("#featureProperties").addClass("hidden");
-    $("#drawerGeojson").html("");
-    if (vectorLayerDrawing) {
-        map.removeLayer(vectorLayerDrawing);
-        vectorSourceDrawing.clear();
-    }
-});
-
-$("#saveFeatureProperties").click(function () {
-    const geojson = geojsonFeature;
-    const area_hectares = geojsonArea;
-
-    if (geojson) {
-        $("#geometryInput").val(JSON.stringify(geojson.geometry));
-        $("#areaInput").val(area_hectares);
     }
 });
 

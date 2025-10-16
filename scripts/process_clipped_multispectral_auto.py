@@ -1,47 +1,90 @@
+import json
 import os
+import shutil
 from datetime import timedelta
-from dateutil import parser as dateparser
+
 import numpy as np
 import rasterio
-from rasterio.merge import merge
+from dateutil import parser as dateparser
 from rasterio import mask
+from rasterio.merge import merge
 
 from sentinelhub import (
-    SHConfig, SentinelHubCatalog, SentinelHubRequest,
-    BBox, CRS, bbox_to_dimensions, MimeType, DataCollection, Geometry
+    BBox,
+    CRS,
+    DataCollection,
+    Geometry,
+    MimeType,
+    SHConfig,
+    SentinelHubCatalog,
+    SentinelHubRequest,
+    bbox_to_dimensions,
 )
 from sentinelhub.areas import BBoxSplitter
 
+
+def _load_json_from_env(var_name: str, default=None):
+    value = os.getenv(var_name)
+    if value is None or value.strip() == "":
+        return default
+    try:
+        return json.loads(value)
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"Invalid JSON provided for {var_name}: {exc}")
+
+
+def _ensure_directory(path: str) -> str:
+    if not path:
+        return path
+    os.makedirs(path, exist_ok=True)
+    return path
+
+
+def _resolve_geometry(aoi_geojson):
+    if not isinstance(aoi_geojson, dict):
+        raise SystemExit("AOI_GEOJSON must be a GeoJSON FeatureCollection dictionary")
+
+    features = aoi_geojson.get("features") or []
+    if not features:
+        raise SystemExit("AOI_GEOJSON does not contain any features")
+
+    geometry_dict = features[0].get("geometry")
+    if not geometry_dict:
+        raise SystemExit("First feature in AOI_GEOJSON does not include geometry")
+
+    return Geometry(geometry_dict, crs=CRS.WGS84)
+
+
 # ====== KONFIGURASI ======
-SH_CLIENT_ID =
-SH_CLIENT_SECRET =
-
 config = SHConfig()
-config.sh_client_id = SH_CLIENT_ID
-config.sh_client_secret = SH_CLIENT_SECRET
-config.sh_token_url = "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token"
-config.sh_base_url  = "https://sh.dataspace.copernicus.eu"
+config.sh_client_id = os.getenv("SH_CLIENT_ID", "")
+config.sh_client_secret = os.getenv("SH_CLIENT_SECRET", "")
+config.sh_token_url = os.getenv(
+    "SH_TOKEN_URL",
+    "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token",
+)
+config.sh_base_url = os.getenv("SH_BASE_URL", "https://sh.dataspace.copernicus.eu")
 
-# Folder untuk simpan
-tiles_dir = "tiles"
-merged_tif = "merged_fixed.tif"
-masked_tif = "merged_masked.tif"
-os.makedirs(tiles_dir, exist_ok=True)
+tiles_dir = _ensure_directory(os.getenv("CLIP_TILE_DIR", "tiles"))
+merged_tif = os.getenv("CLIP_MERGED_TIF", "merged_fixed.tif")
+masked_tif = os.getenv("CLIP_MASKED_TIF", "merged_masked.tif")
+output_tif = os.getenv("OUTPUT_TIF", masked_tif)
+
 
 # ====== PARAMETER ======
-DATE_FROM = "2025-08-01"
-DATE_TO   = "2025-08-31"
-MAX_CLOUD = 60
-LIMIT     = 100
-RES       = 10
-NODATA_VAL = 0   # ganti ke -9999 kalau lebih cocok
+DATE_FROM = os.getenv("DATE_FROM", "2025-08-01")
+DATE_TO = os.getenv("DATE_TO", "2025-08-31")
+MAX_CLOUD = float(os.getenv("MAX_CLOUD", "60"))
+LIMIT = int(os.getenv("LIMIT", "100"))
+RES = int(os.getenv("RES", "10"))
+NODATA_VAL = float(os.getenv("NODATA_VAL", "0"))
+SCENE_ID = os.getenv("SCENE_ID")
 
-# ====== AOI dari GEOJSON ======
-AOI_GEOJSON = {}
+AOI_GEOJSON = _load_json_from_env("AOI_GEOJSON")
+if AOI_GEOJSON is None:
+    raise SystemExit("AOI_GEOJSON environment variable is required")
 
-# Geometry untuk query & masking
-geom_dict = AOI_GEOJSON["features"][0]["geometry"]
-geometry = Geometry(geom_dict, crs=CRS.WGS84)
+geometry = _resolve_geometry(AOI_GEOJSON)
 bbox = geometry.bbox
 
 # ====== CARI SCENE ======
@@ -50,9 +93,10 @@ search_iter = catalog.search(
     DataCollection.SENTINEL2_L1C,
     geometry=geometry,
     time=(DATE_FROM, DATE_TO),
-    limit=LIMIT
+    limit=LIMIT,
 )
 items = list(search_iter)
+
 
 def get_cloud(item):
     props = item.get("properties", {})
@@ -64,9 +108,17 @@ def get_cloud(item):
 if not items:
     raise SystemExit("Tidak ada scene cocok")
 
-items.sort(key=lambda it: it["properties"]["datetime"], reverse=True)
+items.sort(key=lambda it: it["properties"].get("datetime"), reverse=True)
 filtered = [it for it in items if (get_cloud(it) is None or get_cloud(it) <= MAX_CLOUD)]
-chosen = filtered[0] if filtered else items[0]
+
+if SCENE_ID:
+    chosen = next((it for it in filtered if it.get("id") == SCENE_ID), None)
+    if chosen is None:
+        chosen = next((it for it in items if it.get("id") == SCENE_ID), None)
+        if chosen is None:
+            raise SystemExit(f"Scene dengan ID {SCENE_ID} tidak ditemukan dalam hasil pencarian")
+else:
+    chosen = filtered[0] if filtered else items[0]
 
 chosen_time = chosen["properties"]["datetime"]
 print("Scene terpilih:", chosen["id"], "waktu:", chosen_time, "cloud:", get_cloud(chosen))
@@ -111,20 +163,26 @@ for idx, tile_bb in enumerate(tile_bboxes):
 
     request = SentinelHubRequest(
         evalscript=evalscript_all_bands,
-        input_data=[{
-            "type": "sentinel-2-l1c",
-            "dataFilter": {
-                "timeRange": {"from": t_from, "to": t_to},
-                "mosaickingOrder": "mostRecent",
-                "maxCloudCoverage": MAX_CLOUD
-            },
-            "processing": {"upsampling": "BILINEAR","downsampling": "BILINEAR","harmonizeValues": True}
-        }],
+        input_data=[
+            {
+                "type": "sentinel-2-l1c",
+                "dataFilter": {
+                    "timeRange": {"from": t_from, "to": t_to},
+                    "mosaickingOrder": "mostRecent",
+                    "maxCloudCoverage": MAX_CLOUD,
+                },
+                "processing": {
+                    "upsampling": "BILINEAR",
+                    "downsampling": "BILINEAR",
+                    "harmonizeValues": True,
+                },
+            }
+        ],
         responses=[SentinelHubRequest.output_response("default", MimeType.TIFF)],
         bbox=tile_bb,
         size=(w, h),
         data_folder=tiles_dir,
-        config=config
+        config=config,
     )
     _ = request.get_data(save_data=True, show_progress=True)
     for p in request.get_filename_list():
@@ -175,3 +233,16 @@ if tile_paths:
         dst.write(out_img)
 
     print("Merged TIFF masked (poligon AOI) disimpan:", masked_tif)
+
+    if output_tif:
+        output_dir = os.path.dirname(output_tif)
+        if output_dir:
+            os.makedirs(output_dir, exist_ok=True)
+
+        if os.path.abspath(masked_tif) != os.path.abspath(output_tif):
+            shutil.move(masked_tif, output_tif)
+            print("Final clipped imagery disimpan:", output_tif)
+        else:
+            print("Final clipped imagery disimpan pada lokasi default:", output_tif)
+else:
+    raise SystemExit("Tidak ada tile yang diunduh. Periksa parameter pencarian Anda.")
