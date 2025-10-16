@@ -444,7 +444,11 @@
                                             <p class="text-xs text-foreground/60" data-clip-details>Cloud cover: –</p>
                                         </div>
                                     </div>
-                                    <div class="mt-2 flex justify-end">
+                                    <div class="mt-2 flex flex-wrap justify-between gap-2">
+                                        <button class="clip-preview-btn enabled:hover:bg-primary/10 text-primary border-primary/40 inline-flex items-center space-x-1 rounded-md border px-2 py-1 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50" data-clip-preview type="button">
+                                            <i class="ri-image-line"></i>
+                                            <span>Preview on Map</span>
+                                        </button>
                                         <button class="clip-select-btn inline-flex items-center space-x-1 rounded-md border border-primary/40 px-2 py-1 text-xs font-semibold text-primary transition hover:bg-primary/10" type="button">
                                             <i class="ri-checkbox-circle-line"></i>
                                             <span>Select Scene</span>
@@ -1427,6 +1431,78 @@
                         };
                     };
 
+                    const resolveManualPreviewDownloadUrl = (feature) => {
+                        const resolver = window.AppMap?.sentinel?.resolveDownloadUrl;
+                        if (typeof resolver === 'function') {
+                            try {
+                                return resolver(feature) || null;
+                            } catch (error) {
+                                console.warn('Failed to resolve Sentinel download URL for preview.', error);
+                            }
+                        }
+                        return null;
+                    };
+
+                    const buildPreviewPayload = (feature, sceneData) => {
+                        if (!feature) return null;
+                        const props = feature?.properties ?? {};
+                        const acquisition =
+                            sceneData?.datetime ||
+                            props.completionDate ||
+                            props.startDate ||
+                            props.datetime ||
+                            props.endPosition ||
+                            props.beginPosition ||
+                            null;
+                        const productId =
+                            sceneData?.product_id ||
+                            props.productIdentifier ||
+                            props.title ||
+                            feature?.id ||
+                            null;
+                        const mgrs = sceneData?.mgrs || props.mgrsId || props.tileId || props.MGRS || null;
+
+                        const detailParts = [];
+                        const productType = props.productType || props.processingLevel || props.producttype || null;
+                        if (productType) {
+                            detailParts.push(`Product type: ${productType}`);
+                        }
+                        if (productId) {
+                            detailParts.push(`Product ID: ${productId}`);
+                        }
+                        const detailText = detailParts.filter(Boolean).join(' • ');
+
+                        const payload = {
+                            title: sceneData?.title || props.title || (productId ? `Sentinel-2 ${productId}` : 'Sentinel-2 Scene'),
+                            productId,
+                            acquisitionDate: acquisition,
+                            detailText: detailText || null,
+                            tileText: mgrs ? `Tile ${mgrs}` : null,
+                            cloudCover: sceneData?.cloud_cover ?? getCloudCover(feature),
+                            collection: sceneData?.collection ?? props.collection ?? null,
+                            geometry: feature?.geometry || null,
+                            bbox: Array.isArray(feature?.bbox)
+                                ? feature.bbox
+                                : Array.isArray(props?.bbox)
+                                ? props.bbox
+                                : null,
+                            links: Array.isArray(feature?.links)
+                                ? feature.links
+                                : Array.isArray(props?.links)
+                                ? props.links
+                                : [],
+                            assets: feature?.assets ?? props?.assets ?? null,
+                            services: props?.services ?? feature?.services ?? null,
+                        };
+
+                        const downloadBase = resolveManualPreviewDownloadUrl(feature);
+                        if (downloadBase) {
+                            payload.downloadUrlBase = downloadBase;
+                        }
+
+                        return payload;
+                    };
+
                     const fetchScenes = async () => {
                         const params = buildQueryParams();
                         const requestUrl = `${clipConfig.endpoint}?${params.toString()}`;
@@ -1447,6 +1523,7 @@
                         const datetimeEl = clone.querySelector('[data-clip-datetime]');
                         const detailsEl = clone.querySelector('[data-clip-details]');
                         const selectBtn = clone.querySelector('.clip-select-btn');
+                        const previewBtn = clone.querySelector('[data-clip-preview]');
 
                         if (card) {
                             card.dataset.sceneId = sceneData.id ?? '';
@@ -1472,6 +1549,28 @@
                             selectBtn.addEventListener('click', () => {
                                 selectScene(sceneData, 'manual');
                             });
+                        }
+                        if (previewBtn) {
+                            const hasCoverage = Boolean(feature?.geometry) ||
+                                (Array.isArray(feature?.bbox) && feature.bbox.length === 4) ||
+                                (Array.isArray(feature?.properties?.bbox) && feature.properties.bbox.length === 4);
+                            previewBtn.disabled = !hasCoverage;
+                            if (hasCoverage) {
+                                previewBtn.addEventListener('click', () => {
+                                    const payload = buildPreviewPayload(feature, sceneData);
+                                    if (payload) {
+                                        if (typeof window.showSentinelPreviewOnMap === 'function') {
+                                            window.showSentinelPreviewOnMap(payload);
+                                        } else {
+                                            window.MyZkToast?.warning?.('Preview panel is unavailable.');
+                                        }
+                                    } else {
+                                        window.MyZkToast?.warning?.('Preview unavailable for this scene.');
+                                    }
+                                });
+                            } else {
+                                previewBtn.title = 'Preview unavailable for this scene.';
+                            }
                         }
 
                         elements.sceneList.appendChild(clone);
@@ -2680,6 +2779,9 @@
 
                     return bestUrl ?? null;
                 };
+
+                ensureAppNamespace();
+                window.AppMap.sentinel.resolveDownloadUrl = resolveDownloadUrl;
 
                 // Generate a filesystem-friendly filename for Sentinel downloads.
                 const buildDownloadName = (primary, fallback) => {
