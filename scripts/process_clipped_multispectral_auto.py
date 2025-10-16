@@ -1,6 +1,6 @@
 import os
 import json
-from datetime import timedelta
+from datetime import date, timedelta
 from dateutil import parser as dateparser
 import numpy as np
 import rasterio
@@ -21,15 +21,23 @@ def read_env(name: str, default: str | None = None) -> str | None:
     return default
 
 
-SH_CLIENT_ID = read_env("SENTINELHUB_CLIENT_ID", read_env("SH_CLIENT_ID", ""))
-SH_CLIENT_SECRET = read_env("SENTINELHUB_CLIENT_SECRET", read_env("SH_CLIENT_SECRET", ""))
+COPERNICUS_CLIENT_ID = read_env(
+    "COPERNICUS_CLIENT_ID",
+    read_env("SENTINELHUB_CLIENT_ID", read_env("SH_CLIENT_ID", "")),
+)
+COPERNICUS_CLIENT_SECRET = read_env(
+    "COPERNICUS_CLIENT_SECRET",
+    read_env("SENTINELHUB_CLIENT_SECRET", read_env("SH_CLIENT_SECRET", "")),
+)
 
-if not SH_CLIENT_ID or not SH_CLIENT_SECRET:
-    raise SystemExit("Sentinel Hub credentials are not configured. Please set SENTINELHUB_CLIENT_ID and SENTINELHUB_CLIENT_SECRET in the environment.")
+if not COPERNICUS_CLIENT_ID or not COPERNICUS_CLIENT_SECRET:
+    raise SystemExit(
+        "Sentinel Hub credentials are not configured. Please set COPERNICUS_CLIENT_ID and COPERNICUS_CLIENT_SECRET in the environment."
+    )
 
 config = SHConfig()
-config.sh_client_id = SH_CLIENT_ID
-config.sh_client_secret = SH_CLIENT_SECRET
+config.sh_client_id = COPERNICUS_CLIENT_ID
+config.sh_client_secret = COPERNICUS_CLIENT_SECRET
 config.sh_token_url = "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token"
 config.sh_base_url  = "https://sh.dataspace.copernicus.eu"
 
@@ -52,8 +60,11 @@ if masked_tif:
         os.makedirs(masked_dir, exist_ok=True)
 
 # ====== PARAMETER ======
-DATE_FROM = read_env("SENTINEL_CLIP_DATE_FROM", "2025-08-01")
-DATE_TO   = read_env("SENTINEL_CLIP_DATE_TO", "2025-08-31")
+DEFAULT_WINDOW_DAYS = int(float(read_env("SENTINEL_CLIP_WINDOW_DAYS", "30")))
+today = date.today()
+default_start = (today - timedelta(days=DEFAULT_WINDOW_DAYS)).isoformat()
+DATE_FROM = read_env("SENTINEL_CLIP_DATE_FROM", default_start)
+DATE_TO   = read_env("SENTINEL_CLIP_DATE_TO", today.isoformat())
 MAX_CLOUD = float(read_env("SENTINEL_CLIP_MAX_CLOUD", "60"))
 LIMIT     = int(float(read_env("SENTINEL_CLIP_LIMIT", "100")))
 RES       = int(float(read_env("SENTINEL_CLIP_RESOLUTION", "10")))

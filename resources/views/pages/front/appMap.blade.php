@@ -372,8 +372,8 @@
                                     <div class="inline-flex overflow-hidden rounded-full border border-foreground/20" role="tablist">
                                         <button class="clip-mode-btn px-3 py-1 text-xs font-semibold transition data-[active=true]:bg-primary data-[active=true]:text-primary-foreground"
                                             data-mode="auto" type="button" id="clipModeAutoBtn" aria-pressed="true">Auto Mode</button>
-                                        <button class="clip-mode-btn px-3 py-1 text-xs font-semibold transition data-[active=true]:bg-primary data-[active=true]:text-primary-foreground"
-                                            data-mode="manual" type="button" id="clipModeManualBtn" aria-pressed="false">Manual Mode</button>
+                                        <button class="clip-mode-btn px-3 py-1 text-xs font-semibold transition data-[active=true]:bg-primary data-[active=true]:text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                                            data-mode="manual" type="button" id="clipModeManualBtn" aria-pressed="false" disabled aria-disabled="true">Manual Mode</button>
                                     </div>
                                 </div>
 
@@ -388,21 +388,12 @@
                                     </div>
                                 </div>
 
-                                <div class="space-y-2 hidden" id="clipManualPanel">
-                                    <p class="text-foreground/70 text-sm">Review Sentinel-2 scenes that intersect your polygon and choose the best one manually.</p>
-                                    <x-button-secondary id="clipManualSearchBtn" type="button" size="small" disabled>
-                                        <i class="ri-search-line"></i>
-                                        <span>Search Scenes</span>
-                                    </x-button-secondary>
-                                    <div class="text-foreground/70 text-sm" id="clipManualStatus">Draw a polygon to enable manual search.</div>
-                                    <div class="space-y-2 max-h-72 overflow-y-auto nice-scrollbar" id="clipSceneList"></div>
-                                </div>
                             </div>
 
                             <div class="bg-background/60 border border-foreground/10 rounded-lg p-3 shadow-sm space-y-2">
                                 <h4 class="text-foreground text-lg font-semibold">Selected Scene</h4>
                                 <div class="border border-foreground/15 rounded-lg p-3 text-sm" id="clipSelectionSummary">
-                                    No scene selected yet. Use auto or manual mode to pick one.
+                                    No scene selected yet. Use auto mode to pick one.
                                 </div>
                                 <x-button-primary id="clipProcessBtn" type="button" size="small" class="w-full md:w-auto" disabled>
                                     <i class="ri-cpu-line"></i>
@@ -411,30 +402,6 @@
                                 <p class="text-foreground/60 text-xs" id="clipProcessNotice">Processing will run in the background via job queue. We will notify you when the imagery is ready.</p>
                             </div>
 
-                            <template id="clipSceneTemplate">
-                                <div class="clip-scene-card border border-foreground/15 rounded-lg p-2 transition hover:shadow-md">
-                                    <div class="flex items-start gap-2">
-                                        <div class="bg-foreground/5 flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-md text-xs font-semibold" data-clip-thumb>
-                                            <i class="ri-landscape-line text-lg text-primary"></i>
-                                        </div>
-                                        <div class="min-w-0 flex-1 space-y-0.5">
-                                            <p class="text-sm font-semibold text-foreground" data-clip-title>Sentinel-2 Scene</p>
-                                            <p class="text-xs text-foreground/70" data-clip-datetime>Acquired: –</p>
-                                            <p class="text-xs text-foreground/60" data-clip-details>Cloud cover: –</p>
-                                        </div>
-                                    </div>
-                                    <div class="mt-2 flex flex-wrap justify-between gap-2">
-                                        <button class="clip-preview-btn enabled:hover:bg-primary/10 text-primary border-primary/40 inline-flex items-center space-x-1 rounded-md border px-2 py-1 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50" data-clip-preview type="button">
-                                            <i class="ri-image-line"></i>
-                                            <span>Preview on Map</span>
-                                        </button>
-                                        <button class="clip-select-btn inline-flex items-center space-x-1 rounded-md border border-primary/40 px-2 py-1 text-xs font-semibold text-primary transition hover:bg-primary/10" type="button">
-                                            <i class="ri-checkbox-circle-line"></i>
-                                            <span>Select Scene</span>
-                                        </button>
-                                    </div>
-                                </div>
-                            </template>
                         </div>
                     </div>
                 </div>
@@ -1047,18 +1014,13 @@
                         geojsonOutput: document.getElementById('clipGeojsonOutput'),
                         fieldInput: document.getElementById('clipFieldName'),
                         autoBtn: document.getElementById('clipAutoSearchBtn'),
-                        manualBtn: document.getElementById('clipManualSearchBtn'),
                         modeButtons: Array.from(document.querySelectorAll('.clip-mode-btn')),
                         autoPanel: document.getElementById('clipAutoPanel'),
-                        manualPanel: document.getElementById('clipManualPanel'),
                         autoResult: document.getElementById('clipAutoResult'),
-                        manualStatus: document.getElementById('clipManualStatus'),
-                        sceneList: document.getElementById('clipSceneList'),
                         selectionSummary: document.getElementById('clipSelectionSummary'),
                         processBtn: document.getElementById('clipProcessBtn'),
                         processNotice: document.getElementById('clipProcessNotice'),
                         resetBtn: document.getElementById('clipResetBtn'),
-                        template: document.getElementById('clipSceneTemplate'),
                         processUrl: moduleEl.dataset.processUrl || '',
                     };
 
@@ -1070,8 +1032,6 @@
                         creditRate: Number(moduleEl.dataset.creditRate ?? '0') || 0,
                         mode: 'auto',
                         autoScene: null,
-                        manualSelection: null,
-                        manualScenes: [],
                         selectedScene: null,
                     };
 
@@ -1157,19 +1117,6 @@
                             : 'Draw an area and search to preview the recommended scene.';
                     };
 
-                    const resetManualList = () => {
-                        if (elements.sceneList) {
-                            elements.sceneList.innerHTML = '';
-                        }
-                        state.manualScenes = [];
-                        state.manualSelection = null;
-                        if (elements.manualStatus) {
-                            elements.manualStatus.textContent = state.geometry
-                                ? 'Click “Search Scenes” to fetch intersecting scenes.'
-                                : 'Draw a polygon to enable manual search.';
-                        }
-                    };
-
                     const updateProcessAvailability = () => {
                         if (!elements.processBtn) return;
                         const fieldNameFilled = (elements.fieldInput?.value ?? '').trim().length > 0;
@@ -1189,7 +1136,7 @@
                     const updateSelectionSummary = () => {
                         if (!elements.selectionSummary) return;
                         if (!state.selectedScene) {
-                            elements.selectionSummary.textContent = 'No scene selected yet. Use auto or manual mode to pick one.';
+                            elements.selectionSummary.textContent = 'No scene selected yet. Use auto mode to pick one.';
                             updateProcessAvailability();
                             return;
                         }
@@ -1202,63 +1149,42 @@
                         if (state.selectedScene.cloud_cover !== undefined && state.selectedScene.cloud_cover !== null) {
                             parts.push(`<div class="text-xs text-foreground/70">Cloud cover: ${safeFormatNumber(state.selectedScene.cloud_cover, 2)}%</div>`);
                         }
-                        parts.push(`<div class="text-xs text-foreground/60">Mode: ${state.mode === 'auto' ? 'Auto selection' : 'Manual selection'}</div>`);
+                        parts.push('<div class="text-xs text-foreground/60">Mode: Auto selection</div>');
 
                         elements.selectionSummary.innerHTML = parts.join('');
                         updateProcessAvailability();
                     };
 
-                    const highlightManualSelection = (scene) => {
-                        if (!elements.sceneList) return;
-                        const selectedId = scene?.id ? String(scene.id) : '';
-                        const selectedDatetime = scene?.datetime ? String(scene.datetime) : '';
-                        elements.sceneList.querySelectorAll('.clip-scene-card').forEach((card) => {
-                            const matches = card.dataset.sceneId === selectedId && card.dataset.sceneDatetime === selectedDatetime;
-                            card.classList.toggle('border-primary', matches);
-                            card.classList.toggle('ring-2', matches);
-                            card.classList.toggle('ring-primary/60', matches);
-                        });
-                    };
-
-                    const selectScene = (scene, origin = state.mode) => {
+                    const selectScene = (scene) => {
+                        state.autoScene = scene || null;
                         state.selectedScene = scene || null;
-                        if (origin === 'manual') {
-                            state.manualSelection = scene || null;
-                            highlightManualSelection(scene || null);
-                        } else if (origin === 'auto') {
-                            state.autoScene = scene || null;
-                            if (scene && elements.autoResult) {
-                                elements.autoResult.innerHTML = `
-                                    <div class="font-semibold">${scene.title ?? 'Latest Scene'}</div>
-                                    <div class="text-xs text-foreground/70">Acquired: ${formatHumanDate(scene.datetime)}</div>
-                                    <div class="text-xs text-foreground/70">Cloud cover: ${safeFormatNumber(scene.cloud_cover ?? 0, 2)}%</div>
-                                `;
-                            } else if (elements.autoResult) {
-                                resetAutoResult();
-                            }
+                        if (scene && elements.autoResult) {
+                            elements.autoResult.innerHTML = `
+                                <div class="font-semibold">${scene.title ?? 'Latest Scene'}</div>
+                                <div class="text-xs text-foreground/70">Acquired: ${formatHumanDate(scene.datetime)}</div>
+                                <div class="text-xs text-foreground/70">Cloud cover: ${safeFormatNumber(scene.cloud_cover ?? 0, 2)}%</div>
+                            `;
+                        } else if (elements.autoResult) {
+                            resetAutoResult();
                         }
 
                         updateSelectionSummary();
                     };
 
-                    const setMode = (mode) => {
-                        state.mode = mode;
+                    const setMode = () => {
+                        state.mode = 'auto';
                         elements.modeButtons.forEach((button) => {
-                            const active = button.dataset.mode === mode;
-                            button.dataset.active = active ? 'true' : 'false';
-                            button.setAttribute('aria-pressed', active ? 'true' : 'false');
+                            const isAuto = button.dataset.mode === 'auto';
+                            if (!isAuto) {
+                                button.disabled = true;
+                                button.setAttribute('aria-disabled', 'true');
+                            }
+                            button.dataset.active = isAuto ? 'true' : 'false';
+                            button.setAttribute('aria-pressed', isAuto ? 'true' : 'false');
                         });
 
-                        if (elements.autoPanel && elements.manualPanel) {
-                            if (mode === 'auto') {
-                                elements.autoPanel.classList.remove('hidden');
-                                elements.manualPanel.classList.add('hidden');
-                                selectScene(state.autoScene, 'auto');
-                            } else {
-                                elements.manualPanel.classList.remove('hidden');
-                                elements.autoPanel.classList.add('hidden');
-                                selectScene(state.manualSelection, 'manual');
-                            }
+                        if (elements.autoPanel) {
+                            elements.autoPanel.classList.remove('hidden');
                         }
                     };
 
@@ -1422,78 +1348,6 @@
                         };
                     };
 
-                    const resolveManualPreviewDownloadUrl = (feature) => {
-                        const resolver = window.AppMap?.sentinel?.resolveDownloadUrl;
-                        if (typeof resolver === 'function') {
-                            try {
-                                return resolver(feature) || null;
-                            } catch (error) {
-                                console.warn('Failed to resolve Sentinel download URL for preview.', error);
-                            }
-                        }
-                        return null;
-                    };
-
-                    const buildPreviewPayload = (feature, sceneData) => {
-                        if (!feature) return null;
-                        const props = feature?.properties ?? {};
-                        const acquisition =
-                            sceneData?.datetime ||
-                            props.completionDate ||
-                            props.startDate ||
-                            props.datetime ||
-                            props.endPosition ||
-                            props.beginPosition ||
-                            null;
-                        const productId =
-                            sceneData?.product_id ||
-                            props.productIdentifier ||
-                            props.title ||
-                            feature?.id ||
-                            null;
-                        const mgrs = sceneData?.mgrs || props.mgrsId || props.tileId || props.MGRS || null;
-
-                        const detailParts = [];
-                        const productType = props.productType || props.processingLevel || props.producttype || null;
-                        if (productType) {
-                            detailParts.push(`Product type: ${productType}`);
-                        }
-                        if (productId) {
-                            detailParts.push(`Product ID: ${productId}`);
-                        }
-                        const detailText = detailParts.filter(Boolean).join(' • ');
-
-                        const payload = {
-                            title: sceneData?.title || props.title || (productId ? `Sentinel-2 ${productId}` : 'Sentinel-2 Scene'),
-                            productId,
-                            acquisitionDate: acquisition,
-                            detailText: detailText || null,
-                            tileText: mgrs ? `Tile ${mgrs}` : null,
-                            cloudCover: sceneData?.cloud_cover ?? getCloudCover(feature),
-                            collection: sceneData?.collection ?? props.collection ?? null,
-                            geometry: feature?.geometry || null,
-                            bbox: Array.isArray(feature?.bbox)
-                                ? feature.bbox
-                                : Array.isArray(props?.bbox)
-                                ? props.bbox
-                                : null,
-                            links: Array.isArray(feature?.links)
-                                ? feature.links
-                                : Array.isArray(props?.links)
-                                ? props.links
-                                : [],
-                            assets: feature?.assets ?? props?.assets ?? null,
-                            services: props?.services ?? feature?.services ?? null,
-                        };
-
-                        const downloadBase = resolveManualPreviewDownloadUrl(feature);
-                        if (downloadBase) {
-                            payload.downloadUrlBase = downloadBase;
-                        }
-
-                        return payload;
-                    };
-
                     const fetchScenes = async () => {
                         const params = buildQueryParams();
                         const requestUrl = `${clipConfig.endpoint}?${params.toString()}`;
@@ -1504,68 +1358,6 @@
                         const data = await response.json();
                         const features = Array.isArray(data?.features) ? data.features : [];
                         return features.sort((a, b) => getAcquisitionTimestamp(b) - getAcquisitionTimestamp(a));
-                    };
-
-                    const attachManualCard = (feature) => {
-                        if (!elements.template || !elements.sceneList) return;
-                        const sceneData = buildScenePayload(feature);
-                        const clone = elements.template.content.cloneNode(true);
-                        const card = clone.querySelector('.clip-scene-card');
-                        const titleEl = clone.querySelector('[data-clip-title]');
-                        const datetimeEl = clone.querySelector('[data-clip-datetime]');
-                        const detailsEl = clone.querySelector('[data-clip-details]');
-                        const selectBtn = clone.querySelector('.clip-select-btn');
-                        const previewBtn = clone.querySelector('[data-clip-preview]');
-
-                        if (card) {
-                            card.dataset.sceneId = sceneData.id ?? '';
-                            card.dataset.sceneDatetime = sceneData.datetime ?? '';
-                        }
-                        if (titleEl) {
-                            titleEl.textContent = sceneData.title ?? 'Sentinel-2 Scene';
-                        }
-                        if (datetimeEl) {
-                            datetimeEl.textContent = `Acquired: ${formatHumanDate(sceneData.datetime)}`;
-                        }
-                        if (detailsEl) {
-                            const parts = [];
-                            if (sceneData.cloud_cover !== null && sceneData.cloud_cover !== undefined) {
-                                parts.push(`Cloud cover: ${safeFormatNumber(sceneData.cloud_cover, 2)}%`);
-                            }
-                            if (sceneData.mgrs) {
-                                parts.push(`Tile ${sceneData.mgrs}`);
-                            }
-                            detailsEl.textContent = parts.length ? parts.join(' • ') : 'No additional metadata available';
-                        }
-                        if (selectBtn) {
-                            selectBtn.addEventListener('click', () => {
-                                selectScene(sceneData, 'manual');
-                            });
-                        }
-                        if (previewBtn) {
-                            const hasCoverage = Boolean(feature?.geometry) ||
-                                (Array.isArray(feature?.bbox) && feature.bbox.length === 4) ||
-                                (Array.isArray(feature?.properties?.bbox) && feature.properties.bbox.length === 4);
-                            previewBtn.disabled = !hasCoverage;
-                            if (hasCoverage) {
-                                previewBtn.addEventListener('click', () => {
-                                    const payload = buildPreviewPayload(feature, sceneData);
-                                    if (payload) {
-                                        if (typeof window.showSentinelPreviewOnMap === 'function') {
-                                            window.showSentinelPreviewOnMap(payload);
-                                        } else {
-                                            window.MyZkToast?.warning?.('Preview panel is unavailable.');
-                                        }
-                                    } else {
-                                        window.MyZkToast?.warning?.('Preview unavailable for this scene.');
-                                    }
-                                });
-                            } else {
-                                previewBtn.title = 'Preview unavailable for this scene.';
-                            }
-                        }
-
-                        elements.sceneList.appendChild(clone);
                     };
 
                     const handleAutoSearch = async () => {
@@ -1585,24 +1377,14 @@
                                     elements.autoResult.textContent = 'No recent scenes found for this area.';
                                 }
                                 state.autoScene = null;
-                                if (state.mode === 'auto') {
-                                    selectScene(null, 'auto');
-                                }
+                                selectScene(null);
                                 return;
                             }
 
                             const latestFeature = features[0];
                             const sceneData = buildScenePayload(latestFeature);
                             state.autoScene = sceneData;
-                            if (state.mode === 'auto') {
-                                selectScene(sceneData, 'auto');
-                            } else if (elements.autoResult) {
-                                elements.autoResult.innerHTML = `
-                                    <div class="font-semibold">${sceneData.title ?? 'Latest Scene'}</div>
-                                    <div class="text-xs text-foreground/70">Acquired: ${formatHumanDate(sceneData.datetime)}</div>
-                                    <div class="text-xs text-foreground/70">Cloud cover: ${safeFormatNumber(sceneData.cloud_cover ?? 0, 2)}%</div>
-                                `;
-                            }
+                            selectScene(sceneData);
                         } catch (error) {
                             if (elements.autoResult) {
                                 elements.autoResult.textContent = error?.message || 'Unable to fetch scenes. Please try again later.';
@@ -1610,52 +1392,6 @@
                         } finally {
                             elements.autoBtn.disabled = false;
                             elements.autoBtn.innerHTML = originalHtml;
-                            updateProcessAvailability();
-                        }
-                    };
-
-                    const handleManualSearch = async () => {
-                        if (!state.geometry) {
-                            window.MyZkToast?.warning?.('Draw a polygon first to enable manual selection.');
-                            return;
-                        }
-                        if (!elements.manualBtn) return;
-                        const originalHtml = elements.manualBtn.innerHTML;
-                        elements.manualBtn.disabled = true;
-                        elements.manualBtn.innerHTML = '<i class="ri-loader-4-line animate-spin"></i><span>Searching...</span>';
-                        resetManualList();
-                        if (elements.manualStatus) {
-                            elements.manualStatus.textContent = 'Searching Sentinel-2 scenes...';
-                        }
-
-                        try {
-                            const features = await fetchScenes();
-                            state.manualScenes = features;
-                            if (!features.length) {
-                                if (elements.manualStatus) {
-                                    elements.manualStatus.textContent = 'No recent Sentinel-2 scenes found for this area.';
-                                }
-                                state.manualSelection = null;
-                                if (state.mode === 'manual') {
-                                    selectScene(null, 'manual');
-                                }
-                                return;
-                            }
-
-                            if (elements.manualStatus) {
-                                elements.manualStatus.textContent = 'Select a scene to use for clipping.';
-                            }
-                            features.forEach((feature) => attachManualCard(feature));
-                            if (state.manualSelection) {
-                                highlightManualSelection(state.manualSelection);
-                            }
-                        } catch (error) {
-                            if (elements.manualStatus) {
-                                elements.manualStatus.textContent = error?.message || 'Unable to fetch scenes. Please try again later.';
-                            }
-                        } finally {
-                            elements.manualBtn.disabled = false;
-                            elements.manualBtn.innerHTML = originalHtml;
                             updateProcessAvailability();
                         }
                     };
@@ -1668,10 +1404,8 @@
 
                         if (!state.geometry) {
                             state.autoScene = null;
-                            state.manualSelection = null;
                             state.selectedScene = null;
                             resetAutoResult();
-                            resetManualList();
                         }
 
                         updateAreaDisplay();
@@ -1679,9 +1413,6 @@
                         updateGeojsonDisplay();
                         if (elements.autoBtn) {
                             elements.autoBtn.disabled = !state.geometry;
-                        }
-                        if (elements.manualBtn) {
-                            elements.manualBtn.disabled = !state.geometry;
                         }
                         updateSelectionSummary();
                         updateProcessAvailability();
@@ -1784,33 +1515,25 @@
                     updateCreditDisplay();
                     updateGeojsonDisplay();
                     resetAutoResult();
-                    resetManualList();
-                    setMode(state.mode);
+                    setMode();
                     updateSelectionSummary();
                     updateProcessAvailability();
                     if (elements.autoBtn) {
                         elements.autoBtn.disabled = true;
                     }
-                    if (elements.manualBtn) {
-                        elements.manualBtn.disabled = true;
-                    }
 
                     elements.modeButtons.forEach((button) => {
                         button.addEventListener('click', () => {
-                            const mode = button.dataset.mode || 'auto';
-                            setMode(mode);
+                            setMode();
                         });
                     });
 
                     elements.autoBtn?.addEventListener('click', handleAutoSearch);
-                    elements.manualBtn?.addEventListener('click', handleManualSearch);
                     elements.resetBtn?.addEventListener('click', () => {
                         window.AppMap?.clip?.clearDrawing?.();
                         state.autoScene = null;
-                        state.manualSelection = null;
                         state.selectedScene = null;
                         resetAutoResult();
-                        resetManualList();
                         updateSelectionSummary();
                     });
                     elements.fieldInput?.addEventListener('input', updateProcessAvailability);
