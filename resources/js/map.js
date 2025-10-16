@@ -1047,6 +1047,25 @@ function buttonStateDrawing() {
         .addClass(
             drawingRunning ? "btn btn-sm btn-danger" : "btn btn-sm btn-primary"
         );
+
+    const clipBtn = document.getElementById("clipDrawPolygonBtn");
+    if (clipBtn) {
+        const icon = clipBtn.querySelector("i");
+        const label = clipBtn.querySelector("span");
+
+        if (icon) {
+            icon.classList.remove(
+                drawingRunning ? "ri-pencil-line" : "ri-close-line"
+            );
+            icon.classList.add(
+                drawingRunning ? "ri-close-line" : "ri-pencil-line"
+            );
+        }
+
+        if (label) {
+            label.textContent = drawingRunning ? "Cancel" : "Draw Polygon";
+        }
+    }
 }
 
 // Button to start/cancel the draw/measurement
@@ -1064,8 +1083,9 @@ if (clipDrawPolygonBtn) {
     clipDrawPolygonBtn.addEventListener("click", function () {
         if (drawingRunning) {
             drawingEnd();
+        } else {
+            drawingStart();
         }
-        drawingStart();
     });
 }
 $("#cancelFeatureProperties").click(function (e) {

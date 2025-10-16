@@ -1244,7 +1244,7 @@
                                         return wktRing ? `(${wktRing})` : null;
                                     })
                                     .filter(Boolean);
-                                return rings.length ? `POLYGON(${rings.join(', ')})` : null;
+                                return rings.length ? `POLYGON (${rings.join(', ')})` : null;
                             }
                             case 'MultiPolygon': {
                                 if (!Array.isArray(coords) || !coords.length) return null;
@@ -1261,7 +1261,7 @@
                                         return rings.length ? `(${rings.join(', ')})` : null;
                                     })
                                     .filter(Boolean);
-                                return polygons.length ? `MULTIPOLYGON(${polygons.join(', ')})` : null;
+                                return polygons.length ? `MULTIPOLYGON (${polygons.join(', ')})` : null;
                             }
                             default:
                                 return null;
@@ -1275,6 +1275,7 @@
                         params.set('completionDate', `${end}T23:59:59Z`);
                         params.set('productType', clipConfig.productType);
                         params.set('maxRecords', String(clipConfig.maxRecords));
+                        params.set('cloudCover', `0,${clipConfig.defaultMaxCloud}`);
 
                         if (state.geometry) {
                             const wkt = toWkt(state.geometry);
