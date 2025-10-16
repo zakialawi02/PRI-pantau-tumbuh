@@ -897,22 +897,35 @@ function addInteraction(type = "Polygon") {
         geojsonFeature = JSON.parse(geojson);
 
         // Display the GeoJSON string in the #drawerGeojson element
-        document.getElementById(
-            "drawerGeojson"
-        ).innerHTML = `<pre>${JSON.stringify(geojsonFeature, null, 1)}</pre>`;
+        const geojsonOutput = document.getElementById("drawerGeojson");
+        if (geojsonOutput) {
+            geojsonOutput.innerHTML = `<pre>${JSON.stringify(geojsonFeature, null, 1)}</pre>`;
+        }
 
-        // Display measurement result in the #measurementOutput div
-        document.getElementById("measurementOutput").innerHTML =
-            formatNumber(geojsonArea / 10000) + " ha"; // Convert m² to hectares;
+        const measurementOutput = document.getElementById("measurementOutput");
+        if (measurementOutput) {
+            measurementOutput.innerHTML =
+                formatNumber(geojsonArea / 10000) + " ha";
+        }
 
         drawingEnd();
 
-        // Show feature properties after drawing
-        if (draw) {
-            $("#featureProperties").removeClass("hidden");
+        const detail = {
+            geojson: geojsonFeature,
+            geometry: geojsonFeature.geometry,
+            areaSquareMeters: geojsonArea,
+            areaHectares: geojsonArea / 10000,
+            pretty: JSON.stringify(geojsonFeature, null, 1),
+        };
+
+        try {
+            document.dispatchEvent(
+                new CustomEvent("app:polygon-drawn", { detail })
+            );
+        } catch (error) {
+            console.warn("Unable to dispatch polygon drawn event", error);
         }
 
-        // Calculate total price after drawing
         if (typeof window.calculateTotalPrice === "function") {
             window.calculateTotalPrice();
         }
@@ -928,8 +941,15 @@ function drawingStart() {
     drawingRunning = true;
     drawed = null;
     buttonStateDrawing();
-    $("#featureProperties").addClass("hidden");
     $("#drawerGeojson").html("");
+
+    try {
+        document.dispatchEvent(new CustomEvent("app:polygon-reset"));
+    } catch (error) {
+        console.warn("Unable to dispatch polygon reset event", error);
+    }
+
+    window.geojsonArea = 0;
 }
 
 /**
@@ -1012,16 +1032,15 @@ function createMeasureTooltip() {
  * @returns {void}
  */
 function buttonStateDrawing() {
-    $("#drawPolygonBtn").html(
+    const button = $("#drawPolygonBtn");
+    if (!button.length) {
+        return;
+    }
+    button.html(
         drawingRunning
-            ? "Cancel Drawing"
+            ? "<i class='ri-close-line'></i>&nbsp; Cancel Drawing"
             : "<i class='ri-pencil-line'></i>&nbsp; Draw Polygon"
     );
-    $("#drawPolygonBtn")
-        .removeClass()
-        .addClass(
-            drawingRunning ? "btn btn-sm btn-danger" : "btn btn-sm btn-primary"
-        );
 }
 
 // Button to start/cancel the draw/measurement
@@ -1030,17 +1049,27 @@ $("#drawPolygonBtn").click(function (e) {
         drawingEnd();
     } else {
         drawingStart();
-        $("#featurePropertiesForm")[0].reset();
+        const featureForm = $("#featurePropertiesForm");
+        if (featureForm.length && featureForm[0]) {
+            featureForm[0].reset();
+        }
     }
 });
-$("#cancelFeatureProperties").click(function (e) {
-    $("#featureProperties").addClass("hidden");
-    $("#drawerGeojson").html("");
-    if (vectorLayerDrawing) {
-        map.removeLayer(vectorLayerDrawing);
-        vectorSourceDrawing.clear();
-    }
-});
+const cancelFeatureButton = $("#cancelFeatureProperties");
+if (cancelFeatureButton.length) {
+    cancelFeatureButton.click(function () {
+        $("#drawerGeojson").html("");
+        if (vectorLayerDrawing) {
+            map.removeLayer(vectorLayerDrawing);
+            vectorSourceDrawing.clear();
+        }
+        try {
+            document.dispatchEvent(new CustomEvent("app:polygon-reset"));
+        } catch (error) {
+            console.warn("Unable to dispatch polygon reset event", error);
+        }
+    });
+}
 
 $("#saveFeatureProperties").click(function () {
     const geojson = geojsonFeature;

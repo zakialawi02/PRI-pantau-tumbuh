@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\ProcessSentinelClipJob;
 use App\Jobs\ProcessSentinelSceneJob;
 use App\Models\ImageryData;
 use App\Services\CreditService;
@@ -104,6 +105,123 @@ class SentinelProcessingController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Unable to queue Sentinel imagery processing at this time.',
+                'current_credits' => $this->creditService->getRemainingCredits($user->id),
+            ], 500);
+        }
+    }
+
+    public function processClip(Request $request)
+    {
+        $user = $request->user();
+
+        $validated = $request->validate([
+            'geometry' => ['required', 'array'],
+            'geometry.type' => ['required', 'string'],
+            'geometry.coordinates' => ['required'],
+            'area_hectares' => ['required', 'numeric', 'min:0.01'],
+            'selection_mode' => ['required', 'in:auto,manual'],
+            'scene.id' => ['required', 'string', 'max:255'],
+            'scene.datetime' => ['nullable', 'string', 'max:255'],
+            'scene.product_level' => ['nullable', 'string', 'max:255'],
+            'scene.cloud_cover' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'scene.collection' => ['nullable', 'string', 'max:255'],
+            'scene.title' => ['nullable', 'string', 'max:255'],
+            'scene.download_url' => ['nullable', 'url'],
+            'filters.max_cloud' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'filters.resolution' => ['nullable', 'numeric', 'min:5', 'max:60'],
+            'filters.product_level' => ['nullable', 'string', 'max:255'],
+            'filters.start_date' => ['nullable', 'string', 'max:50'],
+            'filters.end_date' => ['nullable', 'string', 'max:50'],
+            'filters.latitude' => ['nullable', 'numeric', 'between:-90,90'],
+            'filters.longitude' => ['nullable', 'numeric', 'between:-180,180'],
+        ]);
+
+        $geometry = $validated['geometry'];
+        $areaHectares = (float) $validated['area_hectares'];
+        $scene = $validated['scene'];
+        $filters = $validated['filters'] ?? [];
+
+        $creditRate = config('app-constants.imagery_credit_cost_per_hectare', 1.0);
+        $creditCost = round($areaHectares * $creditRate, 2);
+
+        if ($creditCost <= 0) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unable to calculate credit usage for the selected area.',
+            ], 422);
+        }
+
+        $productLevel = strtoupper($scene['product_level'] ?? 'S2MSI2A');
+        $cloudLimit = isset($filters['max_cloud']) ? (float) $filters['max_cloud'] : (float) ($scene['cloud_cover'] ?? 60);
+        $resolution = isset($filters['resolution']) ? (float) $filters['resolution'] : (float) config('app-constants.default_sentinel_resolution', 10);
+
+        if (!$this->creditService->deductCreditsForProcessing($user->id, $creditCost, 'ClipSentinel')) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Insufficient credits to process clipped Sentinel imagery.',
+                'current_credits' => $this->creditService->getRemainingCredits($user->id),
+            ], 422);
+        }
+
+        $disk = Storage::disk('public');
+        $imageryDirectory = 'imagery';
+        $disk->makeDirectory($imageryDirectory);
+
+        $rawTitle = trim($scene['title'] ?? '') ?: ($scene['id'] ?? 'SentinelClip');
+        $displayTitle = $this->sanitizeDisplayName($rawTitle . '_' . now()->format('YmdHis'));
+        $outputFilename = $this->ensureUniqueFilename($imageryDirectory, $displayTitle . '_clip', 'tif');
+
+        try {
+            $imagery = ImageryData::create([
+                'user_id' => $user->id,
+                'source_type' => 'sentinel-2-clip',
+                'original_name' => $displayTitle . '.tif',
+                'stored_name' => $outputFilename,
+                'size' => 0,
+                'format' => 'tif',
+                'path' => 'storage/' . trim($imageryDirectory, '/') . '/' . $outputFilename,
+                'upload_status' => 'uploading',
+                'processing_status' => 'waiting',
+                'uploaded_at' => now(),
+            ]);
+
+            ProcessSentinelClipJob::dispatch(
+                $imagery->id,
+                $geometry,
+                $scene['id'],
+                $scene['datetime'] ?? null,
+                $productLevel,
+                $cloudLimit,
+                $resolution,
+                [
+                    'selection_mode' => $validated['selection_mode'],
+                    'scene' => $scene,
+                    'filters' => $filters,
+                ]
+            )->onQueue('download');
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Sentinel clip job queued for processing.',
+                'data' => [
+                    'id' => $imagery->id,
+                    'upload_status' => $imagery->upload_status,
+                    'processing_status' => $imagery->processing_status,
+                    'current_credits' => $this->creditService->getRemainingCredits($user->id),
+                    'credit_cost' => $creditCost,
+                ],
+            ], 202);
+        } catch (Throwable $exception) {
+            Log::error('SentinelProcessingController@processClip failed to queue processing.', [
+                'error' => $exception->getMessage(),
+                'trace' => $exception->getTraceAsString(),
+            ]);
+
+            $this->creditService->addCreditsToUser($user->id, $creditCost, 'ClipSentinelRollback');
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Unable to queue Sentinel clipping at this time.',
                 'current_credits' => $this->creditService->getRemainingCredits($user->id),
             ], 500);
         }
