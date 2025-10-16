@@ -897,13 +897,38 @@ function addInteraction(type = "Polygon") {
         geojsonFeature = JSON.parse(geojson);
 
         // Display the GeoJSON string in the #drawerGeojson element
-        document.getElementById(
-            "drawerGeojson"
-        ).innerHTML = `<pre>${JSON.stringify(geojsonFeature, null, 1)}</pre>`;
+        const drawerGeojsonEl = document.getElementById("drawerGeojson");
+        if (drawerGeojsonEl) {
+            drawerGeojsonEl.innerHTML = `<pre>${JSON.stringify(
+                geojsonFeature,
+                null,
+                1
+            )}</pre>`;
+        }
 
         // Display measurement result in the #measurementOutput div
-        document.getElementById("measurementOutput").innerHTML =
-            formatNumber(geojsonArea / 10000) + " ha"; // Convert m² to hectares;
+        const measurementOutputEl = document.getElementById("measurementOutput");
+        if (measurementOutputEl) {
+            measurementOutputEl.innerHTML =
+                formatNumber(geojsonArea / 10000) + " ha"; // Convert m² to hectares;
+        }
+
+        const clipDetail = {
+            geometry: geojsonFeature?.geometry || null,
+            feature: geojsonFeature || null,
+            areaSqMeters: geojsonArea || 0,
+            areaHectares: geojsonArea ? geojsonArea / 10000 : 0,
+        };
+
+        window.AppMap = window.AppMap || {};
+        window.AppMap.clip = window.AppMap.clip || {};
+        window.AppMap.clip.latest = clipDetail;
+
+        document.dispatchEvent(
+            new CustomEvent("app:clip:geometry", {
+                detail: clipDetail,
+            })
+        );
 
         drawingEnd();
 
@@ -1033,6 +1058,16 @@ $("#drawPolygonBtn").click(function (e) {
         $("#featurePropertiesForm")[0].reset();
     }
 });
+
+const clipDrawPolygonBtn = document.getElementById("clipDrawPolygonBtn");
+if (clipDrawPolygonBtn) {
+    clipDrawPolygonBtn.addEventListener("click", function () {
+        if (drawingRunning) {
+            drawingEnd();
+        }
+        drawingStart();
+    });
+}
 $("#cancelFeatureProperties").click(function (e) {
     $("#featureProperties").addClass("hidden");
     $("#drawerGeojson").html("");
