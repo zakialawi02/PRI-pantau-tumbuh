@@ -1314,13 +1314,12 @@
                         const maxCloud = Number(elements.maxCloud?.value ?? 100);
                         if (Number.isFinite(maxCloud)) {
                             const clamped = Math.min(Math.max(maxCloud, 0), 100);
-                            params.set('cloudCover', `0,${clamped}`);
+                            params.set('cloudCover', `[0,${clamped}]`);
                         }
 
                         if (state.geometry) {
                             try {
                                 params.set('geometry', JSON.stringify(state.geometry));
-                                params.set('geometryRelation', 'intersects');
                             } catch (_) {
                                 // ignore JSON errors
                             }
