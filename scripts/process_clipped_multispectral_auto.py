@@ -1,4 +1,5 @@
 import os
+import json
 from datetime import timedelta
 from dateutil import parser as dateparser
 import numpy as np
@@ -12,9 +13,46 @@ from sentinelhub import (
 )
 from sentinelhub.areas import BBoxSplitter
 
+
+def _env(name, default=None):
+    value = os.environ.get(name)
+    if value is None or str(value).strip() == "":
+        return default
+    return value
+
+
+def _env_json(name, default=None):
+    raw = os.environ.get(name)
+    if raw is None or str(raw).strip() == "":
+        return default
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        return default
+
+
+def _env_float(name, default):
+    value = _env(name)
+    if value is None:
+        return default
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _env_int(name, default):
+    value = _env(name)
+    if value is None:
+        return default
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return default
+
 # ====== KONFIGURASI ======
-SH_CLIENT_ID =
-SH_CLIENT_SECRET =
+SH_CLIENT_ID = _env('SH_CLIENT_ID', _env('SENTINEL_HUB_CLIENT_ID', ''))
+SH_CLIENT_SECRET = _env('SH_CLIENT_SECRET', _env('SENTINEL_HUB_CLIENT_SECRET', ''))
 
 config = SHConfig()
 config.sh_client_id = SH_CLIENT_ID
@@ -23,24 +61,50 @@ config.sh_token_url = "https://identity.dataspace.copernicus.eu/auth/realms/CDSE
 config.sh_base_url  = "https://sh.dataspace.copernicus.eu"
 
 # Folder untuk simpan
-tiles_dir = "tiles"
-merged_tif = "merged_fixed.tif"
-masked_tif = "merged_masked.tif"
+tiles_dir = _env('CLIP_TILES_DIR', "tiles")
+merged_tif = _env('CLIP_MERGED_TIF', "merged_fixed.tif")
+masked_tif = _env('CLIP_MASKED_TIF', "merged_masked.tif")
+
+if not tiles_dir:
+    tiles_dir = "tiles"
 os.makedirs(tiles_dir, exist_ok=True)
 
+merged_dir = os.path.dirname(merged_tif)
+if merged_dir:
+    os.makedirs(merged_dir, exist_ok=True)
+
+masked_dir = os.path.dirname(masked_tif)
+if masked_dir:
+    os.makedirs(masked_dir, exist_ok=True)
+
 # ====== PARAMETER ======
-DATE_FROM = "2025-08-01"
-DATE_TO   = "2025-08-31"
-MAX_CLOUD = 60
-LIMIT     = 100
-RES       = 10
+DATE_FROM = _env('CLIP_DATE_FROM', "2025-08-01")
+DATE_TO   = _env('CLIP_DATE_TO', "2025-08-31")
+MAX_CLOUD = _env_float('CLIP_MAX_CLOUD', 60)
+LIMIT     = _env_int('CLIP_LIMIT', 100)
+RES       = _env_int('CLIP_RESOLUTION', 10)
 NODATA_VAL = 0   # ganti ke -9999 kalau lebih cocok
 
 # ====== AOI dari GEOJSON ======
-AOI_GEOJSON = {}
+AOI_GEOJSON = _env_json('CLIP_GEOJSON', AOI_GEOJSON)
+
+if not AOI_GEOJSON:
+    raise SystemExit("AOI GeoJSON is required for clipped processing.")
+
+if AOI_GEOJSON.get("type") == "FeatureCollection":
+    features = AOI_GEOJSON.get("features") or []
+    if not features:
+        raise SystemExit("AOI GeoJSON feature collection is empty.")
+    geom_dict = features[0].get("geometry")
+elif AOI_GEOJSON.get("type") == "Feature":
+    geom_dict = AOI_GEOJSON.get("geometry")
+else:
+    geom_dict = AOI_GEOJSON
+
+if not geom_dict:
+    raise SystemExit("AOI geometry is invalid.")
 
 # Geometry untuk query & masking
-geom_dict = AOI_GEOJSON["features"][0]["geometry"]
 geometry = Geometry(geom_dict, crs=CRS.WGS84)
 bbox = geometry.bbox
 
@@ -54,6 +118,9 @@ search_iter = catalog.search(
 )
 items = list(search_iter)
 
+target_scene_id = (_env('CLIP_SCENE_ID', '') or '').strip()
+target_product_id = (_env('CLIP_SCENE_PRODUCT_ID', '') or '').strip()
+
 def get_cloud(item):
     props = item.get("properties", {})
     for k in ("eo:cloud_cover", "cloudCover"):
@@ -64,9 +131,28 @@ def get_cloud(item):
 if not items:
     raise SystemExit("Tidak ada scene cocok")
 
+target_item = None
+if target_scene_id or target_product_id:
+    for candidate in items:
+        props = candidate.get("properties", {})
+        candidate_id = str(candidate.get("id", "")).strip()
+        product_identifier = str(props.get("productIdentifier", "")).strip()
+        if target_scene_id and candidate_id == target_scene_id:
+            target_item = candidate
+            break
+        if target_product_id and product_identifier == target_product_id:
+            target_item = candidate
+            break
+
 items.sort(key=lambda it: it["properties"]["datetime"], reverse=True)
 filtered = [it for it in items if (get_cloud(it) is None or get_cloud(it) <= MAX_CLOUD)]
-chosen = filtered[0] if filtered else items[0]
+
+if target_item is not None:
+    chosen = target_item
+else:
+    chosen = filtered[0] if filtered else items[0]
+    if target_scene_id or target_product_id:
+        print("Target scene not found; falling back to best available scene.")
 
 chosen_time = chosen["properties"]["datetime"]
 print("Scene terpilih:", chosen["id"], "waktu:", chosen_time, "cloud:", get_cloud(chosen))

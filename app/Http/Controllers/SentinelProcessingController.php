@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Jobs\ProcessSentinelSceneJob;
 use App\Models\ImageryData;
 use App\Services\CreditService;
+use App\Support\FilenameHelper;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -34,7 +35,7 @@ class SentinelProcessingController extends Controller
         ]);
 
         $rawTitle = trim($validated['title'] ?? '') ?: now()->format('YmdHis') . '_Sentinel_Scene';
-        $displayTitle = $this->sanitizeDisplayName($rawTitle . '_' . now()->format('YmdHis'));
+        $displayTitle = FilenameHelper::sanitizeDisplayName($rawTitle . '_' . now()->format('YmdHis'));
         $finalDisplayName = $displayTitle . '.tif';
 
         $disk = Storage::disk('public');
@@ -43,9 +44,9 @@ class SentinelProcessingController extends Controller
 
         $disk->makeDirectory($imageryDirectory);
         $disk->makeDirectory($sentinelDirectory);
-        $zipFilename = $this->ensureUniqueFilename($sentinelDirectory, $displayTitle, 'zip');
+        $zipFilename = FilenameHelper::ensureUniqueFilename($sentinelDirectory, $displayTitle, 'zip');
         $outputBase = Str::limit($displayTitle . '_multispectral', 160, '');
-        $outputFilename = $this->ensureUniqueFilename($imageryDirectory, $outputBase, 'tif');
+        $outputFilename = FilenameHelper::ensureUniqueFilename($imageryDirectory, $outputBase, 'tif');
 
         try {
             $imagery = ImageryData::create([
@@ -109,47 +110,4 @@ class SentinelProcessingController extends Controller
         }
     }
 
-    private function sanitizeDisplayName(string $value): string
-    {
-        $cleaned = str_replace([
-            ' ',
-            '\\',
-            '/',
-            ':',
-            "\"",
-            '*',
-            '?',
-            '<',
-            '>',
-            '|',
-            'SAFE',
-            '.'
-        ], ' ', $value);
-
-        $normalized = trim(preg_replace('/\s+/', '', $cleaned) ?? '');
-        $fallback = $normalized !== '' ? $normalized : 'Sentinel_Scene';
-
-        return Str::limit($fallback, 120, '');
-    }
-
-
-    private function ensureUniqueFilename(string $directory, string $baseName, string $extension): string
-    {
-        $disk = Storage::disk('public');
-        $cleanDirectory = trim($directory, '/');
-        $extension = ltrim($extension, '.');
-
-        $candidateBase = $baseName !== '' ? $baseName : 'sentinel-scene';
-        $filename = sprintf('%s.%s', $candidateBase, $extension);
-        $counter = 1;
-
-        $pathPrefix = $cleanDirectory === '' ? '' : $cleanDirectory . '/';
-
-        while ($disk->exists($pathPrefix . $filename)) {
-            $filename = sprintf('%s-%d.%s', $candidateBase, $counter, $extension);
-            $counter++;
-        }
-
-        return $filename;
-    }
 }

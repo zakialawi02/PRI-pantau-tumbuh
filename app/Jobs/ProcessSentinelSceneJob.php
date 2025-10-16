@@ -64,6 +64,11 @@ class ProcessSentinelSceneJob implements ShouldQueue
             return;
         }
 
+        if (!empty($this->metadata['clip_mode'])) {
+            $this->handleClipMode($imagery, $creditService, $pythonService);
+            return;
+        }
+
         $publicStorage = storage_path('app/public');
         $imageryDir = $publicStorage . DIRECTORY_SEPARATOR . 'imagery';
         $sourceDir = $this->zipDirectory !== ''
@@ -215,6 +220,145 @@ class ProcessSentinelSceneJob implements ShouldQueue
             }
 
             $creditService->refundCreditsForFailure($imagery, "Job");
+            $imagery->update([
+                'upload_status' => 'failed',
+                'processing_status' => 'error',
+            ]);
+        }
+    }
+
+    protected function handleClipMode(ImageryData $imagery, CreditService $creditService, PythonService $pythonService): void
+    {
+        Log::info('ProcessSentinelSceneJob: clip mode detected.', [
+            'imagery_id' => $imagery->id,
+            'metadata' => $this->metadata,
+        ]);
+
+        $scriptsBase = base_path('scripts');
+        $scriptPath = $scriptsBase . DIRECTORY_SEPARATOR . 'process_clipped_multispectral_auto.py';
+        $pythonPath = $pythonService->resolvePythonPath($scriptsBase);
+
+        if (!$pythonPath) {
+            Log::error('ProcessSentinelSceneJob: Python executable for clip processing not found.');
+            $creditService->refundCreditsForFailure($imagery, 'ClipJob');
+            $imagery->update(['processing_status' => 'error']);
+            return;
+        }
+
+        if (!File::exists($scriptPath)) {
+            Log::error('ProcessSentinelSceneJob: Clip processing script not found.', [
+                'path' => $scriptPath,
+            ]);
+            $creditService->refundCreditsForFailure($imagery, 'ClipJob');
+            $imagery->update(['processing_status' => 'error']);
+            return;
+        }
+
+        $publicStorage = storage_path('app/public');
+        $imageryDir = $publicStorage . DIRECTORY_SEPARATOR . 'imagery';
+        if (!File::isDirectory($imageryDir)) {
+            File::makeDirectory($imageryDir, 0755, true);
+        }
+
+        $workDir = storage_path('app/tmp/sentinel-clip/' . $imagery->id);
+        if (File::isDirectory($workDir)) {
+            File::deleteDirectory($workDir);
+        }
+        File::makeDirectory($workDir, 0755, true);
+
+        $tilesDir = $workDir . DIRECTORY_SEPARATOR . 'tiles';
+        File::makeDirectory($tilesDir, 0755, true);
+
+        $mergedPath = $workDir . DIRECTORY_SEPARATOR . 'merged_fixed.tif';
+        $maskedPath = $workDir . DIRECTORY_SEPARATOR . 'merged_masked.tif';
+        $finalPath = $imageryDir . DIRECTORY_SEPARATOR . $this->outputFilename;
+
+        foreach ([$mergedPath, $maskedPath, $finalPath] as $path) {
+            if (File::exists($path)) {
+                File::delete($path);
+            }
+        }
+
+        $overrides = [
+            'CLIP_GEOJSON' => json_encode($this->metadata['clip_geojson'] ?? []),
+            'CLIP_DATE_FROM' => $this->metadata['clip_date_from'] ?? now()->subMonth()->toIso8601String(),
+            'CLIP_DATE_TO' => $this->metadata['clip_date_to'] ?? now()->toIso8601String(),
+            'CLIP_MAX_CLOUD' => (string) ($this->metadata['clip_max_cloud'] ?? 60),
+            'CLIP_LIMIT' => (string) ($this->metadata['clip_limit'] ?? 20),
+            'CLIP_RESOLUTION' => (string) ($this->metadata['clip_resolution'] ?? 10),
+            'CLIP_TILES_DIR' => $tilesDir,
+            'CLIP_MERGED_TIF' => $mergedPath,
+            'CLIP_MASKED_TIF' => $maskedPath,
+            'CLIP_SCENE_ID' => (string) ($this->metadata['clip_scene_id'] ?? ''),
+            'CLIP_SCENE_PRODUCT_ID' => (string) ($this->metadata['clip_scene_product_id'] ?? ''),
+            'CLIP_SCENE_TITLE' => (string) ($this->metadata['clip_scene_title'] ?? ''),
+            'CLIP_SCENE_COLLECTION' => (string) ($this->metadata['clip_scene_collection'] ?? ''),
+            'CLIP_SCENE_ACQUISITION' => (string) ($this->metadata['clip_scene_acquisition'] ?? ''),
+        ];
+
+        $clientId = env('SENTINEL_HUB_CLIENT_ID', env('SH_CLIENT_ID'));
+        $clientSecret = env('SENTINEL_HUB_CLIENT_SECRET', env('SH_CLIENT_SECRET'));
+        if ($clientId) {
+            $overrides['SH_CLIENT_ID'] = $clientId;
+        }
+        if ($clientSecret) {
+            $overrides['SH_CLIENT_SECRET'] = $clientSecret;
+        }
+
+        $processEnv = $pythonService->buildProcessEnvironment($overrides);
+
+        try {
+            $process = new Process([$pythonPath, $scriptPath], $scriptsBase, $processEnv);
+            $process->setTimeout(7200);
+            $process->run();
+
+            $stdout = trim($process->getOutput());
+            if ($stdout !== '') {
+                Log::info('[Sentinel Clip STDOUT] ' . $stdout);
+            }
+
+            $stderr = trim($process->getErrorOutput());
+            if ($stderr !== '') {
+                Log::error('[Sentinel Clip STDERR] ' . $stderr);
+            }
+
+            if (!$process->isSuccessful()) {
+                throw new \RuntimeException('Clip processing script exited with error.');
+            }
+
+            if (!File::exists($maskedPath)) {
+                throw new \RuntimeException('Clipped Sentinel output not found.');
+            }
+
+            File::move($maskedPath, $finalPath);
+
+            $size = File::exists($finalPath) ? File::size($finalPath) : 0;
+
+            $imagery->update([
+                'upload_status' => 'done',
+                'format' => pathinfo($finalPath, PATHINFO_EXTENSION) ?: 'tif',
+                'size' => $size,
+                'original_name' => $this->displayName,
+                'path' => 'storage/imagery/' . $this->outputFilename,
+            ]);
+
+            File::deleteDirectory($workDir);
+
+            ProcessImageryJob::dispatch($imagery->id)->onQueue('processing');
+        } catch (Throwable $exception) {
+            Log::error('ProcessSentinelSceneJob clip mode failed: ' . $exception->getMessage(), [
+                'imagery_id' => $imagery->id,
+                'metadata' => $this->metadata,
+            ]);
+
+            if (File::exists($finalPath)) {
+                File::delete($finalPath);
+            }
+            if (File::isDirectory($workDir)) {
+                File::deleteDirectory($workDir);
+            }
+
+            $creditService->refundCreditsForFailure($imagery, 'ClipJob');
             $imagery->update([
                 'upload_status' => 'failed',
                 'processing_status' => 'error',

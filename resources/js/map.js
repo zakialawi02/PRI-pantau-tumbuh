@@ -897,25 +897,33 @@ function addInteraction(type = "Polygon") {
         geojsonFeature = JSON.parse(geojson);
 
         // Display the GeoJSON string in the #drawerGeojson element
-        document.getElementById(
-            "drawerGeojson"
-        ).innerHTML = `<pre>${JSON.stringify(geojsonFeature, null, 1)}</pre>`;
+        const geojsonOutput =
+            document.getElementById("sentinelClipGeojson") ||
+            document.getElementById("drawerGeojson");
+        if (geojsonOutput) {
+            geojsonOutput.innerHTML = `<pre>${JSON.stringify(geojsonFeature, null, 1)}</pre>`;
+        }
 
-        // Display measurement result in the #measurementOutput div
-        document.getElementById("measurementOutput").innerHTML =
-            formatNumber(geojsonArea / 10000) + " ha"; // Convert m² to hectares;
+        const areaOutput =
+            document.getElementById("sentinelClipArea") ||
+            document.getElementById("measurementOutput");
+        if (areaOutput) {
+            areaOutput.innerHTML =
+                formatNumber(geojsonArea / 10000) + " ha";
+        }
+
+        window.geojsonFeature = geojsonFeature;
+
+        document.dispatchEvent(
+            new CustomEvent("app:imagery-clip:geometry", {
+                detail: {
+                    geometry: geojsonFeature,
+                    areaSquareMeters: geojsonArea,
+                },
+            })
+        );
 
         drawingEnd();
-
-        // Show feature properties after drawing
-        if (draw) {
-            $("#featureProperties").removeClass("hidden");
-        }
-
-        // Calculate total price after drawing
-        if (typeof window.calculateTotalPrice === "function") {
-            window.calculateTotalPrice();
-        }
     });
 }
 
@@ -928,8 +936,31 @@ function drawingStart() {
     drawingRunning = true;
     drawed = null;
     buttonStateDrawing();
-    $("#featureProperties").addClass("hidden");
-    $("#drawerGeojson").html("");
+    const geojsonOutput =
+        document.getElementById("sentinelClipGeojson") ||
+        document.getElementById("drawerGeojson");
+    if (geojsonOutput) {
+        geojsonOutput.innerHTML = "";
+    }
+
+    const areaOutput =
+        document.getElementById("sentinelClipArea") ||
+        document.getElementById("measurementOutput");
+    if (areaOutput) {
+        areaOutput.innerHTML = "";
+    }
+
+    window.geojsonFeature = null;
+    window.geojsonArea = 0;
+
+    document.dispatchEvent(
+        new CustomEvent("app:imagery-clip:geometry", {
+            detail: {
+                geometry: null,
+                areaSquareMeters: 0,
+            },
+        })
+    );
 }
 
 /**
@@ -1030,28 +1061,8 @@ $("#drawPolygonBtn").click(function (e) {
         drawingEnd();
     } else {
         drawingStart();
-        $("#featurePropertiesForm")[0].reset();
     }
 });
-$("#cancelFeatureProperties").click(function (e) {
-    $("#featureProperties").addClass("hidden");
-    $("#drawerGeojson").html("");
-    if (vectorLayerDrawing) {
-        map.removeLayer(vectorLayerDrawing);
-        vectorSourceDrawing.clear();
-    }
-});
-
-$("#saveFeatureProperties").click(function () {
-    const geojson = geojsonFeature;
-    const area_hectares = geojsonArea;
-
-    if (geojson) {
-        $("#geometryInput").val(JSON.stringify(geojson.geometry));
-        $("#areaInput").val(area_hectares);
-    }
-});
-
 /**
  * Zoom in function
  * @returns {void}
