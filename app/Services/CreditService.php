@@ -17,7 +17,7 @@ class CreditService
      * @param string $logContext Context for logging
      * @return bool True if refund was successful, false otherwise
      */
-    public function refundCreditsForFailure($imagery, string $logContext = 'System'): bool
+    public function refundCreditsForFailure($imagery, string $logContext = 'System', ?float $amount = null): bool
     {
         try {
             // Get the user who owns this imagery
@@ -35,7 +35,7 @@ class CreditService
             }
 
             // Get the credit cost from config
-            $creditCost = Config::get('app-constants.imagery_processing_cost', 10);
+            $creditCost = $amount ?? Config::get('app-constants.imagery_processing_cost', 10);
 
             // Refund the credits
             $userCredit->credits += $creditCost;

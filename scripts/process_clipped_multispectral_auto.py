@@ -1,3 +1,4 @@
+import json
 import os
 from datetime import timedelta
 from dateutil import parser as dateparser
@@ -13,8 +14,8 @@ from sentinelhub import (
 from sentinelhub.areas import BBoxSplitter
 
 # ====== KONFIGURASI ======
-SH_CLIENT_ID =
-SH_CLIENT_SECRET =
+SH_CLIENT_ID = os.getenv("SH_CLIENT_ID", "")
+SH_CLIENT_SECRET = os.getenv("SH_CLIENT_SECRET", "")
 
 config = SHConfig()
 config.sh_client_id = SH_CLIENT_ID
@@ -23,21 +24,36 @@ config.sh_token_url = "https://identity.dataspace.copernicus.eu/auth/realms/CDSE
 config.sh_base_url  = "https://sh.dataspace.copernicus.eu"
 
 # Folder untuk simpan
-tiles_dir = "tiles"
-merged_tif = "merged_fixed.tif"
-masked_tif = "merged_masked.tif"
+tiles_dir = os.getenv("CLIP_TILES_DIR", "tiles")
+merged_tif = os.getenv("CLIP_MERGED_TIF", "merged_fixed.tif")
+masked_tif = os.getenv("CLIP_OUTPUT_TIF", "merged_masked.tif")
 os.makedirs(tiles_dir, exist_ok=True)
+masked_parent = os.path.dirname(masked_tif)
+if masked_parent:
+    os.makedirs(masked_parent, exist_ok=True)
 
 # ====== PARAMETER ======
-DATE_FROM = "2025-08-01"
-DATE_TO   = "2025-08-31"
-MAX_CLOUD = 60
-LIMIT     = 100
-RES       = 10
-NODATA_VAL = 0   # ganti ke -9999 kalau lebih cocok
+DATE_FROM = os.getenv("CLIP_DATE_FROM", "2025-08-01")
+DATE_TO   = os.getenv("CLIP_DATE_TO", "2025-08-31")
+MAX_CLOUD = int(os.getenv("CLIP_MAX_CLOUD", "60"))
+LIMIT     = int(os.getenv("CLIP_LIMIT", "100"))
+RES       = int(os.getenv("CLIP_RESOLUTION", "10"))
+NODATA_VAL = int(os.getenv("CLIP_NODATA", "0"))   # ganti ke -9999 kalau lebih cocok
+
+def load_geojson_from_env(default):
+    value = os.getenv("CLIP_AOI_GEOJSON")
+    if not value:
+        return default
+    try:
+        return json.loads(value)
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"Invalid CLIP_AOI_GEOJSON provided: {exc}")
 
 # ====== AOI dari GEOJSON ======
-AOI_GEOJSON = {}
+AOI_GEOJSON = load_geojson_from_env({})
+
+if not AOI_GEOJSON or "features" not in AOI_GEOJSON or not AOI_GEOJSON["features"]:
+    raise SystemExit("CLIP_AOI_GEOJSON is required and must include at least one feature.")
 
 # Geometry untuk query & masking
 geom_dict = AOI_GEOJSON["features"][0]["geometry"]
@@ -45,9 +61,17 @@ geometry = Geometry(geom_dict, crs=CRS.WGS84)
 bbox = geometry.bbox
 
 # ====== CARI SCENE ======
+collection_type = os.getenv("CLIP_COLLECTION_TYPE", "S2MSI2A").upper()
+if collection_type in ("S2MSI1C", "L1C"):
+    data_collection = DataCollection.SENTINEL2_L1C
+    request_type = "sentinel-2-l1c"
+else:
+    data_collection = DataCollection.SENTINEL2_L2A
+    request_type = "sentinel-2-l2a"
+
 catalog = SentinelHubCatalog(config=config)
 search_iter = catalog.search(
-    DataCollection.SENTINEL2_L1C,
+    data_collection,
     geometry=geometry,
     time=(DATE_FROM, DATE_TO),
     limit=LIMIT
@@ -66,10 +90,45 @@ if not items:
 
 items.sort(key=lambda it: it["properties"]["datetime"], reverse=True)
 filtered = [it for it in items if (get_cloud(it) is None or get_cloud(it) <= MAX_CLOUD)]
-chosen = filtered[0] if filtered else items[0]
+
+selected_scene_id = os.getenv("CLIP_SCENE_ID") or None
+selected_product_id = os.getenv("CLIP_PRODUCT_ID") or None
+selected_datetime = os.getenv("CLIP_SCENE_DATETIME") or None
+
+def match_selected(item):
+    if not item:
+        return False
+    props = item.get("properties", {})
+    if selected_scene_id and item.get("id") == selected_scene_id:
+        return True
+    if selected_product_id and props.get("productIdentifier") == selected_product_id:
+        return True
+    return False
+
+chosen = None
+
+if selected_scene_id or selected_product_id:
+    preferred = [it for it in items if match_selected(it)]
+    if not preferred and selected_datetime:
+        try:
+            target_time = dateparser.isoparse(selected_datetime)
+        except Exception:
+            target_time = None
+        if target_time is not None:
+            preferred = sorted(
+                items,
+                key=lambda it: abs(
+                    (dateparser.isoparse(it["properties"]["datetime"]) - target_time).total_seconds()
+                )
+            )
+    if preferred:
+        chosen = preferred[0]
+
+if chosen is None:
+    chosen = filtered[0] if filtered else items[0]
 
 chosen_time = chosen["properties"]["datetime"]
-print("Scene terpilih:", chosen["id"], "waktu:", chosen_time, "cloud:", get_cloud(chosen))
+print("Scene terpilih:", chosen.get("id"), "waktu:", chosen_time, "cloud:", get_cloud(chosen))
 
 # ====== Evalscript ======
 evalscript_all_bands = """
@@ -112,7 +171,7 @@ for idx, tile_bb in enumerate(tile_bboxes):
     request = SentinelHubRequest(
         evalscript=evalscript_all_bands,
         input_data=[{
-            "type": "sentinel-2-l1c",
+            "type": request_type,
             "dataFilter": {
                 "timeRange": {"from": t_from, "to": t_to},
                 "mosaickingOrder": "mostRecent",

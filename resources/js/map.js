@@ -897,20 +897,26 @@ function addInteraction(type = "Polygon") {
         geojsonFeature = JSON.parse(geojson);
 
         // Display the GeoJSON string in the #drawerGeojson element
-        document.getElementById(
-            "drawerGeojson"
-        ).innerHTML = `<pre>${JSON.stringify(geojsonFeature, null, 1)}</pre>`;
+        const geojsonContainer = document.getElementById("clipGeojsonOutput");
+        if (geojsonContainer) {
+            geojsonContainer.innerHTML = `<pre>${JSON.stringify(geojsonFeature, null, 1)}</pre>`;
+        }
 
-        // Display measurement result in the #measurementOutput div
-        document.getElementById("measurementOutput").innerHTML =
-            formatNumber(geojsonArea / 10000) + " ha"; // Convert m² to hectares;
+        const areaContainer = document.getElementById("clipAreaOutput");
+        if (areaContainer) {
+            areaContainer.innerHTML = `${formatNumber(geojsonArea / 10000)} ha`;
+        }
 
         drawingEnd();
 
-        // Show feature properties after drawing
-        if (draw) {
-            $("#featureProperties").removeClass("hidden");
-        }
+        document.dispatchEvent(
+            new CustomEvent("clip:geometry:updated", {
+                detail: {
+                    feature: geojsonFeature,
+                    areaSquareMeters: geojsonArea,
+                },
+            })
+        );
 
         // Calculate total price after drawing
         if (typeof window.calculateTotalPrice === "function") {
@@ -928,8 +934,7 @@ function drawingStart() {
     drawingRunning = true;
     drawed = null;
     buttonStateDrawing();
-    $("#featureProperties").addClass("hidden");
-    $("#drawerGeojson").html("");
+    clearClipGeometryDisplay();
 }
 
 /**
@@ -1012,12 +1017,12 @@ function createMeasureTooltip() {
  * @returns {void}
  */
 function buttonStateDrawing() {
-    $("#drawPolygonBtn").html(
+    $("#clipDrawPolygonBtn").html(
         drawingRunning
             ? "Cancel Drawing"
             : "<i class='ri-pencil-line'></i>&nbsp; Draw Polygon"
     );
-    $("#drawPolygonBtn")
+    $("#clipDrawPolygonBtn")
         .removeClass()
         .addClass(
             drawingRunning ? "btn btn-sm btn-danger" : "btn btn-sm btn-primary"
@@ -1025,32 +1030,51 @@ function buttonStateDrawing() {
 }
 
 // Button to start/cancel the draw/measurement
-$("#drawPolygonBtn").click(function (e) {
+$("#clipDrawPolygonBtn").click(function (e) {
     if (drawingRunning) {
         drawingEnd();
     } else {
         drawingStart();
-        $("#featurePropertiesForm")[0].reset();
     }
 });
-$("#cancelFeatureProperties").click(function (e) {
-    $("#featureProperties").addClass("hidden");
-    $("#drawerGeojson").html("");
+
+$("#clipClearPolygonBtn").click(function () {
+    clearClipGeometry();
+});
+
+function clearClipGeometryDisplay() {
+    const geojsonContainer = document.getElementById("clipGeojsonOutput");
+    if (geojsonContainer) {
+        geojsonContainer.innerHTML =
+            "<span class=\"text-foreground/50\">Polygon coordinates will appear here...</span>";
+    }
+
+    const areaContainer = document.getElementById("clipAreaOutput");
+    if (areaContainer) {
+        areaContainer.innerHTML =
+            "<span class=\"text-foreground/50\">Draw a polygon to measure area</span>";
+    }
+}
+
+function clearClipGeometry() {
     if (vectorLayerDrawing) {
         map.removeLayer(vectorLayerDrawing);
-        vectorSourceDrawing.clear();
+        vectorLayerDrawing = null;
     }
-});
 
-$("#saveFeatureProperties").click(function () {
-    const geojson = geojsonFeature;
-    const area_hectares = geojsonArea;
+    vectorSourceDrawing.clear();
+    geojsonFeature = null;
+    geojsonArea = 0;
+    window.geojsonArea = 0;
 
-    if (geojson) {
-        $("#geometryInput").val(JSON.stringify(geojson.geometry));
-        $("#areaInput").val(area_hectares);
+    clearClipGeometryDisplay();
+
+    document.dispatchEvent(new CustomEvent("clip:geometry:cleared"));
+
+    if (typeof window.calculateTotalPrice === "function") {
+        window.calculateTotalPrice();
     }
-});
+}
 
 /**
  * Zoom in function
