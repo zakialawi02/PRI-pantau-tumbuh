@@ -1302,6 +1302,72 @@
                         return [sumX / count, sumY / count];
                     };
 
+                    const toWkt = (geometry) => {
+                        if (!geometry || typeof geometry !== 'object') return null;
+                        const type = geometry.type;
+                        const coords = geometry.coordinates;
+                        if (!type || !coords) return null;
+
+                        const normalizeRing = (ring) => {
+                            if (!Array.isArray(ring) || !ring.length) return null;
+                            const points = ring
+                                .map((coord) =>
+                                    Array.isArray(coord) && coord.length >= 2
+                                        ? [Number(coord[0]), Number(coord[1])]
+                                        : null
+                                )
+                                .filter((coord) => Array.isArray(coord));
+                            if (!points.length) return null;
+                            const [firstLon, firstLat] = points[0];
+                            const [lastLon, lastLat] = points[points.length - 1];
+                            if (firstLon !== lastLon || firstLat !== lastLat) {
+                                points.push([firstLon, firstLat]);
+                            }
+                            return points;
+                        };
+
+                        const formatRing = (ring) => {
+                            const normalized = normalizeRing(ring);
+                            if (!normalized) return null;
+                            return normalized
+                                .map((coord) => `${coord[0]} ${coord[1]}`)
+                                .join(', ');
+                        };
+
+                        switch (type) {
+                            case 'Polygon': {
+                                if (!Array.isArray(coords) || !coords.length) return null;
+                                const rings = coords
+                                    .map((ring) => {
+                                        if (!Array.isArray(ring) || !ring.length) return null;
+                                        const wktRing = formatRing(ring);
+                                        return wktRing ? `(${wktRing})` : null;
+                                    })
+                                    .filter(Boolean);
+                                return rings.length ? `POLYGON(${rings.join(', ')})` : null;
+                            }
+                            case 'MultiPolygon': {
+                                if (!Array.isArray(coords) || !coords.length) return null;
+                                const polygons = coords
+                                    .map((polygon) => {
+                                        if (!Array.isArray(polygon) || !polygon.length) return null;
+                                        const rings = polygon
+                                            .map((ring) => {
+                                                if (!Array.isArray(ring) || !ring.length) return null;
+                                                const wktRing = formatRing(ring);
+                                                return wktRing ? `(${wktRing})` : null;
+                                            })
+                                            .filter(Boolean);
+                                        return rings.length ? `(${rings.join(', ')})` : null;
+                                    })
+                                    .filter(Boolean);
+                                return polygons.length ? `MULTIPOLYGON(${polygons.join(', ')})` : null;
+                            }
+                            default:
+                                return null;
+                        }
+                    };
+
                     const buildQueryParams = () => {
                         const params = new URLSearchParams();
                         const startIso = elements.startDate?.value || formatIsoDate(new Date(Date.now() - 30 * 86400000));
@@ -1318,10 +1384,9 @@
                         }
 
                         if (state.geometry) {
-                            try {
-                                params.set('geometry', JSON.stringify(state.geometry));
-                            } catch (_) {
-                                // ignore JSON errors
+                            const wkt = toWkt(state.geometry);
+                            if (wkt) {
+                                params.set('geometry', wkt);
                             }
                             const centroid = computeCentroid(state.geometry);
                             if (centroid) {
