@@ -367,27 +367,6 @@
                             </div>
 
                             <div class="bg-background/60 border border-foreground/10 rounded-lg p-3 shadow-sm space-y-3">
-                                <h4 class="text-foreground text-lg font-semibold">Scene Filters</h4>
-                                <div class="grid grid-cols-1 gap-3 md:grid-cols-3">
-                                    <div class="space-y-1">
-                                        <x-input-label class="text-sm font-medium" for="clipStartDate">Start Date</x-input-label>
-                                        <input class="border border-foreground/20 bg-background rounded-lg px-2 py-1 text-sm focus:border-primary focus:outline-none focus:ring focus:ring-primary/30"
-                                            id="clipStartDate" type="date" autocomplete="off" />
-                                    </div>
-                                    <div class="space-y-1">
-                                        <x-input-label class="text-sm font-medium" for="clipEndDate">End Date</x-input-label>
-                                        <input class="border border-foreground/20 bg-background rounded-lg px-2 py-1 text-sm focus:border-primary focus:outline-none focus:ring focus:ring-primary/30"
-                                            id="clipEndDate" type="date" autocomplete="off" />
-                                    </div>
-                                    <div class="space-y-1">
-                                        <x-input-label class="text-sm font-medium" for="clipMaxCloud">Max Cloud Cover (%)</x-input-label>
-                                        <input class="border border-foreground/20 bg-background rounded-lg px-2 py-1 text-sm focus:border-primary focus:outline-none focus:ring focus:ring-primary/30"
-                                            id="clipMaxCloud" type="number" min="0" max="100" value="40" step="1" />
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="bg-background/60 border border-foreground/10 rounded-lg p-3 shadow-sm space-y-3">
                                 <div class="flex flex-wrap items-center justify-between gap-2">
                                     <h4 class="text-foreground text-lg font-semibold">Scene Selection</h4>
                                     <div class="inline-flex overflow-hidden rounded-full border border-foreground/20" role="tablist">
@@ -1058,6 +1037,8 @@
                         endpoint: 'https://catalogue.dataspace.copernicus.eu/resto/api/collections/Sentinel2/search.json',
                         productType: 'S2MSI2A',
                         maxRecords: 50,
+                        defaultDateWindowDays: 30,
+                        defaultMaxCloud: 60,
                     };
 
                     const elements = {
@@ -1065,9 +1046,6 @@
                         creditOutput: document.getElementById('clipCreditOutput'),
                         geojsonOutput: document.getElementById('clipGeojsonOutput'),
                         fieldInput: document.getElementById('clipFieldName'),
-                        startDate: document.getElementById('clipStartDate'),
-                        endDate: document.getElementById('clipEndDate'),
-                        maxCloud: document.getElementById('clipMaxCloud'),
                         autoBtn: document.getElementById('clipAutoSearchBtn'),
                         manualBtn: document.getElementById('clipManualSearchBtn'),
                         modeButtons: Array.from(document.querySelectorAll('.clip-mode-btn')),
@@ -1129,17 +1107,14 @@
                         }
                     };
 
-                    const ensureDateDefaults = () => {
+                    const getDefaultDateRange = () => {
                         const end = new Date();
                         const start = new Date();
-                        start.setDate(start.getDate() - 30);
-
-                        if (elements.startDate && !elements.startDate.value) {
-                            elements.startDate.value = formatIsoDate(start);
-                        }
-                        if (elements.endDate && !elements.endDate.value) {
-                            elements.endDate.value = formatIsoDate(end);
-                        }
+                        start.setDate(start.getDate() - clipConfig.defaultDateWindowDays);
+                        return {
+                            start: formatIsoDate(start),
+                            end: formatIsoDate(end),
+                        };
                     };
 
                     const computeCreditCost = () => {
@@ -1254,7 +1229,7 @@
                             state.autoScene = scene || null;
                             if (scene && elements.autoResult) {
                                 elements.autoResult.innerHTML = `
-                                    <div class="font-semibold">${scene.title ?? 'Recommended Scene'}</div>
+                                    <div class="font-semibold">${scene.title ?? 'Latest Scene'}</div>
                                     <div class="text-xs text-foreground/70">Acquired: ${formatHumanDate(scene.datetime)}</div>
                                     <div class="text-xs text-foreground/70">Cloud cover: ${safeFormatNumber(scene.cloud_cover ?? 0, 2)}%</div>
                                 `;
@@ -1374,18 +1349,11 @@
 
                     const buildQueryParams = () => {
                         const params = new URLSearchParams();
-                        const startIso = elements.startDate?.value || formatIsoDate(new Date(Date.now() - 30 * 86400000));
-                        const endIso = elements.endDate?.value || formatIsoDate(new Date());
-                        params.set('startDate', `${startIso}T00:00:00Z`);
-                        params.set('completionDate', `${endIso}T23:59:59Z`);
+                        const { start, end } = getDefaultDateRange();
+                        params.set('startDate', `${start}T00:00:00Z`);
+                        params.set('completionDate', `${end}T23:59:59Z`);
                         params.set('productType', clipConfig.productType);
                         params.set('maxRecords', String(clipConfig.maxRecords));
-
-                        const maxCloud = Number(elements.maxCloud?.value ?? 100);
-                        if (Number.isFinite(maxCloud)) {
-                            const clamped = Math.min(Math.max(maxCloud, 0), 100);
-                            params.set('cloudCover', `[0,${clamped}]`);
-                        }
 
                         if (state.geometry) {
                             const wkt = toWkt(state.geometry);
@@ -1414,6 +1382,29 @@
                             }
                         }
                         return null;
+                    };
+
+                    const getAcquisitionTimestamp = (feature) => {
+                        const props = feature?.properties ?? {};
+                        const candidates = [
+                            props.completionDate,
+                            props.endPosition,
+                            props.startDate,
+                            props.contentDate?.end,
+                            props.contentDate?.start,
+                            props.datetime,
+                            feature?.id && typeof feature.id === 'string' && feature.id.includes('T') ? feature.id : null,
+                        ];
+
+                        for (const candidate of candidates) {
+                            if (!candidate) continue;
+                            const date = new Date(candidate);
+                            if (!Number.isNaN(date.getTime())) {
+                                return date.getTime();
+                            }
+                        }
+
+                        return 0;
                     };
 
                     const buildScenePayload = (feature) => {
@@ -1511,7 +1502,8 @@
                             throw new Error('Failed to fetch Sentinel-2 scenes.');
                         }
                         const data = await response.json();
-                        return Array.isArray(data?.features) ? data.features : [];
+                        const features = Array.isArray(data?.features) ? data.features : [];
+                        return features.sort((a, b) => getAcquisitionTimestamp(b) - getAcquisitionTimestamp(a));
                     };
 
                     const attachManualCard = (feature) => {
@@ -1590,7 +1582,7 @@
                             const features = await fetchScenes();
                             if (!features.length) {
                                 if (elements.autoResult) {
-                                    elements.autoResult.textContent = 'No suitable scenes found for the selected period.';
+                                    elements.autoResult.textContent = 'No recent scenes found for this area.';
                                 }
                                 state.autoScene = null;
                                 if (state.mode === 'auto') {
@@ -1599,19 +1591,14 @@
                                 return;
                             }
 
-                            const sorted = [...features].sort((a, b) => {
-                                const cloudA = getCloudCover(a) ?? 1000;
-                                const cloudB = getCloudCover(b) ?? 1000;
-                                return cloudA - cloudB;
-                            });
-                            const bestFeature = sorted[0];
-                            const sceneData = buildScenePayload(bestFeature);
+                            const latestFeature = features[0];
+                            const sceneData = buildScenePayload(latestFeature);
                             state.autoScene = sceneData;
                             if (state.mode === 'auto') {
                                 selectScene(sceneData, 'auto');
                             } else if (elements.autoResult) {
                                 elements.autoResult.innerHTML = `
-                                    <div class="font-semibold">${sceneData.title ?? 'Recommended Scene'}</div>
+                                    <div class="font-semibold">${sceneData.title ?? 'Latest Scene'}</div>
                                     <div class="text-xs text-foreground/70">Acquired: ${formatHumanDate(sceneData.datetime)}</div>
                                     <div class="text-xs text-foreground/70">Cloud cover: ${safeFormatNumber(sceneData.cloud_cover ?? 0, 2)}%</div>
                                 `;
@@ -1646,7 +1633,7 @@
                             state.manualScenes = features;
                             if (!features.length) {
                                 if (elements.manualStatus) {
-                                    elements.manualStatus.textContent = 'No Sentinel-2 scenes found for this area and date range.';
+                                    elements.manualStatus.textContent = 'No recent Sentinel-2 scenes found for this area.';
                                 }
                                 state.manualSelection = null;
                                 if (state.mode === 'manual') {
@@ -1722,14 +1709,16 @@
                             return;
                         }
 
+                        const { start: defaultDateFrom, end: defaultDateTo } = getDefaultDateRange();
+
                         const payload = {
                             field_name: fieldName,
                             geometry: state.feature?.geometry ?? state.geometry,
                             area_hectares: Number(state.areaHectares.toFixed(4)),
                             mode: state.mode,
-                            date_from: elements.startDate?.value || '',
-                            date_to: elements.endDate?.value || '',
-                            max_cloud: Number(elements.maxCloud?.value ?? 0),
+                            date_from: defaultDateFrom,
+                            date_to: defaultDateTo,
+                            max_cloud: clipConfig.defaultMaxCloud,
                             limit: clipConfig.maxRecords,
                             resolution: 10,
                             nodata: 0,
@@ -1791,7 +1780,6 @@
                         }
                     };
 
-                    ensureDateDefaults();
                     updateAreaDisplay();
                     updateCreditDisplay();
                     updateGeojsonDisplay();
