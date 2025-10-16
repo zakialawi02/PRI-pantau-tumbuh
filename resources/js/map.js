@@ -1012,16 +1012,20 @@ function createMeasureTooltip() {
  * @returns {void}
  */
 function buttonStateDrawing() {
-    $("#drawPolygonBtn").html(
-        drawingRunning
-            ? "Cancel Drawing"
-            : "<i class='ri-pencil-line'></i>&nbsp; Draw Polygon"
-    );
-    $("#drawPolygonBtn")
-        .removeClass()
-        .addClass(
-            drawingRunning ? "btn btn-sm btn-danger" : "btn btn-sm btn-primary"
-        );
+    const button = $("#drawPolygonBtn");
+    if (!button.length) {
+        return;
+    }
+
+    if (drawingRunning) {
+        button.html("<i class='ri-close-line'></i>&nbsp; Cancel Drawing");
+        button.removeClass('text-foreground bg-foreground/10 hover:bg-foreground/20');
+        button.addClass('text-red-600 bg-red-100 hover:bg-red-200');
+    } else {
+        button.html("<i class='ri-pencil-line'></i>&nbsp; Draw Polygon");
+        button.removeClass('text-red-600 bg-red-100 hover:bg-red-200');
+        button.addClass('text-foreground bg-foreground/10 hover:bg-foreground/20');
+    }
 }
 
 // Button to start/cancel the draw/measurement
@@ -1036,6 +1040,11 @@ $("#drawPolygonBtn").click(function (e) {
 $("#cancelFeatureProperties").click(function (e) {
     $("#featureProperties").addClass("hidden");
     $("#drawerGeojson").html("");
+    geojsonArea = 0;
+    geojsonFeature = null;
+    if (typeof window.calculateTotalPrice === "function") {
+        window.calculateTotalPrice();
+    }
     if (vectorLayerDrawing) {
         map.removeLayer(vectorLayerDrawing);
         vectorSourceDrawing.clear();

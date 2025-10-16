@@ -235,7 +235,7 @@
             </section>
 
             <!-- ========== SENTINEL COLLECTION PANEL ========== -->
-            <section class="flex hidden h-full flex-col shadow-xl" id="sentinel-panel" data-sentinel-token="{{ $copernicusAccessToken ?? '' }}" data-sentinel-credentials="{{ $copernicusCredentialsConfigured ?? false ? 'true' : 'false' }}" data-sentinel-process-url="{{ auth()->check() ? route('admin.sentinel.process') : '' }}">
+            <section class="flex hidden h-full flex-col shadow-xl" id="sentinel-panel" data-sentinel-token="{{ $copernicusAccessToken ?? '' }}" data-sentinel-credentials="{{ $copernicusCredentialsConfigured ?? false ? 'true' : 'false' }}" data-sentinel-process-url="{{ auth()->check() ? route('admin.sentinel.process') : '' }}" data-sentinel-clip-url="{{ auth()->check() ? route('admin.sentinel.clip') : '' }}">
                 <div class="bg-background border-foreground/10 sticky top-0 z-20 flex items-center justify-between border-b p-2">
                     <h2 class="text-lg font-bold">🛰️ Sentinel-2 Collections</h2>
                     <button class="hover:bg-foreground/20 bg-foreground/10 rounded px-2 py-1 text-sm" onclick="closePanels()">✖</button>
@@ -315,58 +315,170 @@
                     </div>
 
                     <!-- Clip Tab Content -->
-                    <div class="tab-content hidden" class="hidden" id="sentinel-clip-panel" role="tabpanel" aria-labelledby="sentinel-clip-tab">
-                        <div class="bg-primary/10 space-y-2 rounded-lg p-2">
-                            <h4 class="text-foreground flex items-center text-lg font-semibold">
-                                <i class="ri-shopping-bag-line text-primary mr-2"></i>
-                                Clip from Our Collection
-                            </h4>
-                            <p class="text-foreground/80 text-sm">
-                                Don't have satellite data? Purchase clipped high-resolution imagery directly from our platform, captured by leading satellite constellations.
-                            </p>
-
-                            <div class="bg-primary/20 rounded-lg p-2">
-                                <h5 class="text-foreground mb-2 font-medium">What You Get</h5>
-                                <ul class="text-foreground/70 space-y-1 text-sm">
-                                    <li class="flex items-start">
-                                        <i class="ri-check-line text-success mr-2 mt-0.5 text-xs"></i>
-                                        <span>Access to daily updated satellite imagery</span>
-                                    </li>
-                                    <li class="flex items-start">
-                                        <i class="ri-check-line text-success mr-2 mt-0.5 text-xs"></i>
-                                        <span>Global coverage</span>
-                                    </li>
-                                    <li class="flex items-start">
-                                        <i class="ri-check-line text-success mr-2 mt-0.5 text-xs"></i>
-                                        <span>Automatic PRI analysis and health reports included</span>
-                                    </li>
-                                </ul>
-                            </div>
-
-                            <div class="bg-primary/20 rounded-lg p-2">
-                                <h5 class="text-foreground mb-2 font-medium">Satellite Sources</h5>
-                                <div class="grid grid-cols-2 gap-2 text-sm">
-                                    <div class="flex items-center">
-                                        <i class="ri-satellite-line text-success mr-2"></i>
-                                        <span>Sentinel-2</span>
+                    <div class="tab-content hidden" id="sentinel-clip-panel" role="tabpanel" aria-labelledby="sentinel-clip-tab">
+                        <div class="space-y-3">
+                            <div class="bg-background/60 border-foreground/10 space-y-3 rounded-lg border p-3 shadow-sm">
+                                <div class="flex flex-wrap items-start justify-between gap-2">
+                                    <div>
+                                        <h3 class="text-foreground text-sm font-semibold">Imagery Clip Workspace</h3>
+                                        <p class="text-foreground/70 text-xs">Draw a polygon on the map to define your area of interest. The system will estimate credit usage and search Sentinel-2 scenes intersecting your geometry.</p>
                                     </div>
-                                    {{-- <div class="flex items-center">
-                                        <i class="ri-satellite-line text-success mr-2"></i>
-                                        <span>Landsat 8/9</span>
+                                    <div class="flex gap-2">
+                                        <button class="bg-foreground/10 hover:bg-foreground/20 inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium transition" type="button" id="drawPolygonBtn">
+                                            <i class="ri-pencil-line text-sm"></i>
+                                            <span>Draw Polygon</span>
+                                        </button>
+                                        <button class="bg-foreground/10 hover:bg-foreground/20 inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium transition" type="button" id="cancelFeatureProperties">
+                                            <i class="ri-delete-bin-6-line text-sm"></i>
+                                            <span>Clear</span>
+                                        </button>
                                     </div>
-                                    <div class="flex items-center">
-                                        <i class="ri-satellite-line text-success mr-2"></i>
-                                        <span>Quicksat</span>
-                                    </div> --}}
+                                </div>
+
+                                <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+                                    <div class="space-y-1">
+                                        <span class="text-foreground/80 text-xs font-medium">Area</span>
+                                        <div class="border-muted bg-foreground/10 rounded border p-2 text-sm" id="measurementOutput">
+                                            <div class="text-foreground/50 flex items-center">
+                                                <i class="ri-crop-line mr-2"></i>
+                                                <span>Draw a polygon to measure the area.</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="space-y-1">
+                                        <span class="text-foreground/80 text-xs font-medium">Estimated Credits</span>
+                                        <div class="border-muted bg-muted/60 rounded border p-2 text-sm" id="priceOutput">
+                                            <span class="text-primary font-semibold" id="total_price">Credits will be calculated after drawing.</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="space-y-1">
+                                    <span class="text-foreground/80 text-xs font-medium">GeoJSON</span>
+                                    <div class="border-muted bg-foreground/10 max-h-28 overflow-auto rounded border p-2 text-xs" id="drawerGeojson">
+                                        <span class="text-foreground/50">Polygon coordinates will appear here…</span>
+                                    </div>
                                 </div>
                             </div>
-                            <div class="">
-                                <x-button-primary id="buySatelliteBtn" type="button" size="small">
-                                    <i class="ri-shopping-cart-line"></i>
-                                    <span>Buy Satellite Imagery</span>
-                                </x-button-primary>
+
+                            <div class="bg-background/60 border-foreground/10 space-y-3 rounded-lg border p-3 shadow-sm">
+                                <h3 class="text-foreground text-sm font-semibold">Scene Filters</h3>
+                                <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                    <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="clipStartDate">
+                                        <span>Start Date</span>
+                                        <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-1.5 py-0.5 text-sm focus:outline-none focus:ring" id="clipStartDate" type="date" autocomplete="off" />
+                                    </label>
+                                    <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="clipEndDate">
+                                        <span>End Date</span>
+                                        <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-1.5 py-0.5 text-sm focus:outline-none focus:ring" id="clipEndDate" type="date" autocomplete="off" />
+                                    </label>
+                                    <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="clipMaxCloud">
+                                        <span>Max Cloud Cover (%)</span>
+                                        <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-1.5 py-0.5 text-sm focus:outline-none focus:ring" id="clipMaxCloud" type="number" min="0" max="100" step="1" value="40" />
+                                    </label>
+                                    <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="clipProductLevel">
+                                        <span>Product Level</span>
+                                        <select class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-1.5 py-0.5 text-sm focus:outline-none focus:ring" id="clipProductLevel">
+                                            <option value="S2MSI2A" selected>Level-2A (Surface Reflectance)</option>
+                                            <option value="S2MSI1C">Level-1C (Top-of-Atmosphere)</option>
+                                        </select>
+                                    </label>
+                                </div>
+
+                                <div class="space-y-2">
+                                    <span class="text-foreground/80 text-xs font-medium">Scene Selection</span>
+                                    <div class="bg-foreground/10 flex flex-col gap-2 rounded-lg p-2 text-xs md:flex-row">
+                                        <label class="flex items-start gap-2">
+                                            <input class="mt-0.5" type="radio" name="clipMode" value="auto" id="clipModeAuto" checked />
+                                            <span>
+                                                <strong>Auto Mode</strong>
+                                                <span class="block text-foreground/70">Draw a polygon and set a date range. The system selects the best scene automatically.</span>
+                                            </span>
+                                        </label>
+                                        <label class="flex items-start gap-2">
+                                            <input class="mt-0.5" type="radio" name="clipMode" value="manual" id="clipModeManual" />
+                                            <span>
+                                                <strong>Manual Mode</strong>
+                                                <span class="block text-foreground/70">Review search results and choose a scene manually before processing.</span>
+                                            </span>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div class="flex flex-wrap gap-2">
+                                    <button class="bg-primary hover:bg-primary/90 text-background inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition" id="clipSearchButton" type="button">
+                                        <i class="ri-search-line"></i>
+                                        <span>Search Scenes</span>
+                                    </button>
+                                    <button class="bg-success/10 text-success hover:bg-success/20 inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-60" id="clipProcessButton" type="button" disabled>
+                                        <i class="ri-cpu-line"></i>
+                                        <span>Process Imagery</span>
+                                    </button>
+                                </div>
+                                <p class="text-foreground/60 text-xs" id="clipSearchStatus">Draw a polygon and apply filters to discover intersecting Sentinel-2 scenes.</p>
                             </div>
+
+                            <div class="bg-success/10 border-success/30 hidden rounded-lg border p-3 text-xs" id="clipAutoSummary">
+                                <div class="flex items-start justify-between gap-2">
+                                    <div>
+                                        <h4 class="text-success text-sm font-semibold">Auto-selected Scene</h4>
+                                        <p class="text-success/80" data-clip-auto-title>–</p>
+                                        <p class="text-success/70" data-clip-auto-details></p>
+                                    </div>
+                                    <button class="text-success/70 hover:text-success" type="button" data-clip-auto-preview>
+                                        <i class="ri-eye-line"></i>
+                                        <span class="sr-only">Preview selected scene</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="hidden space-y-2" id="clipManualContainer">
+                                <div class="flex items-center justify-between">
+                                    <h4 class="text-foreground text-sm font-semibold">Manual Scene Selection</h4>
+                                    <span class="text-foreground/60 text-xs" data-clip-manual-count>0 scenes</span>
+                                </div>
+                                <div class="space-y-2" id="clipSceneList"></div>
+                            </div>
+
+                            <template id="clipSceneTemplate">
+                                <div class="clip-scene-card border-foreground/15 bg-background/60 flex flex-col rounded-xl border p-3 shadow-sm transition-all duration-200">
+                                    <div class="flex items-start gap-3">
+                                        <div class="border-foreground/10 bg-muted text-foreground/50 flex h-16 w-16 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border" data-clip-thumb>
+                                            <img class="hidden h-full w-full object-cover" data-clip-thumbnail alt="Scene preview" />
+                                            <div class="flex flex-col items-center text-[10px] font-medium" data-clip-placeholder>
+                                                <i class="ri-landscape-line text-lg"></i>
+                                                <span>Preview</span>
+                                            </div>
+                                        </div>
+                                        <div class="flex min-w-0 flex-1 flex-col">
+                                            <p class="text-foreground truncate text-sm font-semibold" data-clip-title>Sentinel Scene</p>
+                                            <p class="text-foreground/70 truncate text-xs" data-clip-datetime>–</p>
+                                            <p class="text-foreground/60 truncate text-xs" data-clip-details>–</p>
+                                        </div>
+                                        <button class="bg-primary/10 text-primary hover:bg-primary/20 inline-flex h-7 w-7 items-center justify-center rounded-full text-xs" type="button" data-clip-preview>
+                                            <i class="ri-eye-line"></i>
+                                            <span class="sr-only">Preview scene</span>
+                                        </button>
+                                    </div>
+                                    <div class="mt-3 flex items-center justify-between gap-2">
+                                        <button class="border-primary/40 text-primary hover:bg-primary/10 inline-flex flex-1 items-center justify-center gap-1 rounded-lg border px-2 py-1 text-xs font-semibold transition" type="button" data-clip-select>
+                                            <i class="ri-check-line"></i>
+                                            <span>Select this scene</span>
+                                        </button>
+                                        <span class="text-primary hidden text-xs font-semibold" data-clip-selected-indicator>
+                                            <i class="ri-checkbox-circle-line mr-1"></i>
+                                            Selected
+                                        </span>
+                                    </div>
+                                </div>
+                            </template>
                         </div>
+
+                        <form id="featurePropertiesForm" class="hidden">
+                            <input id="geometryInput" name="geometry" type="hidden">
+                            <input id="areaInput" name="area_hectares" type="hidden">
+                        </form>
+                        <div id="featureProperties" class="hidden"></div>
                     </div>
                 </div>
 
@@ -709,124 +821,7 @@
         </div>
 
 
-        <!-- Right/Overlay Panel -->
-        <div class="bg-background absolute bottom-0 left-0 z-50 hidden max-h-[60%] w-full max-w-full overflow-hidden rounded-t-xl shadow-xl transition-all duration-300 ease-in-out md:bottom-auto md:left-auto md:right-2 md:top-1/2 md:max-w-[30rem] md:-translate-y-1/2 md:transform md:rounded-xl" id="buyingPanel">
-            <div class="flex h-full w-full min-w-full flex-col p-2" id="drawer-sidebar-left-panel1-label">
-                <!-- Header drawer -->
-                <div class="mb-2 flex items-center justify-between">
-                    <h2 class="text-lg font-semibold">Purchase a field</h2>
-                    <button class="hover:text-primary/80 close-panel-btn text-foreground/50" id="buyingPanelCloseBtn" data-drawer-hide="drawer-sidebar-left-panel1" type="button">✕</button>
-                </div>
-                <!-- Drawer content -->
-                <div class="flex h-full max-h-96 flex-1 flex-col overflow-hidden">
-                    <div class="mb-8 flex-1 space-y-3 overflow-y-auto px-1">
-                        <!-- Draw Polygon Section -->
-                        <div class="flex flex-col items-center justify-center py-2 text-center">
-                            <div class="mb-2">
-                                <h3 class="text-foreground/70 mb-3 text-lg font-semibold">Clip Satellite Imagery</h3>
-                                <p class="text-foreground-70 mb-3 text-xs">Draw a polygon on the map to define your area of interest for satellite imagery analysis.</p>
-                                <x-button-primary id="drawPolygonBtn" type="button" size="small">
-                                    <i class="ri-pencil-line"></i>
-                                    <span>Draw Polygon</span>
-                                </x-button-primary>
-                            </div>
 
-                            <!-- GeoJSON Output -->
-                            <div class="w-full">
-                                <div class="border-muted bg-foreground/10 mt-3 max-h-11 w-full overflow-auto rounded border p-2 text-xs" id="drawerGeojson">
-                                    <span class="text-foreground/50">Polygon coordinates will appear here...</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <hr class="border-gray-300">
-
-                        <!-- Feature Properties Form -->
-                        <form class="space-y-4" id="featurePropertiesForm" action="{{ route('imageryOrder') }}" method="POST">
-                            @csrf
-                            @method('POST')
-
-                            <input id="geometryInput" name="geometry" type="hidden">
-                            <input id="areaInput" name="area_hectares" type="hidden">
-
-                            <!-- Feature Name -->
-                            <div class="space-y-2">
-                                <x-input-label class="text-sm font-medium" for="name_feature">Field Name</x-input-label>
-                                <x-text-input class="w-full" id="name_feature" name="name_feature" size="small" placeholder="Enter field/region name" required />
-                            </div>
-
-                            <!-- Area Information -->
-                            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                                <div class="space-y-2">
-                                    <x-input-label class="text-sm font-medium" for="luas">Area</x-input-label>
-                                    <div class="border-muted bg-foreground/10 rounded border p-2 text-sm" id="measurementOutput">
-                                        <div class="text-foreground/50 flex items-center">
-                                            <i class="ri-crop-line mr-2"></i>
-                                            <span>Calculate area...</span>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- Credit Points Information -->
-                                <div class="space-y-2">
-                                    <x-input-label class="text-sm font-medium" for="credit_info">Credit Points</x-input-label>
-                                    <div class="border-muted rounded border p-2 text-sm">
-                                        <div class="text-foreground/50 flex items-center">
-                                            <i class="ri-coins-line mr-2"></i>
-                                            <span>{{ Number::format(config('app-constants.imagery_credit_cost_per_hectare'), locale: app()->getLocale()) }} Credit Points per hectare</span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Total Price -->
-                            <div class="space-y-2">
-                                <x-input-label class="text-sm font-medium" for="harga">Total Credit Points Needed</x-input-label>
-                                <div class="border-muted bg-muted/60 rounded border p-2 text-sm" id="priceOutput">
-                                    <span class="text-primary font-semibold" id="total_price">Total will be calculated...</span>
-                                </div>
-                            </div>
-
-                            <!-- Action Buttons -->
-                            <div class="flex flex-col gap-2 pt-2 sm:flex-row">
-                                <x-button-primary class="flex-1" id="saveFeatureProperties" type="submit" role="button" size="small">
-                                    <i class="ri-arrow-right-line mr-1"></i>
-                                    Continue to Checkout
-                                </x-button-primary>
-                                <x-button-secondary class="flex-1" id="cancelFeatureProperties" type="reset" role="button" size="small">
-                                    <i class="ri-close-line mr-1"></i>
-                                    Cancel
-                                </x-button-secondary>
-                            </div>
-                        </form>
-
-                        <!-- Additional Information -->
-                        <div class="bg-primary/60 rounded-lg p-3">
-                            <h4 class="text-primary-foreground mb-2 text-sm font-medium">What you'll get:</h4>
-                            <ul class="text-primary-foreground/80 space-y-1 text-xs">
-                                <li class="flex items-center">
-                                    <i class="ri-check-line text-success mr-1"></i>
-                                    High-resolution satellite imagery
-                                </li>
-                                <li class="flex items-center">
-                                    <i class="ri-check-line text-success mr-1"></i>
-                                    PRI stress analysis
-                                </li>
-                                <li class="flex items-center">
-                                    <i class="ri-check-line text-success mr-1"></i>
-                                    Detailed crop health reports
-                                </li>
-                                <li class="flex items-center">
-                                    <i class="ri-check-line text-success mr-1"></i>
-                                    Historical data comparison
-                                </li>
-                            </ul>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
     @push('javascript')
         <script>
             (() => {
@@ -1132,6 +1127,14 @@
                         }
 
                         priceContainer.style.transition = 'all 0.3s ease-in-out';
+
+                        if (window.AppMap?.sentinel?.clip?.updateAreaSummary) {
+                            window.AppMap.sentinel.clip.updateAreaSummary({
+                                areaSqM: areaInSquareMeters,
+                                areaHa: areaInHectares,
+                                creditCost: creditPointsNeeded,
+                            });
+                        }
                     };
 
                     window.calculateTotalPrice = calculateTotalPrice;
@@ -1787,6 +1790,7 @@
                     token: sanitizeToken(panelEl?.dataset?.sentinelToken ?? ''),
                     tokenConfigured: (panelEl?.dataset?.sentinelCredentials ?? '').toLowerCase() === 'true',
                     processUrl: panelEl?.dataset?.sentinelProcessUrl || '',
+                    clipProcessUrl: panelEl?.dataset?.sentinelClipUrl || '',
                 };
 
                 const ignoredDownloadKeywords = ['quicklook', 'thumbnail', 'thumb', 'overview', 'browse', 'preview', 'allorigins'];
@@ -2081,6 +2085,624 @@
                     const normalized = base.replace(/[\s]+/g, '_').replace(/[^A-Za-z0-9._-]+/g, '_');
                     return normalized || 'sentinel-2-scene';
                 };
+
+                ensureAppNamespace();
+
+                const clipModule = (() => {
+                    const panel = document.getElementById('sentinel-clip-panel');
+
+                    const elements = {
+                        panel,
+                        drawButton: document.getElementById('drawPolygonBtn'),
+                        clearButton: document.getElementById('cancelFeatureProperties'),
+                        startDate: document.getElementById('clipStartDate'),
+                        endDate: document.getElementById('clipEndDate'),
+                        maxCloud: document.getElementById('clipMaxCloud'),
+                        productLevel: document.getElementById('clipProductLevel'),
+                        searchButton: document.getElementById('clipSearchButton'),
+                        processButton: document.getElementById('clipProcessButton'),
+                        searchStatus: document.getElementById('clipSearchStatus'),
+                        autoSummary: document.getElementById('clipAutoSummary'),
+                        autoTitle: panel?.querySelector('[data-clip-auto-title]') ?? null,
+                        autoDetails: panel?.querySelector('[data-clip-auto-details]') ?? null,
+                        autoPreviewBtn: panel?.querySelector('[data-clip-auto-preview]') ?? null,
+                        manualContainer: document.getElementById('clipManualContainer'),
+                        manualCount: panel?.querySelector('[data-clip-manual-count]') ?? null,
+                        sceneList: document.getElementById('clipSceneList'),
+                        sceneTemplate: document.getElementById('clipSceneTemplate'),
+                        modeRadios: Array.from(document.querySelectorAll('input[name="clipMode"]')),
+                    };
+
+                    if (!panel || !elements.sceneTemplate) {
+                        return {
+                            updateAreaSummary: () => {},
+                            loadScenes: async () => {},
+                        };
+                    }
+
+                    const clipState = {
+                        mode: elements.modeRadios.find((radio) => radio.checked)?.value || 'auto',
+                        areaSqM: 0,
+                        areaHa: 0,
+                        creditCost: 0,
+                        geometry: null,
+                        scenes: [],
+                        autoScene: null,
+                        selectedSceneId: null,
+                        searching: false,
+                    };
+
+                    const formatDateForDisplay = (value) => {
+                        if (!value) return 'Unknown';
+                        if (typeof window.formatReadableDate === 'function') {
+                            return window.formatReadableDate(value);
+                        }
+                        try {
+                            const date = new Date(value);
+                            if (!Number.isNaN(date.getTime())) {
+                                return date.toISOString();
+                            }
+                        } catch (error) {
+                            return value;
+                        }
+                        return value;
+                    };
+
+                    const formatCloudCoverValue = (value) => {
+                        if (typeof value === 'number' && !Number.isNaN(value)) {
+                            return `${value.toFixed(1)}%`;
+                        }
+                        return 'N/A';
+                    };
+
+                    const setSearchStatus = (message, tone = 'info') => {
+                        if (!elements.searchStatus) return;
+                        elements.searchStatus.textContent = message;
+                        elements.searchStatus.classList.remove('text-foreground/60', 'text-success', 'text-red-500');
+                        const toneClass = tone === 'error' ? 'text-red-500' : tone === 'success' ? 'text-success' : 'text-foreground/60';
+                        elements.searchStatus.classList.add(toneClass);
+                    };
+
+                    const resetResults = (preserveStatus = false) => {
+                        clipState.autoScene = null;
+                        clipState.selectedSceneId = null;
+                        clipState.scenes = [];
+                        if (elements.autoSummary) {
+                            elements.autoSummary.classList.add('hidden');
+                        }
+                        if (elements.manualContainer) {
+                            elements.manualContainer.classList.add('hidden');
+                        }
+                        if (elements.sceneList) {
+                            elements.sceneList.innerHTML = '';
+                        }
+                        if (elements.manualCount) {
+                            elements.manualCount.textContent = '0 scenes';
+                        }
+                        if (!preserveStatus) {
+                            setSearchStatus('Draw a polygon and apply filters to discover intersecting Sentinel-2 scenes.', 'info');
+                        }
+                        updateProcessButtonState();
+                    };
+
+                    const updateProcessButtonState = () => {
+                        if (!elements.processButton) return;
+                        const hasGeometry = clipState.geometry && clipState.areaSqM > 0;
+                        let enabled = false;
+                        if (clipState.mode === 'auto') {
+                            enabled = hasGeometry && Boolean(clipState.autoScene);
+                        } else {
+                            enabled = hasGeometry && Boolean(clipState.selectedSceneId);
+                        }
+                        elements.processButton.disabled = !enabled;
+                    };
+
+                    const updateModeUI = () => {
+                        if (clipState.mode === 'auto') {
+                            if (elements.autoSummary) {
+                                elements.autoSummary.classList.toggle('hidden', !clipState.autoScene);
+                            }
+                            if (elements.manualContainer) {
+                                elements.manualContainer.classList.add('hidden');
+                            }
+                        } else {
+                            if (elements.autoSummary) {
+                                elements.autoSummary.classList.add('hidden');
+                            }
+                            if (elements.manualContainer) {
+                                elements.manualContainer.classList.toggle('hidden', clipState.scenes.length === 0);
+                            }
+                        }
+                        updateProcessButtonState();
+                    };
+
+                    const geometryToWkt = (geometry) => {
+                        if (!geometry || typeof geometry !== 'object') {
+                            return null;
+                        }
+
+                        const ensureClosedRing = (ring) => {
+                            if (!Array.isArray(ring) || ring.length === 0) {
+                                return [];
+                            }
+                            const normalized = ring.slice();
+                            const first = normalized[0];
+                            const last = normalized[normalized.length - 1];
+                            if (
+                                first &&
+                                last &&
+                                Array.isArray(first) &&
+                                Array.isArray(last) &&
+                                (first[0] !== last[0] || first[1] !== last[1])
+                            ) {
+                                normalized.push(first);
+                            }
+                            return normalized;
+                        };
+
+                        const toRing = (ring) => ensureClosedRing(ring)
+                            .filter((coord) => Array.isArray(coord) && coord.length >= 2)
+                            .map((coord) => `${coord[0]} ${coord[1]}`)
+                            .join(', ');
+
+                        const toPolygon = (coords) => {
+                            if (!Array.isArray(coords)) {
+                                return '';
+                            }
+                            const rings = coords
+                                .map((ring) => toRing(ring))
+                                .filter((ring) => ring && ring.split(',').length >= 4);
+                            if (!rings.length) {
+                                return '';
+                            }
+                            return `(${rings.map((ring) => `(${ring})`).join(', ')})`;
+                        };
+
+                        const type = (geometry.type || '').toLowerCase();
+
+                        if (type === 'feature') {
+                            return geometryToWkt(geometry.geometry);
+                        }
+
+                        if (type === 'polygon') {
+                            const polygon = toPolygon(geometry.coordinates || []);
+                            return polygon ? `POLYGON ${polygon}` : null;
+                        }
+
+                        if (type === 'multipolygon') {
+                            const multipolygon = (geometry.coordinates || [])
+                                .map((poly) => toPolygon(poly))
+                                .filter(Boolean);
+                            return multipolygon.length ? `MULTIPOLYGON (${multipolygon.join(', ')})` : null;
+                        }
+
+                        return null;
+                    };
+
+                    const mapFeatureToScene = (feature) => {
+                        const props = feature?.properties ?? {};
+                        const assets = feature?.assets ?? props.assets ?? {};
+                        const links = Array.isArray(feature?.links) ? feature.links : [];
+                        const cloudRaw = props['eo:cloud_cover'] ?? props['cloudCover'];
+                        const cloudCover = cloudRaw === undefined ? null : Number(cloudRaw);
+                        const datetime = props.datetime || props.startDate || props.beginPosition || null;
+                        const title = props.title || props.productIdentifier || feature?.id || 'Sentinel Scene';
+                        const productId = props.productIdentifier || props.identifier || feature?.id || title;
+                        const quicklookUrl = props.thumbnail || props.quicklook || assets.thumbnail?.href || assets.quicklook?.href || null;
+                        const collection = feature?.collection || props.collection || props.productType || null;
+                        const downloadUrl = resolveDownloadUrl(feature);
+
+                        return {
+                            id: feature?.id || productId,
+                            title,
+                            productId,
+                            datetime,
+                            cloudCover: Number.isFinite(cloudCover) ? cloudCover : null,
+                            collection,
+                            quicklookUrl,
+                            downloadUrl,
+                            geometry: feature?.geometry ?? null,
+                            properties: props,
+                            links,
+                        };
+                    };
+
+                    const chooseAutoScene = (scenes) => {
+                        if (!Array.isArray(scenes) || scenes.length === 0) {
+                            return null;
+                        }
+                        const ranked = scenes.slice().sort((a, b) => {
+                            const cloudA = Number.isFinite(a.cloudCover) ? a.cloudCover : Number.POSITIVE_INFINITY;
+                            const cloudB = Number.isFinite(b.cloudCover) ? b.cloudCover : Number.POSITIVE_INFINITY;
+                            if (cloudA !== cloudB) {
+                                return cloudA - cloudB;
+                            }
+                            const dateA = a.datetime ? new Date(a.datetime).getTime() : 0;
+                            const dateB = b.datetime ? new Date(b.datetime).getTime() : 0;
+                            return dateB - dateA;
+                        });
+                        return ranked[0];
+                    };
+
+                    const updateAutoSummary = (scene) => {
+                        if (!elements.autoSummary || !elements.autoTitle || !elements.autoDetails) {
+                            return;
+                        }
+                        if (!scene) {
+                            elements.autoSummary.classList.add('hidden');
+                            return;
+                        }
+                        const readableDate = formatDateForDisplay(scene.datetime);
+                        elements.autoTitle.textContent = `${scene.title}`;
+                        const detailParts = [];
+                        if (scene.collection) detailParts.push(scene.collection);
+                        if (scene.cloudCover !== null) detailParts.push(`Cloud cover: ${formatCloudCoverValue(scene.cloudCover)}`);
+                        detailParts.push(`Acquired: ${readableDate}`);
+                        elements.autoDetails.textContent = detailParts.join(' • ');
+                        elements.autoSummary.classList.remove('hidden');
+                    };
+
+                    const selectManualScene = (sceneId) => {
+                        clipState.selectedSceneId = sceneId;
+                        if (!elements.sceneList) return;
+                        Array.from(elements.sceneList.querySelectorAll('.clip-scene-card')).forEach((card) => {
+                            const indicator = card.querySelector('[data-clip-selected-indicator]');
+                            const id = card.dataset.sceneId;
+                            const isSelected = id === sceneId;
+                            card.classList.toggle('ring', isSelected);
+                            card.classList.toggle('ring-primary', isSelected);
+                            if (indicator) {
+                                indicator.classList.toggle('hidden', !isSelected);
+                            }
+                        });
+                        updateProcessButtonState();
+                    };
+
+                    const renderSceneCard = (scene) => {
+                        if (!elements.sceneTemplate || !elements.sceneList) return;
+                        const fragment = elements.sceneTemplate.content.cloneNode(true);
+                        const card = fragment.querySelector('.clip-scene-card');
+                        if (!card) return;
+                        card.dataset.sceneId = scene.id;
+
+                        const titleEl = card.querySelector('[data-clip-title]');
+                        const datetimeEl = card.querySelector('[data-clip-datetime]');
+                        const detailsEl = card.querySelector('[data-clip-details]');
+                        const previewBtn = card.querySelector('[data-clip-preview]');
+                        const selectBtn = card.querySelector('[data-clip-select]');
+                        const thumbnailImg = card.querySelector('[data-clip-thumbnail]');
+                        const placeholder = card.querySelector('[data-clip-placeholder]');
+
+                        if (titleEl) {
+                            titleEl.textContent = scene.title;
+                        }
+                        if (datetimeEl) {
+                            datetimeEl.textContent = formatDateForDisplay(scene.datetime);
+                        }
+                        if (detailsEl) {
+                            const details = [];
+                            if (scene.collection) details.push(scene.collection);
+                            details.push(`Cloud: ${formatCloudCoverValue(scene.cloudCover)}`);
+                            detailsEl.textContent = details.join(' • ');
+                        }
+
+                        if (scene.quicklookUrl && thumbnailImg) {
+                            thumbnailImg.src = scene.quicklookUrl;
+                            thumbnailImg.classList.remove('hidden');
+                            if (placeholder) placeholder.classList.add('hidden');
+                        }
+
+                        if (previewBtn) {
+                            previewBtn.addEventListener('click', () => {
+                                if (typeof window.showSentinelPreviewOnMap === 'function') {
+                                    window.showSentinelPreviewOnMap({
+                                        title: scene.title,
+                                        productId: scene.productId,
+                                        quicklookUrl: scene.quicklookUrl,
+                                        downloadUrl: scene.downloadUrl,
+                                        acquisitionDate: scene.datetime,
+                                        collection: scene.collection,
+                                        cloudCover: scene.cloudCover,
+                                        geometry: scene.geometry,
+                                        links: scene.links,
+                                    });
+                                }
+                            });
+                        }
+
+                        if (selectBtn) {
+                            selectBtn.addEventListener('click', () => selectManualScene(scene.id));
+                        }
+
+                        elements.sceneList.appendChild(fragment);
+                    };
+
+                    const renderScenes = (scenes) => {
+                        if (!elements.sceneList) return;
+                        elements.sceneList.innerHTML = '';
+                        scenes.forEach((scene) => renderSceneCard(scene));
+                        if (elements.manualCount) {
+                            elements.manualCount.textContent = `${scenes.length} scene${scenes.length === 1 ? '' : 's'}`;
+                        }
+                        if (clipState.mode === 'manual') {
+                            elements.manualContainer?.classList.toggle('hidden', scenes.length === 0);
+                        }
+                        updateProcessButtonState();
+                    };
+
+                    const buildClipQueryParams = () => {
+                        const params = new URLSearchParams({
+                            maxRecords: '40',
+                            sortParam: 'startDate',
+                            sortOrder: 'descending',
+                        });
+
+                        const rangeProvider = typeof window.getDefaultDateRange === 'function'
+                            ? window.getDefaultDateRange
+                            : getDefaultDateRange;
+                        const fallbackRange = rangeProvider(config.defaultMonthsBack);
+
+                        const startValue = elements.startDate?.value?.trim();
+                        const endValue = elements.endDate?.value?.trim();
+                        const parsedStart = parseDate(startValue) || parseDate(state.defaultStartIso) || fallbackRange.start;
+                        const parsedEnd = parseDate(endValue) || parseDate(state.defaultEndIso) || fallbackRange.end;
+
+                        if (!parsedStart || !parsedEnd) {
+                            throw new Error('Please specify a valid date range for the clip search.');
+                        }
+
+                        if (parsedStart > parsedEnd) {
+                            throw new Error('Clip start date must be earlier than or equal to the end date.');
+                        }
+
+                        params.set('startDate', ensureIsoDateString(parsedStart));
+                        params.set('completionDate', ensureIsoDateString(parsedEnd));
+
+                        const productType = elements.productLevel?.value?.trim();
+                        params.set('productType', ['S2MSI2A', 'S2MSI1C'].includes(productType) ? productType : config.defaultProductType);
+
+                        const maxCloudRaw = elements.maxCloud?.value?.trim();
+                        if (maxCloudRaw !== undefined && maxCloudRaw !== '') {
+                            const normalized = Number(maxCloudRaw);
+                            if (!Number.isNaN(normalized)) {
+                                const clamped = Math.min(Math.max(normalized, 0), 100);
+                                params.set('cloudCover', `[0,${Math.round(clamped)}]`);
+                            }
+                        }
+
+                        const wkt = geometryToWkt(clipState.geometry);
+                        if (!wkt) {
+                            throw new Error('Unable to convert the drawn polygon into a valid geometry.');
+                        }
+                        params.set('geometry', wkt);
+
+                        return params;
+                    };
+
+                    const performSearch = async () => {
+                        if (!clipState.geometry || clipState.areaSqM <= 0) {
+                            setSearchStatus('Draw a polygon before searching for Sentinel-2 scenes.', 'error');
+                            return;
+                        }
+
+                        try {
+                            const params = buildClipQueryParams();
+                            const requestUrl = `${config.endpoint}?${params.toString()}`;
+
+                            clipState.searching = true;
+                            elements.searchButton?.classList.add('opacity-70');
+                            elements.searchButton && (elements.searchButton.disabled = true);
+                            setSearchStatus('Searching for intersecting Sentinel-2 scenes…', 'info');
+                            resetResults(true);
+
+                            const response = await fetchCatalog(requestUrl);
+                            const features = Array.isArray(response?.features) ? response.features : [];
+                            const scenes = features.map(mapFeatureToScene);
+
+                            clipState.scenes = scenes;
+
+                            if (!scenes.length) {
+                                setSearchStatus('No Sentinel-2 scenes intersect the selected polygon for this period.', 'error');
+                                updateProcessButtonState();
+                                return;
+                            }
+
+                            renderScenes(scenes);
+
+                            if (clipState.mode === 'auto') {
+                                clipState.autoScene = chooseAutoScene(scenes);
+                                updateAutoSummary(clipState.autoScene);
+                            }
+
+                            setSearchStatus(`Found ${scenes.length} scene${scenes.length === 1 ? '' : 's'} intersecting the polygon.`, 'success');
+                            updateModeUI();
+                        } catch (error) {
+                            setSearchStatus(error?.message || 'Failed to search Sentinel-2 catalogue for the drawn area.', 'error');
+                            resetResults(true);
+                        } finally {
+                            clipState.searching = false;
+                            if (elements.searchButton) {
+                                elements.searchButton.disabled = false;
+                                elements.searchButton.classList.remove('opacity-70');
+                            }
+                            updateProcessButtonState();
+                        }
+                    };
+
+                    const setDefaultDates = () => {
+                        const rangeProvider = typeof window.getDefaultDateRange === 'function'
+                            ? window.getDefaultDateRange
+                            : getDefaultDateRange;
+                        const formatIso = typeof window.formatISODate === 'function'
+                            ? window.formatISODate
+                            : (date) => {
+                                if (!(date instanceof Date)) {
+                                    const parsed = parseDate(date);
+                                    if (parsed) {
+                                        return ensureIsoDateString(parsed);
+                                    }
+                                }
+                                return ensureIsoDateString(date instanceof Date ? date : new Date());
+                            };
+
+                        const { start, end } = rangeProvider(config.defaultMonthsBack);
+                        if (elements.startDate && !elements.startDate.value) {
+                            elements.startDate.value = formatIso(start);
+                        }
+                        if (elements.endDate && !elements.endDate.value) {
+                            elements.endDate.value = formatIso(end);
+                        }
+                    };
+
+                    const submitProcessing = async () => {
+                        if (!state.clipProcessUrl) {
+                            setSearchStatus('Processing endpoint is unavailable. Please try again later.', 'error');
+                            return;
+                        }
+
+                        if (!clipState.geometry || clipState.areaSqM <= 0) {
+                            setSearchStatus('Draw a polygon before processing imagery.', 'error');
+                            return;
+                        }
+
+                        const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+                        const payload = {
+                            mode: clipState.mode,
+                            geometry: clipState.geometry,
+                            area_sq_m: clipState.areaSqM,
+                            start_date: elements.startDate?.value || null,
+                            end_date: elements.endDate?.value || null,
+                            max_cloud: elements.maxCloud?.value || null,
+                            product_level: elements.productLevel?.value || config.defaultProductType,
+                        };
+
+                        let selectedScene = null;
+                        if (clipState.mode === 'auto') {
+                            selectedScene = clipState.autoScene;
+                        } else {
+                            selectedScene = clipState.scenes.find((scene) => scene.id === clipState.selectedSceneId) || null;
+                        }
+
+                        if (!selectedScene) {
+                            setSearchStatus('Select a scene before processing.', 'error');
+                            return;
+                        }
+
+                        payload.scene = {
+                            id: selectedScene.id,
+                            datetime: selectedScene.datetime,
+                            collection: selectedScene.collection,
+                            cloud_cover: selectedScene.cloudCover,
+                        };
+
+                        if (!payload.max_cloud) {
+                            delete payload.max_cloud;
+                        }
+
+                        elements.processButton.disabled = true;
+                        const originalHtml = elements.processButton.innerHTML;
+                        elements.processButton.innerHTML = '<i class="ri-loader-4-line animate-spin"></i> Processing…';
+
+                        try {
+                            const response = await fetch(state.clipProcessUrl, {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'Accept': 'application/json',
+                                    'X-CSRF-TOKEN': csrf,
+                                },
+                                body: JSON.stringify(payload),
+                            });
+
+                            const result = await response.json().catch(() => ({}));
+
+                            if (!response.ok || !result.success) {
+                                throw new Error(result?.message || `Unable to process imagery (status ${response.status}).`);
+                            }
+
+                            setSearchStatus('Sentinel clip request queued for processing.', 'success');
+                            if (window.MyZkToast?.success) {
+                                window.MyZkToast.success('Sentinel clip request queued for processing.');
+                            }
+
+                            if (result?.data?.current_credits !== undefined) {
+                                $('#current-myCredits').text(formatNumber(result.data.current_credits, 2));
+                            }
+
+                            window.AppMap?.uploader?.reload?.();
+                        } catch (error) {
+                            setSearchStatus(error?.message || 'Failed to queue Sentinel clip processing.', 'error');
+                            if (window.MyZkToast?.error) {
+                                window.MyZkToast.error(error?.message || 'Failed to queue Sentinel clip processing.');
+                            }
+                        } finally {
+                            elements.processButton.innerHTML = originalHtml;
+                            updateProcessButtonState();
+                        }
+                    };
+
+                    const bindEvents = () => {
+                        elements.modeRadios.forEach((radio) => {
+                            radio.addEventListener('change', () => {
+                                if (radio.checked) {
+                                    clipState.mode = radio.value;
+                                    updateModeUI();
+                                }
+                            });
+                        });
+
+                        elements.searchButton?.addEventListener('click', performSearch);
+                        elements.processButton?.addEventListener('click', submitProcessing);
+
+                        elements.autoPreviewBtn?.addEventListener('click', () => {
+                            if (!clipState.autoScene || typeof window.showSentinelPreviewOnMap !== 'function') return;
+                            window.showSentinelPreviewOnMap({
+                                title: clipState.autoScene.title,
+                                productId: clipState.autoScene.productId,
+                                quicklookUrl: clipState.autoScene.quicklookUrl,
+                                downloadUrl: clipState.autoScene.downloadUrl,
+                                acquisitionDate: clipState.autoScene.datetime,
+                                collection: clipState.autoScene.collection,
+                                cloudCover: clipState.autoScene.cloudCover,
+                                geometry: clipState.autoScene.geometry,
+                                links: clipState.autoScene.links,
+                            });
+                        });
+
+                        elements.clearButton?.addEventListener('click', () => {
+                            clipState.geometry = null;
+                            clipState.areaSqM = 0;
+                            clipState.areaHa = 0;
+                            clipState.creditCost = 0;
+                            window.geojsonFeature = null;
+                            window.geojsonArea = 0;
+                            resetResults();
+                        });
+                    };
+
+                    const updateAreaSummary = ({ areaSqM = 0, areaHa = 0, creditCost = 0 }) => {
+                        clipState.areaSqM = Number.isFinite(areaSqM) ? areaSqM : 0;
+                        clipState.areaHa = Number.isFinite(areaHa) ? areaHa : 0;
+                        clipState.creditCost = Number.isFinite(creditCost) ? creditCost : 0;
+                        clipState.geometry = window.geojsonFeature?.geometry ?? null;
+                        if (!clipState.geometry || clipState.areaSqM <= 0) {
+                            resetResults(true);
+                        }
+                        updateProcessButtonState();
+                    };
+
+                    setDefaultDates();
+                    bindEvents();
+                    updateModeUI();
+                    updateProcessButtonState();
+
+                    return {
+                        updateAreaSummary,
+                        loadScenes: performSearch,
+                    };
+                })();
+
+                window.AppMap.sentinel.clip = clipModule;
 
                 // Encapsulate preview map rendering, metadata display, and downloads.
                 const createPreviewModule = () => {
