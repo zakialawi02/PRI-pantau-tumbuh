@@ -384,21 +384,13 @@
                                         <span>End Date</span>
                                         <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-2 py-1 text-sm focus:outline-none focus:ring" id="clipEndDate" name="end-date" type="date" autocomplete="off" />
                                     </label>
-                                    <label class="text-foreground/80 flex flex-col space-y-1 text-xs font-medium" for="clipLimit">
-                                        <span>Result Limit</span>
-                                        <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-2 py-1 text-sm focus:outline-none focus:ring" id="clipLimit" name="limit" type="number" min="1" max="50" value="12" />
-                                    </label>
-                                    <label class="text-foreground/80 flex flex-col space-y-1 text-xs font-medium" for="clipResolution">
-                                        <span>Target Resolution (m)</span>
-                                        <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-2 py-1 text-sm focus:outline-none focus:ring" id="clipResolution" name="resolution" type="number" min="10" max="60" step="10" value="10" />
-                                    </label>
                                 </div>
                                 <div class="flex flex-wrap items-center gap-2">
-                                    <x-button-primary id="clipFindScenesBtn" type="button" size="small" class="inline-flex items-center gap-1">
+                                    <x-button-primary id="clipFindScenesBtn" type="button" size="small" class="inline-flex items-center gap-1 hidden">
                                         <i class="ri-search-2-line"></i>
                                         <span>Find Scenes</span>
                                     </x-button-primary>
-                                    <button class="hover:text-primary/80 text-foreground/60 text-xs font-semibold transition" id="clipClearSelectionBtn" type="button">Reset Selection</button>
+                                    <button class="hover:text-primary/80 text-foreground/60 text-xs font-semibold transition hidden" id="clipClearSelectionBtn" type="button">Reset Selection</button>
                                 </div>
                                 <div class="text-foreground/60 text-[11px]" id="clipSearchStatus"></div>
                             </div>
@@ -1085,6 +1077,9 @@
                     csrf: document.querySelector('meta[name="csrf-token"]')?.content || '',
                 };
 
+                const DEFAULT_RESULT_LIMIT = 15;
+                const DEFAULT_RESOLUTION_METERS = 10;
+
                 const elements = {
                     geojsonOutput: document.getElementById('clipGeojsonOutput'),
                     areaOutput: document.getElementById('clipAreaOutput'),
@@ -1094,8 +1089,6 @@
                     startDate: document.getElementById('clipStartDate'),
                     endDate: document.getElementById('clipEndDate'),
                     maxCloud: document.getElementById('clipMaxCloud'),
-                    limit: document.getElementById('clipLimit'),
-                    resolution: document.getElementById('clipResolution'),
                     title: document.getElementById('clipTitleInput'),
                     findScenes: document.getElementById('clipFindScenesBtn'),
                     clearSelection: document.getElementById('clipClearSelectionBtn'),
@@ -1117,6 +1110,29 @@
                     selectedSceneId: null,
                     loadingScenes: false,
                     queueing: false,
+                };
+
+                const getDefaultScenesStatus = () => (state.mode === 'manual'
+                    ? 'Draw a polygon and apply filters to discover scenes intersecting your area.'
+                    : 'Auto Mode selects the best available scene during processing.');
+
+                const updateManualControlsVisibility = () => {
+                    const manual = state.mode === 'manual';
+
+                    if (elements.findScenes) {
+                        elements.findScenes.classList.toggle('hidden', !manual);
+                        elements.findScenes.disabled = !manual || state.loadingScenes;
+                        elements.findScenes.classList.toggle('opacity-60', manual && state.loadingScenes);
+                        elements.findScenes.classList.toggle('cursor-not-allowed', manual && state.loadingScenes);
+                    }
+
+                    if (elements.clearSelection) {
+                        elements.clearSelection.classList.toggle('hidden', !manual);
+                    }
+
+                    if (!manual && elements.searchStatus) {
+                        elements.searchStatus.textContent = '';
+                    }
                 };
 
                 const formatNumber = (value, decimals = 2) => {
@@ -1193,6 +1209,14 @@
                         elements.modeHint.textContent = mode === 'manual'
                             ? 'Manual Mode requires you to select one of the matching scenes below before processing.'
                             : 'Auto Mode will automatically pick the most recent scene with the lowest cloud cover.';
+                    }
+
+                    updateManualControlsVisibility();
+
+                    if (mode === 'auto') {
+                        clearScenes();
+                    } else if (!state.scenes.length && elements.scenesStatus) {
+                        elements.scenesStatus.textContent = getDefaultScenesStatus();
                     }
 
                     updateSelectionSummary();
@@ -1318,11 +1342,7 @@
 
                 const setLoadingScenes = (loading) => {
                     state.loadingScenes = loading;
-                    if (elements.findScenes) {
-                        elements.findScenes.disabled = loading;
-                        elements.findScenes.classList.toggle('opacity-60', loading);
-                        elements.findScenes.classList.toggle('cursor-not-allowed', loading);
-                    }
+                    updateManualControlsVisibility();
                 };
 
                 const setQueueing = (queueing) => {
@@ -1344,9 +1364,9 @@
                         elements.scenesList.innerHTML = '';
                     }
                     if (elements.scenesStatus) {
-                        elements.scenesStatus.textContent = 'Draw a polygon and apply filters to discover scenes intersecting your area.';
+                        elements.scenesStatus.textContent = getDefaultScenesStatus();
                     }
-                    if (elements.searchStatus) {
+                    if (elements.searchStatus && state.mode === 'auto') {
                         elements.searchStatus.textContent = '';
                     }
                     updateSelectionSummary();
@@ -1450,6 +1470,10 @@
                 };
 
                 const fetchScenes = async () => {
+                    if (state.mode !== 'manual') {
+                        return;
+                    }
+
                     if (!config.searchUrl) {
                         notify('error', 'Please log in to search for Sentinel-2 scenes.');
                         return;
@@ -1477,10 +1501,8 @@
                         payload.max_cloud = maxCloud;
                     }
 
-                    const limit = parseNumber(elements.limit?.value);
-                    if (limit !== null) {
-                        payload.limit = limit;
-                    }
+                    payload.limit = DEFAULT_RESULT_LIMIT;
+                    payload.resolution = DEFAULT_RESOLUTION_METERS;
 
                     setLoadingScenes(true);
                     elements.searchStatus.textContent = 'Searching for scenes that intersect your area of interest…';
@@ -1557,15 +1579,8 @@
                         payload.max_cloud = maxCloud;
                     }
 
-                    const limit = parseNumber(elements.limit?.value);
-                    if (limit !== null) {
-                        payload.limit = limit;
-                    }
-
-                    const resolution = parseNumber(elements.resolution?.value);
-                    if (resolution !== null) {
-                        payload.resolution = resolution;
-                    }
+                    payload.limit = DEFAULT_RESULT_LIMIT;
+                    payload.resolution = DEFAULT_RESOLUTION_METERS;
 
                     if (state.mode === 'manual') {
                         payload.scene_id = state.selectedSceneId;
@@ -1618,6 +1633,9 @@
 
                 elements.findScenes?.addEventListener('click', fetchScenes);
                 elements.clearSelection?.addEventListener('click', () => {
+                    if (elements.searchStatus) {
+                        elements.searchStatus.textContent = '';
+                    }
                     clearScenes();
                 });
                 elements.processBtn?.addEventListener('click', processClip);

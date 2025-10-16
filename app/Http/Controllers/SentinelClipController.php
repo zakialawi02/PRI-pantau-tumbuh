@@ -28,7 +28,7 @@ class SentinelClipController extends Controller
         $geometry = $validated['geometry'];
         $wkt = $this->geometryToWkt($geometry);
 
-        $limit = $validated['limit'] ?? 20;
+        $limit = $validated['limit'] ?? 15;
         $maxCloud = $validated['max_cloud'] ?? 60;
         $productLevel = in_array($validated['product_level'] ?? 'S2MSI2A', ['S2MSI2A', 'S2MSI1C'], true)
             ? $validated['product_level']
@@ -152,7 +152,7 @@ class SentinelClipController extends Controller
             'size' => 0,
             'format' => 'tif',
             'path' => 'storage/imagery/' . $storedName,
-            'upload_status' => 'waiting',
+            'upload_status' => 'pending',
             'processing_status' => 'waiting',
             'uploaded_at' => now(),
         ]);
@@ -162,7 +162,7 @@ class SentinelClipController extends Controller
             'date_from' => $validated['date_from'],
             'date_to' => $validated['date_to'],
             'max_cloud' => $validated['max_cloud'] ?? 60,
-            'limit' => $validated['limit'] ?? 40,
+            'limit' => $validated['limit'] ?? 15,
             'resolution' => $validated['resolution'] ?? 10,
             'scene_id' => $validated['mode'] === 'manual' ? $validated['scene_id'] : null,
             'output_filename' => $storedName,

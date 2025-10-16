@@ -99,7 +99,7 @@ class ProcessSentinelClipJob implements ShouldQueue
             'DATE_FROM' => (string) ($this->options['date_from'] ?? ''),
             'DATE_TO' => (string) ($this->options['date_to'] ?? ''),
             'MAX_CLOUD' => (string) ($this->options['max_cloud'] ?? 60),
-            'LIMIT' => (string) ($this->options['limit'] ?? 60),
+            'LIMIT' => (string) ($this->options['limit'] ?? 15),
             'RES' => (string) ($this->options['resolution'] ?? 10),
             'SCENE_ID' => (string) ($this->options['scene_id'] ?? ''),
             'OUTPUT_TIF' => $outputPath,
@@ -117,7 +117,7 @@ class ProcessSentinelClipJob implements ShouldQueue
         try {
             $imagery->update([
                 'processing_status' => 'processing',
-                'upload_status' => 'processing',
+                'upload_status' => 'uploading',
             ]);
 
             $process = new Process([$pythonPath, $scriptPath], $scriptsBase, $processEnv);
