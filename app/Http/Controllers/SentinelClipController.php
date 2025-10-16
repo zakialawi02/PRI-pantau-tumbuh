@@ -30,9 +30,10 @@ class SentinelClipController extends Controller
 
         $limit = $validated['limit'] ?? 15;
         $maxCloud = $validated['max_cloud'] ?? 60;
-        $productLevel = in_array($validated['product_level'] ?? 'S2MSI2A', ['S2MSI2A', 'S2MSI1C'], true)
-            ? $validated['product_level']
-            : 'S2MSI2A';
+        $productLevel = $validated['product_level'] ?? null;
+        if (!in_array($productLevel, ['S2MSI2A', 'S2MSI1C'], true)) {
+            $productLevel = 'S2MSI2A';
+        }
 
         $params = [
             'maxRecords' => $limit,
