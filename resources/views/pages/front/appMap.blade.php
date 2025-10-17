@@ -741,6 +741,840 @@
     @push('javascript')
         <script>
             (() => {
+                const panelEl = document.getElementById('sentinel-panel');
+                if (!panelEl) {
+                    return;
+                }
+
+                const config = {
+                    endpoint: 'https://catalogue.dataspace.copernicus.eu/resto/api/collections/Sentinel2/search.json',
+                    defaultMaxRecords: 10,
+                    filterMaxRecords: 20,
+                    token: panelEl.dataset.sentinelToken || '',
+                    credentialsConfigured: panelEl.dataset.sentinelCredentials === 'true',
+                    processUrl: panelEl.dataset.sentinelProcessUrl || ''
+                };
+
+                const previewPanelEl = document.getElementById('sentinelPreviewPanel');
+
+                const elements = {
+                    form: document.getElementById('sentinelFilterForm'),
+                    resetButton: document.getElementById('sentinelFilterResetButton'),
+                    status: document.getElementById('sentinelCollectionStatus'),
+                    list: document.getElementById('sentinelCollectionList'),
+                    template: document.getElementById('sentinelCollectionTemplate'),
+                    previewPanel: previewPanelEl,
+                    previewTitle: previewPanelEl?.querySelector('[data-sentinel-preview-title]') || null,
+                    previewAcquired: previewPanelEl?.querySelector('[data-sentinel-preview-acquired]') || null,
+                    previewDetails: previewPanelEl?.querySelector('[data-sentinel-preview-details]') || null,
+                    previewStatus: previewPanelEl?.querySelector('[data-sentinel-preview-status]') || null,
+                    previewActions: previewPanelEl?.querySelector('#sentinelPreviewActions') || null,
+                    previewClearBtn: previewPanelEl ? document.getElementById('sentinelPreviewClearBtn') : null,
+                    previewDownloadBtn: previewPanelEl ? document.getElementById('sentinelPreviewDownloadBtn') : null,
+                    previewImageryBtn: previewPanelEl ? document.getElementById('sentinelPreviewImageryBtn') : null,
+                    previewImageryLabel: previewPanelEl?.querySelector('[data-sentinel-preview-imagery-label]') || null,
+                    previewImageryIcon: previewPanelEl?.querySelector('[data-sentinel-preview-imagery-icon]') || null,
+                };
+
+                const defaultFormValues = (() => {
+                    if (!elements.form) {
+                        return {};
+                    }
+                    const values = {};
+                    Array.from(elements.form.elements).forEach((field) => {
+                        if (field.name) {
+                            values[field.name] = field.value;
+                        }
+                    });
+                    return values;
+                })();
+
+                const mapState = {
+                    map: window.map || null,
+                    geoJson: window.ol ? new window.ol.format.GeoJSON() : null,
+                    vectorLayer: null,
+                    wmsLayer: null,
+                    pendingScene: null,
+                };
+
+                if (!mapState.map) {
+                    window.addEventListener('map:ready', (event) => {
+                        mapState.map = event.detail?.map || event.detail || null;
+                        if (mapState.pendingScene) {
+                            displaySceneFootprint(mapState.pendingScene);
+                            mapState.pendingScene = null;
+                        }
+                    }, { once: true });
+                }
+
+                const state = {
+                    abortController: null,
+                    loadedOnce: false,
+                    lastQuery: null,
+                    lastMaxRecords: config.defaultMaxRecords,
+                    currentScene: null,
+                };
+
+                const sanitizeFilename = (value) => {
+                    if (!value || typeof value !== 'string') {
+                        return 'sentinel-scene.zip';
+                    }
+                    const clean = value
+                        .replace(/\.SAFE$/i, '')
+                        .replace(/[^a-z0-9]+/gi, '_')
+                        .replace(/_{2,}/g, '_')
+                        .replace(/^_+|_+$/g, '')
+                        .slice(0, 120);
+                    return (clean || 'sentinel_scene') + '.zip';
+                };
+
+                const parseNumber = (value) => {
+                    const numeric = Number(value);
+                    return Number.isFinite(numeric) ? numeric : null;
+                };
+
+                const toIsoDate = (value, endOfDay = false) => {
+                    if (!value) {
+                        return '';
+                    }
+                    try {
+                        const date = new Date(value);
+                        if (Number.isNaN(date.getTime())) {
+                            return '';
+                        }
+                        if (endOfDay) {
+                            date.setHours(23, 59, 59, 999);
+                        } else {
+                            date.setHours(0, 0, 0, 0);
+                        }
+                        return date.toISOString().replace(/\.\d{3}Z$/, 'Z');
+                    } catch (_error) {
+                        return '';
+                    }
+                };
+
+                const formatDateTime = (value) => {
+                    if (!value) {
+                        return '–';
+                    }
+                    try {
+                        const date = new Date(value);
+                        if (Number.isNaN(date.getTime())) {
+                            return value;
+                        }
+                        return `${date.toISOString().replace('T', ' ').replace('Z', '')} UTC`;
+                    } catch (_error) {
+                        return value;
+                    }
+                };
+
+                const setStatus = (message, { loading = false } = {}) => {
+                    if (!elements.status) {
+                        return;
+                    }
+                    elements.status.textContent = message || '';
+                    elements.status.classList.toggle('hidden', !message);
+                    if (loading) {
+                        elements.status.dataset.loading = 'true';
+                    } else {
+                        delete elements.status.dataset.loading;
+                    }
+                };
+
+                const clearCollections = () => {
+                    if (elements.list) {
+                        elements.list.innerHTML = '';
+                    }
+                };
+
+                const getFormValues = () => {
+                    if (!elements.form) {
+                        return {};
+                    }
+
+                    const formData = new FormData(elements.form);
+                    const values = {};
+                    formData.forEach((rawValue, key) => {
+                        if (typeof rawValue === 'string') {
+                            values[key] = rawValue.trim();
+                        }
+                    });
+                    return values;
+                };
+
+                const buildQueryParams = (maxRecords) => {
+                    const values = getFormValues();
+                    const params = new URLSearchParams();
+
+                    params.set('maxRecords', String(maxRecords || config.defaultMaxRecords));
+                    params.set('productType', values['product-level'] || 'S2MSI2A');
+                    params.set('cloudCover', String(Math.min(100, Math.max(0, parseNumber(values['cloud-cover']) ?? 40))));
+                    params.set('sortParam', 'beginposition');
+                    params.set('sortOrder', 'descending');
+
+                    const startDate = toIsoDate(values['start-date']);
+                    const endDate = toIsoDate(values['end-date'], true);
+                    if (startDate) {
+                        params.set('startDate', startDate);
+                    }
+                    if (endDate) {
+                        params.set('completionDate', endDate);
+                    }
+
+                    const latitude = parseNumber(values.latitude);
+                    const longitude = parseNumber(values.longitude);
+                    if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
+                        params.set('lat', String(latitude));
+                        params.set('lon', String(longitude));
+                    }
+
+                    return params;
+                };
+
+                const ensureVectorLayer = () => {
+                    if (mapState.vectorLayer || !mapState.map || !window.ol) {
+                        return mapState.vectorLayer;
+                    }
+
+                    const source = new window.ol.source.Vector();
+                    const layer = new window.ol.layer.Vector({
+                        source,
+                        style: new window.ol.style.Style({
+                            stroke: new window.ol.style.Stroke({
+                                color: 'rgba(59,130,246,0.9)',
+                                width: 2,
+                            }),
+                            fill: new window.ol.style.Fill({
+                                color: 'rgba(59,130,246,0.15)',
+                            }),
+                        }),
+                    });
+
+                    layer.set('name', 'sentinel-preview-footprint');
+                    mapState.map.addLayer(layer);
+                    mapState.vectorLayer = layer;
+                    return layer;
+                };
+
+                const ensureWmsLayer = () => {
+                    if (mapState.wmsLayer || !mapState.map || !window.ol) {
+                        return mapState.wmsLayer;
+                    }
+
+                    const layer = new window.ol.layer.Tile({
+                        visible: false,
+                        properties: { name: 'sentinel-preview-wms' },
+                    });
+                    mapState.map.addLayer(layer);
+                    mapState.wmsLayer = layer;
+                    return layer;
+                };
+
+                const resetImageryPreview = () => {
+                    if (elements.previewImageryBtn) {
+                        elements.previewImageryBtn.classList.add('hidden');
+                        elements.previewImageryBtn.setAttribute('aria-pressed', 'false');
+                        elements.previewImageryBtn.setAttribute('aria-disabled', 'true');
+                        elements.previewImageryBtn.dataset.active = 'false';
+                    }
+                    if (elements.previewImageryLabel) {
+                        elements.previewImageryLabel.textContent = 'Preview Imagery';
+                    }
+                    if (elements.previewImageryIcon) {
+                        elements.previewImageryIcon.classList.remove('ri-eye-off-line');
+                        elements.previewImageryIcon.classList.add('ri-eye-line');
+                    }
+                    if (mapState.wmsLayer) {
+                        mapState.wmsLayer.setVisible(false);
+                    }
+                };
+
+                const disablePreviewPanel = () => {
+                    if (!elements.previewPanel) {
+                        return;
+                    }
+                    elements.previewPanel.classList.add('hidden');
+                    if (elements.previewTitle) {
+                        elements.previewTitle.textContent = '–';
+                    }
+                    if (elements.previewAcquired) {
+                        elements.previewAcquired.textContent = 'Select a collection to preview on the map.';
+                    }
+                    if (elements.previewDetails) {
+                        elements.previewDetails.classList.add('hidden');
+                        elements.previewDetails.textContent = '';
+                    }
+                    if (elements.previewStatus) {
+                        elements.previewStatus.textContent = 'Awaiting preview selection.';
+                    }
+                    if (elements.previewDownloadBtn) {
+                        elements.previewDownloadBtn.classList.add('hidden');
+                        elements.previewDownloadBtn.setAttribute('aria-disabled', 'true');
+                        elements.previewDownloadBtn.removeAttribute('href');
+                        elements.previewDownloadBtn.removeAttribute('download');
+                    }
+                    resetImageryPreview();
+
+                    if (mapState.vectorLayer) {
+                        mapState.vectorLayer.getSource()?.clear();
+                    }
+                    if (mapState.wmsLayer) {
+                        mapState.wmsLayer.setVisible(false);
+                    }
+                    state.currentScene = null;
+                };
+
+                const displaySceneFootprint = (scene) => {
+                    if (!scene || !scene.geometry) {
+                        return;
+                    }
+
+                    if (!mapState.map || !window.ol) {
+                        mapState.pendingScene = scene;
+                        if (elements.previewStatus) {
+                            elements.previewStatus.textContent = 'Preparing map preview...';
+                        }
+                        return;
+                    }
+
+                    const layer = ensureVectorLayer();
+                    if (!layer || !mapState.geoJson) {
+                        return;
+                    }
+
+                    const source = layer.getSource();
+                    if (source) {
+                        source.clear();
+                        try {
+                            const feature = mapState.geoJson.readFeature(scene.geometry, {
+                                dataProjection: 'EPSG:4326',
+                                featureProjection: mapState.map.getView().getProjection(),
+                            });
+                            feature.set('sentinelSceneId', scene.id || scene.productId || scene.title || '');
+                            source.addFeature(feature);
+                            mapState.map.getView().fit(feature.getGeometry(), {
+                                duration: 500,
+                                padding: [80, 80, 80, 80],
+                                maxZoom: 14,
+                            });
+                        } catch (error) {
+                            console.warn('Failed to display Sentinel footprint.', error);
+                        }
+                    }
+                };
+
+                const toggleWmsImagery = (scene, forceState = null) => {
+                    if (!scene?.services?.wms) {
+                        return false;
+                    }
+
+                    const button = elements.previewImageryBtn;
+                    if (!button || !window.ol) {
+                        return false;
+                    }
+
+                    const nextState = forceState !== null
+                        ? Boolean(forceState)
+                        : button.getAttribute('aria-pressed') !== 'true';
+
+                    const layer = ensureWmsLayer();
+                    if (!layer) {
+                        return false;
+                    }
+
+                    if (!nextState) {
+                        layer.setVisible(false);
+                        button.setAttribute('aria-pressed', 'false');
+                        button.dataset.active = 'false';
+                        if (elements.previewImageryLabel) {
+                            elements.previewImageryLabel.textContent = 'Preview Imagery';
+                        }
+                        if (elements.previewImageryIcon) {
+                            elements.previewImageryIcon.classList.remove('ri-eye-off-line');
+                            elements.previewImageryIcon.classList.add('ri-eye-line');
+                        }
+                        return true;
+                    }
+
+                    const wmsConfig = scene.services.wms;
+                    const url = wmsConfig.url || wmsConfig.href || '';
+                    const layerName = wmsConfig.layers || wmsConfig.layer || '';
+                    if (!url || !layerName) {
+                        return false;
+                    }
+
+                    const params = {
+                        LAYERS: layerName,
+                        FORMAT: wmsConfig.format || 'image/png',
+                        STYLES: wmsConfig.styles || '',
+                        TRANSPARENT: 'true',
+                    };
+
+                    if (wmsConfig.time) {
+                        params.TIME = wmsConfig.time;
+                    } else if (scene.acquisitionDate) {
+                        params.TIME = scene.acquisitionDate;
+                    }
+
+                    const TileWMS = window.ol.source.TileWMS;
+                    if (!TileWMS) {
+                        return false;
+                    }
+
+                    const source = new TileWMS({
+                        url,
+                        params,
+                        crossOrigin: 'anonymous',
+                    });
+                    layer.setSource(source);
+                    layer.setVisible(true);
+
+                    button.setAttribute('aria-pressed', 'true');
+                    button.dataset.active = 'true';
+                    if (elements.previewImageryLabel) {
+                        elements.previewImageryLabel.textContent = 'Hide Imagery';
+                    }
+                    if (elements.previewImageryIcon) {
+                        elements.previewImageryIcon.classList.remove('ri-eye-line');
+                        elements.previewImageryIcon.classList.add('ri-eye-off-line');
+                    }
+                    return true;
+                };
+
+                const updatePreviewPanel = (scene) => {
+                    if (!elements.previewPanel) {
+                        return;
+                    }
+
+                    elements.previewPanel.classList.remove('hidden');
+                    if (elements.previewTitle) {
+                        elements.previewTitle.textContent = scene.title || scene.productId || 'Sentinel-2 Scene';
+                    }
+                    if (elements.previewAcquired) {
+                        elements.previewAcquired.textContent = scene.acquisitionDate
+                            ? `Acquired: ${formatDateTime(scene.acquisitionDate)}`
+                            : 'Acquisition date unavailable';
+                    }
+
+                    if (elements.previewDetails) {
+                        const parts = [];
+                        if (scene.tileId) {
+                            parts.push(scene.tileId);
+                        }
+                        if (Number.isFinite(scene.cloudCover)) {
+                            parts.push(`Cloud cover ${scene.cloudCover.toFixed(1)}%`);
+                        }
+                        if (scene.collection) {
+                            parts.push(scene.collection);
+                        }
+
+                        if (parts.length > 0) {
+                            elements.previewDetails.textContent = parts.join(' • ');
+                            elements.previewDetails.classList.remove('hidden');
+                        } else {
+                            elements.previewDetails.classList.add('hidden');
+                            elements.previewDetails.textContent = '';
+                        }
+                    }
+
+                    if (elements.previewStatus) {
+                        elements.previewStatus.textContent = 'Footprint displayed on the map.';
+                    }
+
+                    if (elements.previewDownloadBtn) {
+                        if (scene.downloadUrl) {
+                            elements.previewDownloadBtn.href = scene.downloadUrl;
+                            elements.previewDownloadBtn.setAttribute('aria-disabled', 'false');
+                            elements.previewDownloadBtn.setAttribute('download', sanitizeFilename(scene.downloadFilename || scene.title || 'sentinel_scene'));
+                            elements.previewDownloadBtn.classList.remove('hidden');
+                        } else {
+                            elements.previewDownloadBtn.classList.add('hidden');
+                            elements.previewDownloadBtn.setAttribute('aria-disabled', 'true');
+                            elements.previewDownloadBtn.removeAttribute('href');
+                            elements.previewDownloadBtn.removeAttribute('download');
+                        }
+                    }
+
+                    if (elements.previewImageryBtn) {
+                        if (scene.services?.wms) {
+                            elements.previewImageryBtn.classList.remove('hidden');
+                            elements.previewImageryBtn.setAttribute('aria-disabled', 'false');
+                            elements.previewImageryBtn.setAttribute('aria-pressed', 'false');
+                            elements.previewImageryBtn.dataset.active = 'false';
+                            elements.previewImageryBtn.dataset.sceneId = scene.id || scene.productId || '';
+                        } else {
+                            resetImageryPreview();
+                        }
+                    }
+                };
+
+                const populateThumbnail = (container, scene) => {
+                    if (!container) {
+                        return;
+                    }
+                    const imageEl = container.querySelector('[data-sentinel-thumbnail]');
+                    const placeholder = container.querySelector('[data-sentinel-placeholder]');
+                    if (scene.thumbnailUrl && imageEl) {
+                        imageEl.src = scene.thumbnailUrl;
+                        imageEl.classList.remove('hidden');
+                        placeholder?.classList.add('hidden');
+                    } else {
+                        imageEl?.classList.add('hidden');
+                        if (placeholder) {
+                            placeholder.classList.remove('hidden');
+                        }
+                    }
+                };
+
+                const mapFeatureToScene = (feature) => {
+                    const properties = feature?.properties || {};
+                    const services = properties.services || {};
+
+                    const downloadService = services.download || services.Download || services.s3 || services.S3 || null;
+                    const quicklookService = services.quicklook || services.Quicklook || services.thumbnail || services.Thumbnail || null;
+                    const wmsService = services.wms || services.WMS || services.ogc || services.OGC || null;
+
+                    const cloudCover = properties.cloudCover
+                        ?? properties.cloudcover
+                        ?? properties.cloudcoverpercentage
+                        ?? properties.cloudCoverPercentage;
+
+                    const scene = {
+                        id: feature?.id || properties.id || properties.productIdentifier || '',
+                        title: properties.title || properties.productIdentifier || properties.id || 'Sentinel-2 Scene',
+                        productId: properties.productIdentifier || properties.id || '',
+                        collection: properties.collection || properties.dataset || '',
+                        acquisitionDate: properties.startDate || properties.beginPosition || properties.acquisitionDate || '',
+                        completionDate: properties.completionDate || properties.endPosition || '',
+                        cloudCover: typeof cloudCover === 'number' ? cloudCover : parseNumber(cloudCover),
+                        tileId: properties.tileId || properties.tilename || properties.MGRS || properties.mgrs || '',
+                        geometry: feature?.geometry || null,
+                        thumbnailUrl: quicklookService?.url || quicklookService?.href || properties.quicklook || properties.thumbnail || '',
+                        downloadUrl: downloadService?.url || downloadService?.href || '',
+                        services: {
+                            ...services,
+                            download: downloadService || services.download,
+                            quicklook: quicklookService || services.quicklook,
+                            wms: wmsService || services.wms,
+                        },
+                        details: properties,
+                    };
+
+                    scene.downloadFilename = sanitizeFilename(scene.title);
+
+                    return scene;
+                };
+
+                const renderSceneCard = (scene) => {
+                    if (!elements.template || !elements.list) {
+                        return;
+                    }
+
+                    const fragment = elements.template.content.cloneNode(true);
+                    const card = fragment.querySelector('.sentinel-card');
+                    if (!card) {
+                        return;
+                    }
+
+                    const thumbContainer = card.querySelector('[data-sentinel-thumb]');
+                    populateThumbnail(thumbContainer, scene);
+
+                    const titleEl = card.querySelector('[data-sentinel-title]');
+                    const productEl = card.querySelector('[data-sentinel-product]');
+                    const datetimeEl = card.querySelector('[data-sentinel-datetime]');
+                    const detailsEl = card.querySelector('[data-sentinel-details]');
+
+                    if (titleEl) {
+                        titleEl.textContent = scene.title || 'Sentinel-2 Scene';
+                    }
+                    if (productEl) {
+                        productEl.textContent = scene.productId || 'Product ID unavailable';
+                    }
+                    if (datetimeEl) {
+                        const acquired = scene.acquisitionDate
+                            ? `Acquired: ${formatDateTime(scene.acquisitionDate)}`
+                            : 'Acquisition date unavailable';
+                        datetimeEl.textContent = acquired;
+                    }
+                    if (detailsEl) {
+                        const details = [];
+                        if (scene.tileId) {
+                            details.push(scene.tileId);
+                        }
+                        if (Number.isFinite(scene.cloudCover)) {
+                            details.push(`Cloud cover ${scene.cloudCover.toFixed(1)}%`);
+                        }
+                        if (scene.collection) {
+                            details.push(scene.collection);
+                        }
+                        detailsEl.textContent = details.length > 0
+                            ? details.join(' • ')
+                            : 'No additional details available.';
+                    }
+
+                    const downloadBtn = card.querySelector('[data-sentinel-download]');
+                    if (downloadBtn) {
+                        if (scene.downloadUrl) {
+                            downloadBtn.href = scene.downloadUrl;
+                            downloadBtn.classList.remove('hidden');
+                            downloadBtn.setAttribute('aria-disabled', 'false');
+                            downloadBtn.setAttribute('download', scene.downloadFilename);
+                        } else {
+                            downloadBtn.classList.add('hidden');
+                            downloadBtn.setAttribute('aria-disabled', 'true');
+                        }
+                    }
+
+                    const previewBtn = card.querySelector('[data-sentinel-preview]');
+                    if (previewBtn) {
+                        previewBtn.addEventListener('click', () => {
+                            resetImageryPreview();
+                            displaySceneFootprint(scene);
+                            updatePreviewPanel(scene);
+                            state.currentScene = scene;
+                            if (elements.previewStatus) {
+                                elements.previewStatus.textContent = 'Footprint displayed on the map.';
+                            }
+                        });
+                    }
+
+                    const processBtn = card.querySelector('[data-sentinel-process]');
+                    if (processBtn && config.processUrl) {
+                        processBtn.classList.remove('hidden');
+                        processBtn.disabled = false;
+                        processBtn.addEventListener('click', () => {
+                            queueSceneProcessing(scene, processBtn);
+                        });
+                    }
+
+                    elements.list.appendChild(fragment);
+                };
+
+                const queueSceneProcessing = async (scene, triggerButton) => {
+                    if (!config.processUrl || !scene?.downloadUrl) {
+                        return;
+                    }
+
+                    if (triggerButton) {
+                        triggerButton.disabled = true;
+                        triggerButton.dataset.loading = 'true';
+                    }
+
+                    const payload = {
+                        title: scene.title || scene.productId || 'Sentinel Scene',
+                        download_url: scene.downloadUrl,
+                        product_id: scene.productId || scene.id || '',
+                        collection: scene.collection || '',
+                        acquisition_date: scene.acquisitionDate || '',
+                        download_filename: scene.downloadFilename || sanitizeFilename(scene.title),
+                    };
+
+                    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+
+                    try {
+                        const response = await fetch(config.processUrl, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRF-TOKEN': csrfToken,
+                                'Accept': 'application/json',
+                            },
+                            body: JSON.stringify(payload),
+                        });
+
+                        const data = await response.json().catch(() => ({}));
+
+                        if (!response.ok || data.success === false) {
+                            const message = data?.message || 'Failed to queue Sentinel imagery for processing.';
+                            if (window.MyZkToast?.error) {
+                                window.MyZkToast.error(message);
+                            } else {
+                                console.error(message);
+                            }
+                        } else if (window.MyZkToast?.success) {
+                            window.MyZkToast.success(data?.message || 'Sentinel imagery queued for processing.');
+                        }
+                    } catch (error) {
+                        if (window.MyZkToast?.error) {
+                            window.MyZkToast.error(error?.message || 'Unable to process Sentinel scene.');
+                        } else {
+                            console.error('Unable to process Sentinel scene.', error);
+                        }
+                    } finally {
+                        if (triggerButton) {
+                            triggerButton.disabled = false;
+                            delete triggerButton.dataset.loading;
+                        }
+                    }
+                };
+
+                const handleFetchError = (error) => {
+                    if (error?.name === 'AbortError') {
+                        return;
+                    }
+                    console.error('Failed to fetch Sentinel collections.', error);
+                    const message = config.credentialsConfigured
+                        ? 'Unable to load Sentinel-2 catalogue. Please try again.'
+                        : 'Sentinel catalogue unavailable. Configure Copernicus credentials to enable this feature.';
+                    setStatus(message);
+                };
+
+                const fetchCollections = async (maxRecords) => {
+                    if (!config.credentialsConfigured) {
+                        setStatus('Copernicus credentials are not configured. Sentinel catalogue is unavailable.');
+                        return;
+                    }
+
+                    const params = buildQueryParams(maxRecords);
+                    const url = `${config.endpoint}?${params.toString()}`;
+
+                    state.lastQuery = url;
+                    state.lastMaxRecords = maxRecords;
+
+                    if (state.abortController) {
+                        state.abortController.abort();
+                    }
+                    state.abortController = new AbortController();
+
+                    clearCollections();
+                    setStatus('Loading Sentinel-2 scenes...', { loading: true });
+
+                    const headers = {
+                        'Accept': 'application/json',
+                    };
+                    if (config.token) {
+                        headers['Authorization'] = `Bearer ${config.token}`;
+                    }
+
+                    try {
+                        const response = await fetch(url, {
+                            method: 'GET',
+                            headers,
+                            signal: state.abortController.signal,
+                        });
+
+                        if (!response.ok) {
+                            throw new Error(`Request failed with status ${response.status}`);
+                        }
+
+                        const payload = await response.json();
+                        const features = Array.isArray(payload?.features)
+                            ? payload.features
+                            : Array.isArray(payload?.FeatureCollection?.features)
+                                ? payload.FeatureCollection.features
+                                : [];
+
+                        clearCollections();
+
+                        if (features.length === 0) {
+                            setStatus('No Sentinel-2 scenes found for the selected filters.');
+                            state.loadedOnce = true;
+                            return;
+                        }
+
+                        features.forEach((feature) => {
+                            const scene = mapFeatureToScene(feature);
+                            renderSceneCard(scene);
+                        });
+
+                        const label = features.length === 1 ? 'scene' : 'scenes';
+                        setStatus(`${features.length} Sentinel-2 ${label} loaded.`);
+                        state.loadedOnce = true;
+                    } catch (error) {
+                        handleFetchError(error);
+                    }
+                };
+
+                if (elements.previewClearBtn) {
+                    elements.previewClearBtn.addEventListener('click', () => {
+                        disablePreviewPanel();
+                    });
+                }
+
+                if (elements.previewImageryBtn) {
+                    elements.previewImageryBtn.addEventListener('click', () => {
+                        if (!state.currentScene) {
+                            return;
+                        }
+                        const activated = toggleWmsImagery(state.currentScene);
+                        if (activated && elements.previewStatus) {
+                            elements.previewStatus.textContent = elements.previewImageryBtn.dataset.active === 'true'
+                                ? 'Imagery preview enabled.'
+                                : 'Imagery preview disabled.';
+                        }
+                    });
+                }
+
+                if (elements.previewDownloadBtn) {
+                    elements.previewDownloadBtn.addEventListener('click', () => {
+                        if (state.currentScene && elements.previewStatus) {
+                            elements.previewStatus.textContent = 'Downloading Sentinel-2 scene...';
+                        }
+                    });
+                }
+
+                if (elements.form) {
+                    elements.form.addEventListener('submit', (event) => {
+                        event.preventDefault();
+                        fetchCollections(config.filterMaxRecords);
+                    });
+                }
+
+                if (elements.resetButton) {
+                    elements.resetButton.addEventListener('click', () => {
+                        if (!elements.form) {
+                            return;
+                        }
+                        Object.entries(defaultFormValues).forEach(([name, value]) => {
+                            const field = elements.form.elements.namedItem(name);
+                            if (field && 'value' in field) {
+                                field.value = value;
+                            }
+                        });
+                        fetchCollections(config.defaultMaxRecords);
+                    });
+                }
+
+                disablePreviewPanel();
+
+                window.AppMap = window.AppMap || {};
+
+                const moduleApi = {
+                    loadCollections: (maxRecords = config.defaultMaxRecords) => fetchCollections(maxRecords),
+                    reload: () => {
+                        if (state.lastQuery) {
+                            fetchCollections(state.lastMaxRecords || config.defaultMaxRecords);
+                        } else {
+                            fetchCollections(config.defaultMaxRecords);
+                        }
+                    },
+                    get loadedOnce() {
+                        return state.loadedOnce;
+                    },
+                    set loadedOnce(value) {
+                        state.loadedOnce = Boolean(value);
+                    },
+                };
+
+                window.AppMap.sentinel = moduleApi;
+
+                try {
+                    document.dispatchEvent(new CustomEvent('app:sentinel:ready', { detail: moduleApi }));
+                } catch (error) {
+                    console.warn('Unable to dispatch app:sentinel:ready event.', error);
+                }
+
+                if (config.credentialsConfigured) {
+                    fetchCollections(config.defaultMaxRecords);
+                } else {
+                    setStatus('Copernicus credentials are not configured. Sentinel catalogue is unavailable.');
+                }
+            })();
+        </script>
+    @endpush
+    @push('javascript')
+        <script>
+            (() => {
                 // Centralized DOM references used by the panel controller.
                 const selectors = {
                     panelWrapper: document.getElementById('panel-wrapper'),
