@@ -109,6 +109,11 @@ class SentinelProcessingController extends Controller
         }
     }
 
+    public function processClip(Request $request)
+    {
+        $user = $request->user();
+    }
+
     private function sanitizeDisplayName(string $value): string
     {
         $cleaned = str_replace([

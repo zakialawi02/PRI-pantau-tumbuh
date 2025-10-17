@@ -907,28 +907,12 @@ function addInteraction(type = "Polygon") {
         }
 
         // Display measurement result in the #measurementOutput div
-        const measurementOutputEl = document.getElementById("measurementOutput");
+        const measurementOutputEl =
+            document.getElementById("measurementOutput");
         if (measurementOutputEl) {
             measurementOutputEl.innerHTML =
                 formatNumber(geojsonArea / 10000) + " ha"; // Convert m² to hectares;
         }
-
-        const clipDetail = {
-            geometry: geojsonFeature?.geometry || null,
-            feature: geojsonFeature || null,
-            areaSqMeters: geojsonArea || 0,
-            areaHectares: geojsonArea ? geojsonArea / 10000 : 0,
-        };
-
-        window.AppMap = window.AppMap || {};
-        window.AppMap.clip = window.AppMap.clip || {};
-        window.AppMap.clip.latest = clipDetail;
-
-        document.dispatchEvent(
-            new CustomEvent("app:clip:geometry", {
-                detail: clipDetail,
-            })
-        );
 
         drawingEnd();
 
@@ -1047,25 +1031,6 @@ function buttonStateDrawing() {
         .addClass(
             drawingRunning ? "btn btn-sm btn-danger" : "btn btn-sm btn-primary"
         );
-
-    const clipBtn = document.getElementById("clipDrawPolygonBtn");
-    if (clipBtn) {
-        const icon = clipBtn.querySelector("i");
-        const label = clipBtn.querySelector("span");
-
-        if (icon) {
-            icon.classList.remove(
-                drawingRunning ? "ri-pencil-line" : "ri-close-line"
-            );
-            icon.classList.add(
-                drawingRunning ? "ri-close-line" : "ri-pencil-line"
-            );
-        }
-
-        if (label) {
-            label.textContent = drawingRunning ? "Cancel" : "Draw Polygon";
-        }
-    }
 }
 
 // Button to start/cancel the draw/measurement
@@ -1088,24 +1053,6 @@ if (clipDrawPolygonBtn) {
         }
     });
 }
-$("#cancelFeatureProperties").click(function (e) {
-    $("#featureProperties").addClass("hidden");
-    $("#drawerGeojson").html("");
-    if (vectorLayerDrawing) {
-        map.removeLayer(vectorLayerDrawing);
-        vectorSourceDrawing.clear();
-    }
-});
-
-$("#saveFeatureProperties").click(function () {
-    const geojson = geojsonFeature;
-    const area_hectares = geojsonArea;
-
-    if (geojson) {
-        $("#geometryInput").val(JSON.stringify(geojson.geometry));
-        $("#areaInput").val(area_hectares);
-    }
-});
 
 /**
  * Zoom in function
