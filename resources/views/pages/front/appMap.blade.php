@@ -860,6 +860,35 @@
                 };
 
                 /**
+                 * Append the Copernicus access token to download URLs so the ZIP service authorises the request.
+                 */
+                const withAccessToken = (url) => {
+                    if (!url || !config.token) {
+                        return url;
+                    }
+
+                    try {
+                        const parsed = new URL(url, window.location.href);
+                        const params = parsed.searchParams;
+
+                        if (!params.has('token') && !params.has('access_token')) {
+                            params.set('token', config.token);
+                        }
+
+                        return parsed.toString();
+                    } catch (error) {
+                        // Fallback for environments that cannot parse the URL instance (e.g. malformed URLs).
+                        const hasQuery = url.includes('?');
+                        const hasTokenParam = /(?:\?|&)(token|access_token)=/i.test(url);
+                        if (hasTokenParam) {
+                            return url;
+                        }
+                        const separator = hasQuery ? '&' : '?';
+                        return `${url}${separator}token=${encodeURIComponent(config.token)}`;
+                    }
+                };
+
+                /**
                  * Mutate the status label shown above the collection list.
                  */
                 const setStatus = (message) => {
@@ -1076,7 +1105,7 @@
                     const acquisitionDate = resolveAcquisitionDate(feature);
                     const cloudCover = resolveCloudCover(feature);
                     const mgrs = props.mgrsId || props.tileId || props.MGRS || props.utmc || null;
-                    const downloadUrl = resolveDownloadUrl(feature);
+                    const downloadUrl = withAccessToken(resolveDownloadUrl(feature));
                     const thumbnailUrl = resolveThumbnailUrl(feature);
                     const wms = resolveWmsConfig(feature);
                     const geometry = feature.geometry || geometryFromBbox(feature.bbox || []);
