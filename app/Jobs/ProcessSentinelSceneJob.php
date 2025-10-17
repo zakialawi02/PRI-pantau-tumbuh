@@ -98,15 +98,15 @@ class ProcessSentinelSceneJob implements ShouldQueue
                     'zip_path' => $zipPath,
                     'status' => $response->status(),
                 ]);
-                $creditService->refundCreditsForFailure($imagery, "Job");
-                $imagery->update(['processing_status' => 'error']);
                 throw new \RuntimeException('Unable to download Sentinel scene. HTTP status: ' . $response->status());
             }
 
             if (!File::exists($zipPath)) {
-                Log::error('ProcessSentinelSceneJob: Sentinel scene download failed.');
-                $creditService->refundCreditsForFailure($imagery, "Job");
-                $imagery->update(['processing_status' => 'error']);
+                Log::error('ProcessSentinelSceneJob: Sentinel scene download failed.', [
+                    'imagery_id' => $this->imageryId,
+                    'zip_path' => $zipPath,
+                    'status' => $response->status(),
+                ]);
                 throw new \RuntimeException('Sentinel scene download missing after request.');
             }
 
@@ -134,15 +134,11 @@ class ProcessSentinelSceneJob implements ShouldQueue
 
             if (!$pythonPath) {
                 Log::error('ProcessSentinelSceneJob: Python executable for Sentinel processing not found.');
-                $creditService->refundCreditsForFailure($imagery, "Job");
-                $imagery->update(['processing_status' => 'error']);
                 throw new \RuntimeException('Python executable for Sentinel processing not found.');
             }
 
             if (!File::exists($scriptPath)) {
                 Log::error('ProcessSentinelSceneJob: Multispectral processing script not found.');
-                $creditService->refundCreditsForFailure($imagery, "Job");
-                $imagery->update(['processing_status' => 'error']);
                 throw new \RuntimeException('Multispectral processing script not found.');
             }
 
@@ -171,20 +167,14 @@ class ProcessSentinelSceneJob implements ShouldQueue
             $stderr = trim($process->getErrorOutput());
             if ($stderr !== '') {
                 Log::error('[Sentinel Multispectral STDERR] ' . $stderr);
-                $creditService->refundCreditsForFailure($imagery, "Job");
-                $imagery->update(['processing_status' => 'error']);
             }
 
             if (!$process->isSuccessful()) {
                 throw new \RuntimeException('Sentinel multispectral processing failed.');
-                $creditService->refundCreditsForFailure($imagery, "Job");
-                $imagery->update(['processing_status' => 'error']);
             }
 
             if (!File::exists($outputPath)) {
                 throw new \RuntimeException('Multispectral output was not created.');
-                $creditService->refundCreditsForFailure($imagery, "Job");
-                $imagery->update(['processing_status' => 'error']);
             }
 
             $outputSize = File::size($outputPath) ?: $downloadedSize;

@@ -373,7 +373,7 @@ async function checkUserCredits() {
         return false;
     }
 
-    const currentCredits = parseFloat(formatNumber(result.credits, 2));
+    const currentCredits = parseFloat(result.credits) || 0;
     const requiredCredits =
         parseFloat("{{ config('app.imagery_processing_cost') }}") || 10; // Default to 10 if not set
 

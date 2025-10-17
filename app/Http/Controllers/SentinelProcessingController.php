@@ -33,6 +33,20 @@ class SentinelProcessingController extends Controller
             'download_filename' => ['nullable', 'string', 'max:255'],
         ]);
 
+        $requiredCredits = (float) config('app-constants.imagery_processing_cost', 10);
+        $currentCredits = $this->creditService->getRemainingCredits($user->id);
+
+        if ($requiredCredits > 0 && $currentCredits < $requiredCredits) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Insufficient credits to process Sentinel imagery.',
+                'data' => [
+                    'current_credits' => $currentCredits,
+                    'required_credits' => $requiredCredits,
+                ],
+            ], 402);
+        }
+
         $rawTitle = trim($validated['title'] ?? '') ?: now()->format('YmdHis') . '_Sentinel_Scene';
         $displayTitle = $this->sanitizeDisplayName($rawTitle . '_' . now()->format('YmdHis'));
         $finalDisplayName = $displayTitle . '.tif';
@@ -47,6 +61,8 @@ class SentinelProcessingController extends Controller
         $outputBase = Str::limit($displayTitle . '_multispectral', 160, '');
         $outputFilename = $this->ensureUniqueFilename($imageryDirectory, $outputBase, 'tif');
 
+        $deductedCredits = false;
+
         try {
             $imagery = ImageryData::create([
                 'user_id' => $user->id,
@@ -60,6 +76,24 @@ class SentinelProcessingController extends Controller
                 'processing_status' => 'waiting',
                 'uploaded_at' => now(),
             ]);
+
+            if ($requiredCredits > 0) {
+                $deductedCredits = $this->creditService->deductCreditsForProcessing($user->id, $requiredCredits);
+
+                if (!$deductedCredits) {
+                    $currentCredits = $this->creditService->getRemainingCredits($user->id);
+                    $imagery->delete();
+
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Insufficient credits to process Sentinel imagery.',
+                        'data' => [
+                            'current_credits' => $currentCredits,
+                            'required_credits' => $requiredCredits,
+                        ],
+                    ], 402);
+                }
+            }
 
             ProcessSentinelSceneJob::dispatch(
                 $imagery->id,
@@ -76,7 +110,7 @@ class SentinelProcessingController extends Controller
                 ]
             )->onQueue('download');
 
-            $this->creditService->deductCreditsForProcessing($user->id, config('app-constants.imagery_processing_cost', 10));
+            $remainingCredits = $this->creditService->getRemainingCredits($user->id);
 
             return response()->json([
                 'success' => true,
@@ -85,7 +119,8 @@ class SentinelProcessingController extends Controller
                     'id' => $imagery->id,
                     'upload_status' => $imagery->upload_status,
                     'processing_status' => $imagery->processing_status,
-                    'current_credits' => $this->creditService->getRemainingCredits($user->id),
+                    'current_credits' => $remainingCredits,
+                    'required_credits' => $requiredCredits,
                 ],
             ], 202);
         } catch (Throwable $exception) {
@@ -101,10 +136,17 @@ class SentinelProcessingController extends Controller
                 ]);
             }
 
+            if ($deductedCredits && $requiredCredits > 0) {
+                $this->creditService->addCreditsToUser($user->id, $requiredCredits, 'SentinelProcessingController');
+            }
+
             return response()->json([
                 'success' => false,
                 'message' => 'Unable to queue Sentinel imagery processing at this time.',
-                'current_credits' => $this->creditService->getRemainingCredits($user->id),
+                'data' => [
+                    'current_credits' => $this->creditService->getRemainingCredits($user->id),
+                    'required_credits' => $requiredCredits,
+                ],
             ], 500);
         }
     }

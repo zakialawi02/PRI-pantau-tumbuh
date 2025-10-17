@@ -235,7 +235,7 @@
             </section>
 
             <!-- ========== SENTINEL COLLECTION PANEL ========== -->
-            <section class="flex hidden h-full flex-col shadow-xl" id="sentinel-panel" data-sentinel-token="{{ $copernicusAccessToken ?? '' }}" data-sentinel-credentials="{{ $copernicusCredentialsConfigured ?? false ? 'true' : 'false' }}" data-sentinel-process-url="{{ auth()->check() ? route('admin.sentinel.process') : '' }}">
+            <section class="flex hidden h-full flex-col shadow-xl" id="sentinel-panel" data-sentinel-token="{{ $copernicusAccessToken ?? '' }}" data-sentinel-credentials="{{ $copernicusCredentialsConfigured ?? false ? 'true' : 'false' }}" data-sentinel-process-url="{{ auth()->check() ? route('admin.sentinel.process') : '' }}" data-sentinel-processing-cost="{{ config('app-constants.imagery_processing_cost', 10) }}">
                 <div class="bg-background border-foreground/10 sticky top-0 z-20 flex items-center justify-between border-b p-2">
                     <h2 class="text-lg font-bold">🛰️ Sentinel-2 Collections</h2>
                     <button class="hover:bg-foreground/20 bg-foreground/10 rounded px-2 py-1 text-sm" onclick="closePanels()">✖</button>
@@ -316,7 +316,7 @@
 
                     <!-- Clip Tab Content -->
                     <div class="tab-content hidden" id="sentinel-clip-panel" role="tabpanel" aria-labelledby="sentinel-clip-tab">
-                        <div class="space-y-3" id="sentinelClipModule" data-credit-rate="{{ config('app-constants.imagery_credit_cost_per_hectare') }}">
+                        <div class="space-y-3" id="sentinelClipModule" data-credit-rate="{{ config('app-constants.imagery_credit_cost_per_hectare') }}" data-process-url="{{ auth()->check() ? route('admin.sentinel.process') : '' }}" data-processing-cost="{{ config('app-constants.imagery_processing_cost', 10) }}">
                             <div class="bg-background/60 border-foreground/10 space-y-3 rounded-lg border p-3 shadow-sm">
                                 <div class="flex flex-wrap items-center justify-between gap-2">
                                     <div>
@@ -364,8 +364,8 @@
                                 <div class="flex flex-wrap items-center justify-between gap-2">
                                     <h4 class="text-foreground text-lg font-semibold">Scene Selection</h4>
                                     <div class="border-foreground/20 inline-flex overflow-hidden rounded-full border" role="tablist">
-                                        <button class="clip-mode-btn data-[active=true]:bg-primary data-[active=true]:text-primary-foreground px-3 py-1 text-xs font-semibold transition" id="clipModeAutoBtn" data-mode="auto" type="button" aria-pressed="true">Auto Mode</button>
-                                        <button class="clip-mode-btn data-[active=true]:bg-primary data-[active=true]:text-primary-foreground px-3 py-1 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-60" id="clipModeManualBtn" data-mode="manual" type="button" aria-pressed="false" aria-disabled="true" disabled>Manual Mode</button>
+                                        <button class="bg-primary px-3 py-1 text-xs font-semibold transition" id="clipModeAutoBtn" data-mode="auto" type="button" aria-pressed="true">Auto Mode</button>
+                                        <button class="px-3 py-1 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-60" id="clipModeManualBtn" data-mode="manual" type="button" aria-pressed="false" aria-disabled="true" disabled>Manual Mode</button>
                                     </div>
                                 </div>
 
@@ -401,9 +401,6 @@
                 <div class="bg-background border-foreground/10 sticky bottom-0 border-t p-3">
                     <div class="text-foreground/70 text-xs">
                         Data source: Copernicus Sentinel-2 (via public catalogue)
-                    </div>
-                    <div class="text-foreground/50 text-xs">
-                        Last updated: <span id="sentinelLastUpdated">–</span>
                     </div>
                 </div>
 
@@ -986,559 +983,6 @@
                     window.addEventListener('resize', syncPanelLayoutWithViewport);
                 };
 
-                const initialiseClipModule = () => {
-                    const moduleEl = document.getElementById('sentinelClipModule');
-                    if (!moduleEl) {
-                        return;
-                    }
-
-                    const clipConfig = {
-                        endpoint: 'https://catalogue.dataspace.copernicus.eu/resto/api/collections/Sentinel2/search.json',
-                        maxRecords: 50,
-                        defaultDateWindowDays: 30,
-                        defaultMaxCloud: 60,
-                    };
-
-                    const elements = {
-                        areaOutput: document.getElementById('clipAreaOutput'),
-                        creditOutput: document.getElementById('clipCreditOutput'),
-                        geojsonOutput: document.getElementById('clipGeojsonOutput'),
-                        fieldInput: document.getElementById('clipFieldName'),
-                        autoBtn: document.getElementById('clipAutoSearchBtn'),
-                        modeButtons: Array.from(document.querySelectorAll('.clip-mode-btn')),
-                        autoPanel: document.getElementById('clipAutoPanel'),
-                        autoResult: document.getElementById('clipAutoResult'),
-                        selectionSummary: document.getElementById('clipSelectionSummary'),
-                        processBtn: document.getElementById('clipProcessBtn'),
-                        processNotice: document.getElementById('clipProcessNotice'),
-                        processUrl: moduleEl.dataset.processUrl || '',
-                    };
-
-                    const state = {
-                        geometry: null,
-                        feature: null,
-                        areaSqMeters: 0,
-                        areaHectares: 0,
-                        creditRate: Number(moduleEl.dataset.creditRate ?? '0') || 0,
-                        mode: 'auto',
-                        autoScene: null,
-                        selectedScene: null,
-                    };
-
-                    const safeFormatNumber = (value, decimals = 2) => {
-                        const numeric = Number(value ?? 0);
-                        if (!Number.isFinite(numeric)) {
-                            return '0';
-                        }
-                        if (typeof window.formatNumber === 'function') {
-                            return window.formatNumber(numeric, decimals);
-                        }
-                        return numeric.toFixed(decimals);
-                    };
-
-                    const formatIsoDate = (date) => {
-                        const copy = new Date(date.getTime());
-                        copy.setHours(0, 0, 0, 0);
-                        return copy.toISOString().split('T')[0];
-                    };
-
-                    const formatHumanDate = (value) => {
-                        if (typeof window.formatReadableDate === 'function') {
-                            return window.formatReadableDate(value);
-                        }
-                        if (!value) {
-                            return '–';
-                        }
-                        try {
-                            const parsed = new Date(value);
-                            return parsed.toISOString().replace('T', ' ').replace('Z', ' UTC');
-                        } catch (_) {
-                            return value;
-                        }
-                    };
-
-                    const getDefaultDateRange = () => {
-                        const end = new Date();
-                        const start = new Date();
-                        start.setDate(start.getDate() - clipConfig.defaultDateWindowDays);
-                        return {
-                            start: formatIsoDate(start),
-                            end: formatIsoDate(end),
-                        };
-                    };
-
-                    const computeCreditCost = () => {
-                        const cost = state.areaHectares * state.creditRate;
-                        return Number.isFinite(cost) ? cost : 0;
-                    };
-
-                    const updateAreaDisplay = () => {
-                        if (!elements.areaOutput) return;
-                        if (state.areaHectares > 0) {
-                            elements.areaOutput.innerHTML = `<strong>${safeFormatNumber(state.areaHectares, 2)} ha</strong>`;
-                        } else {
-                            elements.areaOutput.textContent = 'Draw a polygon to calculate the area.';
-                        }
-                    };
-
-                    const updateCreditDisplay = () => {
-                        if (!elements.creditOutput) return;
-                        if (state.areaHectares > 0 && state.creditRate > 0) {
-                            const cost = computeCreditCost();
-                            elements.creditOutput.innerHTML = `<span class="font-semibold text-primary">${safeFormatNumber(cost, 2)} Credit Points</span>`;
-                        } else {
-                            elements.creditOutput.textContent = '–';
-                        }
-                    };
-
-                    const updateGeojsonDisplay = () => {
-                        if (!elements.geojsonOutput) return;
-                        if (state.feature) {
-                            elements.geojsonOutput.innerHTML = `<pre>${JSON.stringify(state.feature, null, 2)}</pre>`;
-                        } else {
-                            elements.geojsonOutput.innerHTML = '<span class="text-foreground/60">Coordinates will appear here after drawing.</span>';
-                        }
-                    };
-
-                    const resetAutoResult = () => {
-                        if (!elements.autoResult) return;
-                        elements.autoResult.textContent = state.geometry ?
-                            'Click “Find Best Scene” to analyse the area.' :
-                            'Draw an area and search to preview the recommended scene.';
-                    };
-
-                    const updateProcessAvailability = () => {
-                        if (!elements.processBtn) return;
-                        const fieldNameFilled = (elements.fieldInput?.value ?? '').trim().length > 0;
-                        const hasScene = !!state.selectedScene;
-                        const hasGeometry = !!state.geometry;
-                        const urlAvailable = elements.processUrl !== '';
-
-                        elements.processBtn.disabled = !(fieldNameFilled && hasScene && hasGeometry && urlAvailable);
-
-                        if (!urlAvailable && elements.processNotice) {
-                            elements.processNotice.textContent = 'Log in to clip and download imagery.';
-                        } else if (elements.processNotice) {
-                            elements.processNotice.textContent = 'Processing will run in the background via job queue. We will notify you when the imagery is ready.';
-                        }
-                    };
-
-                    const updateSelectionSummary = () => {
-                        if (!elements.selectionSummary) return;
-                        if (!state.selectedScene) {
-                            elements.selectionSummary.textContent = 'No scene selected yet. Use auto mode to pick one.';
-                            updateProcessAvailability();
-                            return;
-                        }
-
-                        const parts = [];
-                        parts.push(`<div class="font-semibold">${state.selectedScene.title ?? 'Sentinel-2 Scene'}</div>`);
-                        if (state.selectedScene.datetime) {
-                            parts.push(`<div class="text-xs text-foreground/70">Acquired: ${formatHumanDate(state.selectedScene.datetime)}</div>`);
-                        }
-                        if (state.selectedScene.cloud_cover !== undefined && state.selectedScene.cloud_cover !== null) {
-                            parts.push(`<div class="text-xs text-foreground/70">Cloud cover: ${safeFormatNumber(state.selectedScene.cloud_cover, 2)}%</div>`);
-                        }
-                        parts.push('<div class="text-xs text-foreground/60">Mode: Auto selection</div>');
-
-                        elements.selectionSummary.innerHTML = parts.join('');
-                        updateProcessAvailability();
-                    };
-
-                    const selectScene = (scene) => {
-                        state.autoScene = scene || null;
-                        state.selectedScene = scene || null;
-                        if (scene && elements.autoResult) {
-                            elements.autoResult.innerHTML = `
-                                <div class="font-semibold">${scene.title ?? 'Latest Scene'}</div>
-                                <div class="text-xs text-foreground/70">Acquired: ${formatHumanDate(scene.datetime)}</div>
-                                <div class="text-xs text-foreground/70">Cloud cover: ${safeFormatNumber(scene.cloud_cover ?? 0, 2)}%</div>
-                            `;
-                        } else if (elements.autoResult) {
-                            resetAutoResult();
-                        }
-
-                        updateSelectionSummary();
-                    };
-
-                    const setMode = () => {
-                        state.mode = 'auto';
-                        elements.modeButtons.forEach((button) => {
-                            const isAuto = button.dataset.mode === 'auto';
-                            if (!isAuto) {
-                                button.disabled = true;
-                                button.setAttribute('aria-disabled', 'true');
-                            }
-                            button.dataset.active = isAuto ? 'true' : 'false';
-                            button.setAttribute('aria-pressed', isAuto ? 'true' : 'false');
-                        });
-
-                        if (elements.autoPanel) {
-                            elements.autoPanel.classList.remove('hidden');
-                        }
-                    };
-
-                    const computeCentroid = (geometry) => {
-                        if (!geometry) return null;
-                        const coords = Array.isArray(geometry.coordinates) ? geometry.coordinates : [];
-                        const ring = coords[0] ?? [];
-                        if (!ring.length) return null;
-                        let sumX = 0;
-                        let sumY = 0;
-                        let count = 0;
-                        ring.forEach((point) => {
-                            if (Array.isArray(point) && point.length >= 2) {
-                                sumX += Number(point[0]);
-                                sumY += Number(point[1]);
-                                count++;
-                            }
-                        });
-                        if (!count) return null;
-                        return [sumX / count, sumY / count];
-                    };
-
-                    const toWkt = (geometry) => {
-                        if (!geometry || typeof geometry !== 'object') return null;
-                        const type = geometry.type;
-                        const coords = geometry.coordinates;
-                        if (!type || !coords) return null;
-
-                        const normalizeRing = (ring) => {
-                            if (!Array.isArray(ring) || !ring.length) return null;
-                            const points = ring
-                                .map((coord) =>
-                                    Array.isArray(coord) && coord.length >= 2 ? [Number(coord[0]), Number(coord[1])] :
-                                    null
-                                )
-                                .filter((coord) => Array.isArray(coord));
-                            if (!points.length) return null;
-                            const [firstLon, firstLat] = points[0];
-                            const [lastLon, lastLat] = points[points.length - 1];
-                            if (firstLon !== lastLon || firstLat !== lastLat) {
-                                points.push([firstLon, firstLat]);
-                            }
-                            return points;
-                        };
-
-                        const formatRing = (ring) => {
-                            const normalized = normalizeRing(ring);
-                            if (!normalized) return null;
-                            return normalized
-                                .map((coord) => `${coord[0]} ${coord[1]}`)
-                                .join(', ');
-                        };
-
-                        switch (type) {
-                            case 'Polygon': {
-                                if (!Array.isArray(coords) || !coords.length) return null;
-                                const rings = coords
-                                    .map((ring) => {
-                                        if (!Array.isArray(ring) || !ring.length) return null;
-                                        const wktRing = formatRing(ring);
-                                        return wktRing ? `(${wktRing})` : null;
-                                    })
-                                    .filter(Boolean);
-                                return rings.length ? `POLYGON (${rings.join(', ')})` : null;
-                            }
-                            case 'MultiPolygon': {
-                                if (!Array.isArray(coords) || !coords.length) return null;
-                                const polygons = coords
-                                    .map((polygon) => {
-                                        if (!Array.isArray(polygon) || !polygon.length) return null;
-                                        const rings = polygon
-                                            .map((ring) => {
-                                                if (!Array.isArray(ring) || !ring.length) return null;
-                                                const wktRing = formatRing(ring);
-                                                return wktRing ? `(${wktRing})` : null;
-                                            })
-                                            .filter(Boolean);
-                                        return rings.length ? `(${rings.join(', ')})` : null;
-                                    })
-                                    .filter(Boolean);
-                                return polygons.length ? `MULTIPOLYGON (${polygons.join(', ')})` : null;
-                            }
-                            default:
-                                return null;
-                        }
-                    };
-
-                    const buildQueryParams = () => {
-                        const params = new URLSearchParams();
-                        const {
-                            start,
-                            end
-                        } = getDefaultDateRange();
-                        params.set('startDate', `${start}T00:00:00Z`);
-                        params.set('completionDate', `${end}T23:59:59Z`);
-                        params.set('maxRecords', String(clipConfig.maxRecords));
-
-                        if (state.geometry) {
-                            const wkt = toWkt(state.geometry);
-                            if (wkt) {
-                                params.set('geometry', wkt);
-                            }
-                            const centroid = computeCentroid(state.geometry);
-                            if (centroid) {
-                                params.set('lat', centroid[1].toFixed(6));
-                                params.set('lon', centroid[0].toFixed(6));
-                            }
-                        }
-
-                        return params;
-                    };
-
-                    const getCloudCover = (feature) => {
-                        const props = feature?.properties ?? {};
-                        const keys = ['eo:cloudCover', 'cloudCover', 'cloudcoverpercentage', 'cloudCoverageAssessment'];
-                        for (const key of keys) {
-                            if (props[key] !== undefined && props[key] !== null) {
-                                const value = Number(props[key]);
-                                if (Number.isFinite(value)) {
-                                    return value;
-                                }
-                            }
-                        }
-                        return null;
-                    };
-
-                    const getAcquisitionTimestamp = (feature) => {
-                        const props = feature?.properties ?? {};
-                        const candidates = [
-                            props.completionDate,
-                            props.endPosition,
-                            props.startDate,
-                            props.contentDate?.end,
-                            props.contentDate?.start,
-                            props.datetime,
-                            feature?.id && typeof feature.id === 'string' && feature.id.includes('T') ? feature.id : null,
-                        ];
-
-                        for (const candidate of candidates) {
-                            if (!candidate) continue;
-                            const date = new Date(candidate);
-                            if (!Number.isNaN(date.getTime())) {
-                                return date.getTime();
-                            }
-                        }
-
-                        return 0;
-                    };
-
-                    const buildScenePayload = (feature) => {
-                        const props = feature?.properties ?? {};
-                        const sceneId = feature?.id || props.productIdentifier || props.title || props.id || null;
-                        const acquisition = props.completionDate || props.startDate || props.datetime || props.endPosition || props.beginPosition || null;
-                        return {
-                            id: sceneId ? String(sceneId) : null,
-                            product_id: props.productIdentifier || null,
-                            title: props.title || props.productIdentifier || (sceneId ? String(sceneId) : 'Sentinel-2 Scene'),
-                            datetime: acquisition || null,
-                            cloud_cover: getCloudCover(feature),
-                            collection: props.collection || props.collectionName || null,
-                            mgrs: props.mgrsId || props.tileId || props.MGRS || null,
-                        };
-                    };
-
-                    const fetchScenes = async () => {
-                        const params = buildQueryParams();
-                        const requestUrl = `${clipConfig.endpoint}?${params.toString()}`;
-                        const response = await fetch(requestUrl);
-                        if (!response.ok) {
-                            throw new Error('Failed to fetch Sentinel-2 scenes.');
-                        }
-                        const data = await response.json();
-                        const features = Array.isArray(data?.features) ? data.features : [];
-                        return features.sort((a, b) => getAcquisitionTimestamp(b) - getAcquisitionTimestamp(a));
-                    };
-
-                    const handleAutoSearch = async () => {
-                        if (!state.geometry) {
-                            window.MyZkToast?.warning?.('Draw a polygon first to enable auto selection.');
-                            return;
-                        }
-                        if (!elements.autoBtn) return;
-                        const originalHtml = elements.autoBtn.innerHTML;
-                        elements.autoBtn.disabled = true;
-                        elements.autoBtn.innerHTML = '<i class="ri-loader-4-line animate-spin"></i><span>Searching...</span>';
-
-                        try {
-                            const features = await fetchScenes();
-                            if (!features.length) {
-                                if (elements.autoResult) {
-                                    elements.autoResult.textContent = 'No recent scenes found for this area.';
-                                }
-                                state.autoScene = null;
-                                selectScene(null);
-                                return;
-                            }
-
-                            const latestFeature = features[0];
-                            const sceneData = buildScenePayload(latestFeature);
-                            state.autoScene = sceneData;
-                            selectScene(sceneData);
-                        } catch (error) {
-                            if (elements.autoResult) {
-                                elements.autoResult.textContent = error?.message || 'Unable to fetch scenes. Please try again later.';
-                            }
-                        } finally {
-                            elements.autoBtn.disabled = false;
-                            elements.autoBtn.innerHTML = originalHtml;
-                            updateProcessAvailability();
-                        }
-                    };
-
-                    const updateGeometryState = (detail) => {
-                        state.geometry = detail?.geometry || null;
-                        state.feature = detail?.feature || (state.geometry ? {
-                            type: 'Feature',
-                            properties: {},
-                            geometry: state.geometry
-                        } : null);
-                        state.areaSqMeters = detail?.areaSqMeters || 0;
-                        state.areaHectares = detail?.areaHectares || 0;
-
-                        if (!state.geometry) {
-                            state.autoScene = null;
-                            state.selectedScene = null;
-                            resetAutoResult();
-                        }
-
-                        updateAreaDisplay();
-                        updateCreditDisplay();
-                        updateGeojsonDisplay();
-                        if (elements.autoBtn) {
-                            elements.autoBtn.disabled = !state.geometry;
-                        }
-                        updateSelectionSummary();
-                        updateProcessAvailability();
-                    };
-
-                    const handleProcess = () => {
-                        if (!elements.processBtn) return;
-                        if (!elements.processUrl) {
-                            window.MyZkToast?.warning?.('Please sign in to process Sentinel-2 imagery.');
-                            return;
-                        }
-                        if (!state.geometry) {
-                            window.MyZkToast?.warning?.('Draw a polygon before processing.');
-                            return;
-                        }
-                        if (!state.selectedScene) {
-                            window.MyZkToast?.warning?.('Select a Sentinel-2 scene first.');
-                            return;
-                        }
-
-                        const fieldName = (elements.fieldInput?.value || '').trim();
-                        if (!fieldName) {
-                            window.MyZkToast?.warning?.('Please enter a field name.');
-                            elements.fieldInput?.focus();
-                            return;
-                        }
-
-                        const {
-                            start: defaultDateFrom,
-                            end: defaultDateTo
-                        } = getDefaultDateRange();
-
-                        const payload = {
-                            field_name: fieldName,
-                            geometry: state.feature?.geometry ?? state.geometry,
-                            area_hectares: Number(state.areaHectares.toFixed(4)),
-                            mode: state.mode,
-                            date_from: defaultDateFrom,
-                            date_to: defaultDateTo,
-                            max_cloud: clipConfig.defaultMaxCloud,
-                            limit: clipConfig.maxRecords,
-                            resolution: 10,
-                            nodata: 0,
-                            selected_scene: state.selectedScene,
-                        };
-
-                        const creditCost = computeCreditCost();
-
-                        const proceed = () => {
-                            const originalHtml = elements.processBtn.innerHTML;
-                            elements.processBtn.disabled = true;
-                            elements.processBtn.innerHTML = '<i class="ri-loader-4-line animate-spin"></i><span>Processing...</span>';
-
-                            fetch(elements.processUrl, {
-                                    method: 'POST',
-                                    headers: {
-                                        'Content-Type': 'application/json',
-                                        Accept: 'application/json',
-                                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}',
-                                    },
-                                    body: JSON.stringify(payload),
-                                })
-                                .then(async (response) => {
-                                    const data = await response.json().catch(() => ({}));
-                                    if (!response.ok) {
-                                        const message = data?.message || 'Unable to queue Sentinel-2 clipping request.';
-                                        throw new Error(message);
-                                    }
-                                    if (data?.data?.current_credits !== undefined) {
-                                        $('#current-myCredits')?.text(safeFormatNumber(data.data.current_credits, 2));
-                                    }
-                                    if (window.MyZkToast?.success) {
-                                        window.MyZkToast.success(data?.message || 'Sentinel-2 clipping queued successfully.');
-                                    }
-                                })
-                                .catch((error) => {
-                                    if (window.MyZkToast?.error) {
-                                        window.MyZkToast.error(error?.message || 'Failed to queue clipping request.');
-                                    }
-                                })
-                                .finally(() => {
-                                    elements.processBtn.disabled = false;
-                                    elements.processBtn.innerHTML = originalHtml;
-                                    updateProcessAvailability();
-                                });
-                        };
-
-                        const message = `This action will deduct ${safeFormatNumber(creditCost, 2)} credit points. Continue?`;
-                        if (window.ZkPopAlert?.show) {
-                            ZkPopAlert.show({
-                                message,
-                                icon: '<i class="ri-cpu-line text-2xl text-primary"></i>',
-                                confirmText: 'Yes, Process',
-                                cancelText: 'Cancel',
-                                onConfirm: proceed,
-                            });
-                        } else if (window.confirm(message)) {
-                            proceed();
-                        }
-                    };
-
-                    updateAreaDisplay();
-                    updateCreditDisplay();
-                    updateGeojsonDisplay();
-                    resetAutoResult();
-                    setMode();
-                    updateSelectionSummary();
-                    updateProcessAvailability();
-                    if (elements.autoBtn) {
-                        elements.autoBtn.disabled = true;
-                    }
-
-                    elements.modeButtons.forEach((button) => {
-                        button.addEventListener('click', () => {
-                            setMode();
-                        });
-                    });
-
-                    elements.autoBtn?.addEventListener('click', handleAutoSearch);
-                    elements.fieldInput?.addEventListener('input', updateProcessAvailability);
-                    elements.processBtn?.addEventListener('click', handleProcess);
-
-                    document.addEventListener('app:clip:geometry', (event) => {
-                        updateGeometryState(event.detail || {});
-                    });
-
-                    if (window.AppMap?.clip?.latest) {
-                        updateGeometryState(window.AppMap.clip.latest);
-                    }
-                };
-
                 const bootstrapPanels = () => {
                     window.showPanel = showPanel;
                     window.closePanels = closePanels;
@@ -1546,7 +990,6 @@
                     initialiseHorizontalScroll();
                     initialiseDefaultPanel();
                     registerEventListeners();
-                    initialiseClipModule();
                     syncPanelLayoutWithViewport();
 
                     const sentinelModule = window.AppMap?.sentinel;
@@ -1565,6 +1008,7 @@
             })();
         </script>
     @endpush
+
     @push('javascript')
         @auth
             <script>
@@ -2077,10 +1521,10 @@
                     const loadMyData = async () => {
                         const container = elements.myDataContainer;
                         container.innerHTML = `
-                    <div class="flex justify-center py-4">
-                        <p class="text-sm text-foreground/60 animate-pulse">Loading your imagery list...</p>
-                    </div>
-                    `;
+                        <div class="flex justify-center py-4">
+                            <p class="text-sm text-foreground/60 animate-pulse">Loading your imagery list...</p>
+                        </div>
+                        `;
 
                         try {
                             const response = await fetch(endpoints.list);
@@ -2105,10 +1549,10 @@
                             });
                         } catch (error) {
                             container.innerHTML = `
-                        <div class="text-sm text-red-500 bg-red-50 border border-red-200 rounded p-3">
-                            ❌ ${error.message}
-                        </div>
-                    `;
+                            <div class="text-sm text-red-500 bg-red-50 border border-red-200 rounded p-3">
+                                ❌ ${error.message}
+                            </div>
+                            `;
                         }
                     };
 
@@ -2145,8 +1589,1361 @@
             </script>
         @endauth
     @endpush
-
     @push('javascript')
+        <script>
+            (() => {
+                // Abort if the Sentinel panel is not present in the DOM.
+                const panel = document.getElementById('sentinel-panel');
+                if (!panel) {
+                    return;
+                }
+
+                // Cache frequently accessed DOM nodes for the Sentinel module.
+                const previewPanelEl = document.getElementById('sentinelPreviewPanel');
+                const previewDownloadBtnEl = document.getElementById('sentinelPreviewDownloadBtn');
+                const previewImageryBtnEl = document.getElementById('sentinelPreviewImageryBtn');
+                const previewClearBtnEl = document.getElementById('sentinelPreviewClearBtn');
+
+                const elements = {
+                    filterForm: document.getElementById('sentinelFilterForm'),
+                    resetButton: document.getElementById('sentinelFilterResetButton'),
+                    cloudInput: document.getElementById('sentinelCloudFilter'),
+                    productInput: document.getElementById('sentinelProductLevel'),
+                    startInput: document.getElementById('sentinelStartDate'),
+                    endInput: document.getElementById('sentinelEndDate'),
+                    latInput: document.getElementById('sentinelLatFilter'),
+                    lonInput: document.getElementById('sentinelLonFilter'),
+                    status: document.getElementById('sentinelCollectionStatus'),
+                    list: document.getElementById('sentinelCollectionList'),
+                    template: document.getElementById('sentinelCollectionTemplate'),
+                    previewPanel: previewPanelEl,
+                    previewTitle: previewPanelEl?.querySelector('[data-sentinel-preview-title]'),
+                    previewAcquired: previewPanelEl?.querySelector('[data-sentinel-preview-acquired]'),
+                    previewDetails: previewPanelEl?.querySelector('[data-sentinel-preview-details]'),
+                    previewStatus: previewPanelEl?.querySelector('[data-sentinel-preview-status]'),
+                    previewDownloadBtn: previewDownloadBtnEl,
+                    previewImageryBtn: previewImageryBtnEl,
+                    previewImageryIcon: previewPanelEl?.querySelector('[data-sentinel-preview-imagery-icon]'),
+                    previewImageryLabel: previewPanelEl?.querySelector('[data-sentinel-preview-imagery-label]'),
+                    previewClearBtn: previewClearBtnEl,
+                };
+
+                if (!elements.template || !elements.list || !elements.status) {
+                    console.warn('Sentinel collection template or container missing. Skipping Sentinel module bootstrap.');
+                    return;
+                }
+
+                // Normalise access to the global namespace so other modules can reuse this logic.
+                window.AppMap = window.AppMap || {};
+
+                const config = {
+                    endpoint: 'https://catalogue.dataspace.copernicus.eu/resto/api/collections/Sentinel2/search.json',
+                    defaultMaxRecords: 10,
+                    filteredMaxRecords: 20,
+                    defaultDateRangeDays: 30,
+                    token: (panel.dataset.sentinelToken || '').trim(),
+                    processUrl: (panel.dataset.sentinelProcessUrl || '').trim(),
+                    processingCost: Number.parseFloat(panel.dataset.sentinelProcessingCost ?? '') || 0,
+                    // Fallback Copernicus WMS endpoint & layer when the catalogue response omits one.
+                    defaultWmsEndpoint: 'https://sh.dataspace.copernicus.eu/ogc/wms/1bd0fec1-0e52-427a-8e83-6e0dcd29a03a',
+                    defaultWmsLayer: 'NATURAL-COLOR',
+                    // Layer stacking order: keep WMS below the highlighted footprint polygons.
+                    previewWmsZIndex: 10,
+                    previewFootprintZIndex: 50,
+                    // Copernicus WMS enforces a ~200 m/px ceiling; clamp tiles below this threshold.
+                    previewMaxMetersPerPixel: 190,
+                    // Ensure enough zoom levels for over-zooming while keeping tile math predictable.
+                    previewTileZoomLevels: 22,
+                    previewTileSize: 256,
+                };
+
+                window.AppMap.constants = window.AppMap.constants || {};
+                if (!Number.isFinite(window.AppMap.constants.imageryProcessingCost) || window.AppMap.constants.imageryProcessingCost <= 0) {
+                    window.AppMap.constants.imageryProcessingCost = config.processingCost;
+                }
+
+                // Track loaded scenes, pending requests, and map preview state.
+                const state = {
+                    scenes: [],
+                    loadedOnce: false,
+                    requestController: null,
+                    lastQueryString: null,
+                    preview: {
+                        map: window.map || null,
+                        footprintLayer: null,
+                        wmsLayer: null,
+                        activeSceneIndex: null,
+                        wmsActive: false,
+                    },
+                };
+
+                /**
+                 * Resolve the underlying OpenLayers map instance from various potential wrappers.
+                 */
+                const resolveMapInstance = (candidate) => {
+                    if (candidate && typeof candidate.addLayer === 'function' && typeof candidate.getView === 'function') {
+                        return candidate;
+                    }
+                    if (candidate?.map && typeof candidate.map.addLayer === 'function') {
+                        return candidate.map;
+                    }
+                    if (candidate?.detail) {
+                        return resolveMapInstance(candidate.detail);
+                    }
+                    return null;
+                };
+
+                /**
+                 * Persist and return the active OpenLayers map instance.
+                 */
+                const assignMapInstance = (candidate) => {
+                    const resolved = resolveMapInstance(candidate);
+                    if (resolved) {
+                        state.preview.map = resolved;
+                    }
+                    return resolved;
+                };
+
+                /**
+                 * Retrieve the OpenLayers map, refreshing the cached instance when necessary.
+                 */
+                const getMapInstance = () => {
+                    const resolved =
+                        resolveMapInstance(state.preview.map) ||
+                        assignMapInstance(window.map);
+                    if (resolved && state.preview.map !== resolved) {
+                        state.preview.map = resolved;
+                    }
+                    return resolved;
+                };
+
+                // Cache any immediately available map reference.
+                assignMapInstance(window.map);
+
+                // Lazily capture the OpenLayers map instance when it becomes available.
+                if (!state.preview.map) {
+                    window.addEventListener('map:ready', (event) => {
+                        assignMapInstance(event.detail);
+                    }, {
+                        once: true
+                    });
+                }
+
+                /**
+                 * Format a Date object into the YYYY-MM-DD pattern expected by date inputs.
+                 */
+                const formatDateForInput = (date) => {
+                    const year = date.getFullYear();
+                    const month = String(date.getMonth() + 1).padStart(2, '0');
+                    const day = String(date.getDate()).padStart(2, '0');
+                    return `${year}-${month}-${day}`;
+                };
+
+                /**
+                 * Provide a default 30-day date range ending today so the initial query stays manageable.
+                 */
+                const ensureDefaultDates = () => {
+                    if (!elements.startInput || !elements.endInput) {
+                        return;
+                    }
+
+                    const end = new Date();
+                    const start = new Date();
+                    start.setDate(end.getDate() - config.defaultDateRangeDays);
+
+                    if (!elements.startInput.value) {
+                        elements.startInput.value = formatDateForInput(start);
+                    }
+                    if (!elements.endInput.value) {
+                        elements.endInput.value = formatDateForInput(end);
+                    }
+                };
+
+                /**
+                 * Replace characters that are invalid for filenames so download names stay portable.
+                 */
+                const sanitizeFileName = (value, fallback = 'sentinel-scene') => {
+                    const base = (value || '').toString().trim();
+                    const normalized = base
+                        .normalize('NFKD')
+                        .replace(/[\u0300-\u036f]/g, '')
+                        .replace(/[^a-zA-Z0-9-_.]+/g, '-')
+                        .replace(/-{2,}/g, '-')
+                        .replace(/^-+|-+$/g, '');
+                    return (normalized || fallback).substring(0, 120);
+                };
+
+                /**
+                 * Append the Copernicus access token to download URLs so the ZIP service authorises the request.
+                 */
+                const withAccessToken = (url) => {
+                    if (!url || !config.token) {
+                        return url;
+                    }
+
+                    try {
+                        const parsed = new URL(url, window.location.href);
+                        const params = parsed.searchParams;
+
+                        if (!params.has('token') && !params.has('access_token')) {
+                            params.set('token', config.token);
+                        }
+
+                        return parsed.toString();
+                    } catch (error) {
+                        // Fallback for environments that cannot parse the URL instance (e.g. malformed URLs).
+                        const hasQuery = url.includes('?');
+                        const hasTokenParam = /(?:\?|&)(token|access_token)=/i.test(url);
+                        if (hasTokenParam) {
+                            return url;
+                        }
+                        const separator = hasQuery ? '&' : '?';
+                        return `${url}${separator}token=${encodeURIComponent(config.token)}`;
+                    }
+                };
+
+                /**
+                 * Mutate the status label shown above the collection list.
+                 */
+                const setStatus = (message, isLoading = false) => {
+                    if (elements.status) {
+                        if (isLoading) {
+                            elements.status.innerHTML = `
+                                <div class="flex items-center">
+                                    <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-current" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                    <span>${message}</span>
+                                </div>
+                            `;
+                        } else {
+                            elements.status.innerHTML = message;
+                        }
+                    }
+                };
+
+                /**
+                 * Update the preview status text safely.
+                 */
+                const setPreviewStatus = (message) => {
+                    if (elements.previewStatus) {
+                        elements.previewStatus.textContent = message;
+                    }
+                };
+
+                /**
+                 * Toggle a loading appearance while data is being fetched.
+                 */
+                const setLoadingState = (isLoading) => {
+                    if (isLoading) {
+                        // Clear the container content and show only status with spinner
+                        if (elements.list) {
+                            elements.list.innerHTML = '';
+                        }
+                    }
+                };
+
+                /**
+                 * Convert a bounding box array into a simple polygon GeoJSON object.
+                 */
+                const geometryFromBbox = (bbox) => {
+                    if (!Array.isArray(bbox) || bbox.length < 4) {
+                        return null;
+                    }
+                    const [minLon, minLat, maxLon, maxLat] = bbox;
+                    return {
+                        type: 'Polygon',
+                        coordinates: [
+                            [
+                                [minLon, minLat],
+                                [maxLon, minLat],
+                                [maxLon, maxLat],
+                                [minLon, maxLat],
+                                [minLon, minLat],
+                            ]
+                        ],
+                    };
+                };
+
+                /**
+                 * Recursively flatten coordinate arrays so we can derive bounds from arbitrary geometries.
+                 */
+                const collectCoordinatePairs = (input, acc = []) => {
+                    if (!Array.isArray(input)) {
+                        return acc;
+                    }
+                    if (
+                        input.length >= 2 &&
+                        typeof input[0] === 'number' &&
+                        typeof input[1] === 'number'
+                    ) {
+                        acc.push([input[0], input[1]]);
+                        return acc;
+                    }
+                    for (const value of input) {
+                        collectCoordinatePairs(value, acc);
+                    }
+                    return acc;
+                };
+
+                /**
+                 * Derive a geographic bounding box from any supported GeoJSON geometry.
+                 */
+                const bboxFromGeometry = (geometry) => {
+                    if (!geometry) {
+                        return null;
+                    }
+
+                    const geometries =
+                        geometry.type === 'GeometryCollection' ?
+                        geometry.geometries || [] : [geometry];
+
+                    let minLon = Infinity;
+                    let minLat = Infinity;
+                    let maxLon = -Infinity;
+                    let maxLat = -Infinity;
+
+                    for (const geom of geometries) {
+                        const coords = collectCoordinatePairs(geom?.coordinates);
+                        for (const pair of coords) {
+                            const [lon, lat] = pair;
+                            if (!Number.isFinite(lon) || !Number.isFinite(lat)) {
+                                continue;
+                            }
+                            if (lon < minLon) minLon = lon;
+                            if (lat < minLat) minLat = lat;
+                            if (lon > maxLon) maxLon = lon;
+                            if (lat > maxLat) maxLat = lat;
+                        }
+                    }
+
+                    if (
+                        !Number.isFinite(minLon) ||
+                        !Number.isFinite(minLat) ||
+                        !Number.isFinite(maxLon) ||
+                        !Number.isFinite(maxLat)
+                    ) {
+                        return null;
+                    }
+
+                    return [minLon, minLat, maxLon, maxLat];
+                };
+
+                /**
+                 * Transform a geographic bounding box into the map's projection for clipping the WMS layer.
+                 */
+                const projectBboxToMapExtent = (bbox, mapInstance) => {
+                    if (!Array.isArray(bbox) || bbox.length < 4 || !mapInstance) {
+                        return null;
+                    }
+
+                    const view = typeof mapInstance.getView === 'function' ? mapInstance.getView() : null;
+                    const projection = view?.getProjection?.();
+                    if (!projection) {
+                        return null;
+                    }
+
+                    const code = typeof projection.getCode === 'function' ? projection.getCode() : null;
+                    if (code === 'EPSG:4326') {
+                        return bbox;
+                    }
+
+                    if (!window.ol?.proj?.transformExtent) {
+                        return null;
+                    }
+
+                    try {
+                        return window.ol.proj.transformExtent(bbox, 'EPSG:4326', projection);
+                    } catch (error) {
+                        console.warn('Failed to transform Sentinel extent:', error);
+                        return null;
+                    }
+                };
+
+                /**
+                 * Build a tile grid tailored to the scene extent so WMS requests stay within Copernicus limits.
+                 */
+                const createTileGridForExtent = (extent, projection) => {
+                    if (
+                        !extent ||
+                        extent.length < 4 ||
+                        !window.ol?.tilegrid ||
+                        (!window.ol.tilegrid.createXYZ && !window.ol.tilegrid.TileGrid)
+                    ) {
+                        return null;
+                    }
+
+                    const [minX, minY, maxX, maxY] = extent;
+                    if (
+                        !Number.isFinite(minX) ||
+                        !Number.isFinite(minY) ||
+                        !Number.isFinite(maxX) ||
+                        !Number.isFinite(maxY) ||
+                        maxX <= minX ||
+                        maxY <= minY
+                    ) {
+                        return null;
+                    }
+
+                    const units = projection?.getUnits?.();
+                    if (units && units !== 'm') {
+                        // Only clamp resolutions for metre-based projections; degrees don't trigger the Copernicus cap.
+                        return null;
+                    }
+
+                    const tileSize = Number.isFinite(config.previewTileSize) ?
+                        config.previewTileSize :
+                        256;
+                    const spanX = maxX - minX;
+                    const spanY = maxY - minY;
+                    const dominantSpan = Math.max(spanX, spanY);
+                    if (!Number.isFinite(dominantSpan) || dominantSpan <= 0) {
+                        return null;
+                    }
+
+                    const baseResolution = dominantSpan / tileSize;
+                    if (!Number.isFinite(baseResolution) || baseResolution <= 0) {
+                        return null;
+                    }
+
+                    const cap = Number.isFinite(config.previewMaxMetersPerPixel) ?
+                        Math.max(1, config.previewMaxMetersPerPixel) :
+                        190;
+                    const startingResolution = Math.min(baseResolution, cap);
+
+                    const zoomLevels = Number.isFinite(config.previewTileZoomLevels) ?
+                        Math.max(1, Math.floor(config.previewTileZoomLevels)) :
+                        22;
+
+                    // Precompute the resolution pyramid so we can fall back if createXYZ is unavailable.
+                    const resolutions = [];
+                    for (let i = 0; i < zoomLevels; i += 1) {
+                        resolutions.push(startingResolution / Math.pow(2, i));
+                    }
+
+                    try {
+                        if (window.ol.tilegrid.createXYZ) {
+                            return window.ol.tilegrid.createXYZ({
+                                extent,
+                                tileSize,
+                                maxResolution: startingResolution,
+                                maxZoom: zoomLevels - 1,
+                            });
+                        }
+
+                        if (window.ol.tilegrid.TileGrid) {
+                            return new window.ol.tilegrid.TileGrid({
+                                extent,
+                                tileSize,
+                                resolutions,
+                            });
+                        }
+                    } catch (error) {
+                        console.warn('Failed to construct Sentinel tile grid:', error);
+                    }
+
+                    return null;
+                };
+
+                /**
+                 * Extract a numeric cloud cover percentage from a feature if available.
+                 */
+                const resolveCloudCover = (feature) => {
+                    const props = feature?.properties ?? {};
+                    const candidates = [
+                        props['eo:cloudCover'],
+                        props.cloudCover,
+                        props.cloudcoverpercentage,
+                        props.cloudCoverageAssessment,
+                    ];
+                    for (const candidate of candidates) {
+                        const value = Number(candidate);
+                        if (Number.isFinite(value)) {
+                            return value;
+                        }
+                    }
+                    return null;
+                };
+
+                /**
+                 * Locate the best available download link for a feature.
+                 */
+                const resolveDownloadUrl = (feature) => {
+                    const props = feature?.properties ?? {};
+                    const linkSources = [];
+
+                    if (Array.isArray(props.links)) {
+                        linkSources.push(...props.links);
+                    } else if (props.links && typeof props.links === 'object') {
+                        linkSources.push(...Object.values(props.links));
+                    }
+
+                    const services = props.services || {};
+                    if (services.download) {
+                        linkSources.push(services.download);
+                    }
+                    if (services.s3) {
+                        linkSources.push(services.s3);
+                    }
+
+                    for (const entry of linkSources) {
+                        const href = entry?.href || entry?.url || entry?.URI;
+                        const relation = (entry?.rel || entry?.role || '').toLowerCase();
+                        if (typeof href === 'string' && href.startsWith('http')) {
+                            if (!relation || /enclosure|download|data/.test(relation)) {
+                                return href;
+                            }
+                        }
+                    }
+
+                    if (typeof props.downloadLink === 'string' && props.downloadLink.startsWith('http')) {
+                        return props.downloadLink;
+                    }
+
+                    return null;
+                };
+
+                /**
+                 * Discover a thumbnail or quicklook URL so each card can show a preview image.
+                 */
+                const resolveThumbnailUrl = (feature) => {
+                    const props = feature?.properties ?? {};
+                    const assets = feature?.assets ?? {};
+                    const candidates = [
+                        props.thumbnail,
+                        props.quicklook,
+                        props.quicklookUrl,
+                        props.thumbnailUrl,
+                        assets.thumbnail?.href,
+                        assets.quicklook?.href,
+                    ];
+                    return candidates.find((value) => typeof value === 'string' && value.startsWith('http')) || null;
+                };
+
+                /**
+                 * Extract WMS configuration (URL & layers) if the API exposes it.
+                 */
+                const resolveWmsConfig = (feature, acquisitionDate) => {
+                    const services = feature?.properties?.services ?? {};
+                    const ogc = services.ogc || services.wms || {};
+                    const wmsCandidates = Array.isArray(ogc?.wms) ? ogc.wms : [ogc.wms || ogc];
+
+                    for (const candidate of wmsCandidates) {
+                        const url = candidate?.url || candidate?.href;
+                        const layers = candidate?.layers || candidate?.layer || candidate?.name;
+                        if (typeof url === 'string' && url.startsWith('http') && layers) {
+                            return {
+                                url,
+                                layers,
+                                time: candidate?.time || candidate?.TIME || formatReadableDate(acquisitionDate),
+                            };
+                        }
+                    }
+
+                    if (config.defaultWmsEndpoint && config.defaultWmsLayer) {
+                        // Use the shared Copernicus service when the catalogue does not expose a per-scene WMS link.
+                        return {
+                            url: config.defaultWmsEndpoint,
+                            layers: config.defaultWmsLayer,
+                            time: formatReadableDate(acquisitionDate),
+                        };
+                    }
+
+                    return null;
+                };
+
+                /**
+                 * Prepare URL parameters used for the Sentinel search endpoint.
+                 */
+                const buildQueryParams = (maxRecords) => {
+                    const params = new URLSearchParams();
+                    params.set('maxRecords', String(maxRecords));
+                    params.set('productType', (elements.productInput?.value || '').trim() || 'S2MSI2A');
+
+                    const cloudValue = Number(elements.cloudInput?.value ?? '');
+                    if (Number.isFinite(cloudValue)) {
+                        const bounded = Math.min(Math.max(cloudValue, 0), 100);
+                        const rounded = Math.round(bounded);
+                        // Dataspace expects range syntax with inclusive brackets, e.g. "[0,30]".
+                        // Supplying legacy dash-separated ranges triggers a 400 validation error.
+                        const rangeValue = `[0,${rounded}]`;
+                        // Only set the documented "cloudCover" parameter; the API rejects other
+                        // aliases (cloudCoverPercentage/cloudcoverpercentage) with a 400 error.
+                        params.set('cloudCover', rangeValue);
+                    }
+
+                    const startValue = (elements.startInput?.value || '').trim();
+                    const endValue = (elements.endInput?.value || '').trim();
+                    if (startValue) {
+                        params.set('startDate', `${startValue}T00:00:00Z`);
+                    }
+                    if (endValue) {
+                        params.set('completionDate', `${endValue}T23:59:59Z`);
+                    }
+
+                    const latValue = Number(elements.latInput?.value ?? '');
+                    const lonValue = Number(elements.lonInput?.value ?? '');
+                    if (Number.isFinite(latValue) && Number.isFinite(lonValue)) {
+                        params.set('lat', latValue.toFixed(6));
+                        params.set('lon', lonValue.toFixed(6));
+                    }
+
+                    return params;
+                };
+
+                /**
+                 * Convert the raw API feature into a simplified scene object for rendering.
+                 */
+                const transformFeature = (feature) => {
+                    if (!feature) return null;
+
+                    const props = feature.properties || {};
+                    const title = shortenFilename(props?.title, 30) || props?.productIdentifier || feature?.id || 'Sentinel-2 Scene';
+                    const acquisitionDate = props.completionDate || props.startDate || props.endPosition || props.beginPosition || props.startTimeFromAscendingNode;
+                    const cloudCover = resolveCloudCover(feature);
+                    const mgrs = props.mgrsId || props.tileId || props.MGRS || props.utmc || null;
+                    const downloadUrl = withAccessToken(resolveDownloadUrl(feature));
+                    const thumbnailUrl = resolveThumbnailUrl(feature);
+                    const wms = resolveWmsConfig(feature, acquisitionDate);
+                    const geometry = feature.geometry || geometryFromBbox(feature.bbox || []);
+                    const bbox = Array.isArray(feature.bbox) && feature.bbox.length >= 4 ?
+                        feature.bbox.slice(0, 4) :
+                        bboxFromGeometry(geometry);
+
+                    const details = [];
+                    if (mgrs) {
+                        details.push(`Tile ${mgrs}`);
+                    }
+                    if (Number.isFinite(cloudCover)) {
+                        details.push(`Cloud ${cloudCover.toFixed(1)}%`);
+                    }
+
+                    return {
+                        id: feature.id || props.id || null,
+                        title,
+                        productId: props.productIdentifier || null,
+                        collection: props.collection || props.collectionName || null,
+                        datetime: formatReadableDate(acquisitionDate) ?? null,
+                        details: details.join(' • '),
+                        cloudCover,
+                        mgrs,
+                        downloadUrl,
+                        downloadName: sanitizeFileName(`${title}.zip`),
+                        thumbnailUrl,
+                        wms,
+                        geometry,
+                        bbox,
+                        raw: feature,
+                    };
+                };
+
+                const buildProcessingPayload = (scene) => ({
+                    title: scene.title || 'Sentinel-2 Scene',
+                    download_url: scene.downloadUrl,
+                    product_id: scene.productId || scene.id || null,
+                    collection: scene.collection || null,
+                    acquisition_date: scene.datetime || null,
+                    download_filename: scene.downloadName || sanitizeFileName(`${scene.title || 'Sentinel-2 Scene'}.zip`),
+                });
+
+                const handleProcessScene = (index, buttonEl) => {
+                    const scene = state.scenes[index];
+                    if (!scene) {
+                        return;
+                    }
+
+                    if (!config.processUrl) {
+                        MyZkToast?.warning?.('Please sign in to process Sentinel-2 imagery.');
+                        return;
+                    }
+
+                    if (!scene.downloadUrl) {
+                        MyZkToast?.warning?.('Selected scene is missing a Copernicus download link.');
+                        return;
+                    }
+
+                    const originalHtml = buttonEl?.innerHTML || '<i class="ri-cpu-line"></i><span>Process Imagery</span>';
+                    const setButtonState = (html, disabled) => {
+                        if (!buttonEl) {
+                            return;
+                        }
+                        if (typeof html === 'string') {
+                            buttonEl.innerHTML = html;
+                        }
+                        if (typeof disabled === 'boolean') {
+                            buttonEl.disabled = disabled;
+                        }
+                    };
+
+                    const payload = buildProcessingPayload(scene);
+
+                    const enqueueProcessing = async () => {
+                        setButtonState('<i class="ri-loader-4-line animate-spin"></i><span>Queuing...</span>', true);
+                        try {
+                            const response = await fetch(config.processUrl, {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'Accept': 'application/json',
+                                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}',
+                                },
+                                body: JSON.stringify(payload)
+                            });
+
+                            const result = await response.json();
+
+                            if (response.ok) {
+                                $('#current-myCredits')?.text(formatNumber(result?.data?.current_credits, 2));
+                                const message = result?.message || 'Sentinel scene queued for processing.';
+                                MyZkToast?.success?.(message);
+                            } else {
+                                const errorMessage = result?.message || 'Failed to queue Sentinel processing. Please try again later.';
+                                MyZkToast?.error?.(errorMessage);
+                            }
+                        } catch (error) {
+                            console.error('Failed to queue Sentinel processing', error);
+                            MyZkToast?.error?.(error?.message || 'Unable to queue Sentinel imagery.');
+                        } finally {
+                            setButtonState(originalHtml, false);
+                            if (typeof window.AppMap?.uploader?.reload === 'function') {
+                                window.AppMap.uploader.reload();
+                            }
+                        }
+                    };
+
+                    setButtonState('<i class="ri-loader-4-line animate-spin"></i><span>Checking credits...</span>', true);
+
+                    // Check user credits before proceeding
+                    checkUserCredits().then(res => {
+                        $('#current-myCredits').text(formatNumber(res.currentCredits, 2));
+                        // Show confirmation modal before starting upload
+                        ZkPopAlert.show({
+                            message: `${res.hasCredits ? `This action will cost ${res.requiredCredits} credit points for processing imagery. Do you want to proceed?` : `Insufficient credit points for processing. You need ${res.requiredCredits} credits. Please purchase more credits to continue processing.`}`,
+                            icon: '<i class="ri-cpu-line text-2xl text-primary"></i>',
+                            confirmClass: "focus:ring-primary/80 rounded-md text-sm px-2.5 py-1.5 bg-primary text-primary-foreground border border-primary hover:bg-primary/80 focus:outline-none focus:ring-primary",
+                            confirmText: "Yes, Continue",
+                            cancelText: "Cancel",
+                            onConfirm: () => {
+                                if (!res.hasCredits) {
+                                    MyZkToast.warning('Insufficient credit points for processing. Please purchase more credits to continue processing.');
+                                } else {
+                                    enqueueProcessing()
+                                }
+                            }
+                        });
+                    }).catch(error => {
+                        // Restore ready state on error
+                        MyZkToast.error('Failed to check credit balance: ' + error.message);
+                    }).finally(() => {
+                        setButtonState(originalHtml, false);
+                    });
+                };
+
+                /**
+                 * Render a single Sentinel scene card using the HTML template fragment.
+                 */
+                const renderSceneCard = (scene, index) => {
+                    const fragment = elements.template.content.cloneNode(true);
+                    const card = fragment.querySelector('.sentinel-card');
+                    if (!card) {
+                        return null;
+                    }
+
+                    const titleEl = fragment.querySelector('[data-sentinel-title]');
+                    const productEl = fragment.querySelector('[data-sentinel-product]');
+                    const datetimeEl = fragment.querySelector('[data-sentinel-datetime]');
+                    const detailsEl = fragment.querySelector('[data-sentinel-details]');
+                    const thumbWrapper = fragment.querySelector('[data-sentinel-thumb]');
+                    const thumbnailEl = fragment.querySelector('[data-sentinel-thumbnail]');
+                    const placeholderEl = fragment.querySelector('[data-sentinel-placeholder]');
+                    const downloadBtn = fragment.querySelector('[data-sentinel-download]');
+                    const processBtn = fragment.querySelector('[data-sentinel-process]');
+                    const previewBtn = fragment.querySelector('[data-sentinel-preview]');
+
+                    if (titleEl) {
+                        titleEl.textContent = scene.title;
+                    }
+                    if (productEl) {
+                        productEl.textContent = scene.productId || scene.id || 'Sentinel-2 Product';
+                    }
+                    if (datetimeEl) {
+                        datetimeEl.textContent = scene.datetime ?
+                            `Acquired: ${formatReadableDate(scene.datetime)}` :
+                            'Acquired: –';
+                    }
+                    if (detailsEl) {
+                        detailsEl.textContent = scene.details || 'Details unavailable';
+                    }
+
+                    if (scene.thumbnailUrl && thumbnailEl) {
+                        thumbnailEl.src = scene.thumbnailUrl;
+                        thumbnailEl.classList.remove('hidden');
+                        placeholderEl?.classList.add('hidden');
+                    } else {
+                        thumbnailEl?.classList.add('hidden');
+                        placeholderEl?.classList.remove('hidden');
+                    }
+
+                    if (downloadBtn) {
+                        if (scene.downloadUrl) {
+                            downloadBtn.href = scene.downloadUrl;
+                            downloadBtn.download = scene.downloadName;
+                            downloadBtn.title = `Download ${scene.title}`;
+                            downloadBtn.setAttribute('aria-disabled', 'false');
+                            downloadBtn.classList.remove('hidden');
+                        } else {
+                            downloadBtn.classList.add('hidden');
+                            downloadBtn.setAttribute('aria-disabled', 'true');
+                        }
+                    }
+
+                    if (processBtn) {
+                        if (config.processUrl && scene.downloadUrl) {
+                            processBtn.classList.remove('hidden');
+                            processBtn.disabled = false;
+                            processBtn.dataset.sceneIndex = String(index);
+                            processBtn.addEventListener('click', () => handleProcessScene(index, processBtn));
+                        } else {
+                            processBtn.classList.add('hidden');
+                            processBtn.disabled = true;
+                        }
+                    }
+
+                    if (previewBtn) {
+                        previewBtn.dataset.sceneIndex = String(index);
+                        previewBtn.addEventListener('click', () => handlePreview(index));
+                    }
+
+                    // Expose the raw scene payload so other actions (process imagery) can reuse it later.
+                    card.dataset.sceneIndex = String(index);
+
+                    return fragment;
+                };
+
+                /**
+                 * Refresh the list container with the latest set of scenes.
+                 */
+                const renderSceneList = () => {
+                    if (!elements.list) return;
+                    elements.list.innerHTML = '';
+                    state.scenes.forEach((scene, index) => {
+                        const cardFragment = renderSceneCard(scene, index);
+                        if (cardFragment) {
+                            elements.list.appendChild(cardFragment);
+                        }
+                    });
+                };
+
+                /**
+                 * Ensure a vector layer exists for drawing Sentinel footprints.
+                 */
+                const ensureFootprintLayer = () => {
+                    if (state.preview.footprintLayer) {
+                        return state.preview.footprintLayer;
+                    }
+                    const mapInstance = getMapInstance();
+                    if (
+                        !mapInstance ||
+                        !window.ol?.layer?.Vector ||
+                        !window.ol?.source?.Vector ||
+                        !window.ol?.style?.Style ||
+                        !window.ol?.style?.Stroke ||
+                        !window.ol?.style?.Fill
+                    ) {
+                        return null;
+                    }
+
+                    if (typeof mapInstance.addLayer !== 'function') {
+                        return null;
+                    }
+
+                    const layer = new ol.layer.Vector({
+                        source: new ol.source.Vector(),
+
+                        style: new ol.style.Style({
+                            stroke: new ol.style.Stroke({
+                                color: 'rgba(37, 99, 235, 0.9)',
+                                width: 2,
+                                lineDash: [4, 4]
+                            }),
+                            fill: new ol.style.Fill({
+                                color: 'rgba(37, 99, 235, 0.06)'
+                            }),
+                        }),
+                        properties: {
+                            name: 'sentinel-footprint'
+                        },
+                        visible: false,
+                    });
+
+                    if (typeof layer.setZIndex === 'function') {
+                        layer.setZIndex(config.previewFootprintZIndex);
+                    }
+
+                    mapInstance.addLayer(layer);
+                    state.preview.footprintLayer = layer;
+                    return layer;
+                };
+
+                /**
+                 * Show the Sentinel footprint geometry on the OpenLayers map.
+                 */
+                const showFootprint = (geometry) => {
+                    const mapInstance = getMapInstance();
+                    if (
+                        !mapInstance ||
+                        typeof mapInstance.getView !== 'function' ||
+                        !geometry ||
+                        !window.ol?.format?.GeoJSON
+                    ) {
+                        return false;
+                    }
+
+                    const layer = ensureFootprintLayer();
+                    if (!layer) {
+                        return false;
+                    }
+
+                    const source = layer.getSource();
+                    source.clear();
+
+                    const reader = new ol.format.GeoJSON();
+                    const feature = reader.readFeature({
+                        type: 'Feature',
+                        geometry
+                    }, {
+                        dataProjection: 'EPSG:4326',
+                        featureProjection: mapInstance.getView().getProjection(),
+                    });
+
+                    source.addFeature(feature);
+                    layer.setVisible(true);
+
+                    const extent = feature.getGeometry().getExtent();
+                    mapInstance.getView().fit(extent, {
+                        duration: 400,
+                        padding: [40, 40, 40, 40],
+                        maxZoom: 13
+                    });
+                    return true;
+                };
+
+                /**
+                 * Tear down the footprint overlay and optionally hide the layer.
+                 */
+                const clearFootprint = () => {
+                    if (!state.preview.footprintLayer) {
+                        return;
+                    }
+                    state.preview.footprintLayer.getSource().clear();
+                    state.preview.footprintLayer.setVisible(false);
+                };
+
+                /**
+                 * Create or update the WMS layer used for Sentinel preview imagery.
+                 */
+                const toggleWmsLayer = (enable) => {
+                    const mapInstance = getMapInstance();
+                    const hasMapSupport =
+                        mapInstance &&
+                        typeof mapInstance.addLayer === 'function' &&
+                        typeof mapInstance.getView === 'function';
+
+                    if (!enable) {
+                        if (state.preview.wmsLayer) {
+                            const currentSource = typeof state.preview.wmsLayer.getSource === 'function' ?
+                                state.preview.wmsLayer.getSource() :
+                                null;
+                            if (currentSource?.updateParams) {
+                                currentSource.updateParams({
+                                    TIME: undefined
+                                });
+                            }
+                            state.preview.wmsLayer.setVisible(false);
+                            state.preview.wmsLayer.setExtent(undefined);
+                        }
+                        state.preview.wmsActive = false;
+                        return true;
+                    }
+
+                    const scene = state.scenes[state.preview.activeSceneIndex ?? -1];
+                    if (!scene?.wms || !hasMapSupport || !window.ol?.layer?.Tile || !window.ol?.source?.TileWMS) {
+                        return false;
+                    }
+
+                    const bboxSource = Array.isArray(scene.bbox) && scene.bbox.length >= 4 ? scene.bbox : null;
+                    const bbox = bboxSource || bboxFromGeometry(scene.geometry || geometryFromBbox(scene.bbox || []));
+                    if (!bbox) {
+                        return false;
+                    }
+
+                    let extent = projectBboxToMapExtent(bbox, mapInstance);
+                    const view = mapInstance.getView();
+                    const projection = typeof view?.getProjection === 'function' ? view.getProjection() : null;
+                    const projectionCode = typeof projection?.getCode === 'function' ? projection.getCode() : 'EPSG:3857';
+
+                    if (!extent) {
+                        try {
+                            if (projection && window.ol?.proj?.transformExtent) {
+                                extent = window.ol.proj.transformExtent(bbox, 'EPSG:4326', projection);
+                            } else {
+                                extent = bbox;
+                            }
+                        } catch (error) {
+                            console.warn('Failed to transform Sentinel preview extent:', error);
+                            extent = bbox;
+                        }
+                    }
+
+                    const params = {
+                        LAYERS: scene.wms.layers,
+                        FORMAT: 'image/png',
+                        TRANSPARENT: 'true',
+                        TILED: 'true',
+                        SHOWLOGO: 'false',
+                        VERSION: '1.3.0',
+                    };
+
+                    if (projectionCode) {
+                        params.CRS = projectionCode;
+                        params.SRS = projectionCode;
+                    }
+
+                    if (scene.wms.time) {
+                        const candidate = new Date(scene.wms.time);
+                        if (!Number.isNaN(candidate.getTime())) {
+                            params.TIME = candidate.toISOString();
+                        } else if (typeof scene.wms.time === 'string') {
+                            params.TIME = scene.wms.time;
+                        }
+                    }
+
+                    const wmsUrl = withAccessToken(scene.wms.url);
+                    const tileGrid = extent ? createTileGridForExtent(extent, projection) : null;
+                    const source = new ol.source.TileWMS({
+                        url: wmsUrl,
+                        params,
+                        crossOrigin: 'anonymous',
+                        wrapX: false,
+                        tileGrid: tileGrid || undefined,
+                    });
+
+                    if (!state.preview.wmsLayer) {
+                        state.preview.wmsLayer = new ol.layer.Tile({
+                            opacity: 1,
+                            visible: false,
+                        });
+                        if (typeof state.preview.wmsLayer.setZIndex === 'function') {
+                            state.preview.wmsLayer.setZIndex(config.previewWmsZIndex);
+                        }
+                        mapInstance.addLayer(state.preview.wmsLayer);
+                    }
+
+                    state.preview.wmsLayer.setSource(source);
+                    if (extent) {
+                        state.preview.wmsLayer.setExtent(extent);
+                    } else {
+                        state.preview.wmsLayer.setExtent(undefined);
+                    }
+                    state.preview.wmsLayer.setVisible(true);
+                    state.preview.wmsActive = true;
+                    return true;
+                };
+
+                /**
+                 * Update the preview panel UI to reflect the selected scene.
+                 */
+                const updatePreviewPanel = (scene) => {
+                    if (!elements.previewPanel) {
+                        return;
+                    }
+
+                    elements.previewPanel.classList.remove('hidden');
+                    if (elements.previewTitle) {
+                        elements.previewTitle.textContent = scene.title;
+                    }
+                    if (elements.previewAcquired) {
+                        elements.previewAcquired.textContent = scene.datetime ?
+                            new Date(scene.datetime).toUTCString() :
+                            'Acquisition time unavailable';
+                    }
+
+                    if (scene.details) {
+                        if (elements.previewDetails) {
+                            elements.previewDetails.textContent = scene.details;
+                            elements.previewDetails.classList.remove('hidden');
+                        }
+                    } else {
+                        if (elements.previewDetails) {
+                            elements.previewDetails.textContent = '';
+                            elements.previewDetails.classList.add('hidden');
+                        }
+                    }
+
+                    if (scene.downloadUrl) {
+                        if (elements.previewDownloadBtn) {
+                            elements.previewDownloadBtn.href = scene.downloadUrl;
+                            elements.previewDownloadBtn.download = scene.downloadName;
+                            elements.previewDownloadBtn.setAttribute('aria-disabled', 'false');
+                            elements.previewDownloadBtn.classList.remove('hidden');
+                        }
+                    } else {
+                        if (elements.previewDownloadBtn) {
+                            elements.previewDownloadBtn.href = '#';
+                            elements.previewDownloadBtn.setAttribute('aria-disabled', 'true');
+                            elements.previewDownloadBtn.classList.add('hidden');
+                        }
+                    }
+
+                    if (elements.previewImageryBtn) {
+                        if (scene.wms) {
+                            elements.previewImageryBtn.classList.remove('hidden');
+                            elements.previewImageryBtn.removeAttribute('disabled');
+                            elements.previewImageryBtn.setAttribute('aria-disabled', 'false');
+                        } else {
+                            elements.previewImageryBtn.classList.add('hidden');
+                            elements.previewImageryBtn.setAttribute('aria-disabled', 'true');
+                        }
+                    }
+
+                    setPreviewStatus('Footprint highlighted on the map.');
+                    if (elements.previewImageryBtn) {
+                        elements.previewImageryBtn.dataset.sceneIndex = String(state.preview.activeSceneIndex ?? -1);
+                        elements.previewImageryBtn.setAttribute('aria-pressed', 'false');
+                    }
+                    if (elements.previewImageryLabel) {
+                        elements.previewImageryLabel.textContent = 'Preview Imagery';
+                    }
+                    if (elements.previewImageryIcon) {
+                        elements.previewImageryIcon.classList.remove('ri-eye-off-line');
+                        elements.previewImageryIcon.classList.add('ri-eye-line');
+                    }
+                };
+
+                /**
+                 * Handle user clicks on "Preview on Map" buttons within the card list.
+                 */
+                const handlePreview = (index) => {
+                    const scene = state.scenes[index];
+                    if (!scene) {
+                        return;
+                    }
+
+                    state.preview.activeSceneIndex = index;
+                    state.preview.wmsActive = false;
+
+                    const footprintDisplayed = showFootprint(scene.geometry);
+                    if (!footprintDisplayed) {
+                        setPreviewStatus('Unable to display footprint on the map.');
+                    }
+
+                    toggleWmsLayer(false);
+                    updatePreviewPanel(scene);
+                };
+
+                /**
+                 * Hide the preview panel and clean up any active map overlays.
+                 */
+                const clearPreviewPanel = () => {
+                    clearFootprint();
+                    toggleWmsLayer(false);
+                    state.preview.activeSceneIndex = null;
+                    state.preview.wmsActive = false;
+                    if (elements.previewPanel) {
+                        elements.previewPanel.classList.add('hidden');
+                    }
+                    setPreviewStatus('Awaiting preview selection.');
+                };
+
+                /**
+                 * Fetch Sentinel scenes using the current filter values.
+                 */
+                const loadCollections = async (options = {}) => {
+                    const triggeredByFilter = options.triggeredByFilter === true;
+                    const maxRecords = options.maxRecords ?
+                        Number(options.maxRecords) :
+                        triggeredByFilter ?
+                        config.filteredMaxRecords :
+                        config.defaultMaxRecords;
+
+                    if (state.requestController) {
+                        state.requestController.abort();
+                    }
+
+                    const controller = new AbortController();
+                    state.requestController = controller;
+
+                    setLoadingState(true);
+                    setStatus('Fetching Sentinel-2 scenes...', true);
+
+                    const params = buildQueryParams(maxRecords);
+                    state.lastQueryString = params.toString();
+                    const requestUrl = `${config.endpoint}?${state.lastQueryString}`;
+
+                    const headers = {
+                        Accept: 'application/json'
+                    };
+                    if (config.token) {
+                        headers.Authorization = `Bearer ${config.token}`;
+                    }
+
+                    try {
+                        const response = await fetch(requestUrl, {
+                            headers,
+                            signal: controller.signal
+                        });
+                        if (!response.ok) {
+                            throw new Error(`Unable to fetch Sentinel-2 scenes (HTTP ${response.status}).`);
+                        }
+
+                        const payload = await response.json();
+                        const features = Array.isArray(payload?.features) ? payload.features : [];
+                        const scenes = features
+                            .map(transformFeature)
+                            .filter(Boolean)
+                            .sort((a, b) => {
+                                const aTime = a.acquisitionDate?.getTime() || 0;
+                                const bTime = b.acquisitionDate?.getTime() || 0;
+                                return bTime - aTime;
+                            });
+
+                        state.scenes = scenes;
+                        state.loadedOnce = true;
+
+                        renderSceneList();
+
+                        if (scenes.length === 0) {
+                            setStatus('No Sentinel-2 scenes found for the selected filters.');
+                        } else {
+                            const suffix = triggeredByFilter ? 'filters' : 'default filters';
+                            setStatus(`Showing ${scenes.length} scene(s) based on ${suffix}.`);
+                        }
+                    } catch (error) {
+                        if (error.name === 'AbortError') {
+                            return;
+                        }
+                        console.error('Sentinel catalogue fetch failed:', error);
+                        state.scenes = [];
+                        renderSceneList();
+                        const fallbackMessage = error?.message || 'Failed to load Sentinel-2 scenes.';
+                        setStatus(fallbackMessage);
+                    } finally {
+                        if (state.requestController === controller) {
+                            state.requestController = null;
+                        }
+                        setLoadingState(false);
+                    }
+                };
+
+                /**
+                 * Reset filter inputs to their default values before refreshing the catalogue.
+                 */
+                const resetFilters = () => {
+                    if (elements.cloudInput) {
+                        elements.cloudInput.value = '40';
+                    }
+                    if (elements.productInput) {
+                        elements.productInput.value = 'S2MSI2A';
+                    }
+                    if (elements.latInput) {
+                        elements.latInput.value = '-1.24536';
+                    }
+                    if (elements.lonInput) {
+                        elements.lonInput.value = '114.54535';
+                    }
+                    if (elements.startInput) {
+                        elements.startInput.value = '';
+                    }
+                    if (elements.endInput) {
+                        elements.endInput.value = '';
+                    }
+                    ensureDefaultDates();
+                };
+
+                // Wire up event listeners for filter submission, reset, and preview actions.
+                elements.filterForm?.addEventListener('submit', (event) => {
+                    event.preventDefault();
+                    loadCollections({
+                        triggeredByFilter: true
+                    }).catch(() => {
+                        /* handled in loadCollections */
+                    });
+                });
+
+                elements.resetButton?.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    resetFilters();
+                    loadCollections({
+                        triggeredByFilter: false
+                    }).catch(() => {
+                        /* handled in loadCollections */
+                    });
+                });
+
+                elements.previewClearBtn?.addEventListener('click', () => {
+                    clearPreviewPanel();
+                });
+
+                elements.previewImageryBtn?.addEventListener('click', () => {
+                    if (state.preview.activeSceneIndex == null) {
+                        return;
+                    }
+                    const nextState = !state.preview.wmsActive;
+                    const toggled = toggleWmsLayer(nextState);
+                    if (!toggled) {
+                        setPreviewStatus('Imagery preview is unavailable for this scene.');
+                        return;
+                    }
+                    state.preview.wmsActive = nextState;
+                    elements.previewImageryBtn.setAttribute('aria-pressed', String(nextState));
+                    if (nextState) {
+                        setPreviewStatus('Sentinel WMS preview enabled on the map.');
+                        if (elements.previewImageryLabel) {
+                            elements.previewImageryLabel.textContent = 'Hide Imagery';
+                        }
+                        elements.previewImageryIcon?.classList.remove('ri-eye-line');
+                        elements.previewImageryIcon?.classList.add('ri-eye-off-line');
+                    } else {
+                        setPreviewStatus('Imagery preview hidden.');
+                        if (elements.previewImageryLabel) {
+                            elements.previewImageryLabel.textContent = 'Preview Imagery';
+                        }
+                        elements.previewImageryIcon?.classList.remove('ri-eye-off-line');
+                        elements.previewImageryIcon?.classList.add('ri-eye-line');
+                    }
+                });
+
+                const helpers = {
+                    withAccessToken,
+                    sanitizeFileName,
+                    resolveDownloadUrl,
+                };
+
+                // Expose the Sentinel module to other parts of the app while keeping internals encapsulated.
+                const sentinelModule = {
+                    get loadedOnce() {
+                        return state.loadedOnce;
+                    },
+                    loadCollections,
+                    clearPreview: clearPreviewPanel,
+                    resetFilters,
+                    helpers,
+                };
+
+                window.AppMap.sentinel = sentinelModule;
+                window.AppMap.sentinelHelpers = helpers;
+                document.dispatchEvent(new CustomEvent('app:sentinel:ready', {
+                    detail: sentinelModule
+                }));
+
+                // Bootstrap defaults and kick off the initial fetch.
+                ensureDefaultDates();
+                loadCollections().catch(() => {
+                    /* handled inside loadCollections */
+                });
+            })();
+        </script>
     @endpush
 
 </x-app-front-map-layout>
