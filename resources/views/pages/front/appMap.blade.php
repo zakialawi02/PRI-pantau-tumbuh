@@ -794,6 +794,11 @@
                     // Fallback Copernicus WMS endpoint & layer when the catalogue response omits one.
                     defaultWmsEndpoint: 'https://sh.dataspace.copernicus.eu/ogc/wms/1bd0fec1-0e52-427a-8e83-6e0dcd29a03a',
                     defaultWmsLayer: 'NATURAL-COLOR',
+                    // Enforce a minimum zoom level so Copernicus does not reject large imagery requests.
+                    previewMinWmsZoom: 10,
+                    // Layer stacking order: keep WMS below the highlighted footprint polygons.
+                    previewWmsZIndex: 10,
+                    previewFootprintZIndex: 50,
                 };
 
                 // Track loaded scenes, pending requests, and map preview state.
@@ -808,6 +813,8 @@
                         wmsLayer: null,
                         activeSceneIndex: null,
                         wmsActive: false,
+                        wmsSuppressedForZoom: false,
+                        wmsZoomListenerKey: null,
                     },
                 };
 
@@ -1411,6 +1418,10 @@
                         visible: false,
                     });
 
+                    if (typeof layer.setZIndex === 'function') {
+                        layer.setZIndex(config.previewFootprintZIndex);
+                    }
+
                     mapInstance.addLayer(layer);
                     state.preview.footprintLayer = layer;
                     return layer;
@@ -1464,6 +1475,67 @@
                 };
 
                 /**
+                 * Reflect the minimum zoom rule on the WMS overlay visibility and preview messaging.
+                 */
+                const updateWmsVisibilityForZoom = () => {
+                    if (!state.preview.wmsLayer) {
+                        state.preview.wmsSuppressedForZoom = false;
+                        return;
+                    }
+
+                    const mapInstance = getMapInstance();
+                    const view = typeof mapInstance?.getView === 'function' ? mapInstance.getView() : null;
+                    const zoom = typeof view?.getZoom === 'function' ? view.getZoom() : null;
+                    const threshold = Number.isFinite(config.previewMinWmsZoom) ? config.previewMinWmsZoom : null;
+                    const belowThreshold =
+                        threshold != null && Number.isFinite(zoom) ? zoom < threshold : false;
+
+                    state.preview.wmsSuppressedForZoom = belowThreshold;
+
+                    if (typeof state.preview.wmsLayer.setVisible === 'function') {
+                        state.preview.wmsLayer.setVisible(state.preview.wmsActive && !belowThreshold);
+                    }
+
+                    if (!state.preview.wmsActive) {
+                        return;
+                    }
+
+                    if (belowThreshold && threshold != null) {
+                        setPreviewStatus(`Zoom in to level ${threshold} or closer to display Sentinel imagery.`);
+                    } else {
+                        setPreviewStatus('Sentinel WMS preview enabled on the map.');
+                    }
+                };
+
+                /**
+                 * Attach a zoom listener so the preview layer follows the minimum zoom rule dynamically.
+                 */
+                const ensureWmsZoomListener = (view) => {
+                    if (!view || typeof view.on !== 'function' || state.preview.wmsZoomListenerKey) {
+                        return;
+                    }
+
+                    state.preview.wmsZoomListenerKey = view.on('change:resolution', () => {
+                        updateWmsVisibilityForZoom();
+                    });
+                };
+
+                /**
+                 * Remove the WMS zoom listener when the overlay is disabled to avoid leaks.
+                 */
+                const detachWmsZoomListener = () => {
+                    if (!state.preview.wmsZoomListenerKey) {
+                        return;
+                    }
+
+                    const unByKey = window.ol?.Observable?.unByKey;
+                    if (typeof unByKey === 'function') {
+                        unByKey(state.preview.wmsZoomListenerKey);
+                    }
+                    state.preview.wmsZoomListenerKey = null;
+                };
+
+                /**
                  * Create or update the WMS layer used for Sentinel preview imagery.
                  */
                 const toggleWmsLayer = (enable) => {
@@ -1486,6 +1558,9 @@
                         state.preview.wmsLayer = new ol.layer.Tile({
                             opacity: 0.7,
                         });
+                        if (typeof state.preview.wmsLayer.setZIndex === 'function') {
+                            state.preview.wmsLayer.setZIndex(config.previewWmsZIndex);
+                        }
                         mapInstance.addLayer(state.preview.wmsLayer);
                     }
 
@@ -1519,6 +1594,17 @@
                         const bboxSource = Array.isArray(scene.bbox) && scene.bbox.length >= 4 ? scene.bbox : null;
                         const bbox = bboxSource || bboxFromGeometry(scene.geometry || geometryFromBbox(scene.bbox || []));
                         const projectedExtent = projectBboxToMapExtent(bbox, mapInstance);
+                        if (
+                            view &&
+                            typeof view.getResolutionForZoom === 'function' &&
+                            Number.isFinite(config.previewMinWmsZoom)
+                        ) {
+                            const maxResolution = view.getResolutionForZoom(config.previewMinWmsZoom);
+                            if (Number.isFinite(maxResolution)) {
+                                state.preview.wmsLayer.setMaxResolution(maxResolution);
+                            }
+                        }
+                        ensureWmsZoomListener(view);
                         state.preview.wmsLayer.setExtent(projectedExtent || undefined);
 
                         state.preview.wmsLayer.setSource(new ol.source.TileWMS({
@@ -1526,8 +1612,8 @@
                             params,
                             crossOrigin: 'anonymous',
                         }));
-                        state.preview.wmsLayer.setVisible(true);
                         state.preview.wmsActive = true;
+                        updateWmsVisibilityForZoom();
                         return true;
                     }
 
@@ -1536,7 +1622,9 @@
                         state.preview.wmsLayer.setSource(null);
                         state.preview.wmsLayer.setExtent(undefined);
                     }
+                    detachWmsZoomListener();
                     state.preview.wmsActive = false;
+                    state.preview.wmsSuppressedForZoom = false;
                     return true;
                 };
 
@@ -1778,7 +1866,13 @@
                     state.preview.wmsActive = nextState;
                     elements.previewImageryBtn.setAttribute('aria-pressed', String(nextState));
                     if (nextState) {
-                        setPreviewStatus('Sentinel WMS preview enabled on the map.');
+                        if (state.preview.wmsSuppressedForZoom && Number.isFinite(config.previewMinWmsZoom)) {
+                            setPreviewStatus(
+                                `Zoom in to level ${config.previewMinWmsZoom} or closer to display Sentinel imagery.`,
+                            );
+                        } else {
+                            setPreviewStatus('Sentinel WMS preview enabled on the map.');
+                        }
                         if (elements.previewImageryLabel) {
                             elements.previewImageryLabel.textContent = 'Hide Imagery';
                         }
