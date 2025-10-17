@@ -984,6 +984,102 @@
                 };
 
                 /**
+                 * Recursively flatten coordinate arrays so we can derive bounds from arbitrary geometries.
+                 */
+                const collectCoordinatePairs = (input, acc = []) => {
+                    if (!Array.isArray(input)) {
+                        return acc;
+                    }
+                    if (
+                        input.length >= 2 &&
+                        typeof input[0] === 'number' &&
+                        typeof input[1] === 'number'
+                    ) {
+                        acc.push([input[0], input[1]]);
+                        return acc;
+                    }
+                    for (const value of input) {
+                        collectCoordinatePairs(value, acc);
+                    }
+                    return acc;
+                };
+
+                /**
+                 * Derive a geographic bounding box from any supported GeoJSON geometry.
+                 */
+                const bboxFromGeometry = (geometry) => {
+                    if (!geometry) {
+                        return null;
+                    }
+
+                    const geometries =
+                        geometry.type === 'GeometryCollection'
+                            ? geometry.geometries || []
+                            : [geometry];
+
+                    let minLon = Infinity;
+                    let minLat = Infinity;
+                    let maxLon = -Infinity;
+                    let maxLat = -Infinity;
+
+                    for (const geom of geometries) {
+                        const coords = collectCoordinatePairs(geom?.coordinates);
+                        for (const pair of coords) {
+                            const [lon, lat] = pair;
+                            if (!Number.isFinite(lon) || !Number.isFinite(lat)) {
+                                continue;
+                            }
+                            if (lon < minLon) minLon = lon;
+                            if (lat < minLat) minLat = lat;
+                            if (lon > maxLon) maxLon = lon;
+                            if (lat > maxLat) maxLat = lat;
+                        }
+                    }
+
+                    if (
+                        !Number.isFinite(minLon) ||
+                        !Number.isFinite(minLat) ||
+                        !Number.isFinite(maxLon) ||
+                        !Number.isFinite(maxLat)
+                    ) {
+                        return null;
+                    }
+
+                    return [minLon, minLat, maxLon, maxLat];
+                };
+
+                /**
+                 * Transform a geographic bounding box into the map's projection for clipping the WMS layer.
+                 */
+                const projectBboxToMapExtent = (bbox, mapInstance) => {
+                    if (!Array.isArray(bbox) || bbox.length < 4 || !mapInstance) {
+                        return null;
+                    }
+
+                    const view = typeof mapInstance.getView === 'function' ? mapInstance.getView() : null;
+                    const projection = view?.getProjection?.();
+                    if (!projection) {
+                        return null;
+                    }
+
+                    const code = typeof projection.getCode === 'function' ? projection.getCode() : null;
+                    if (code === 'EPSG:4326') {
+                        return bbox;
+                    }
+
+                    if (!window.ol?.proj?.transformExtent) {
+                        return null;
+                    }
+
+                    try {
+                        return window.ol.proj.transformExtent(bbox, 'EPSG:4326', projection);
+                    } catch (error) {
+                        console.warn('Failed to transform Sentinel extent:', error);
+                        return null;
+                    }
+                };
+
+                /**
                  * Extract a numeric cloud cover percentage from a feature if available.
                  */
                 const resolveCloudCover = (feature) => {
@@ -1168,6 +1264,9 @@
                     const thumbnailUrl = resolveThumbnailUrl(feature);
                     const wms = resolveWmsConfig(feature, acquisitionDate);
                     const geometry = feature.geometry || geometryFromBbox(feature.bbox || []);
+                    const bbox = Array.isArray(feature.bbox) && feature.bbox.length >= 4
+                        ? feature.bbox.slice(0, 4)
+                        : bboxFromGeometry(geometry);
 
                     const details = [];
                     if (mgrs) {
@@ -1192,6 +1291,7 @@
                         thumbnailUrl,
                         wms,
                         geometry,
+                        bbox,
                         raw: feature,
                     };
                 };
@@ -1395,10 +1495,34 @@
                             LAYERS: scene.wms.layers,
                             FORMAT: 'image/png',
                             TRANSPARENT: true,
+                            SHOWLOGO: false,
+                            LOGO: false,
+                            showlogo: false,
                         };
                         if (scene.wms.time) {
                             params.TIME = scene.wms.time;
                         }
+
+                        const geometryForMask = scene.geometry || geometryFromBbox(scene.bbox || []);
+                        if (geometryForMask && window.ol?.format?.GeoJSON && window.ol?.format?.WKT) {
+                            try {
+                                const geoReader = new window.ol.format.GeoJSON();
+                                const wktWriter = new window.ol.format.WKT();
+                                const geometryObj = geoReader.readGeometry(geometryForMask, {
+                                    dataProjection: 'EPSG:4326',
+                                    featureProjection: 'EPSG:4326',
+                                });
+                                const wkt = wktWriter.writeGeometry(geometryObj);
+                                params.GEOMETRY = wkt;
+                                params.geometry = wkt;
+                            } catch (error) {
+                                console.warn('Failed to encode Sentinel geometry for WMS mask:', error);
+                            }
+                        }
+
+                        const bbox = scene.bbox || bboxFromGeometry(geometryForMask);
+                        const projectedExtent = projectBboxToMapExtent(bbox, mapInstance);
+                        state.preview.wmsLayer.setExtent(projectedExtent || undefined);
 
                         state.preview.wmsLayer.setSource(new ol.source.TileWMS({
                             url: wmsUrl,
@@ -1413,6 +1537,7 @@
                     if (state.preview.wmsLayer) {
                         state.preview.wmsLayer.setVisible(false);
                         state.preview.wmsLayer.setSource(null);
+                        state.preview.wmsLayer.setExtent(undefined);
                     }
                     state.preview.wmsActive = false;
                     return true;
