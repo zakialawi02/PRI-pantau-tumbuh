@@ -2,6 +2,7 @@ import "./bootstrap";
 import "./variables";
 import "./preline-helpers";
 import "./navigation";
+import "./sentinel-collections";
 
 $.ajaxSetup({
     headers: {
