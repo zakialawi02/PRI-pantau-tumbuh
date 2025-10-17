@@ -364,51 +364,27 @@ function formatTimeETA(seconds) {
 window.formatTimeETA = formatTimeETA;
 
 // Function to check user credits
-async function checkUserCredits(requiredCredits = null) {
-    const response = await fetch("/user/credits/check", {
-        headers: {
-            Accept: "application/json",
-        },
-    });
-
-    if (!response.ok) {
-        throw new Error("Unable to check credit balance.");
-    }
-
+async function checkUserCredits() {
+    const response = await fetch("/user/credits/check");
     const result = await response.json();
 
     if (!result.success) {
-        throw new Error(result.message || "Failed to check credit balance.");
+        MyZkToast.error(result.message || "Failed to check credit balance.");
+        return false;
     }
 
-    const currentCredits = Number(result.credits ?? 0);
+    const currentCredits = parseFloat(formatNumber(result.credits, 2));
+    const requiredCredits =
+        parseFloat("{{ config('app.imagery_processing_cost') }}") || 10; // Default to 10 if not set
 
-    const fallbackSources = [
-        requiredCredits,
-        window.AppMap?.constants?.imageryProcessingCost,
-        window.AppMap?.uploader?.config?.imageryProcessingCost,
-    ];
-
-    const metaValue = document
-        .querySelector('meta[name="imagery-processing-cost"]')
-        ?.getAttribute("content");
-    if (metaValue !== undefined && metaValue !== null && metaValue !== "") {
-        fallbackSources.push(Number(metaValue));
-    }
-
-    fallbackSources.push(10);
-
-    const candidateValues = fallbackSources
-        .map((value) => Number(value))
-        .filter((value) => Number.isFinite(value) && value > 0);
-
-    const normalizedRequired = candidateValues.length ? Math.max(...candidateValues) : 0;
-
-    return {
-        hasCredits:
-            normalizedRequired === 0 ? true : currentCredits >= normalizedRequired,
-        currentCredits,
-        requiredCredits: normalizedRequired,
+    const data = {
+        hasCredits: currentCredits >= requiredCredits,
+        currentCredits: currentCredits,
+        requiredCredits: requiredCredits,
     };
+
+    return new Promise((resolve) => {
+        resolve(data);
+    });
 }
 window.checkUserCredits = checkUserCredits;
