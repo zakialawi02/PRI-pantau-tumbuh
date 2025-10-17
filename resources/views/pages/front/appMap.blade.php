@@ -1712,12 +1712,35 @@
                     clipState.lastSignature = null;
                 };
 
+                const resolveGeometryFeature = () => {
+                    if (window.geojsonFeature && typeof window.geojsonFeature === 'object') {
+                        return window.geojsonFeature;
+                    }
+
+                    const drawerEl = document.getElementById('drawerGeojson');
+                    if (!drawerEl) {
+                        return null;
+                    }
+
+                    const raw = drawerEl.textContent?.trim();
+                    if (!raw) {
+                        return null;
+                    }
+
+                    try {
+                        return JSON.parse(raw);
+                    } catch (error) {
+                        console.warn('Unable to parse drawer geometry.', error);
+                        return null;
+                    }
+                };
+
                 const syncGeometryFromGlobals = () => {
                     if (!clipModuleEl) {
                         return;
                     }
 
-                    const feature = window.geojsonFeature;
+                    const feature = resolveGeometryFeature();
                     if (!feature || typeof feature !== 'object') {
                         resetClipOutputs();
                         setClipStatus(clipConfig?.processUrl ? clipDefaults.status : 'Sign in to process Sentinel-2 clips.');
