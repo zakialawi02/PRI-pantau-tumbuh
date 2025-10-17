@@ -914,6 +914,8 @@ function addInteraction(type = "Polygon") {
                 formatNumber(geojsonArea / 10000) + " ha"; // Convert m² to hectares;
         }
 
+        updateSentinelClipSummary(geojsonArea, geojsonFeature);
+
         drawingEnd();
 
         // Show feature properties after drawing
@@ -1044,6 +1046,54 @@ $("#drawPolygonBtn").click(function (e) {
 });
 
 const clipDrawPolygonBtn = document.getElementById("clipDrawPolygonBtn");
+const sentinelClipModuleEl = document.getElementById("sentinelClipModule");
+const clipAreaOutputEl = document.getElementById("clipAreaOutput");
+const clipCreditOutputEl = document.getElementById("clipCreditOutput");
+const clipGeojsonOutputEl = document.getElementById("clipGeojsonOutput");
+
+function updateSentinelClipSummary(areaSquareMeters, geojsonData) {
+    if (!sentinelClipModuleEl || !Number.isFinite(areaSquareMeters)) {
+        return;
+    }
+
+    const areaInHectares = areaSquareMeters / 10000;
+    const locale = document?.documentElement?.lang;
+
+    if (clipAreaOutputEl) {
+        clipAreaOutputEl.textContent =
+            formatNumber(areaInHectares, 2, locale) + " ha";
+    }
+
+    const creditRate = Number.parseFloat(
+        sentinelClipModuleEl.dataset?.creditRate ?? "0"
+    );
+    const processingCost = Number.parseFloat(
+        sentinelClipModuleEl.dataset?.processingCost ?? "0"
+    );
+
+    if (clipCreditOutputEl) {
+        const estimatedCredits =
+            Math.max(
+                0,
+                areaInHectares * (Number.isFinite(creditRate) ? creditRate : 0)
+            ) + (Number.isFinite(processingCost) ? processingCost : 0);
+        clipCreditOutputEl.textContent =
+            formatNumber(estimatedCredits, 2, locale) + " credits";
+        sentinelClipModuleEl.dataset.estimatedCredits = String(estimatedCredits);
+    }
+
+    if (clipGeojsonOutputEl && geojsonData) {
+        clipGeojsonOutputEl.innerHTML = `<pre>${JSON.stringify(
+            geojsonData,
+            null,
+            2
+        )}</pre>`;
+        sentinelClipModuleEl.dataset.geojson = JSON.stringify(geojsonData);
+    }
+
+    sentinelClipModuleEl.dataset.areaHectares = String(areaInHectares);
+}
+
 if (clipDrawPolygonBtn) {
     clipDrawPolygonBtn.addEventListener("click", function () {
         if (drawingRunning) {

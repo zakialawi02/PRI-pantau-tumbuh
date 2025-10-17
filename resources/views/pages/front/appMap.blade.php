@@ -362,7 +362,6 @@
 
                             <div class="bg-background/60 border-foreground/10 space-y-3 rounded-lg border p-3 shadow-sm">
                                 <div class="flex flex-wrap items-center justify-between gap-2">
-                                    <h4 class="text-foreground text-lg font-semibold">Scene Selection</h4>
                                     <div class="border-foreground/20 inline-flex overflow-hidden rounded-full border" role="tablist">
                                         <button class="bg-primary px-3 py-1 text-xs font-semibold transition" id="clipModeAutoBtn" data-mode="auto" type="button" aria-pressed="true">Auto Mode</button>
                                         <button class="px-3 py-1 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-60" id="clipModeManualBtn" data-mode="manual" type="button" aria-pressed="false" aria-disabled="true" disabled>Manual Mode</button>
@@ -383,7 +382,6 @@
                             </div>
 
                             <div class="bg-background/60 border-foreground/10 space-y-2 rounded-lg border p-3 shadow-sm">
-                                <h4 class="text-foreground text-lg font-semibold">Selected Scene</h4>
                                 <div class="border-foreground/15 rounded-lg border p-3 text-sm" id="clipSelectionSummary">
                                     No scene selected yet. Use auto mode to pick one.
                                 </div>
