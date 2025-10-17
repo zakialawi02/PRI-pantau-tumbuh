@@ -984,133 +984,6 @@
                 };
 
                 /**
-                 * Ensure a linear ring is closed and numeric so WKT parsing succeeds.
-                 */
-                const normaliseRing = (ring) => {
-                    if (!Array.isArray(ring)) {
-                        return [];
-                    }
-
-                    const cleaned = [];
-                    for (const coordinate of ring) {
-                        if (!Array.isArray(coordinate) || coordinate.length < 2) {
-                            continue;
-                        }
-                        const lon = Number(coordinate[0]);
-                        const lat = Number(coordinate[1]);
-                        if (!Number.isFinite(lon) || !Number.isFinite(lat)) {
-                            continue;
-                        }
-                        cleaned.push([lon, lat]);
-                    }
-
-                    if (cleaned.length < 3) {
-                        return [];
-                    }
-
-                    const [firstLon, firstLat] = cleaned[0];
-                    const [lastLon, lastLat] = cleaned[cleaned.length - 1];
-                    if (Math.abs(firstLon - lastLon) > 1e-9 || Math.abs(firstLat - lastLat) > 1e-9) {
-                        cleaned.push([firstLon, firstLat]);
-                    }
-
-                    return cleaned;
-                };
-
-                /**
-                 * Convert a single polygon coordinate array into a WKT fragment.
-                 */
-                const polygonCoordsToWktFragment = (polygonCoords) => {
-                    if (!Array.isArray(polygonCoords)) {
-                        return null;
-                    }
-
-                    const rings = [];
-                    for (const ring of polygonCoords) {
-                        const closedRing = normaliseRing(ring);
-                        if (closedRing.length < 4) {
-                            continue;
-                        }
-                        const parts = closedRing.map(([lon, lat]) => `${lon.toFixed(6)} ${lat.toFixed(6)}`);
-                        rings.push(`(${parts.join(', ')})`);
-                    }
-
-                    if (!rings.length) {
-                        return null;
-                    }
-
-                    return `(${rings.join(', ')})`;
-                };
-
-                /**
-                 * Convert a GeoJSON geometry into 2D WKT understood by the Copernicus WMS service.
-                 */
-                const geometryToWkt2d = (geometry) => {
-                    if (!geometry) {
-                        return null;
-                    }
-
-                    const polygons = [];
-                    const collectPolygons = (geom) => {
-                        if (!geom) {
-                            return;
-                        }
-                        if (geom.type === 'Polygon') {
-                            polygons.push(geom.coordinates || []);
-                            return;
-                        }
-                        if (geom.type === 'MultiPolygon') {
-                            const coords = Array.isArray(geom.coordinates) ? geom.coordinates : [];
-                            for (const poly of coords) {
-                                polygons.push(poly);
-                            }
-                            return;
-                        }
-                        if (geom.type === 'GeometryCollection') {
-                            const geometries = Array.isArray(geom.geometries) ? geom.geometries : [];
-                            for (const inner of geometries) {
-                                collectPolygons(inner);
-                            }
-                        }
-                    };
-
-                    collectPolygons(geometry);
-
-                    const wktFragments = polygons
-                        .map((coords) => polygonCoordsToWktFragment(coords))
-                        .filter(Boolean);
-
-                    if (!wktFragments.length) {
-                        return null;
-                    }
-
-                    if (wktFragments.length === 1) {
-                        return `POLYGON${wktFragments[0]}`;
-                    }
-
-                    return `MULTIPOLYGON(${wktFragments.join(', ')})`;
-                };
-
-                /**
-                 * Convert a bounding box array into a POLYGON WKT string.
-                 */
-                const bboxToWkt = (bbox) => {
-                    if (!Array.isArray(bbox) || bbox.length < 4) {
-                        return null;
-                    }
-                    const [minLon, minLat, maxLon, maxLat] = bbox;
-                    const ring = [
-                        [minLon, minLat],
-                        [maxLon, minLat],
-                        [maxLon, maxLat],
-                        [minLon, maxLat],
-                        [minLon, minLat],
-                    ];
-                    const fragment = polygonCoordsToWktFragment([ring]);
-                    return fragment ? `POLYGON${fragment}` : null;
-                };
-
-                /**
                  * Recursively flatten coordinate arrays so we can derive bounds from arbitrary geometries.
                  */
                 const collectCoordinatePairs = (input, acc = []) => {
@@ -1627,49 +1500,24 @@
                             FORMAT: 'image/png',
                             TRANSPARENT: true,
                             SHOWLOGO: 'false',
-                            LOGO: 'false',
-                            showlogo: 'false',
                             // Force legacy WMS axis order (lon/lat) to avoid transparent tiles caused by CRS swaps.
                             VERSION: '1.1.1',
                             SRS: projectionCode,
                             CRS: projectionCode,
                             TILED: true,
                         };
+
                         if (scene.wms.time) {
                             const candidate = new Date(scene.wms.time);
                             if (!Number.isNaN(candidate.getTime())) {
-                                const utcDateParts = [
-                                    candidate.getUTCFullYear(),
-                                    candidate.getUTCMonth(),
-                                    candidate.getUTCDate(),
-                                ];
-                                const startOfDay = new Date(Date.UTC(utcDateParts[0], utcDateParts[1], utcDateParts[2], 0, 0, 0));
-                                const endOfDay = new Date(Date.UTC(utcDateParts[0], utcDateParts[1], utcDateParts[2], 23, 59, 59));
-                                const formatWmsDate = (date) => {
-                                    const year = date.getUTCFullYear();
-                                    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
-                                    const day = String(date.getUTCDate()).padStart(2, '0');
-                                    return `${year}-${month}-${day}`;
-                                };
-                                params.TIME = `${formatWmsDate(startOfDay)}/${formatWmsDate(endOfDay)}`;
-                            } else {
-                                const isoTime = String(scene.wms.time);
-                                params.TIME = `${isoTime}/${isoTime}`;
+                                params.TIME = candidate.toISOString();
+                            } else if (typeof scene.wms.time === 'string') {
+                                params.TIME = scene.wms.time;
                             }
                         }
 
-                        const geometryForMask = scene.geometry || geometryFromBbox(scene.bbox || []);
-                        const bbox = scene.bbox || bboxFromGeometry(geometryForMask);
-                        const geometryWkt = geometryToWkt2d(geometryForMask) || bboxToWkt(bbox);
-                        if (geometryWkt) {
-                            params.GEOMETRY = geometryWkt;
-                            params.GEOMETRY_CRS = 'EPSG:4326';
-                        }
-
-                        if (Number.isFinite(scene.cloudCover)) {
-                            params.MAXCC = Math.round(Math.max(0, Math.min(scene.cloudCover, 100)));
-                        }
-
+                        const bboxSource = Array.isArray(scene.bbox) && scene.bbox.length >= 4 ? scene.bbox : null;
+                        const bbox = bboxSource || bboxFromGeometry(scene.geometry || geometryFromBbox(scene.bbox || []));
                         const projectedExtent = projectBboxToMapExtent(bbox, mapInstance);
                         state.preview.wmsLayer.setExtent(projectedExtent || undefined);
 
