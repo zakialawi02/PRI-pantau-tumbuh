@@ -376,7 +376,8 @@
                                         <span>Find Best Scene</span>
                                     </x-button-primary>
                                     <div class="border-foreground/15 rounded-lg border border-dashed p-3 text-sm" id="clipAutoResult">
-                                        Draw an area and search to preview the recommended scene.
+                                        <p class="text-foreground/70" id="clipAutoStatus">Draw an area and search to preview the recommended scene.</p>
+                                        <div class="mt-3 space-y-2" id="clipSceneList"></div>
                                     </div>
                                 </div>
 
@@ -1008,6 +1009,583 @@
                 } else {
                     bootstrapPanels();
                 }
+            })();
+        </script>
+        <script>
+            (() => {
+                const moduleEl = document.getElementById('sentinelClipModule');
+                if (!moduleEl) {
+                    return;
+                }
+
+                const areaOutputEl = document.getElementById('clipAreaOutput');
+                const creditOutputEl = document.getElementById('clipCreditOutput');
+                const geojsonOutputEl = document.getElementById('clipGeojsonOutput');
+                const searchButton = document.getElementById('clipAutoSearchBtn');
+                const statusEl = document.getElementById('clipAutoStatus');
+                const sceneListEl = document.getElementById('clipSceneList');
+                const selectionSummaryEl = document.getElementById('clipSelectionSummary');
+                const processButton = document.getElementById('clipProcessBtn');
+                const processNoticeEl = document.getElementById('clipProcessNotice');
+                const fieldNameInput = document.getElementById('clipFieldName');
+
+                const creditRate = Number(moduleEl.dataset.creditRate ?? 0) || 0;
+                const processUrl = moduleEl.dataset.processUrl ?? '';
+                const catalogEndpoint = 'https://catalogue.dataspace.copernicus.eu/resto/api/collections/Sentinel2/search.json';
+
+                const state = {
+                    geometry: null,
+                    areaSqMeters: 0,
+                    areaHectares: 0,
+                    creditCost: 0,
+                    creditRate,
+                    selectedScene: null,
+                    scenes: [],
+                    searching: false,
+                    processUrl,
+                };
+
+                const formatNumberSafe = (value, digits = 2) => {
+                    if (typeof value !== 'number' || Number.isNaN(value)) {
+                        return '0';
+                    }
+                    if (typeof window.formatNumber === 'function') {
+                        return window.formatNumber(value, digits, document.documentElement.lang);
+                    }
+                    return value.toFixed(digits);
+                };
+
+                const formatDateSafe = (value) => {
+                    if (typeof window.formatReadableDate === 'function') {
+                        return window.formatReadableDate(value);
+                    }
+                    try {
+                        return new Date(value).toLocaleString();
+                    } catch (error) {
+                        return value || 'Unknown date';
+                    }
+                };
+
+                const formatCloud = (value) => {
+                    if (typeof window.AppMap?.sentinel?.formatCloudCover === 'function') {
+                        return window.AppMap.sentinel.formatCloudCover(value);
+                    }
+                    if (typeof value === 'number' && !Number.isNaN(value)) {
+                        return `${value.toFixed(1)}%`;
+                    }
+                    return 'N/A';
+                };
+
+                const sanitizeGeometry = (feature) => {
+                    if (!feature || typeof feature !== 'object') {
+                        return null;
+                    }
+                    if (feature.type === 'Feature') {
+                        return feature;
+                    }
+                    if (feature.type && feature.coordinates) {
+                        return { type: 'Feature', properties: {}, geometry: feature };
+                    }
+                    return null;
+                };
+
+                const updateGeojsonOutput = (feature) => {
+                    if (!geojsonOutputEl) return;
+                    if (!feature) {
+                        geojsonOutputEl.innerHTML = '<span class="text-foreground/60">Coordinates will appear here after drawing.</span>';
+                        return;
+                    }
+                    try {
+                        const geometry = feature.geometry ?? feature;
+                        geojsonOutputEl.textContent = JSON.stringify(geometry, null, 2);
+                    } catch (error) {
+                        geojsonOutputEl.textContent = 'Unable to display GeoJSON geometry.';
+                    }
+                };
+
+                const updateAreaDisplay = () => {
+                    const hasGeometry = Boolean(state.geometry?.geometry);
+                    const areaHa = hasGeometry ? state.areaHectares : 0;
+                    const creditCost = hasGeometry ? state.creditCost : 0;
+
+                    if (areaOutputEl) {
+                        areaOutputEl.textContent = areaHa > 0
+                            ? `${formatNumberSafe(areaHa, 2)} ha`
+                            : 'Draw a polygon to calculate the area.';
+                    }
+
+                    if (creditOutputEl) {
+                        creditOutputEl.textContent = creditCost > 0
+                            ? `${formatNumberSafe(creditCost, 2)} credit${creditCost >= 2 ? 's' : ''}`
+                            : '–';
+                    }
+                };
+
+                const updateProcessAvailability = () => {
+                    if (!processButton || !processNoticeEl) {
+                        return;
+                    }
+
+                    if (!state.processUrl) {
+                        processButton.disabled = true;
+                        processButton.setAttribute('aria-disabled', 'true');
+                        processNoticeEl.textContent = 'Log in to process Sentinel imagery.';
+                        return;
+                    }
+
+                    const ready = Boolean(state.geometry && state.selectedScene && state.creditCost > 0);
+                    processButton.disabled = !ready;
+                    processButton.setAttribute('aria-disabled', ready ? 'false' : 'true');
+                    processNoticeEl.textContent = ready
+                        ? `Processing will run in the background and deduct approximately ${formatNumberSafe(state.creditCost, 2)} credits.`
+                        : 'Draw an area and select a scene to enable processing.';
+                };
+
+                const computeAreaFromFeature = (feature) => {
+                    if (!feature?.geometry) {
+                        return 0;
+                    }
+                    if (typeof window.geojsonArea === 'number' && !Number.isNaN(window.geojsonArea)) {
+                        return Math.max(window.geojsonArea, 0);
+                    }
+                    return 0;
+                };
+
+                const refreshGeometry = () => {
+                    const feature = sanitizeGeometry(window.geojsonFeature);
+                    state.geometry = feature;
+                    state.areaSqMeters = feature ? computeAreaFromFeature(feature) : 0;
+                    state.areaHectares = state.areaSqMeters > 0 ? state.areaSqMeters / 10000 : 0;
+                    state.creditCost = state.areaHectares > 0 ? state.areaHectares * state.creditRate : 0;
+
+                    if (!feature) {
+                        state.scenes = [];
+                        state.selectedScene = null;
+                        if (sceneListEl) {
+                            sceneListEl.innerHTML = '';
+                        }
+                        if (statusEl) {
+                            statusEl.textContent = 'Draw an area and search to preview the recommended scene.';
+                        }
+                    }
+
+                    updateGeojsonOutput(feature);
+                    updateAreaDisplay();
+
+                    if (searchButton) {
+                        searchButton.disabled = !feature;
+                    }
+
+                    updateProcessAvailability();
+                    updateSelectionSummary();
+                };
+
+                window.calculateTotalPrice = () => {
+                    refreshGeometry();
+                };
+
+                const getSceneDate = (props = {}) => props.datetime
+                    || props.completionDate
+                    || props.startDate
+                    || props.endPosition
+                    || props.beginPosition
+                    || props.startTimeFromAscendingNode
+                    || props.date
+                    || null;
+
+                const getSceneCollection = (props = {}) => props.collection
+                    || props.productType
+                    || props.processingLevel
+                    || 'S2MSI2A';
+
+                const getSceneCloud = (props = {}) => props.cloudCover
+                    ?? props['cloudcoverpercentage']
+                    ?? props['cloudCoverageAssessment']
+                    ?? props['eo:cloud_cover']
+                    ?? null;
+
+                const getSceneTile = (props = {}) => props.mgrsId
+                    || props.tileId
+                    || props.MGRS
+                    || null;
+
+                const renderSceneList = () => {
+                    if (!sceneListEl) return;
+                    sceneListEl.innerHTML = '';
+
+                    if (!Array.isArray(state.scenes) || !state.scenes.length) {
+                        return;
+                    }
+
+                    const render = window.AppMap?.sentinel?.renderCard;
+                    if (typeof render !== 'function') {
+                        state.scenes.forEach((feature) => {
+                            const props = feature?.properties ?? {};
+                            const item = document.createElement('div');
+                            item.className = 'border-foreground/20 rounded-lg border p-2';
+                            item.textContent = props.title || props.productIdentifier || feature?.id || 'Sentinel-2 Scene';
+                            sceneListEl.appendChild(item);
+                        });
+                        return;
+                    }
+
+                    state.scenes.forEach((feature) => {
+                        const fragment = render(feature, {
+                            download: { hidden: true },
+                            process: {
+                                label: 'Select Scene',
+                                onClick: (context) => {
+                                    context?.event?.preventDefault();
+                                    selectScene(feature);
+                                },
+                            },
+                            postRender: ({ root }) => {
+                                if (!root) {
+                                    return;
+                                }
+                                root.dataset.sceneId = feature?.id ?? '';
+                                root.classList.add('cursor-pointer');
+                                root.addEventListener('click', () => selectScene(feature));
+                                if (state.selectedScene && (feature?.id === state.selectedScene?.id)) {
+                                    root.classList.add('ring-2', 'ring-primary', 'border-primary/50');
+                                }
+                            },
+                        });
+
+                        if (fragment) {
+                            sceneListEl.appendChild(fragment);
+                        }
+                    });
+                };
+
+                const markSelectedScene = () => {
+                    if (!sceneListEl) return;
+                    const selectedId = state.selectedScene?.id ?? '';
+                    sceneListEl.querySelectorAll('[data-scene-id]').forEach((node) => {
+                        if (!(node instanceof HTMLElement)) return;
+                        if (node.dataset.sceneId === selectedId) {
+                            node.classList.add('ring-2', 'ring-primary', 'border-primary/50');
+                        } else {
+                            node.classList.remove('ring-2', 'ring-primary', 'border-primary/50');
+                        }
+                    });
+                };
+
+                const updateSelectionSummary = () => {
+                    if (!selectionSummaryEl) return;
+                    const scene = state.selectedScene;
+
+                    if (!scene) {
+                        selectionSummaryEl.innerHTML = 'No scene selected yet. Use auto mode to pick one.';
+                        markSelectedScene();
+                        updateProcessAvailability();
+                        return;
+                    }
+
+                    const props = scene.properties ?? {};
+                    const title = props.title || props.productIdentifier || scene.id || 'Sentinel-2 Scene';
+                    const acquisition = getSceneDate(props);
+                    const tile = getSceneTile(props);
+                    const cloud = getSceneCloud(props);
+
+                    const lines = [
+                        `<strong>Scene:</strong> ${title}`,
+                        `<strong>Acquired:</strong> ${formatDateSafe(acquisition)}`,
+                        `<strong>Tile:</strong> ${tile ?? '–'}`,
+                        `<strong>Cloud cover:</strong> ${formatCloud(Number(cloud))}`,
+                        `<strong>Area:</strong> ${state.areaHectares > 0 ? `${formatNumberSafe(state.areaHectares, 2)} ha` : '–'}`,
+                        `<strong>Credits:</strong> ${state.creditCost > 0 ? formatNumberSafe(state.creditCost, 2) : '–'}`,
+                    ];
+
+                    selectionSummaryEl.innerHTML = `<div class="space-y-1">${lines.map((line) => `<p>${line}</p>`).join('')}</div>`;
+                    markSelectedScene();
+                    updateProcessAvailability();
+                };
+
+                const selectScene = (scene) => {
+                    state.selectedScene = scene || null;
+                    updateSelectionSummary();
+                };
+
+                const computeBbox = (feature) => {
+                    const geometry = feature?.geometry ?? feature;
+                    if (!geometry || !Array.isArray(geometry.coordinates)) {
+                        return null;
+                    }
+
+                    const flatten = (coords) => coords.reduce((acc, item) => {
+                        if (Array.isArray(item[0])) {
+                            acc.push(...flatten(item));
+                        } else if (item.length >= 2) {
+                            acc.push(item);
+                        }
+                        return acc;
+                    }, []);
+
+                    const points = flatten(geometry.coordinates);
+                    if (!points.length) {
+                        return null;
+                    }
+
+                    const lons = points.map((point) => Number(point[0])).filter((value) => Number.isFinite(value));
+                    const lats = points.map((point) => Number(point[1])).filter((value) => Number.isFinite(value));
+
+                    if (!lons.length || !lats.length) {
+                        return null;
+                    }
+
+                    return [
+                        Math.min(...lons),
+                        Math.min(...lats),
+                        Math.max(...lons),
+                        Math.max(...lats),
+                    ];
+                };
+
+                const geometryToWkt = (geometry) => {
+                    if (!geometry || !geometry.type) {
+                        return null;
+                    }
+
+                    const formatRing = (ring) => ring
+                        .map((coord) => `${coord[0]} ${coord[1]}`)
+                        .join(', ');
+
+                    if (geometry.type === 'Polygon') {
+                        const rings = geometry.coordinates
+                            .map((ring) => `(${formatRing(ring)})`)
+                            .join(', ');
+                        return `POLYGON(${rings})`;
+                    }
+
+                    if (geometry.type === 'MultiPolygon') {
+                        const polygons = geometry.coordinates
+                            .map((poly) => `(${poly.map((ring) => `(${formatRing(ring)})`).join(', ')})`)
+                            .join(', ');
+                        return `MULTIPOLYGON(${polygons})`;
+                    }
+
+                    return null;
+                };
+
+                const fetchCatalogue = async (url) => {
+                    const attempt = async (targetUrl) => {
+                        const response = await fetch(targetUrl);
+                        if (!response.ok) {
+                            throw new Error(`Status ${response.status}`);
+                        }
+                        return response.json();
+                    };
+
+                    try {
+                        return await attempt(url);
+                    } catch (error) {
+                        const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+                        return await attempt(proxyUrl);
+                    }
+                };
+
+                const searchScenes = async () => {
+                    if (!state.geometry?.geometry) {
+                        window.MyZkToast?.warning?.('Draw a polygon before searching Sentinel scenes.');
+                        return;
+                    }
+
+                    if (state.searching) {
+                        return;
+                    }
+
+                    state.searching = true;
+                    if (searchButton) {
+                        searchButton.disabled = true;
+                        searchButton.dataset.loading = 'true';
+                        searchButton.innerHTML = '<i class="ri-loader-4-line animate-spin"></i> Searching...';
+                    }
+
+                    if (statusEl) {
+                        statusEl.textContent = 'Searching Sentinel-2 catalogue...';
+                    }
+                    if (sceneListEl) {
+                        sceneListEl.innerHTML = '';
+                    }
+
+                    try {
+                        const geometry = state.geometry.geometry ?? state.geometry;
+                        const bbox = computeBbox(geometry);
+                        const wkt = geometryToWkt(geometry);
+
+                        const params = new URLSearchParams({
+                            maxRecords: '6',
+                            sortParam: 'startDate',
+                            sortOrder: 'descending',
+                            productType: getSceneCollection({}),
+                            status: 'all',
+                            cloudCover: '[0,60]',
+                        });
+
+                        if (bbox) {
+                            params.set('bbox', bbox.join(','));
+                        }
+
+                        if (wkt) {
+                            params.set('geometry', wkt);
+                            params.set('relation', 'Intersects');
+                        }
+
+                        const centroid = bbox
+                            ? [
+                                (Number(bbox[1]) + Number(bbox[3])) / 2,
+                                (Number(bbox[0]) + Number(bbox[2])) / 2,
+                            ]
+                            : null;
+
+                        if (centroid && Number.isFinite(centroid[0]) && Number.isFinite(centroid[1])) {
+                            params.set('lat', centroid[0].toFixed(6));
+                            params.set('lon', centroid[1].toFixed(6));
+                        }
+
+                        const requestUrl = `${catalogEndpoint}?${params.toString()}`;
+                        const response = await fetchCatalogue(requestUrl);
+                        const features = Array.isArray(response?.features) ? response.features : [];
+
+                        if (!features.length) {
+                            state.scenes = [];
+                            state.selectedScene = null;
+                            updateSelectionSummary();
+                            if (statusEl) {
+                                statusEl.textContent = 'No Sentinel-2 scenes were found for the selected area.';
+                            }
+                            return;
+                        }
+
+                        features.sort((a, b) => {
+                            const dateA = new Date(getSceneDate(a?.properties ?? {}));
+                            const dateB = new Date(getSceneDate(b?.properties ?? {}));
+                            return dateB.getTime() - dateA.getTime();
+                        });
+
+                        state.scenes = features;
+                        state.selectedScene = features[0];
+                        renderSceneList();
+                        updateSelectionSummary();
+
+                        if (statusEl) {
+                            statusEl.textContent = `Found ${features.length} scene${features.length > 1 ? 's' : ''}. Latest scene selected automatically.`;
+                        }
+                    } catch (error) {
+                        console.error('Failed to fetch Sentinel scenes for clipping.', error);
+                        if (statusEl) {
+                            statusEl.textContent = error?.message || 'Unable to search for Sentinel scenes right now.';
+                        }
+                        window.MyZkToast?.error?.('Unable to search for Sentinel scenes. Please try again later.');
+                    } finally {
+                        state.searching = false;
+                        if (searchButton) {
+                            searchButton.disabled = !state.geometry;
+                            searchButton.dataset.loading = 'false';
+                            searchButton.innerHTML = '<i class="ri-magic-line"></i> <span>Find Best Scene</span>';
+                        }
+                    }
+                };
+
+                const extractScenePayload = (scene) => {
+                    const props = scene?.properties ?? {};
+                    return {
+                        id: scene?.id ?? null,
+                        product_id: props.productIdentifier || scene?.id || null,
+                        title: props.title || props.productIdentifier || scene?.id || null,
+                        collection: getSceneCollection(props),
+                        acquired_at: getSceneDate(props),
+                        cloud_cover: getSceneCloud(props),
+                        tile: getSceneTile(props),
+                        geometry: scene?.geometry ?? null,
+                    };
+                };
+
+                const queueClipProcessing = async () => {
+                    if (!processButton) {
+                        return;
+                    }
+
+                    if (!state.processUrl) {
+                        window.MyZkToast?.error?.('Processing endpoint is unavailable. Please log in and try again.');
+                        return;
+                    }
+
+                    if (!state.geometry || !state.selectedScene) {
+                        window.MyZkToast?.warning?.('Draw an area and select a scene before processing.');
+                        return;
+                    }
+
+                    const payload = {
+                        field_name: fieldNameInput?.value?.trim() || null,
+                        geometry: state.geometry,
+                        area_hectares: Number(state.areaHectares.toFixed(4)),
+                        credit_cost: Number(state.creditCost.toFixed(2)),
+                        scene: extractScenePayload(state.selectedScene),
+                    };
+
+                    const buttonHtml = processButton.innerHTML;
+                    processButton.disabled = true;
+                    processButton.setAttribute('aria-disabled', 'true');
+                    processButton.innerHTML = '<i class="ri-loader-4-line animate-spin"></i> Processing...';
+
+                    try {
+                        const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+                        const response = await fetch(state.processUrl, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/json',
+                                'X-CSRF-TOKEN': csrf,
+                            },
+                            body: JSON.stringify(payload),
+                        });
+
+                        const result = await response.json().catch(() => ({}));
+
+                        if (response.ok) {
+                            $('#current-myCredits')?.text(formatNumberSafe(result?.data?.current_credits ?? 0, 2));
+                            window.MyZkToast?.success?.(result?.message || 'Sentinel imagery queued for clipping.');
+                            if (typeof window.AppMap?.uploader?.reload === 'function') {
+                                window.AppMap.uploader.reload();
+                            }
+                        } else {
+                            const message = result?.message || 'Failed to queue Sentinel clip processing.';
+                            window.MyZkToast?.error?.(message);
+                        }
+                    } catch (error) {
+                        console.error('Failed to queue Sentinel clip processing.', error);
+                        window.MyZkToast?.error?.('Unexpected error while queueing Sentinel clip processing.');
+                    } finally {
+                        processButton.disabled = false;
+                        processButton.setAttribute('aria-disabled', 'false');
+                        processButton.innerHTML = buttonHtml;
+                    }
+                };
+
+                searchButton?.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    searchScenes();
+                });
+
+                processButton?.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    queueClipProcessing();
+                });
+
+                fieldNameInput?.addEventListener('input', () => {
+                    updateSelectionSummary();
+                });
+
+                document.addEventListener('app:sentinel:ready', () => {
+                    if (state.scenes.length) {
+                        renderSceneList();
+                        updateSelectionSummary();
+                    }
+                });
+
+                refreshGeometry();
             })();
         </script>
     @endpush
@@ -1932,6 +2510,10 @@
 
                 ensureAppNamespace();
                 window.AppMap.sentinel.resolveDownloadUrl = resolveDownloadUrl;
+                window.AppMap.sentinel.renderCard = renderCard;
+                window.AppMap.sentinel.formatCloudCover = formatCloudCover;
+                window.AppMap.sentinel.applyTokenToUrl = applyTokenToUrl;
+                window.AppMap.sentinel.buildDownloadName = buildDownloadName;
 
                 // Generate a filesystem-friendly filename for Sentinel downloads.
                 const buildDownloadName = (primary, fallback) => {
@@ -2895,26 +3477,33 @@
                 };
 
                 // Create a UI card summarizing a single Sentinel catalogue feature.
-                const renderCard = (feature) => {
+                const renderCard = (feature, options = {}) => {
                     if (!templateEl?.content) return null;
-                    const clone = templateEl.content.cloneNode(true);
+
+                    const fragment = templateEl.content.cloneNode(true);
+                    const rootElement = fragment.querySelector('.sentinel-card') ?? fragment.firstElementChild ?? null;
                     const props = feature?.properties ?? {};
                     const links = feature?.links ?? [];
                     const assets = feature?.assets ?? {};
+                    const opts = typeof options === 'object' && options !== null ? options : {};
+                    const processOptions = opts.process ?? {};
+                    const downloadOptions = opts.download ?? {};
+                    const previewOptions = opts.preview ?? {};
+                    const postRender = typeof opts.postRender === 'function' ? opts.postRender : null;
 
-                    const titleEl = clone.querySelector('[data-sentinel-title]');
-                    const productEl = clone.querySelector('[data-sentinel-product]');
-                    const datetimeEl = clone.querySelector('[data-sentinel-datetime]');
-                    const detailEl = clone.querySelector('[data-sentinel-details]');
-                    const previewButton = clone.querySelector('[data-sentinel-preview]');
-                    const downloadButton = clone.querySelector('[data-sentinel-download]');
-                    const processButton = clone.querySelector('[data-sentinel-process]');
-                    const thumbnailImg = clone.querySelector('[data-sentinel-thumbnail]');
-                    const thumbnailPlaceholder = clone.querySelector('[data-sentinel-placeholder]');
+                    const titleEl = fragment.querySelector('[data-sentinel-title]');
+                    const productEl = fragment.querySelector('[data-sentinel-product]');
+                    const datetimeEl = fragment.querySelector('[data-sentinel-datetime]');
+                    const detailEl = fragment.querySelector('[data-sentinel-details]');
+                    const previewButton = fragment.querySelector('[data-sentinel-preview]');
+                    const downloadButton = fragment.querySelector('[data-sentinel-download]');
+                    const processButton = fragment.querySelector('[data-sentinel-process]');
+                    const thumbnailImg = fragment.querySelector('[data-sentinel-thumbnail]');
+                    const thumbnailPlaceholder = fragment.querySelector('[data-sentinel-placeholder]');
 
-                    const shortenText = typeof window?.shortenFilename === 'function' ?
-                        (value, max = 40) => window.shortenFilename(String(value), max) :
-                        (value) => String(value ?? '');
+                    const shortenText = typeof window?.shortenFilename === 'function'
+                        ? (value, max = 40) => window.shortenFilename(String(value), max)
+                        : (value) => String(value ?? '');
 
                     const productId = props.productIdentifier || props.title || feature?.id || 'Sentinel-2 Product';
                     const acquisitionDate = props.completionDate || props.startDate || props.endPosition || props.beginPosition || props.startTimeFromAscendingNode;
@@ -2945,18 +3534,25 @@
                         detailEl.textContent = detailParts.length ? detailParts.join(' • ') : 'No additional metadata available';
                     }
 
-                    const quicklookUrl = props.thumbnail ||
-                        props.quicklook ||
-                        assets?.thumbnail?.href ||
-                        assets?.overview?.href ||
-                        links.find((link) => link.rel === 'preview')?.href;
+                    const quicklookUrl = props.thumbnail
+                        || props.quicklook
+                        || assets?.thumbnail?.href
+                        || assets?.overview?.href
+                        || links.find((link) => link.rel === 'preview')?.href;
 
                     const downloadUrl = resolveDownloadUrl(feature);
                     const downloadUrlWithToken = applyTokenToUrl(downloadUrl);
                     const downloadFilename = buildDownloadName(productId, titleText);
 
                     if (downloadButton) {
-                        if (downloadUrl && downloadUrlWithToken && hasToken()) {
+                        if (downloadOptions.hidden) {
+                            downloadButton.classList.add('hidden');
+                            downloadButton.setAttribute('href', '#');
+                            downloadButton.setAttribute('aria-disabled', 'true');
+                            downloadButton.removeAttribute('download');
+                            delete downloadButton.dataset.downloadBase;
+                            downloadButton.tabIndex = -1;
+                        } else if (downloadUrl && downloadUrlWithToken && hasToken()) {
                             downloadButton.classList.remove('hidden');
                             downloadButton.setAttribute('href', downloadUrlWithToken);
                             downloadButton.setAttribute('aria-disabled', 'false');
@@ -2974,43 +3570,92 @@
                         }
                     }
 
+                    const buildProcessPayload = () => ({
+                        button: processButton,
+                        feature,
+                        title: titleText,
+                        productId,
+                        collection: props.collection || null,
+                        acquisition: acquisitionDate,
+                        downloadUrl: downloadUrlWithToken,
+                        downloadBase: downloadUrl,
+                        downloadFilename,
+                    });
+
                     if (processButton) {
-                        processButton.addEventListener('click', () => {
-                            const buttonClone = processButton.cloneNode(true);
-                            processButton.disabled = true;
-                            processButton.innerHTML = '<i class="ri-loader-4-line animate-spin"></i> Processing...';
-                            // Check user credits before proceeding
-                            checkUserCredits().then(res => {
-                                $('#current-myCredits').text(formatNumber(res.currentCredits, 2));
-                                // Show confirmation modal before starting upload
-                                ZkPopAlert.show({
-                                    message: `${res.hasCredits ? `This action will cost ${res.requiredCredits} credit points for processing imagery. Do you want to proceed?` : `Insufficient credit points for processing. You need ${res.requiredCredits} credits. You can still upload the file, but processing will be skipped. Please purchase more credits to continue processing.`}`,
-                                    icon: '<i class="ri-cpu-line text-2xl text-primary"></i>',
-                                    confirmClass: "focus:ring-primary/80 rounded-md text-sm px-2.5 py-1.5 bg-primary text-primary-foreground border border-primary hover:bg-primary/80 focus:outline-none focus:ring-primary",
-                                    confirmText: "Yes, Continue",
-                                    cancelText: "Cancel",
-                                    onConfirm: () => {
-                                        queueSentinelProcessing({
-                                            button: processButton,
-                                            feature,
-                                            title: titleText,
-                                            productId,
-                                            collection: props.collection || null,
-                                            acquisition: acquisitionDate,
-                                            downloadUrl: downloadUrlWithToken,
-                                            downloadBase: downloadUrl,
-                                            downloadFilename
+                        const labelSpan = processButton.querySelector('span');
+                        if (processOptions.label && labelSpan) {
+                            labelSpan.textContent = processOptions.label;
+                        }
+
+                        if (processOptions.hidden) {
+                            processButton.classList.add('hidden');
+                            processButton.setAttribute('aria-hidden', 'true');
+                        } else {
+                            processButton.classList.remove('hidden');
+                            processButton.setAttribute('aria-hidden', 'false');
+                            processButton.disabled = false;
+
+                            const defaultHandler = () => {
+                                if (!processButton) {
+                                    return;
+                                }
+
+                                const originalHtml = processButton.innerHTML;
+                                processButton.disabled = true;
+                                processButton.setAttribute('aria-disabled', 'true');
+                                processButton.innerHTML = '<i class="ri-loader-4-line animate-spin"></i> Processing...';
+
+                                checkUserCredits()
+                                    .then((res) => {
+                                        $('#current-myCredits')?.text(formatNumber(res.currentCredits, 2));
+                                        ZkPopAlert.show({
+                                            message: `${res.hasCredits ? `This action will cost ${res.requiredCredits} credit points for processing imagery. Do you want to proceed?` : `Insufficient credit points for processing. You need ${res.requiredCredits} credits. You can still upload the file, but processing will be skipped. Please purchase more credits to continue processing.`}`,
+                                            icon: '<i class="ri-cpu-line text-2xl text-primary"></i>',
+                                            confirmClass: "focus:ring-primary/80 rounded-md text-sm px-2.5 py-1.5 bg-primary text-primary-foreground border border-primary hover:bg-primary/80 focus:outline-none focus:ring-primary",
+                                            confirmText: 'Yes, Continue',
+                                            cancelText: 'Cancel',
+                                            onConfirm: () => {
+                                                const payload = buildProcessPayload();
+                                                queueSentinelProcessing(payload);
+                                            },
                                         });
-                                    }
-                                });
-                            }).catch(error => {
-                                // Restore ready state on error
-                                MyZkToast.error('Failed to check credit balance: ' + error.message);
-                            }).finally(() => {
-                                processButton.disabled = false;
-                                processButton.innerHTML = buttonClone.innerHTML;
+                                    })
+                                    .catch((error) => {
+                                        const message = error?.message ?? 'Unknown error';
+                                        window.MyZkToast?.error?.('Failed to check credit balance: ' + message);
+                                    })
+                                    .finally(() => {
+                                        processButton.disabled = false;
+                                        processButton.setAttribute('aria-disabled', 'false');
+                                        processButton.innerHTML = originalHtml;
+                                    });
+                            };
+
+                            processButton.addEventListener('click', (event) => {
+                                event.preventDefault();
+                                const payload = buildProcessPayload();
+
+                                if (typeof processOptions.onClick === 'function') {
+                                    processOptions.onClick({
+                                        event,
+                                        button: processButton,
+                                        feature,
+                                        props,
+                                        payload,
+                                        defaultHandler,
+                                        metadata: {
+                                            productId,
+                                            acquisitionDate,
+                                            cloudCover,
+                                        },
+                                        root: rootElement,
+                                    });
+                                } else {
+                                    defaultHandler();
+                                }
                             });
-                        });
+                        }
                     }
 
                     if (thumbnailImg) {
@@ -3026,12 +3671,8 @@
                             };
                             thumbnailImg.classList.add('hidden');
                             thumbnailPlaceholder?.classList.remove('hidden');
-                            thumbnailImg.addEventListener('error', handleError, {
-                                once: true
-                            });
-                            thumbnailImg.addEventListener('load', handleLoad, {
-                                once: true
-                            });
+                            thumbnailImg.addEventListener('error', handleError, { once: true });
+                            thumbnailImg.addEventListener('load', handleLoad, { once: true });
                             thumbnailImg.src = quicklookUrl;
                             thumbnailImg.alt = `Quicklook preview for ${productText}`;
                         } else {
@@ -3045,10 +3686,15 @@
                     const hasCoverage = Boolean(feature?.geometry) || (Array.isArray(bboxArray) && bboxArray.length === 4);
 
                     if (previewButton) {
-                        if (hasCoverage || quicklookUrl) {
+                        if (previewOptions.hidden) {
+                            previewButton.classList.add('hidden');
+                            previewButton.disabled = true;
+                        } else if (hasCoverage || quicklookUrl) {
                             previewButton.disabled = false;
                             previewButton.title = 'Display preview on the map';
-                            previewButton.addEventListener('click', () => {
+
+                            const defaultPreview = (event) => {
+                                event?.preventDefault();
                                 window.showSentinelPreviewOnMap?.({
                                     title: titleText,
                                     productId,
@@ -3066,8 +3712,29 @@
                                     links,
                                     assets,
                                     featureProperties: props,
-                                    featureId: feature?.id ?? null
+                                    featureId: feature?.id ?? null,
                                 });
+                            };
+
+                            previewButton.addEventListener('click', (event) => {
+                                if (typeof previewOptions.onClick === 'function') {
+                                    previewOptions.onClick({
+                                        event,
+                                        button: previewButton,
+                                        feature,
+                                        props,
+                                        quicklookUrl,
+                                        metadata: {
+                                            productId,
+                                            acquisitionDate,
+                                            tileText,
+                                            cloudCover,
+                                        },
+                                        defaultHandler: () => defaultPreview(event),
+                                    });
+                                } else {
+                                    defaultPreview(event);
+                                }
                             });
                         } else {
                             previewButton.disabled = true;
@@ -3075,7 +3742,36 @@
                         }
                     }
 
-                    return clone;
+                    if (postRender) {
+                        postRender({
+                            root: rootElement,
+                            fragment,
+                            elements: {
+                                title: titleEl,
+                                product: productEl,
+                                datetime: datetimeEl,
+                                detail: detailEl,
+                                previewButton,
+                                downloadButton,
+                                processButton,
+                                thumbnailImg,
+                                thumbnailPlaceholder,
+                            },
+                            feature,
+                            props,
+                            metadata: {
+                                productId,
+                                acquisitionDate,
+                                cloudCover,
+                                downloadUrl,
+                                downloadUrlWithToken,
+                                downloadFilename,
+                                quicklookUrl,
+                            },
+                        });
+                    }
+
+                    return fragment;
                 };
 
                 // Display a loading message while clearing previous catalogue entries.
