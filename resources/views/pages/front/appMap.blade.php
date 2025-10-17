@@ -1106,6 +1106,39 @@
 
                 const originalHtml = processButton.innerHTML;
 
+                const extractDrawnGeometry = () => {
+                    if (window.geojsonFeature) {
+                        if (typeof window.geojsonFeature === 'object') {
+                            return window.geojsonFeature;
+                        }
+
+                        if (typeof window.geojsonFeature === 'string') {
+                            try {
+                                return JSON.parse(window.geojsonFeature);
+                            } catch (error) {
+                                console.warn('Unable to parse window.geojsonFeature string', error);
+                            }
+                        }
+                    }
+
+                    const geojsonOutput = document.getElementById('clipGeojsonOutput');
+                    if (!geojsonOutput) {
+                        return null;
+                    }
+
+                    const rawText = geojsonOutput.textContent?.trim();
+                    if (!rawText || rawText.startsWith('Coordinates will')) {
+                        return null;
+                    }
+
+                    try {
+                        return JSON.parse(rawText);
+                    } catch (error) {
+                        console.warn('Unable to parse drawn GeoJSON output', error);
+                        return null;
+                    }
+                };
+
                 processButton.addEventListener('click', async () => {
                     if (!processUrl) {
                         showToast('warning', 'Please sign in to process Sentinel-2 clips.');
@@ -1113,7 +1146,7 @@
                         return;
                     }
 
-                    const rawFeature = window.geojsonFeature;
+                    const rawFeature = extractDrawnGeometry();
                     const featureCollection = resolveFeatureCollection(rawFeature);
                     if (!featureCollection) {
                         showToast('warning', 'Draw an area on the map before processing imagery.');
