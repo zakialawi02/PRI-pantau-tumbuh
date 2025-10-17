@@ -1037,7 +1037,10 @@
                     const cloudValue = Number(elements.cloudInput?.value ?? '');
                     if (Number.isFinite(cloudValue)) {
                         const bounded = Math.min(Math.max(cloudValue, 0), 100);
-                        const rangeValue = `0-${bounded}`;
+                        const rounded = Math.round(bounded);
+                        // Dataspace expects range syntax with inclusive brackets, e.g. "[0,30]".
+                        // Supplying legacy dash-separated ranges triggers a 400 validation error.
+                        const rangeValue = `[0,${rounded}]`;
                         // Only set the documented "cloudCover" parameter; the API rejects other
                         // aliases (cloudCoverPercentage/cloudcoverpercentage) with a 400 error.
                         params.set('cloudCover', rangeValue);
