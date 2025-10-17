@@ -791,6 +791,9 @@
                     filteredMaxRecords: 20,
                     defaultDateRangeDays: 30,
                     token: (panel.dataset.sentinelToken || '').trim(),
+                    // Fallback Copernicus WMS endpoint & layer when the catalogue response omits one.
+                    defaultWmsEndpoint: 'https://sh.dataspace.copernicus.eu/ogc/wms/1bd0fec1-0e52-427a-8e83-6e0dcd29a03a',
+                    defaultWmsLayer: 'NATURAL-COLOR',
                 };
 
                 // Track loaded scenes, pending requests, and map preview state.
@@ -1082,7 +1085,7 @@
                 /**
                  * Extract WMS configuration (URL & layers) if the API exposes it.
                  */
-                const resolveWmsConfig = (feature) => {
+                const resolveWmsConfig = (feature, acquisitionDate) => {
                     const services = feature?.properties?.services ?? {};
                     const ogc = services.ogc || services.wms || {};
                     const wmsCandidates = Array.isArray(ogc?.wms) ? ogc.wms : [ogc.wms || ogc];
@@ -1091,8 +1094,21 @@
                         const url = candidate?.url || candidate?.href;
                         const layers = candidate?.layers || candidate?.layer || candidate?.name;
                         if (typeof url === 'string' && url.startsWith('http') && layers) {
-                            return { url, layers };
+                            return {
+                                url,
+                                layers,
+                                time: candidate?.time || candidate?.TIME || (acquisitionDate ? acquisitionDate.toISOString() : null),
+                            };
                         }
+                    }
+
+                    if (config.defaultWmsEndpoint && config.defaultWmsLayer) {
+                        // Use the shared Copernicus service when the catalogue does not expose a per-scene WMS link.
+                        return {
+                            url: config.defaultWmsEndpoint,
+                            layers: config.defaultWmsLayer,
+                            time: acquisitionDate ? acquisitionDate.toISOString() : null,
+                        };
                     }
 
                     return null;
@@ -1150,7 +1166,7 @@
                     const mgrs = props.mgrsId || props.tileId || props.MGRS || props.utmc || null;
                     const downloadUrl = withAccessToken(resolveDownloadUrl(feature));
                     const thumbnailUrl = resolveThumbnailUrl(feature);
-                    const wms = resolveWmsConfig(feature);
+                    const wms = resolveWmsConfig(feature, acquisitionDate);
                     const geometry = feature.geometry || geometryFromBbox(feature.bbox || []);
 
                     const details = [];
@@ -1374,13 +1390,19 @@
                     }
 
                     if (enable) {
+                        const wmsUrl = withAccessToken(scene.wms.url);
+                        const params = {
+                            LAYERS: scene.wms.layers,
+                            FORMAT: 'image/png',
+                            TRANSPARENT: true,
+                        };
+                        if (scene.wms.time) {
+                            params.TIME = scene.wms.time;
+                        }
+
                         state.preview.wmsLayer.setSource(new ol.source.TileWMS({
-                            url: scene.wms.url,
-                            params: {
-                                LAYERS: scene.wms.layers,
-                                FORMAT: 'image/png',
-                                TRANSPARENT: true,
-                            },
+                            url: wmsUrl,
+                            params,
                             crossOrigin: 'anonymous',
                         }));
                         state.preview.wmsLayer.setVisible(true);
