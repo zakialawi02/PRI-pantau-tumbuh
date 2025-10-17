@@ -235,7 +235,7 @@
             </section>
 
             <!-- ========== SENTINEL COLLECTION PANEL ========== -->
-            <section class="flex hidden h-full flex-col shadow-xl" id="sentinel-panel" data-sentinel-token="{{ $copernicusAccessToken ?? '' }}" data-sentinel-credentials="{{ $copernicusCredentialsConfigured ?? false ? 'true' : 'false' }}" data-sentinel-process-url="{{ auth()->check() ? route('admin.sentinel.process') : '' }}">
+            <section class="flex hidden h-full flex-col shadow-xl" id="sentinel-panel" data-sentinel-token="{{ $copernicusAccessToken ?? '' }}" data-sentinel-credentials="{{ $copernicusCredentialsConfigured ?? false ? 'true' : 'false' }}" data-sentinel-process-url="{{ auth()->check() ? route('admin.sentinel.process') : '' }}" data-sentinel-processing-cost="{{ config('app-constants.imagery_processing_cost', 10) }}">
                 <div class="bg-background border-foreground/10 sticky top-0 z-20 flex items-center justify-between border-b p-2">
                     <h2 class="text-lg font-bold">🛰️ Sentinel-2 Collections</h2>
                     <button class="hover:bg-foreground/20 bg-foreground/10 rounded px-2 py-1 text-sm" onclick="closePanels()">✖</button>
@@ -316,7 +316,7 @@
 
                     <!-- Clip Tab Content -->
                     <div class="tab-content hidden" id="sentinel-clip-panel" role="tabpanel" aria-labelledby="sentinel-clip-tab">
-                        <div class="space-y-3" id="sentinelClipModule" data-credit-rate="{{ config('app-constants.imagery_credit_cost_per_hectare') }}">
+                        <div class="space-y-3" id="sentinelClipModule" data-credit-rate="{{ config('app-constants.imagery_credit_cost_per_hectare') }}" data-process-url="{{ auth()->check() ? route('admin.sentinel.process') : '' }}" data-processing-cost="{{ config('app-constants.imagery_processing_cost', 10) }}">
                             <div class="bg-background/60 border-foreground/10 space-y-3 rounded-lg border p-3 shadow-sm">
                                 <div class="flex flex-wrap items-center justify-between gap-2">
                                     <div>
@@ -791,6 +791,7 @@
                     filteredMaxRecords: 20,
                     defaultDateRangeDays: 30,
                     token: (panel.dataset.sentinelToken || '').trim(),
+                    processingCost: Number.parseFloat(panel.dataset.sentinelProcessingCost ?? '') || 0,
                     // Fallback Copernicus WMS endpoint & layer when the catalogue response omits one.
                     defaultWmsEndpoint: 'https://sh.dataspace.copernicus.eu/ogc/wms/1bd0fec1-0e52-427a-8e83-6e0dcd29a03a',
                     defaultWmsLayer: 'NATURAL-COLOR',
@@ -803,6 +804,11 @@
                     previewTileZoomLevels: 22,
                     previewTileSize: 256,
                 };
+
+                window.AppMap.constants = window.AppMap.constants || {};
+                if (!Number.isFinite(window.AppMap.constants.imageryProcessingCost) || window.AppMap.constants.imageryProcessingCost <= 0) {
+                    window.AppMap.constants.imageryProcessingCost = config.processingCost;
+                }
 
                 // Track loaded scenes, pending requests, and map preview state.
                 const state = {
@@ -1923,6 +1929,12 @@
                     }
                 });
 
+                const helpers = {
+                    withAccessToken,
+                    sanitizeFileName,
+                    resolveDownloadUrl,
+                };
+
                 // Expose the Sentinel module to other parts of the app while keeping internals encapsulated.
                 const sentinelModule = {
                     get loadedOnce() {
@@ -1931,9 +1943,11 @@
                     loadCollections,
                     clearPreview: clearPreviewPanel,
                     resetFilters,
+                    helpers,
                 };
 
                 window.AppMap.sentinel = sentinelModule;
+                window.AppMap.sentinelHelpers = helpers;
                 document.dispatchEvent(new CustomEvent('app:sentinel:ready', { detail: sentinelModule }));
 
                 // Bootstrap defaults and kick off the initial fetch.
@@ -2201,6 +2215,7 @@
                         maxRecords: 50,
                         defaultDateWindowDays: 30,
                         defaultMaxCloud: 60,
+                        processingCost: Number.parseFloat(moduleEl.dataset.processingCost ?? '') || 0,
                     };
 
                     const elements = {
@@ -2217,6 +2232,64 @@
                         processNotice: document.getElementById('clipProcessNotice'),
                         processUrl: moduleEl.dataset.processUrl || '',
                     };
+
+                    const defaultProcessButtonHtml = elements.processBtn?.innerHTML || '<i class="ri-cpu-line"></i><span>Process Imagery</span>';
+
+                    const sentinelHelpers = window.AppMap?.sentinel?.helpers || window.AppMap?.sentinelHelpers || {};
+                    const applyAccessToken = typeof sentinelHelpers.withAccessToken === 'function'
+                        ? sentinelHelpers.withAccessToken
+                        : (url) => url;
+                    const sanitizeFileName = typeof sentinelHelpers.sanitizeFileName === 'function'
+                        ? sentinelHelpers.sanitizeFileName
+                        : (value, fallback = 'sentinel-scene') => {
+                            const base = (value || '').toString().trim();
+                            const normalized = base
+                                .normalize('NFKD')
+                                .replace(/[\u0300-\u036f]/g, '')
+                                .replace(/[^a-zA-Z0-9-_.]+/g, '-')
+                                .replace(/-{2,}/g, '-')
+                                .replace(/^-+|-+$/g, '');
+                            return (normalized || fallback).substring(0, 120);
+                        };
+
+                    const fallbackResolveDownloadUrl = (feature) => {
+                        const props = feature?.properties ?? {};
+                        const linkSources = [];
+
+                        if (Array.isArray(props.links)) {
+                            linkSources.push(...props.links);
+                        } else if (props.links && typeof props.links === 'object') {
+                            linkSources.push(...Object.values(props.links));
+                        }
+
+                        const services = props.services || {};
+                        if (services.download) {
+                            linkSources.push(services.download);
+                        }
+                        if (services.s3) {
+                            linkSources.push(services.s3);
+                        }
+
+                        for (const entry of linkSources) {
+                            const href = entry?.href || entry?.url || entry?.URI;
+                            const relation = (entry?.rel || entry?.role || '').toLowerCase();
+                            if (typeof href === 'string' && href.startsWith('http')) {
+                                if (!relation || /enclosure|download|data/.test(relation)) {
+                                    return href;
+                                }
+                            }
+                        }
+
+                        if (typeof props.downloadLink === 'string' && props.downloadLink.startsWith('http')) {
+                            return props.downloadLink;
+                        }
+
+                        return null;
+                    };
+
+                    const resolveDownloadLink = typeof sentinelHelpers.resolveDownloadUrl === 'function'
+                        ? sentinelHelpers.resolveDownloadUrl
+                        : fallbackResolveDownloadUrl;
 
                     const state = {
                         geometry: null,
@@ -2314,7 +2387,7 @@
                     const updateProcessAvailability = () => {
                         if (!elements.processBtn) return;
                         const fieldNameFilled = (elements.fieldInput?.value ?? '').trim().length > 0;
-                        const hasScene = !!state.selectedScene;
+                        const hasScene = !!(state.selectedScene && state.selectedScene.download_url);
                         const hasGeometry = !!state.geometry;
                         const urlAvailable = elements.processUrl !== '';
 
@@ -2322,6 +2395,8 @@
 
                         if (!urlAvailable && elements.processNotice) {
                             elements.processNotice.textContent = 'Log in to clip and download imagery.';
+                        } else if (state.selectedScene && !state.selectedScene.download_url && elements.processNotice) {
+                            elements.processNotice.textContent = 'Selected scene is missing a Copernicus download link.';
                         } else if (elements.processNotice) {
                             elements.processNotice.textContent = 'Processing will run in the background via job queue. We will notify you when the imagery is ready.';
                         }
@@ -2532,14 +2607,20 @@
                         const props = feature?.properties ?? {};
                         const sceneId = feature?.id || props.productIdentifier || props.title || props.id || null;
                         const acquisition = props.completionDate || props.startDate || props.datetime || props.endPosition || props.beginPosition || null;
+                        const rawTitle = props.title || props.productIdentifier || (sceneId ? String(sceneId) : 'Sentinel-2 Scene');
+                        const downloadSource = resolveDownloadLink(feature);
+                        const downloadUrl = downloadSource ? applyAccessToken(downloadSource) : null;
+                        const downloadFilename = sanitizeFileName(`${rawTitle}.zip`);
                         return {
                             id: sceneId ? String(sceneId) : null,
                             product_id: props.productIdentifier || null,
-                            title: props.title || props.productIdentifier || (sceneId ? String(sceneId) : 'Sentinel-2 Scene'),
+                            title: rawTitle,
                             datetime: acquisition || null,
                             cloud_cover: getCloudCover(feature),
                             collection: props.collection || props.collectionName || null,
                             mgrs: props.mgrsId || props.tileId || props.MGRS || null,
+                            download_url: downloadUrl,
+                            download_filename: downloadFilename,
                         };
                     };
 
@@ -2632,6 +2713,12 @@
                             return;
                         }
 
+                        const scene = state.selectedScene;
+                        if (!scene.download_url) {
+                            window.MyZkToast?.warning?.('Selected scene does not expose a downloadable link.');
+                            return;
+                        }
+
                         const fieldName = (elements.fieldInput?.value || '').trim();
                         if (!fieldName) {
                             window.MyZkToast?.warning?.('Please enter a field name.');
@@ -2644,7 +2731,7 @@
                             end: defaultDateTo
                         } = getDefaultDateRange();
 
-                        const payload = {
+                        const basePayload = {
                             field_name: fieldName,
                             geometry: state.feature?.geometry ?? state.geometry,
                             area_hectares: Number(state.areaHectares.toFixed(4)),
@@ -2658,30 +2745,61 @@
                             selected_scene: state.selectedScene,
                         };
 
-                        const creditCost = computeCreditCost();
+                        const processPayload = {
+                            ...basePayload,
+                            title: scene.title || 'Sentinel-2 Scene',
+                            download_url: scene.download_url,
+                            product_id: scene.product_id || scene.id || null,
+                            collection: scene.collection || null,
+                            acquisition_date: scene.datetime || null,
+                            download_filename: scene.download_filename || sanitizeFileName(`${scene.title || 'Sentinel-2 Scene'}.zip`),
+                        };
+
+                        const creditCandidates = [
+                            computeCreditCost(),
+                            clipConfig.processingCost,
+                            window.AppMap?.constants?.imageryProcessingCost,
+                        ]
+                            .map((value) => Number(value))
+                            .filter((value) => Number.isFinite(value) && value > 0);
+
+                        const requiredCreditEstimate = creditCandidates.length ? Math.max(...creditCandidates) : null;
+
+                        const setProcessButtonState = (html, disabled) => {
+                            if (!elements.processBtn) return;
+                            if (typeof disabled === 'boolean') {
+                                elements.processBtn.disabled = disabled;
+                            }
+                            if (typeof html === 'string') {
+                                elements.processBtn.innerHTML = html;
+                            }
+                        };
+
+                        const restoreProcessButton = () => {
+                            setProcessButtonState(defaultProcessButtonHtml, false);
+                            updateProcessAvailability();
+                        };
 
                         const proceed = () => {
-                            const originalHtml = elements.processBtn.innerHTML;
-                            elements.processBtn.disabled = true;
-                            elements.processBtn.innerHTML = '<i class="ri-loader-4-line animate-spin"></i><span>Processing...</span>';
+                            setProcessButtonState('<i class="ri-loader-4-line animate-spin"></i><span>Processing...</span>', true);
 
                             fetch(elements.processUrl, {
-                                    method: 'POST',
-                                    headers: {
-                                        'Content-Type': 'application/json',
-                                        Accept: 'application/json',
-                                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}',
-                                    },
-                                    body: JSON.stringify(payload),
-                                })
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    Accept: 'application/json',
+                                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}',
+                                },
+                                body: JSON.stringify(processPayload),
+                            })
                                 .then(async (response) => {
                                     const data = await response.json().catch(() => ({}));
+                                    if (data?.data?.current_credits !== undefined) {
+                                        $('#current-myCredits')?.text(safeFormatNumber(data.data.current_credits, 2));
+                                    }
                                     if (!response.ok) {
                                         const message = data?.message || 'Unable to queue Sentinel-2 clipping request.';
                                         throw new Error(message);
-                                    }
-                                    if (data?.data?.current_credits !== undefined) {
-                                        $('#current-myCredits')?.text(safeFormatNumber(data.data.current_credits, 2));
                                     }
                                     if (window.MyZkToast?.success) {
                                         window.MyZkToast.success(data?.message || 'Sentinel-2 clipping queued successfully.');
@@ -2693,24 +2811,67 @@
                                     }
                                 })
                                 .finally(() => {
-                                    elements.processBtn.disabled = false;
-                                    elements.processBtn.innerHTML = originalHtml;
-                                    updateProcessAvailability();
+                                    restoreProcessButton();
                                 });
                         };
 
-                        const message = `This action will deduct ${safeFormatNumber(creditCost, 2)} credit points. Continue?`;
-                        if (window.ZkPopAlert?.show) {
-                            ZkPopAlert.show({
-                                message,
-                                icon: '<i class="ri-cpu-line text-2xl text-primary"></i>',
-                                confirmText: 'Yes, Process',
-                                cancelText: 'Cancel',
-                                onConfirm: proceed,
+                        setProcessButtonState('<i class="ri-loader-4-line animate-spin"></i><span>Checking credits...</span>', true);
+
+                        checkUserCredits(requiredCreditEstimate ?? undefined)
+                            .then((creditInfo) => {
+                                restoreProcessButton();
+
+                                if (creditInfo && typeof creditInfo.currentCredits === 'number') {
+                                    $('#current-myCredits')?.text(safeFormatNumber(creditInfo.currentCredits, 2));
+                                }
+
+                                const requiredCredits = Number.isFinite(creditInfo?.requiredCredits) && creditInfo.requiredCredits > 0
+                                    ? creditInfo.requiredCredits
+                                    : (requiredCreditEstimate ?? 0);
+
+                                const message = creditInfo?.hasCredits
+                                    ? `Processing this scene will deduct ${safeFormatNumber(requiredCredits, 2)} credit points. You currently have ${safeFormatNumber(creditInfo.currentCredits ?? 0, 2)} credit points. Continue?`
+                                    : `Insufficient credits to process this scene. You need ${safeFormatNumber(requiredCredits, 2)} credit points but only have ${safeFormatNumber(creditInfo?.currentCredits ?? 0, 2)} credit points.`;
+
+                                if (window.ZkPopAlert?.show) {
+                                    const dialogConfig = {
+                                        message,
+                                        icon: '<i class="ri-cpu-line text-2xl text-primary"></i>',
+                                        confirmText: creditInfo?.hasCredits ? 'Yes, Process' : 'Close',
+                                        onConfirm: () => {
+                                            if (!creditInfo?.hasCredits) {
+                                                if (window.MyZkToast?.warning) {
+                                                    window.MyZkToast.warning('Insufficient credits to process this scene.');
+                                                }
+                                                return;
+                                            }
+                                            proceed();
+                                        },
+                                    };
+
+                                    if (creditInfo?.hasCredits) {
+                                        dialogConfig.cancelText = 'Cancel';
+                                    } else {
+                                        dialogConfig.hideCancel = true;
+                                    }
+
+                                    ZkPopAlert.show(dialogConfig);
+                                } else {
+                                    if (!creditInfo?.hasCredits) {
+                                        window.alert(message);
+                                        return;
+                                    }
+                                    if (window.confirm(message)) {
+                                        proceed();
+                                    }
+                                }
+                            })
+                            .catch((error) => {
+                                restoreProcessButton();
+                                if (window.MyZkToast?.error) {
+                                    window.MyZkToast.error(error?.message || 'Failed to verify credit balance.');
+                                }
                             });
-                        } else if (window.confirm(message)) {
-                            proceed();
-                        }
                     };
 
                     updateAreaDisplay();
