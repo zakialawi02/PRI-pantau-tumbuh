@@ -104,16 +104,120 @@ if resolution <= 0:
     resolution = 10
 
 catalog = SentinelHubCatalog(config=config)
-search_iter = catalog.search(
-    DataCollection.SENTINEL2_L2A,
-    geometry=geometry,
-    time=(start_date.isoformat(), end_date.isoformat()),
-    limit=max_records,
+
+
+def bounds_from_tuple(bounds_tuple):
+    return (
+        float(bounds_tuple[0]),
+        float(bounds_tuple[1]),
+        float(bounds_tuple[2]),
+        float(bounds_tuple[3]),
+    )
+
+
+target_bounds = bounds_from_tuple(
+    (
+        bbox.min_x,
+        bbox.min_y,
+        bbox.max_x,
+        bbox.max_y,
+    )
 )
-items = list(search_iter)
+
+try:
+    target_shape = geometry.geometry
+except Exception:
+    target_shape = None
+
+
+def intersects_target(scene):
+    geom_dict_item = scene.get("geometry")
+    candidate_geom = None
+    candidate_bounds = None
+
+    if geom_dict_item:
+        try:
+            candidate_geom = Geometry(geom_dict_item, CRS.WGS84)
+            candidate_bounds = bounds_from_tuple(
+                (
+                    candidate_geom.bbox.min_x,
+                    candidate_geom.bbox.min_y,
+                    candidate_geom.bbox.max_x,
+                    candidate_geom.bbox.max_y,
+                )
+            )
+        except Exception:
+            candidate_geom = None
+            candidate_bounds = None
+
+    if candidate_bounds is None:
+        bbox_coords = scene.get("bbox")
+        if isinstance(bbox_coords, (list, tuple)) and len(bbox_coords) == 4:
+            try:
+                candidate_bounds = bounds_from_tuple(bbox_coords)
+            except Exception:
+                candidate_bounds = None
+
+    if candidate_bounds is None:
+        return False
+
+    a_min_x, a_min_y, a_max_x, a_max_y = candidate_bounds
+    b_min_x, b_min_y, b_max_x, b_max_y = target_bounds
+    intersects = not (
+        a_max_x < b_min_x
+        or a_min_x > b_max_x
+        or a_max_y < b_min_y
+        or a_min_y > b_max_y
+    )
+
+    if not intersects:
+        return False
+
+    if target_shape is not None and candidate_geom is not None:
+        try:
+            candidate_shape = candidate_geom.geometry
+        except Exception:
+            candidate_shape = None
+
+        if candidate_shape is not None and hasattr(candidate_shape, "intersects"):
+            try:
+                return bool(candidate_shape.intersects(target_shape))
+            except Exception:
+                return True
+
+    return True
+
+
+items = []
+search_start = start_date
+
+for attempt in range(6):
+    search_iter = catalog.search(
+        DataCollection.SENTINEL2_L2A,
+        bbox=bbox,
+        time=(search_start.isoformat(), end_date.isoformat()),
+        limit=max_records,
+    )
+    attempt_items = [scene for scene in search_iter if intersects_target(scene)]
+
+    if attempt_items:
+        items = attempt_items
+        break
+
+    search_start = search_start - timedelta(days=30)
+    if search_start < datetime(2015, 6, 23, tzinfo=timezone.utc):
+        break
+
+    print(
+        "No Sentinel-2 scenes intersect the area between",
+        search_start.isoformat(),
+        "and",
+        end_date.isoformat(),
+        "- extending search window",
+    )
 
 if not items:
-    raise SystemExit("No Sentinel-2 scenes found for the provided area and date range")
+    raise SystemExit("No Sentinel-2 scenes intersect the provided area and date range")
 
 items.sort(key=lambda it: it.get("properties", {}).get("datetime", ""), reverse=True)
 chosen = items[0]
