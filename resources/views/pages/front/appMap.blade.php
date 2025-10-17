@@ -998,7 +998,6 @@
 
                     const clipConfig = {
                         endpoint: 'https://catalogue.dataspace.copernicus.eu/resto/api/collections/Sentinel2/search.json',
-                        productType: 'S2MSI2A',
                         maxRecords: 50,
                         defaultDateWindowDays: 30,
                         defaultMaxCloud: 60,
@@ -1273,9 +1272,7 @@
                         const { start, end } = getDefaultDateRange();
                         params.set('startDate', `${start}T00:00:00Z`);
                         params.set('completionDate', `${end}T23:59:59Z`);
-                        params.set('productType', clipConfig.productType);
                         params.set('maxRecords', String(clipConfig.maxRecords));
-                        params.set('cloudCover', `0,${clipConfig.defaultMaxCloud}`);
 
                         if (state.geometry) {
                             const wkt = toWkt(state.geometry);
