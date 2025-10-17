@@ -316,7 +316,7 @@
 
                     <!-- Clip Tab Content -->
                     <div class="tab-content hidden" id="sentinel-clip-panel" role="tabpanel" aria-labelledby="sentinel-clip-tab">
-                        <div class="space-y-3" id="sentinelClipModule" data-credit-rate="{{ config('app-constants.imagery_credit_cost_per_hectare') }}" data-process-url="{{ auth()->check() ? route('admin.sentinel.process') : '' }}" data-processing-cost="{{ config('app-constants.imagery_processing_cost', 10) }}">
+                        <div class="space-y-3" id="sentinelClipModule" data-credit-rate="{{ config('app-constants.imagery_credit_cost_per_hectare') }}" data-process-url="{{ auth()->check() ? route('admin.sentinel.clip') : '' }}" data-processing-cost="{{ config('app-constants.imagery_processing_cost', 10) }}">
                             <div class="bg-background/60 border-foreground/10 space-y-3 rounded-lg border p-3 shadow-sm">
                                 <div class="flex flex-wrap items-center justify-between gap-2">
                                     <div>
@@ -358,6 +358,14 @@
                                     <x-input-label class="text-sm font-medium" for="clipFieldName">Field Name</x-input-label>
                                     <x-text-input class="w-full" id="clipFieldName" name="field_name" size="small" placeholder="e.g. North Farm Block" />
                                 </div>
+                            </div>
+
+                            <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                                <p class="text-foreground/60 text-xs" id="clipProcessFeedback">Draw your area of interest to enable imagery clipping.</p>
+                                <x-button-primary id="processClipBtn" type="button" size="small">
+                                    <i class="ri-cpu-line"></i>
+                                    <span>Process Imagery</span>
+                                </x-button-primary>
                             </div>
 
                         </div>
@@ -971,6 +979,235 @@
                 } else {
                     bootstrapPanels();
                 }
+            })();
+        </script>
+    @endpush
+
+    @push('javascript')
+        <script>
+            (() => {
+                const module = document.getElementById('sentinelClipModule');
+                if (!module) {
+                    return;
+                }
+
+                const processButton = document.getElementById('processClipBtn');
+                const feedbackEl = document.getElementById('clipProcessFeedback');
+                const fieldNameInput = document.getElementById('clipFieldName');
+                const processUrl = (module.dataset.processUrl || '').trim();
+
+                if (!processButton) {
+                    return;
+                }
+
+                const setButtonState = (html, disabled) => {
+                    if (typeof html === 'string') {
+                        processButton.innerHTML = html;
+                    }
+                    if (typeof disabled === 'boolean') {
+                        processButton.disabled = disabled;
+                    }
+                };
+
+                const updateFeedback = (message) => {
+                    if (feedbackEl) {
+                        feedbackEl.textContent = message;
+                    }
+                };
+
+                const resolveFeatureCollection = (rawGeometry) => {
+                    if (!rawGeometry || typeof rawGeometry !== 'object') {
+                        return null;
+                    }
+
+                    if (rawGeometry.type === 'FeatureCollection') {
+                        return rawGeometry;
+                    }
+
+                    if (rawGeometry.type === 'Feature') {
+                        return {
+                            type: 'FeatureCollection',
+                            features: [rawGeometry],
+                        };
+                    }
+
+                    if (rawGeometry.geometry) {
+                        return {
+                            type: 'FeatureCollection',
+                            features: [
+                                {
+                                    type: 'Feature',
+                                    properties: rawGeometry.properties || {},
+                                    geometry: rawGeometry.geometry,
+                                },
+                            ],
+                        };
+                    }
+
+                    return null;
+                };
+
+                const fetchCreditBalance = async () => {
+                    const response = await fetch('/user/credits/check', {
+                        headers: {
+                            'Accept': 'application/json',
+                        },
+                    });
+
+                    const result = await response.json();
+
+                    if (!response.ok || !result.success) {
+                        throw new Error(result?.message || 'Unable to retrieve credit balance.');
+                    }
+
+                    return Number.parseFloat(result.credits) || 0;
+                };
+
+                const getCsrfToken = () => document
+                    .querySelector('meta[name="csrf-token"]')
+                    ?.getAttribute('content') || '{{ csrf_token() }}';
+
+                const formatCredits = (value) => {
+                    if (typeof window.formatNumber === 'function') {
+                        return window.formatNumber(value, 2);
+                    }
+                    return Number.parseFloat(value).toFixed(2);
+                };
+
+                const showToast = (type, message) => {
+                    if (type === 'error') {
+                        MyZkToast?.error?.(message);
+                    } else if (type === 'success') {
+                        MyZkToast?.success?.(message);
+                    } else if (type === 'warning') {
+                        MyZkToast?.warning?.(message);
+                    } else {
+                        MyZkToast?.info?.(message);
+                    }
+                };
+
+                const confirmProcessing = (message) => {
+                    if (window.ZkPopAlert?.show) {
+                        return new Promise((resolve) => {
+                            ZkPopAlert.show({
+                                message,
+                                icon: '<i class="ri-cpu-line text-2xl text-primary"></i>',
+                                confirmText: 'Yes, Process',
+                                cancelText: 'Cancel',
+                                confirmClass: 'focus:ring-primary/80 rounded-md text-sm px-2.5 py-1.5 bg-primary text-primary-foreground border border-primary hover:bg-primary/80 focus:outline-none focus:ring-primary',
+                                onConfirm: () => resolve(true),
+                                onCancel: () => resolve(false),
+                            });
+                        });
+                    }
+
+                    return Promise.resolve(window.confirm(message));
+                };
+
+                const originalHtml = processButton.innerHTML;
+
+                processButton.addEventListener('click', async () => {
+                    if (!processUrl) {
+                        showToast('warning', 'Please sign in to process Sentinel-2 clips.');
+                        updateFeedback('Sign in to process imagery clips.');
+                        return;
+                    }
+
+                    const rawFeature = window.geojsonFeature;
+                    const featureCollection = resolveFeatureCollection(rawFeature);
+                    if (!featureCollection) {
+                        showToast('warning', 'Draw an area on the map before processing imagery.');
+                        updateFeedback('Draw an area of interest before processing.');
+                        return;
+                    }
+
+                    const rawArea = typeof window.geojsonArea === 'number'
+                        ? window.geojsonArea
+                        : Number.parseFloat(window.geojsonArea ?? '');
+                    const areaHectares = Number.isFinite(rawArea) && rawArea > 0 ? rawArea / 10000 : NaN;
+
+                    if (!Number.isFinite(areaHectares) || areaHectares <= 0) {
+                        showToast('warning', 'Unable to determine the area of the drawn polygon.');
+                        updateFeedback('Unable to determine area. Please redraw the polygon.');
+                        return;
+                    }
+
+                    const fieldName = fieldNameInput?.value?.trim();
+                    if (!fieldName) {
+                        showToast('warning', 'Please provide a field name for this area of interest.');
+                        updateFeedback('Enter a field name before submitting for processing.');
+                        fieldNameInput?.focus();
+                        return;
+                    }
+
+                    const creditRate = Number.parseFloat(module.dataset.creditRate || '0');
+                    const processingCost = Number.parseFloat(module.dataset.processingCost || '0');
+                    const areaCost = Number.isFinite(creditRate) && creditRate > 0 ? areaHectares * creditRate : 0;
+                    const estimatedCredits = Math.max(0, areaCost + (Number.isFinite(processingCost) ? processingCost : 0));
+
+                    setButtonState('<i class="ri-loader-4-line animate-spin"></i><span>Checking credits...</span>', true);
+                    updateFeedback('Checking available credit balance...');
+
+                    try {
+                        const currentCredits = await fetchCreditBalance();
+                        if (typeof jQuery !== 'undefined') {
+                            jQuery('#current-myCredits').text(formatCredits(currentCredits));
+                        }
+
+                        if (estimatedCredits > 0 && currentCredits < estimatedCredits) {
+                            showToast('error', `Insufficient credit points. Required: ${formatCredits(estimatedCredits)}.`);
+                            updateFeedback('Insufficient credits to process this clip.');
+                            return;
+                        }
+
+                        const confirmationMessage = `Processing this Sentinel-2 clip will deduct approximately ${formatCredits(estimatedCredits)} credit points. Continue?`;
+                        const confirmed = await confirmProcessing(confirmationMessage);
+                        if (!confirmed) {
+                            updateFeedback('Processing cancelled.');
+                            return;
+                        }
+
+                        setButtonState('<i class="ri-loader-4-line animate-spin"></i><span>Queuing...</span>', true);
+                        updateFeedback('Queuing Sentinel-2 clip for processing...');
+
+                        const response = await fetch(processUrl, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/json',
+                                'X-CSRF-TOKEN': getCsrfToken(),
+                            },
+                            body: JSON.stringify({
+                                field_name: fieldName,
+                                geometry: featureCollection,
+                                area_hectares: areaHectares,
+                                estimated_credits: estimatedCredits,
+                            }),
+                        });
+
+                        const result = await response.json();
+
+                        if (response.ok) {
+                            showToast('success', result?.message || 'Sentinel-2 clip queued for processing.');
+                            updateFeedback('Clip request queued. Processing will continue in the background.');
+
+                            if (result?.data?.current_credits !== undefined && typeof jQuery !== 'undefined') {
+                                jQuery('#current-myCredits').text(formatCredits(result.data.current_credits));
+                            }
+                        } else {
+                            const message = result?.message || 'Failed to queue Sentinel-2 clip processing. Please try again.';
+                            showToast('error', message);
+                            updateFeedback(message);
+                        }
+                    } catch (error) {
+                        console.error('Failed to process Sentinel-2 clip', error);
+                        const message = error?.message || 'Unexpected error while queuing Sentinel-2 clip.';
+                        showToast('error', message);
+                        updateFeedback(message);
+                    } finally {
+                        setButtonState(originalHtml, false);
+                    }
+                });
             })();
         </script>
     @endpush
