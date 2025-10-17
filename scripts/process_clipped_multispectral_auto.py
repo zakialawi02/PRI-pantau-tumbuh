@@ -51,8 +51,13 @@ DATASPACE_TOKEN_URL = f"{DATASPACE_AUTH_BASE}/auth/realms/CDSE/protocol/openid-c
 DATASPACE_SH_BASE = "https://sh.dataspace.copernicus.eu"
 
 # Ensure downstream Sentinel Hub helpers default to Copernicus Data Space endpoints.
-os.environ.setdefault("SH_AUTH_BASE_URL", DATASPACE_AUTH_BASE)
-os.environ.setdefault("SH_BASE_URL", DATASPACE_SH_BASE)
+# Some sentinelhub-py internals read the SH_* env vars directly, so make sure we
+# override any pre-existing configuration that could still point to the legacy
+# services.sentinel-hub.com host.
+os.environ["SH_AUTH_BASE_URL"] = DATASPACE_AUTH_BASE
+os.environ["SH_BASE_URL"] = DATASPACE_SH_BASE
+os.environ["SH_PROCESSING_API_URL"] = f"{DATASPACE_SH_BASE}/api/v1/process"
+os.environ["SH_ONLINE_PROCESSING_BASE_URL"] = DATASPACE_SH_BASE
 
 config = SHConfig()
 config.sh_client_id = SH_CLIENT_ID
@@ -60,9 +65,12 @@ config.sh_client_secret = SH_CLIENT_SECRET
 config.sh_auth_base_url = DATASPACE_AUTH_BASE
 config.sh_token_url = DATASPACE_TOKEN_URL
 config.sh_base_url = DATASPACE_SH_BASE
+config.sh_processing_api_url = f"{DATASPACE_SH_BASE}/api/v1/process"
+config.sh_online_processing_base_url = DATASPACE_SH_BASE
 config.instance_id = None
 
 print("Configured Copernicus Data Space endpoints:", config.sh_base_url)
+print("Processing API endpoint:", getattr(config, "sh_processing_api_url", "<not set>"))
 
 tiles_dir = os.environ.get("CLIP_TILES_DIR") or "tiles"
 output_path = os.environ.get("CLIP_OUTPUT") or os.path.join(os.getcwd(), "merged_masked.tif")
