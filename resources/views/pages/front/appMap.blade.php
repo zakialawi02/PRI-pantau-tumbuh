@@ -789,7 +789,7 @@
                     endpoint: 'https://catalogue.dataspace.copernicus.eu/resto/api/collections/Sentinel2/search.json',
                     defaultMaxRecords: 10,
                     filteredMaxRecords: 20,
-                    defaultDateRangeDays: 14,
+                    defaultDateRangeDays: 30,
                     token: (panel.dataset.sentinelToken || '').trim(),
                 };
 
@@ -826,7 +826,7 @@
                 };
 
                 /**
-                 * Provide a short default date range so the initial query stays manageable.
+                 * Provide a default 30-day date range ending today so the initial query stays manageable.
                  */
                 const ensureDefaultDates = () => {
                     if (!elements.startInput || !elements.endInput) {
