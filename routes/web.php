@@ -57,6 +57,7 @@ Route::prefix('dashboard')->name('admin.')->group(function () {
         Route::get('/imagery/{imagery}/download-source', [ImageryDataController::class, 'downloadSource'])->name('imagery.download.source');
         Route::get('/imagery/{imagery}/download-result', [ImageryDataController::class, 'downloadResult'])->name('imagery.download.result');
         Route::post('/sentinel/process', [SentinelProcessingController::class, 'processScene'])->name('sentinel.process');
+        Route::post('/sentinel/process-clip', [SentinelProcessingController::class, 'processClip'])->name('sentinel.process-clip');
 
         // Credit Purchase
         Route::get('/purchase-credits', [UserCreditsController::class, 'purchase'])->name('purchase-credits');

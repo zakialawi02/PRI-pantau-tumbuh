@@ -316,7 +316,7 @@
 
                     <!-- Clip Tab Content -->
                     <div class="tab-content hidden" id="sentinel-clip-panel" role="tabpanel" aria-labelledby="sentinel-clip-tab">
-                        <div class="space-y-3" id="sentinelClipModule" data-credit-rate="{{ config('app-constants.imagery_credit_cost_per_hectare') }}" data-process-url="{{ auth()->check() ? route('admin.sentinel.process') : '' }}" data-processing-cost="{{ config('app-constants.imagery_processing_cost', 10) }}">
+                        <div class="space-y-3" id="sentinelClipModule" data-credit-rate="{{ config('app-constants.imagery_credit_cost_per_hectare') }}" data-process-url="{{ auth()->check() ? route('admin.sentinel.process') : '' }}" data-processing-cost="{{ config('app-constants.imagery_processing_cost', 10) }}" data-clip-url="{{ auth()->check() ? route('admin.sentinel.process-clip') : '' }}">
                             <div class="bg-background/60 border-foreground/10 space-y-3 rounded-lg border p-3 shadow-sm">
                                 <div class="flex flex-wrap items-center justify-between gap-2">
                                     <div>
@@ -359,6 +359,20 @@
                                     <x-text-input class="w-full" id="clipFieldName" name="field_name" size="small" placeholder="e.g. North Farm Block" />
                                 </div>
                             </div>
+
+                            @auth
+                                <div class="border-foreground/10 bg-background/80 flex flex-col gap-2 rounded-lg border p-3 md:flex-row md:items-center md:justify-between">
+                                    <p class="text-foreground/70 text-xs" id="clipProcessStatus">Draw a polygon on the map to enable clipped processing.</p>
+                                    <x-button-primary id="clipProcessBtn" type="button" size="small">
+                                        <i class="ri-cpu-line"></i>
+                                        <span>Process Imagery</span>
+                                    </x-button-primary>
+                                </div>
+                            @else
+                                <div class="border-foreground/10 bg-foreground/5 rounded-lg border p-3 text-sm text-foreground/70">
+                                    Sign in to process clipped Sentinel imagery.
+                                </div>
+                            @endauth
 
                         </div>
                     </div>
@@ -971,6 +985,182 @@
                 } else {
                     bootstrapPanels();
                 }
+            })();
+        </script>
+        <script>
+            (() => {
+                const moduleEl = document.getElementById('sentinelClipModule');
+                if (!moduleEl) {
+                    return;
+                }
+
+                const processButton = document.getElementById('clipProcessBtn');
+                const statusLabel = document.getElementById('clipProcessStatus');
+                const fieldNameInput = document.getElementById('clipFieldName');
+                const creditRate = parseFloat(moduleEl.dataset.creditRate || '0');
+
+                const formatCredits = (value) => {
+                    if (!Number.isFinite(value)) {
+                        return null;
+                    }
+                    try {
+                        return new Intl.NumberFormat(document.documentElement.lang || 'en-US', {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                        }).format(value);
+                    } catch (error) {
+                        return value.toFixed(2);
+                    }
+                };
+
+                const setStatus = (message, tone = 'info') => {
+                    if (!statusLabel) {
+                        return;
+                    }
+
+                    statusLabel.textContent = message;
+                    statusLabel.classList.remove('text-foreground/70', 'text-success', 'text-red-500');
+
+                    if (tone === 'success') {
+                        statusLabel.classList.add('text-success');
+                    } else if (tone === 'error') {
+                        statusLabel.classList.add('text-red-500');
+                    } else {
+                        statusLabel.classList.add('text-foreground/70');
+                    }
+                };
+
+                const getFeatureFromOutput = () => {
+                    const outputContainer = document.getElementById('clipGeojsonOutput');
+                    if (!outputContainer) {
+                        return null;
+                    }
+
+                    const pre = outputContainer.querySelector('pre');
+                    if (!pre) {
+                        return null;
+                    }
+
+                    try {
+                        return JSON.parse(pre.textContent.trim());
+                    } catch (error) {
+                        return null;
+                    }
+                };
+
+                const resolveAreaHectares = () => {
+                    if (typeof window.geojsonArea === 'number' && window.geojsonArea > 0) {
+                        return window.geojsonArea / 10000;
+                    }
+
+                    const areaOutput = document.getElementById('clipAreaOutput');
+                    if (!areaOutput) {
+                        return null;
+                    }
+
+                    const numeric = parseFloat(areaOutput.textContent.replace(/[^0-9.\-]/g, ''));
+                    if (Number.isFinite(numeric) && numeric > 0) {
+                        return numeric;
+                    }
+
+                    return null;
+                };
+
+                const getCsrfToken = () => {
+                    const meta = document.querySelector('meta[name="csrf-token"]');
+                    return meta?.getAttribute('content') || '';
+                };
+
+                const updateCreditDisplay = (credits) => {
+                    const creditEl = document.getElementById('current-myCredits');
+                    if (!creditEl) {
+                        return;
+                    }
+
+                    const formatted = formatCredits(credits);
+                    if (formatted !== null) {
+                        creditEl.textContent = formatted;
+                    }
+                };
+
+                const toggleButtonState = (disable) => {
+                    if (!processButton) {
+                        return;
+                    }
+
+                    processButton.disabled = disable;
+                    processButton.classList.toggle('opacity-60', disable);
+                    processButton.classList.toggle('pointer-events-none', disable);
+                };
+
+                processButton?.addEventListener('click', async () => {
+                    const requestUrl = moduleEl.dataset.clipUrl;
+                    if (!requestUrl) {
+                        setStatus('You need to sign in to process clipped imagery.', 'error');
+                        return;
+                    }
+
+                    const feature = getFeatureFromOutput();
+                    if (!feature) {
+                        setStatus('Draw a polygon to define your area of interest before processing.', 'error');
+                        return;
+                    }
+
+                    const areaHa = resolveAreaHectares();
+                    if (!Number.isFinite(areaHa) || areaHa <= 0) {
+                        setStatus('Unable to calculate the area of your selection. Please redraw the polygon.', 'error');
+                        return;
+                    }
+
+                    const estimatedCredits = creditRate > 0 ? Number((areaHa * creditRate).toFixed(2)) : null;
+
+                    const payload = {
+                        field_name: fieldNameInput?.value?.trim() || null,
+                        feature,
+                        area_hectares: areaHa,
+                        credit_cost: estimatedCredits,
+                    };
+
+                    if (moduleEl.dataset.sceneId) {
+                        payload.scene_id = moduleEl.dataset.sceneId;
+                    }
+
+                    toggleButtonState(true);
+                    setStatus('Submitting clipped imagery request...', 'info');
+
+                    try {
+                        const response = await fetch(requestUrl, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/json',
+                                'X-CSRF-TOKEN': getCsrfToken(),
+                            },
+                            body: JSON.stringify(payload),
+                        });
+
+                        const result = await response.json().catch(() => null);
+
+                        if (!response.ok) {
+                            const message = result?.message || 'Failed to queue clipped Sentinel imagery.';
+                            throw new Error(message);
+                        }
+
+                        setStatus(result?.message || 'Clipped Sentinel imagery queued successfully.', 'success');
+
+                        if (result?.data?.current_credits !== undefined) {
+                            updateCreditDisplay(Number(result.data.current_credits));
+                        }
+
+                        if (typeof window.AppMap?.uploader?.reload === 'function') {
+                            window.AppMap.uploader.reload();
+                        }
+                    } catch (error) {
+                        setStatus(error.message || 'Unable to process clipped Sentinel imagery.', 'error');
+                    } finally {
+                        toggleButtonState(false);
+                    }
+                });
             })();
         </script>
     @endpush

@@ -2,7 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\ProcessSentinelClipJob;
 use App\Jobs\ProcessSentinelSceneJob;
+use App\Models\FieldArea;
 use App\Models\ImageryData;
 use App\Services\CreditService;
 use Illuminate\Http\Request;
@@ -154,6 +156,185 @@ class SentinelProcessingController extends Controller
     public function processClip(Request $request)
     {
         $user = $request->user();
+
+        $validated = $request->validate([
+            'field_name' => ['nullable', 'string', 'max:255'],
+            'feature' => ['required'],
+            'area_hectares' => ['required', 'numeric', 'min:0.0001'],
+            'credit_cost' => ['nullable', 'numeric', 'min:0'],
+            'date_from' => ['nullable', 'date'],
+            'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
+            'resolution' => ['nullable', 'integer', 'min:10', 'max:60'],
+            'limit' => ['nullable', 'integer', 'min:1', 'max:200'],
+            'scene_id' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $feature = $validated['feature'];
+        if (is_string($feature)) {
+            try {
+                $feature = json_decode($feature, true, 512, JSON_THROW_ON_ERROR);
+            } catch (\JsonException $exception) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid GeoJSON payload provided.',
+                ], 422);
+            }
+        }
+
+        if (!is_array($feature) || !isset($feature['type']) || strtolower($feature['type']) !== 'feature' || !isset($feature['geometry'])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'A valid GeoJSON feature is required to process Sentinel imagery.',
+            ], 422);
+        }
+
+        $geometry = $feature['geometry'];
+        if (!is_array($geometry) || empty($geometry)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'GeoJSON geometry is missing or malformed.',
+            ], 422);
+        }
+
+        $feature['properties'] = $feature['properties'] ?? [];
+        $featureCollection = [
+            'type' => 'FeatureCollection',
+            'features' => [
+                [
+                    'type' => 'Feature',
+                    'properties' => $feature['properties'],
+                    'geometry' => $geometry,
+                ],
+            ],
+        ];
+
+        $areaHa = (float) $validated['area_hectares'];
+        $creditRate = (float) config('app-constants.imagery_credit_cost_per_hectare', 0);
+        $requiredCredits = (array_key_exists('credit_cost', $validated) && $validated['credit_cost'] !== null)
+            ? (float) $validated['credit_cost']
+            : round($areaHa * $creditRate, 2);
+        $requiredCredits = max($requiredCredits, 0);
+
+        $currentCredits = $this->creditService->getRemainingCredits($user->id);
+        if ($requiredCredits > 0 && $currentCredits < $requiredCredits) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Insufficient credits to process Sentinel imagery.',
+                'data' => [
+                    'current_credits' => $currentCredits,
+                    'required_credits' => $requiredCredits,
+                ],
+            ], 402);
+        }
+
+        $disk = Storage::disk('public');
+        $imageryDirectory = 'imagery';
+        $disk->makeDirectory($imageryDirectory);
+
+        $fieldName = trim($validated['field_name'] ?? '') ?: 'Sentinel Clip ' . now()->format('Ymd His');
+        $safeBaseName = $this->sanitizeDisplayName($fieldName . '_' . now()->format('YmdHis'));
+        $outputFilename = $this->ensureUniqueFilename($imageryDirectory, $safeBaseName, 'tif');
+        $originalName = Str::limit(trim($fieldName), 120, '') ?: 'Sentinel Clip';
+        $originalDisplayName = $originalName . '.tif';
+
+        $deductedCredits = false;
+
+        try {
+            $fieldArea = FieldArea::create([
+                'user_id' => $user->id,
+                'name' => $fieldName,
+                'geom' => $featureCollection,
+                'area_ha' => $areaHa,
+            ]);
+
+            $imagery = ImageryData::create([
+                'user_id' => $user->id,
+                'source_type' => 'sentinel-2-clip',
+                'original_name' => $originalDisplayName,
+                'stored_name' => $outputFilename,
+                'size' => 0,
+                'format' => pathinfo($outputFilename, PATHINFO_EXTENSION) ?: 'tif',
+                'path' => 'storage/' . trim($imageryDirectory, '/') . '/' . $outputFilename,
+                'upload_status' => 'pending',
+                'processing_status' => 'waiting',
+                'uploaded_at' => now(),
+            ]);
+
+            if ($requiredCredits > 0) {
+                $deductedCredits = $this->creditService->deductCreditsForProcessing((string) $user->id, $requiredCredits, 'SentinelClipController');
+                if (!$deductedCredits) {
+                    $currentCredits = $this->creditService->getRemainingCredits($user->id);
+                    $imagery->delete();
+                    $fieldArea->delete();
+
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Insufficient credits to process Sentinel imagery.',
+                        'data' => [
+                            'current_credits' => $currentCredits,
+                            'required_credits' => $requiredCredits,
+                        ],
+                    ], 402);
+                }
+            }
+
+            ProcessSentinelClipJob::dispatch(
+                $imagery->id,
+                $fieldArea->id,
+                [
+                    'geojson' => $featureCollection,
+                    'geometry' => $geometry,
+                    'field_name' => $fieldName,
+                    'area_hectares' => $areaHa,
+                    'credit_cost' => $requiredCredits,
+                    'output_filename' => $outputFilename,
+                    'scene_id' => $validated['scene_id'] ?? null,
+                    'date_from' => $validated['date_from'] ?? null,
+                    'date_to' => $validated['date_to'] ?? null,
+                    'resolution' => $validated['resolution'] ?? null,
+                    'limit' => $validated['limit'] ?? null,
+                ]
+            )->onQueue('processing');
+
+            $remainingCredits = $this->creditService->getRemainingCredits($user->id);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Sentinel clipped imagery queued for processing.',
+                'data' => [
+                    'imagery_id' => $imagery->id,
+                    'field_area_id' => $fieldArea->id,
+                    'current_credits' => $remainingCredits,
+                    'required_credits' => $requiredCredits,
+                ],
+            ], 202);
+        } catch (Throwable $exception) {
+            Log::error('SentinelProcessingController@processClip failed to queue processing.', [
+                'error' => $exception->getMessage(),
+                'trace' => $exception->getTraceAsString(),
+            ]);
+
+            if (isset($imagery)) {
+                $imagery->delete();
+            }
+
+            if (isset($fieldArea)) {
+                $fieldArea->delete();
+            }
+
+            if ($deductedCredits && $requiredCredits > 0) {
+                $this->creditService->addCreditsToUser((string) $user->id, $requiredCredits, 'SentinelClipController');
+            }
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Unable to queue Sentinel clipped imagery at this time.',
+                'data' => [
+                    'current_credits' => $this->creditService->getRemainingCredits($user->id),
+                    'required_credits' => $requiredCredits,
+                ],
+            ], 500);
+        }
     }
 
     private function sanitizeDisplayName(string $value): string
