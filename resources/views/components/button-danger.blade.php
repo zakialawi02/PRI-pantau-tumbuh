@@ -7,6 +7,7 @@
 
 @php
     $sizes = [
+        'xsmall' => 'px-2 py-1.5 text-xs',
         'small' => 'text-sm px-2.5 py-1.5',
         'normal' => 'text-base px-4 py-2',
         'large' => 'text-lg px-6 py-3',
