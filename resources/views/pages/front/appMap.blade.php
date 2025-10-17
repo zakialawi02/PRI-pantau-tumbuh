@@ -316,7 +316,14 @@
 
                     <!-- Clip Tab Content -->
                     <div class="tab-content hidden" id="sentinel-clip-panel" role="tabpanel" aria-labelledby="sentinel-clip-tab">
-                        <div class="space-y-3" id="sentinelClipModule" data-credit-rate="{{ config('app-constants.imagery_credit_cost_per_hectare') }}" data-process-url="{{ auth()->check() ? route('admin.sentinel.process') : '' }}" data-processing-cost="{{ config('app-constants.imagery_processing_cost', 10) }}">
+                        <div
+                            class="space-y-3"
+                            id="sentinelClipModule"
+                            data-credit-rate="{{ config('app-constants.imagery_credit_cost_per_hectare') }}"
+                            data-process-url="{{ auth()->check() ? route('admin.sentinel.process') : '' }}"
+                            data-clip-process-url="{{ auth()->check() ? route('admin.sentinel.clip.process') : '' }}"
+                            data-processing-cost="{{ config('app-constants.imagery_processing_cost', 10) }}"
+                        >
                             <div class="bg-background/60 border-foreground/10 space-y-3 rounded-lg border p-3 shadow-sm">
                                 <div class="flex flex-wrap items-center justify-between gap-2">
                                     <div>
@@ -358,6 +365,25 @@
                                     <x-input-label class="text-sm font-medium" for="clipFieldName">Field Name</x-input-label>
                                     <x-text-input class="w-full" id="clipFieldName" name="field_name" size="small" placeholder="e.g. North Farm Block" />
                                 </div>
+                            </div>
+
+                            <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                                <div class="flex items-center gap-2">
+                                    @auth
+                                        <x-button-primary id="clipProcessImageryBtn" type="button" size="small">
+                                            <i class="ri-cpu-line"></i>
+                                            <span>Process Imagery</span>
+                                        </x-button-primary>
+                                    @else
+                                        <x-button-primary id="clipProcessImageryBtn" type="button" size="small" variant="outline" disabled title="Login to process imagery">
+                                            <i class="ri-lock-line"></i>
+                                            <span>Login to Process</span>
+                                        </x-button-primary>
+                                    @endauth
+                                </div>
+                                <p class="text-foreground/60 text-xs" id="clipProcessStatus" hidden>
+                                    Draw an area and provide a field name before processing the imagery clip.
+                                </p>
                             </div>
 
                         </div>

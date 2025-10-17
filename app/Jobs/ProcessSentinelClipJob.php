@@ -66,7 +66,7 @@ class ProcessSentinelClipJob implements ShouldQueue
 
         if (!$pythonPath) {
             Log::error('ProcessSentinelClipJob: Python executable not found for clipping process.');
-            $creditService->refundCreditsForFailure($imagery, 'ClipJob');
+            $this->refundCredits($creditService, $imagery);
             $imagery->update([
                 'processing_status' => 'error',
                 'upload_status' => 'failed',
@@ -78,7 +78,7 @@ class ProcessSentinelClipJob implements ShouldQueue
             Log::error('ProcessSentinelClipJob: Clipping script not found.', [
                 'path' => $scriptPath,
             ]);
-            $creditService->refundCreditsForFailure($imagery, 'ClipJob');
+            $this->refundCredits($creditService, $imagery);
             $imagery->update([
                 'processing_status' => 'error',
                 'upload_status' => 'failed',
@@ -91,12 +91,121 @@ class ProcessSentinelClipJob implements ShouldQueue
             Log::error('ProcessSentinelClipJob: Geometry payload missing.', [
                 'imagery_id' => $this->imageryId,
             ]);
-            $creditService->refundCreditsForFailure($imagery, 'ClipJob');
+            $this->refundCredits($creditService, $imagery);
             $imagery->update([
                 'processing_status' => 'error',
                 'upload_status' => 'failed',
             ]);
             return;
         }
+
+        if (($geometry['type'] ?? null) !== 'FeatureCollection') {
+            $geometry = [
+                'type' => 'FeatureCollection',
+                'features' => [$geometry],
+            ];
+        }
+
+        $dateFrom = $this->payload['date_from'] ?? now()->subDays(30)->toDateString();
+        $dateTo = $this->payload['date_to'] ?? now()->toDateString();
+        $limit = (int) ($this->payload['limit'] ?? 50);
+        $resolution = (int) ($this->payload['resolution'] ?? 10);
+        $nodata = (float) ($this->payload['nodata'] ?? 0);
+        $sceneId = $this->payload['scene_id'] ?? null;
+
+        $overrides = [
+            'SENTINEL_CLIP_GEOJSON' => json_encode($geometry),
+            'SENTINEL_CLIP_TILE_DIR' => $tilesDir,
+            'SENTINEL_CLIP_MERGED_PATH' => $mergedPath,
+            'SENTINEL_CLIP_OUTPUT' => $outputPath,
+            'SENTINEL_CLIP_DATE_FROM' => $dateFrom,
+            'SENTINEL_CLIP_DATE_TO' => $dateTo,
+            'SENTINEL_CLIP_LIMIT' => (string) max($limit, 1),
+            'SENTINEL_CLIP_RESOLUTION' => (string) max($resolution, 10),
+            'SENTINEL_CLIP_NODATA' => (string) $nodata,
+        ];
+
+        if (!empty($sceneId)) {
+            $overrides['SENTINEL_CLIP_SCENE_ID'] = $sceneId;
+        }
+
+        $processEnv = $pythonService->buildProcessEnvironment($overrides);
+
+        try {
+            $imagery->update([
+                'processing_status' => 'processing',
+            ]);
+
+            $process = new Process([$pythonPath, $scriptPath], $scriptsBase, $processEnv);
+            $process->setTimeout(7200);
+            $process->run();
+
+            $stdout = trim($process->getOutput());
+            if ($stdout !== '') {
+                Log::info('[Sentinel Clip STDOUT] ' . $stdout);
+            }
+
+            $stderr = trim($process->getErrorOutput());
+            if ($stderr !== '') {
+                Log::warning('[Sentinel Clip STDERR] ' . $stderr);
+            }
+
+            if (!$process->isSuccessful()) {
+                throw new \RuntimeException('Sentinel clip processing failed.');
+            }
+
+            if (!File::exists($outputPath)) {
+                throw new \RuntimeException('Sentinel clip output file was not created.');
+            }
+
+            $outputSize = File::size($outputPath) ?: 0;
+
+            $imagery->update([
+                'upload_status' => 'done',
+                'processing_status' => 'completed',
+                'processed_path' => $relativeOutput,
+                'processed_at' => now(),
+                'path' => $relativeOutput,
+                'format' => pathinfo($outputFilename, PATHINFO_EXTENSION) ?: 'tif',
+                'size' => $outputSize,
+            ]);
+        } catch (Throwable $exception) {
+            Log::error('ProcessSentinelClipJob failed: ' . $exception->getMessage(), [
+                'imagery_id' => $this->imageryId,
+                'field_area_id' => $this->fieldAreaId,
+                'trace' => $exception->getTraceAsString(),
+            ]);
+
+            if (File::exists($outputPath)) {
+                File::delete($outputPath);
+            }
+
+            $this->refundCredits($creditService, $imagery);
+
+            $imagery->update([
+                'processing_status' => 'error',
+                'upload_status' => 'failed',
+            ]);
+
+            $this->fail($exception);
+        } finally {
+            if (File::isDirectory($tilesDir)) {
+                File::deleteDirectory($tilesDir);
+            }
+
+            if (File::exists($mergedPath)) {
+                File::delete($mergedPath);
+            }
+        }
+    }
+
+    private function refundCredits(CreditService $creditService, ImageryData $imagery): void
+    {
+        $creditCost = (float) ($this->payload['credit_cost'] ?? 0);
+        if ($creditCost <= 0) {
+            return;
+        }
+
+        $creditService->addCreditsToUser($imagery->user_id, $creditCost, 'ClipJobFailure');
     }
 }

@@ -1101,6 +1101,145 @@ if (clipDrawPolygonBtn) {
     });
 }
 
+const clipProcessButton = document.getElementById("clipProcessImageryBtn");
+if (clipProcessButton) {
+    clipProcessButton.addEventListener("click", function () {
+        const sentinelClipModule = document.getElementById("sentinelClipModule");
+        const statusEl = document.getElementById("clipProcessStatus");
+        const fieldNameInput = document.getElementById("clipFieldName");
+
+        if (!sentinelClipModule) {
+            return;
+        }
+
+        const processUrl = sentinelClipModule.dataset.clipProcessUrl || "";
+        if (!processUrl) {
+            if (statusEl) {
+                statusEl.hidden = false;
+                statusEl.classList.remove("text-success", "text-foreground/70");
+                statusEl.classList.add("text-destructive");
+                statusEl.textContent =
+                    "Login to your account to start Sentinel-2 clip processing.";
+            }
+            return;
+        }
+
+        if (!geojsonFeature || !geojsonArea) {
+            if (statusEl) {
+                statusEl.hidden = false;
+                statusEl.classList.remove("text-success", "text-destructive");
+                statusEl.classList.add("text-foreground/70");
+                statusEl.textContent =
+                    "Draw a polygon on the map to define the area you want to clip.";
+            }
+            return;
+        }
+
+        const fieldName = fieldNameInput?.value?.trim() || "";
+        if (!fieldName) {
+            if (statusEl) {
+                statusEl.hidden = false;
+                statusEl.classList.remove("text-success", "text-foreground/70");
+                statusEl.classList.add("text-destructive");
+                statusEl.textContent =
+                    "Please provide a field name before processing the imagery.";
+            }
+            fieldNameInput?.focus();
+            return;
+        }
+
+        const csrfToken = document
+            .querySelector('meta[name="csrf-token"]')
+            ?.getAttribute("content");
+        if (!csrfToken) {
+            if (statusEl) {
+                statusEl.hidden = false;
+                statusEl.classList.remove("text-success");
+                statusEl.classList.add("text-destructive");
+                statusEl.textContent =
+                    "Unable to find a CSRF token for the request.";
+            }
+            return;
+        }
+
+        const featureCollection = {
+            type: "FeatureCollection",
+            features: [geojsonFeature],
+        };
+
+        const areaHa = (geojsonArea || 0) / 10000;
+
+        clipProcessButton.disabled = true;
+        clipProcessButton.innerHTML =
+            '<span class="flex items-center gap-2"><span class="h-3 w-3 animate-spin rounded-full border border-current border-r-transparent"></span><span>Submitting...</span></span>';
+
+        if (statusEl) {
+            statusEl.hidden = false;
+            statusEl.classList.remove("text-success", "text-destructive");
+            statusEl.classList.add("text-foreground/70");
+            statusEl.textContent = "Submitting Sentinel-2 clip request...";
+        }
+
+        $.ajax({
+            url: processUrl,
+            method: "POST",
+            headers: {
+                "X-CSRF-TOKEN": csrfToken,
+            },
+            data: {
+                field_name: fieldName,
+                geometry: JSON.stringify(featureCollection),
+                area_hectares: areaHa,
+            },
+            success: function (response) {
+                if (statusEl) {
+                    statusEl.hidden = false;
+                    statusEl.classList.remove("text-destructive", "text-foreground/70");
+                    statusEl.classList.add("text-success");
+                    statusEl.textContent =
+                        response?.message ||
+                        "Sentinel-2 imagery clipping has been queued successfully.";
+                }
+
+                if (response?.data?.current_credits !== undefined) {
+                    const creditsValue = response.data.current_credits;
+                    const creditOutput = document.getElementById("current-myCredits");
+                    if (creditOutput) {
+                        creditOutput.textContent = formatNumber(
+                            Number(creditsValue),
+                            2,
+                            document.documentElement.lang
+                        );
+                    }
+                }
+
+                if (fieldNameInput) {
+                    fieldNameInput.value = "";
+                }
+            },
+            error: function (xhr) {
+                if (statusEl) {
+                    statusEl.hidden = false;
+                    statusEl.classList.remove("text-success", "text-foreground/70");
+                    statusEl.classList.add("text-destructive");
+
+                    let message =
+                        "Unable to queue Sentinel-2 clip processing. Please try again.";
+                    if (xhr?.responseJSON?.message) {
+                        message = xhr.responseJSON.message;
+                    }
+                    statusEl.textContent = message;
+                }
+            },
+            complete: function () {
+                clipProcessButton.disabled = false;
+                clipProcessButton.innerHTML =
+                    '<i class="ri-cpu-line"></i><span>Process Imagery</span>';
+            },
+        });
+    });
+}
+
 /**
  * Zoom in function
  * @returns {void}
