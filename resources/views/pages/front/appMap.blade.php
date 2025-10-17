@@ -794,8 +794,6 @@
                     // Fallback Copernicus WMS endpoint & layer when the catalogue response omits one.
                     defaultWmsEndpoint: 'https://sh.dataspace.copernicus.eu/ogc/wms/1bd0fec1-0e52-427a-8e83-6e0dcd29a03a',
                     defaultWmsLayer: 'NATURAL-COLOR',
-                    // Request static Sentinel imagery at this base resolution for preview overlays.
-                    previewWmsImageMaxSize: 2048,
                     // Layer stacking order: keep WMS below the highlighted footprint polygons.
                     previewWmsZIndex: 10,
                     previewFootprintZIndex: 50,
@@ -1081,70 +1079,6 @@
                     } catch (error) {
                         console.warn('Failed to transform Sentinel extent:', error);
                         return null;
-                    }
-                };
-
-                /**
-                 * Calculate a suitable image size for static WMS preview requests.
-                 */
-                const deriveWmsImageSize = (bbox) => {
-                    const baseSize = Number.isFinite(config.previewWmsImageMaxSize)
-                        ? config.previewWmsImageMaxSize
-                        : 2048;
-                    if (!Array.isArray(bbox) || bbox.length < 4) {
-                        return { width: baseSize, height: baseSize };
-                    }
-
-                    const [minLon, minLat, maxLon, maxLat] = bbox;
-                    const widthSpan = Math.max(Math.abs(maxLon - minLon), 1e-6);
-                    const heightSpan = Math.max(Math.abs(maxLat - minLat), 1e-6);
-                    const aspect = widthSpan / heightSpan;
-
-                    let width = baseSize;
-                    let height = baseSize;
-                    if (Number.isFinite(aspect) && aspect > 0) {
-                        if (aspect >= 1) {
-                            height = Math.round(baseSize / aspect);
-                        } else {
-                            width = Math.round(baseSize * aspect);
-                        }
-                    }
-
-                    const clamp = (value) => Math.max(512, Math.min(4096, Math.max(1, Math.round(value))));
-                    return { width: clamp(width), height: clamp(height) };
-                };
-
-                /**
-                 * Assemble a WMS GetMap URL with the provided query parameters.
-                 */
-                const buildWmsRequestUrl = (baseUrl, params) => {
-                    if (typeof baseUrl !== 'string' || !baseUrl) {
-                        return null;
-                    }
-
-                    const applyParams = (url) => {
-                        Object.entries(params || {}).forEach(([key, value]) => {
-                            if (value == null || value === '') {
-                                return;
-                            }
-                            url.searchParams.set(key, value);
-                        });
-                        return url.toString();
-                    };
-
-                    try {
-                        const url = new URL(baseUrl);
-                        return applyParams(url);
-                    } catch (error) {
-                        const entries = Object.entries(params || {})
-                            .filter(([, value]) => value != null && value !== '')
-                            .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`);
-                        const queryString = entries.join('&');
-                        if (!queryString) {
-                            return baseUrl;
-                        }
-                        const separator = baseUrl.includes('?') ? '&' : '?';
-                        return `${baseUrl}${separator}${queryString}`;
                     }
                 };
 
@@ -1548,8 +1482,13 @@
 
                     if (!enable) {
                         if (state.preview.wmsLayer) {
+                            const currentSource = typeof state.preview.wmsLayer.getSource === 'function'
+                                ? state.preview.wmsLayer.getSource()
+                                : null;
+                            if (currentSource?.updateParams) {
+                                currentSource.updateParams({ TIME: undefined });
+                            }
                             state.preview.wmsLayer.setVisible(false);
-                            state.preview.wmsLayer.setSource(null);
                             state.preview.wmsLayer.setExtent(undefined);
                         }
                         state.preview.wmsActive = false;
@@ -1557,19 +1496,8 @@
                     }
 
                     const scene = state.scenes[state.preview.activeSceneIndex ?? -1];
-                    if (!scene?.wms || !hasMapSupport || !window.ol?.layer?.Image || !window.ol?.source?.ImageStatic) {
+                    if (!scene?.wms || !hasMapSupport || !window.ol?.layer?.Tile || !window.ol?.source?.TileWMS) {
                         return false;
-                    }
-
-                    if (!state.preview.wmsLayer) {
-                        state.preview.wmsLayer = new ol.layer.Image({
-                            opacity: 0.7,
-                            visible: false,
-                        });
-                        if (typeof state.preview.wmsLayer.setZIndex === 'function') {
-                            state.preview.wmsLayer.setZIndex(config.previewWmsZIndex);
-                        }
-                        mapInstance.addLayer(state.preview.wmsLayer);
                     }
 
                     const bboxSource = Array.isArray(scene.bbox) && scene.bbox.length >= 4 ? scene.bbox : null;
@@ -1578,27 +1506,36 @@
                         return false;
                     }
 
-                    const extent = projectBboxToMapExtent(bbox, mapInstance);
+                    let extent = projectBboxToMapExtent(bbox, mapInstance);
                     const view = mapInstance.getView();
                     const projection = typeof view?.getProjection === 'function' ? view.getProjection() : null;
                     const projectionCode = typeof projection?.getCode === 'function' ? projection.getCode() : 'EPSG:3857';
-                    const { width, height } = deriveWmsImageSize(bbox);
+
+                    if (!extent) {
+                        try {
+                            if (projection && window.ol?.proj?.transformExtent) {
+                                extent = window.ol.proj.transformExtent(bbox, 'EPSG:4326', projection);
+                            } else {
+                                extent = bbox;
+                            }
+                        } catch (error) {
+                            console.warn('Failed to transform Sentinel preview extent:', error);
+                            extent = bbox;
+                        }
+                    }
 
                     const params = {
-                        SERVICE: 'WMS',
-                        REQUEST: 'GetMap',
-                        VERSION: '1.1.1',
                         LAYERS: scene.wms.layers,
                         FORMAT: 'image/png',
                         TRANSPARENT: 'true',
-                        SRS: 'EPSG:4326',
-                        BBOX: bbox.join(','),
-                        WIDTH: String(width),
-                        HEIGHT: String(height),
+                        TILED: 'true',
+                        SHOWLOGO: 'false',
+                        VERSION: '1.3.0',
                     };
 
-                    if (projectionCode && projectionCode !== 'EPSG:4326') {
-                        params.CRS = 'EPSG:4326';
+                    if (projectionCode) {
+                        params.CRS = projectionCode;
+                        params.SRS = projectionCode;
                     }
 
                     if (scene.wms.time) {
@@ -1610,35 +1547,31 @@
                         }
                     }
 
-                    const rawRequestUrl = buildWmsRequestUrl(scene.wms.url, params);
-                    if (!rawRequestUrl) {
-                        return false;
-                    }
-                    const wmsUrl = withAccessToken(rawRequestUrl);
+                    const wmsUrl = withAccessToken(scene.wms.url);
+                    const source = new ol.source.TileWMS({
+                        url: wmsUrl,
+                        params,
+                        crossOrigin: 'anonymous',
+                        wrapX: false,
+                    });
 
-                    let imageExtent = extent;
-                    if (!imageExtent) {
-                        try {
-                            if (projection && window.ol?.proj?.transformExtent) {
-                                imageExtent = window.ol.proj.transformExtent(bbox, 'EPSG:4326', projection);
-                            } else {
-                                imageExtent = bbox;
-                            }
-                        } catch (error) {
-                            console.warn('Failed to transform Sentinel preview extent:', error);
-                            imageExtent = bbox;
+                    if (!state.preview.wmsLayer) {
+                        state.preview.wmsLayer = new ol.layer.Tile({
+                            opacity: 0.7,
+                            visible: false,
+                        });
+                        if (typeof state.preview.wmsLayer.setZIndex === 'function') {
+                            state.preview.wmsLayer.setZIndex(config.previewWmsZIndex);
                         }
+                        mapInstance.addLayer(state.preview.wmsLayer);
                     }
 
-                    state.preview.wmsLayer.setSource(
-                        new ol.source.ImageStatic({
-                            url: wmsUrl,
-                            imageExtent,
-                            projection: projection || projectionCode || undefined,
-                            crossOrigin: 'anonymous',
-                        })
-                    );
-                    state.preview.wmsLayer.setExtent(imageExtent || extent || undefined);
+                    state.preview.wmsLayer.setSource(source);
+                    if (extent) {
+                        state.preview.wmsLayer.setExtent(extent);
+                    } else {
+                        state.preview.wmsLayer.setExtent(undefined);
+                    }
                     state.preview.wmsLayer.setVisible(true);
                     state.preview.wmsActive = true;
                     return true;
