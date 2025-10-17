@@ -896,23 +896,6 @@ function addInteraction(type = "Polygon") {
         });
         geojsonFeature = JSON.parse(geojson);
 
-        const clipDetail = {
-            geometry: geojsonFeature?.geometry || null,
-            feature: geojsonFeature || null,
-            areaSqMeters: geojsonArea || 0,
-            areaHectares: geojsonArea ? geojsonArea / 10000 : 0,
-        };
-
-        window.AppMap = window.AppMap || {};
-        window.AppMap.clip = window.AppMap.clip || {};
-        window.AppMap.clip.latest = clipDetail;
-
-        document.dispatchEvent(
-            new CustomEvent("app:clip:geometry", {
-                detail: clipDetail,
-            })
-        );
-
         drawingEnd();
 
         // Calculate total price after drawing
