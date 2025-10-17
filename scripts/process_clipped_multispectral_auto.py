@@ -1,6 +1,6 @@
 import os
 import json
-from datetime import timedelta
+from datetime import datetime, timedelta
 from dateutil import parser as dateparser
 import numpy as np
 import rasterio
@@ -20,15 +20,15 @@ def read_env(name: str, default: str | None = None) -> str | None:
         return value
     return default
 
-SH_CLIENT_ID = read_env("SENTINELHUB_CLIENT_ID", read_env("SH_CLIENT_ID", ""))
-SH_CLIENT_SECRET = read_env("SENTINELHUB_CLIENT_SECRET", read_env("SH_CLIENT_SECRET", ""))
+COPERNICUS_CLIENT_ID = read_env("COPERNICUS_CLIENT_ID", read_env("SENTINELHUB_CLIENT_ID", read_env("SH_CLIENT_ID", "")))
+COPERNICUS_CLIENT_SECRET = read_env("COPERNICUS_CLIENT_SECRET", read_env("SENTINELHUB_CLIENT_SECRET", read_env("SH_CLIENT_SECRET", "")))
 
-if not SH_CLIENT_ID or not SH_CLIENT_SECRET:
-    raise SystemExit("Sentinel Hub credentials are not configured.")
+if not COPERNICUS_CLIENT_ID or not COPERNICUS_CLIENT_SECRET:
+    raise SystemExit("Copernicus credentials are not configured.")
 
 config = SHConfig()
-config.sh_client_id = SH_CLIENT_ID
-config.sh_client_secret = SH_CLIENT_SECRET
+config.sh_client_id = COPERNICUS_CLIENT_ID
+config.sh_client_secret = COPERNICUS_CLIENT_SECRET
 config.sh_token_url = "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token"
 config.sh_base_url  = "https://sh.dataspace.copernicus.eu"
 
@@ -45,9 +45,12 @@ if masked_tif:
     os.makedirs(os.path.dirname(os.path.abspath(masked_tif)), exist_ok=True)
 
 # ====== PARAMETER ======
-DATE_FROM = read_env("SENTINEL_CLIP_DATE_FROM", "2025-10-17")
-DATE_TO   = read_env("SENTINEL_CLIP_DATE_TO", "2025-08-31")
-LIMIT     = int(float(read_env("SENTINEL_CLIP_LIMIT", "100")))
+default_to = datetime.utcnow().date()
+default_from = default_to - timedelta(days=30)
+
+DATE_FROM = read_env("SENTINEL_CLIP_DATE_FROM", default_from.isoformat())
+DATE_TO   = read_env("SENTINEL_CLIP_DATE_TO", default_to.isoformat())
+LIMIT     = int(float(read_env("SENTINEL_CLIP_LIMIT", "50")))
 RES       = int(float(read_env("SENTINEL_CLIP_RESOLUTION", "10")))
 NODATA_VAL = float(read_env("SENTINEL_CLIP_NODATA", "0"))
 
@@ -138,6 +141,9 @@ if geojson_env:
 else:
     AOI_GEOJSON = default_geojson
 
+if DATE_FROM > DATE_TO:
+    DATE_FROM, DATE_TO = DATE_TO, DATE_FROM
+
 geom_dict = AOI_GEOJSON["features"][0]["geometry"]
 geometry = Geometry(geom_dict, crs=CRS.WGS84)
 bbox = geometry.bbox
@@ -162,7 +168,7 @@ filtered = items   # <- tidak ada filter cloud coverage
 preferred_scene_id = read_env("SENTINEL_CLIP_SCENE_ID") or read_env("CLIP_SCENE_ID")
 chosen = None
 if preferred_scene_id:
-    chosen = next((it for it in items if str(it.get("id")) == preferred_scene_id), None)
+    chosen = next((it for it in items if str(it.get("id")) == str(preferred_scene_id)), None)
 if chosen is None:
     chosen = filtered[0]
 
