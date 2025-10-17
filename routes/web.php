@@ -83,6 +83,7 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/imagery-checkout', [ImageryDataController::class, 'imageryCheckout'])->name('imageryCheckout');
     Route::post('/imagery-checkout', [ImageryDataController::class, 'processCheckoutImagery'])->name('processImageryCheckout');
 
+    Route::post('/sentinel/clip/search', [SentinelClipController::class, 'searchScenes'])->name('sentinel.clip.search');
     Route::post('/sentinel/clip/process', [SentinelClipController::class, 'processClip'])->name('sentinel.clip.process');
 
     Route::post('/checkout/purchase-credits', [UserCreditsController::class, 'orderCredit'])->name('orderCredit');

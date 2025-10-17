@@ -316,7 +316,7 @@
 
                     <!-- Clip Tab Content -->
                     <div class="tab-content hidden" id="sentinel-clip-panel" role="tabpanel" aria-labelledby="sentinel-clip-tab">
-                        <div class="space-y-3" id="sentinelClipModule" data-credit-rate="{{ config('app-constants.imagery_credit_cost_per_hectare') }}" data-process-url="{{ auth()->check() ? route('sentinel.clip.process') : '' }}">
+                        <div class="space-y-3" id="sentinelClipModule" data-credit-rate="{{ config('app-constants.imagery_credit_cost_per_hectare') }}" data-process-url="{{ auth()->check() ? route('sentinel.clip.process') : '' }}" data-search-url="{{ auth()->check() ? route('sentinel.clip.search') : '' }}">
                             <div class="bg-background/60 border-foreground/10 space-y-3 rounded-lg border p-3 shadow-sm">
                                 <div class="flex flex-wrap items-center justify-between gap-2">
                                     <div>
@@ -3302,6 +3302,506 @@
                     });
                 } else {
                     initialise();
+                }
+            })();
+        </script>
+    @endpush
+
+    @push('javascript')
+        <script>
+            (() => {
+                const init = () => {
+                    const moduleEl = document.getElementById('sentinelClipModule');
+                    if (!moduleEl) {
+                        return;
+                    }
+
+                    const sentinelPanelEl = document.getElementById('sentinel-panel');
+                    const dataset = moduleEl.dataset || {};
+                    const creditRate = Number(dataset.creditRate ?? '0') || 0;
+                    const searchUrl = dataset.searchUrl || '';
+                    const processUrl = dataset.processUrl || '';
+                    const credentialsConfigured = (sentinelPanelEl?.dataset?.sentinelCredentials ?? '').toLowerCase() === 'true';
+
+                    const elements = {
+                        areaOutput: document.getElementById('clipAreaOutput'),
+                        creditOutput: document.getElementById('clipCreditOutput'),
+                        geojsonOutput: document.getElementById('clipGeojsonOutput'),
+                        fieldName: document.getElementById('clipFieldName'),
+                        autoButton: document.getElementById('clipAutoSearchBtn'),
+                        autoResult: document.getElementById('clipAutoResult'),
+                        processButton: document.getElementById('clipProcessBtn'),
+                        processNotice: document.getElementById('clipProcessNotice'),
+                        selectionSummary: document.getElementById('clipSelectionSummary')
+                    };
+
+                    const state = {
+                        geometry: null,
+                        areaSqm: 0,
+                        areaHa: 0,
+                        creditRate: creditRate,
+                        creditCost: 0,
+                        scenes: [],
+                        selectedScene: null,
+                        searching: false,
+                        processing: false
+                    };
+
+                    const hasSearchAccess = Boolean(searchUrl);
+                    const hasProcessAccess = Boolean(processUrl);
+                    const autoButtonInitial = elements.autoButton?.innerHTML || '';
+                    const processButtonInitial = elements.processButton?.innerHTML || '';
+                    const initialProcessNotice = elements.processNotice?.textContent || '';
+
+                    const getCsrfToken = () => document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+
+                    const formatDecimal = (value, digits = 2) => {
+                        if (!Number.isFinite(value)) {
+                            return '0'.padEnd(digits ? digits + 2 : 1, '0');
+                        }
+
+                        if (typeof window.formatNumber === 'function') {
+                            return window.formatNumber(value, digits);
+                        }
+
+                        try {
+                            return new Intl.NumberFormat(document.documentElement.lang || 'en', {
+                                minimumFractionDigits: digits,
+                                maximumFractionDigits: digits
+                            }).format(value);
+                        } catch (error) {
+                            return value.toFixed(digits);
+                        }
+                    };
+
+                    const formatDateTime = (isoString) => {
+                        if (!isoString) {
+                            return 'Unknown time';
+                        }
+                        try {
+                            const date = new Date(isoString);
+                            if (Number.isNaN(date.getTime())) {
+                                return isoString;
+                            }
+                            return new Intl.DateTimeFormat(document.documentElement.lang || 'en', {
+                                dateStyle: 'medium',
+                                timeStyle: 'short'
+                            }).format(date);
+                        } catch (error) {
+                            return isoString;
+                        }
+                    };
+
+                    const truncateGeojson = (geometry) => {
+                        if (!geometry) {
+                            return '';
+                        }
+                        try {
+                            const raw = JSON.stringify(geometry);
+                            return raw.length > 480 ? `${raw.slice(0, 477)}...` : raw;
+                        } catch (error) {
+                            return '[Unable to render geometry]';
+                        }
+                    };
+
+                    const setAutoResultContent = (html) => {
+                        if (!elements.autoResult) {
+                            return;
+                        }
+                        elements.autoResult.innerHTML = html;
+                    };
+
+                    const computeCredits = () => {
+                        const cost = state.areaHa * state.creditRate;
+                        state.creditCost = Number.isFinite(cost) ? Math.max(0, cost) : 0;
+                    };
+
+                    const updateAreaOutputs = () => {
+                        if (!elements.areaOutput || !elements.creditOutput) {
+                            return;
+                        }
+
+                        if (!state.geometry) {
+                            elements.areaOutput.textContent = 'Draw a polygon to calculate the area.';
+                            elements.creditOutput.textContent = '–';
+                            return;
+                        }
+
+                        const hectares = formatDecimal(state.areaHa, 2);
+                        const squareMeters = formatDecimal(state.areaSqm, 0);
+                        const credits = formatDecimal(state.creditCost, 2);
+
+                        elements.areaOutput.textContent = `${hectares} ha (${squareMeters} m²)`;
+                        elements.creditOutput.textContent = `${credits} credit points`;
+                    };
+
+                    const updateGeojsonOutput = () => {
+                        if (!elements.geojsonOutput) {
+                            return;
+                        }
+
+                        if (!state.geometry) {
+                            elements.geojsonOutput.innerHTML = '<span class="text-foreground/60">Coordinates will appear here after drawing.</span>';
+                            return;
+                        }
+
+                        elements.geojsonOutput.textContent = truncateGeojson(state.geometry);
+                    };
+
+                    const updateSelectionSummary = () => {
+                        if (!elements.selectionSummary) {
+                            return;
+                        }
+
+                        const scene = state.selectedScene;
+                        if (!scene) {
+                            elements.selectionSummary.textContent = 'No scene selected yet. Use auto mode to pick one.';
+                            return;
+                        }
+
+                        const cloudCover = Number.isFinite(scene.cloud_cover) ? `${formatDecimal(scene.cloud_cover, 1)}% cloud cover` : 'Cloud cover unavailable';
+                        const collection = scene.collection ? scene.collection.toUpperCase() : 'SENTINEL-2';
+                        const platform = scene.platform ? `Platform: ${scene.platform}` : null;
+                        const orbit = scene.orbit ? `Orbit: ${scene.orbit}` : null;
+
+                        const details = [cloudCover, platform, orbit].filter(Boolean).join(' • ');
+
+                        elements.selectionSummary.innerHTML = `
+                            <div class="space-y-1">
+                                <p class="text-sm font-semibold text-foreground">${scene.title || 'Sentinel-2 Scene'}</p>
+                                <p class="text-xs text-foreground/70">${collection} • ${formatDateTime(scene.datetime)}</p>
+                                <p class="text-xs text-foreground/60">${details || 'No additional metadata available.'}</p>
+                            </div>
+                        `;
+                    };
+
+                    const updateActionStates = () => {
+                        if (elements.autoButton) {
+                            const canSearch = Boolean(state.geometry) && hasSearchAccess && credentialsConfigured && !state.searching;
+                            elements.autoButton.disabled = !canSearch;
+                        }
+
+                        if (elements.processButton) {
+                            const canProcess = Boolean(state.geometry) && Boolean(state.selectedScene) && hasProcessAccess && !state.processing;
+                            elements.processButton.disabled = !canProcess;
+                        }
+
+                        if (elements.processNotice) {
+                            if (!hasProcessAccess) {
+                                elements.processNotice.textContent = 'Log in to process Sentinel-2 imagery clips.';
+                            } else if (!state.selectedScene) {
+                                elements.processNotice.textContent = 'Processing will run in the background. We will notify you when the imagery is ready.';
+                            } else {
+                                elements.processNotice.textContent = initialProcessNotice || 'Processing will run in the background. We will notify you when the imagery is ready.';
+                            }
+                        }
+                    };
+
+                    const renderSceneList = (scenes) => {
+                        if (!elements.autoResult) {
+                            return;
+                        }
+
+                        if (!scenes.length) {
+                            setAutoResultContent('<p class="text-sm text-foreground/60">No scenes found for the selected area and criteria.</p>');
+                            return;
+                        }
+
+                        const list = document.createElement('div');
+                        list.className = 'space-y-2';
+
+                        scenes.forEach((scene) => {
+                            const button = document.createElement('button');
+                            button.type = 'button';
+                            button.className = 'w-full rounded-lg border border-foreground/20 bg-background/40 p-2 text-left text-sm transition hover:border-primary hover:bg-primary/5 focus:outline-none focus:ring-2 focus:ring-primary/40';
+
+                            if (state.selectedScene?.id === scene.id) {
+                                button.classList.add('border-primary', 'bg-primary/10');
+                            }
+
+                            const sceneCloud = Number.isFinite(scene.cloud_cover) ? `${formatDecimal(scene.cloud_cover, 1)}% cloud` : 'Cloud data unavailable';
+                            const metaLine = [scene.collection ? scene.collection.toUpperCase() : 'SENTINEL-2', scene.platform || null].filter(Boolean).join(' • ');
+
+                            button.innerHTML = `
+                                <div class="flex items-start justify-between gap-2">
+                                    <div class="min-w-0">
+                                        <p class="truncate text-sm font-semibold text-foreground">${scene.title || 'Sentinel-2 Scene'}</p>
+                                        <p class="text-xs text-foreground/70">${formatDateTime(scene.datetime)}</p>
+                                        <p class="text-xs text-foreground/60">${metaLine}</p>
+                                    </div>
+                                    <span class="shrink-0 text-xs font-medium text-foreground/70">${sceneCloud}</span>
+                                </div>
+                            `;
+
+                            button.addEventListener('click', () => {
+                                state.selectedScene = scene;
+                                renderSceneList(state.scenes);
+                                updateSelectionSummary();
+                                updateActionStates();
+                            });
+
+                            list.appendChild(button);
+                        });
+
+                        elements.autoResult.innerHTML = '';
+                        elements.autoResult.appendChild(list);
+                    };
+
+                    const resetScenes = (message = 'Draw an area and search to preview the recommended scene.') => {
+                        state.scenes = [];
+                        state.selectedScene = null;
+                        setAutoResultContent(`<p class="text-sm text-foreground/60">${message}</p>`);
+                        updateSelectionSummary();
+                    };
+
+                    const notifyError = (message) => {
+                        if (window.MyZkToast?.error) {
+                            window.MyZkToast.error(message);
+                        } else {
+                            console.error(message);
+                        }
+                    };
+
+                    const notifySuccess = (message) => {
+                        if (window.MyZkToast?.success) {
+                            window.MyZkToast.success(message);
+                        } else {
+                            console.log(message);
+                        }
+                    };
+
+                    const handleDrawingUpdate = () => {
+                        const feature = window.geojsonFeature;
+                        const area = Number(window.geojsonArea);
+
+                        if (!feature || !Number.isFinite(area)) {
+                            state.geometry = null;
+                            state.areaSqm = 0;
+                            state.areaHa = 0;
+                            computeCredits();
+                            updateAreaOutputs();
+                            updateGeojsonOutput();
+                            resetScenes();
+                            updateActionStates();
+                            return;
+                        }
+
+                        const geometry = feature.geometry || (feature.type === 'Feature' ? feature.geometry : null);
+                        if (!geometry) {
+                            state.geometry = null;
+                            state.areaSqm = 0;
+                            state.areaHa = 0;
+                            computeCredits();
+                            updateAreaOutputs();
+                            updateGeojsonOutput();
+                            resetScenes('Unable to interpret the drawn geometry. Please try again.');
+                            updateActionStates();
+                            return;
+                        }
+
+                        state.geometry = geometry;
+                        state.areaSqm = Math.max(0, area);
+                        state.areaHa = state.areaSqm / 10000;
+                        computeCredits();
+                        updateAreaOutputs();
+                        updateGeojsonOutput();
+                        resetScenes();
+                        updateActionStates();
+                    };
+
+                    const executeSceneSearch = async () => {
+                        if (!state.geometry) {
+                            notifyError('Draw an area on the map before searching for scenes.');
+                            return;
+                        }
+
+                        if (!credentialsConfigured) {
+                            notifyError('Copernicus credentials are not configured. Please contact the administrator.');
+                            return;
+                        }
+
+                        if (!hasSearchAccess) {
+                            notifyError('You need to sign in to search Sentinel scenes.');
+                            return;
+                        }
+
+                        state.searching = true;
+                        updateActionStates();
+
+                        if (elements.autoButton) {
+                            elements.autoButton.innerHTML = '<i class="ri-loader-4-line animate-spin"></i> Searching...';
+                            elements.autoButton.setAttribute('aria-busy', 'true');
+                        }
+
+                        setAutoResultContent('<p class="text-sm text-foreground/60 animate-pulse">Searching for the newest Sentinel-2 scenes...</p>');
+
+                        try {
+                            const payload = {
+                                geometry: state.geometry,
+                                area_hectares: state.areaHa,
+                                area_square_meters: state.areaSqm,
+                                limit: 5,
+                                max_cloud_cover: 60,
+                                collection: 'sentinel-2-l2a'
+                            };
+
+                            const response = await fetch(searchUrl, {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'Accept': 'application/json',
+                                    'X-CSRF-TOKEN': getCsrfToken()
+                                },
+                                body: JSON.stringify(payload)
+                            });
+
+                            const result = await response.json().catch(() => ({}));
+
+                            if (!response.ok) {
+                                const message = result?.message || 'Unable to search Sentinel catalogue at this time.';
+                                throw new Error(message);
+                            }
+
+                            const scenes = Array.isArray(result?.data?.scenes) ? result.data.scenes : [];
+                            state.scenes = scenes.map((scene) => ({
+                                ...scene,
+                                cloud_cover: Number.isFinite(scene.cloud_cover) ? scene.cloud_cover : Number(scene.cloud_cover)
+                            }));
+                            state.selectedScene = state.scenes[0] || null;
+
+                            if (!state.scenes.length) {
+                                resetScenes('No scenes found for the selected area and timeframe. Try expanding the timeframe or adjusting the area.');
+                            } else {
+                                renderSceneList(state.scenes);
+                                updateSelectionSummary();
+                                notifySuccess('Found Sentinel-2 scenes that intersect your area.');
+                            }
+                        } catch (error) {
+                            resetScenes(error?.message || 'Search failed. Please try again.');
+                            notifyError(error?.message || 'Failed to search Sentinel scenes.');
+                        } finally {
+                            state.searching = false;
+                            if (elements.autoButton) {
+                                elements.autoButton.innerHTML = autoButtonInitial;
+                                elements.autoButton.removeAttribute('aria-busy');
+                            }
+                            updateActionStates();
+                        }
+                    };
+
+                    const executeProcessing = async () => {
+                        if (!state.geometry || !state.selectedScene) {
+                            notifyError('Select an area and Sentinel scene before processing.');
+                            return;
+                        }
+
+                        if (!hasProcessAccess) {
+                            notifyError('You need to sign in to process Sentinel clips.');
+                            return;
+                        }
+
+                        state.processing = true;
+                        updateActionStates();
+
+                        if (elements.processButton) {
+                            elements.processButton.innerHTML = '<i class="ri-loader-4-line animate-spin"></i> Queuing...';
+                            elements.processButton.setAttribute('aria-busy', 'true');
+                        }
+
+                        const fieldName = elements.fieldName?.value?.trim();
+
+                        const payload = {
+                            field_name: fieldName || null,
+                            geometry: state.geometry,
+                            area_hectares: state.areaHa,
+                            area_square_meters: state.areaSqm,
+                            credit_rate: state.creditRate,
+                            credit_cost: state.creditCost,
+                            scene: state.selectedScene
+                        };
+
+                        try {
+                            const response = await fetch(processUrl, {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'Accept': 'application/json',
+                                    'X-CSRF-TOKEN': getCsrfToken()
+                                },
+                                body: JSON.stringify(payload)
+                            });
+
+                            const result = await response.json().catch(() => ({}));
+
+                            if (!response.ok) {
+                                const errorMessage = result?.message || Object.values(result?.errors || {})?.[0]?.[0] || 'Failed to queue Sentinel clip processing.';
+                                throw new Error(errorMessage);
+                            }
+
+                            const credits = Number(result?.data?.current_credits);
+                            if (Number.isFinite(credits)) {
+                                const creditDisplay = document.getElementById('current-myCredits');
+                                if (creditDisplay) {
+                                    creditDisplay.textContent = formatDecimal(credits, 2);
+                                }
+                            }
+
+                            notifySuccess(result?.message || 'Sentinel clip queued for processing.');
+
+                            if (typeof window.AppMap?.uploader?.reload === 'function') {
+                                window.AppMap.uploader.reload();
+                            }
+                        } catch (error) {
+                            notifyError(error?.message || 'Unable to process Sentinel clip.');
+                        } finally {
+                            state.processing = false;
+                            if (elements.processButton) {
+                                elements.processButton.innerHTML = processButtonInitial;
+                                elements.processButton.removeAttribute('aria-busy');
+                            }
+                            updateActionStates();
+                        }
+                    };
+
+                    if (elements.autoButton) {
+                        elements.autoButton.addEventListener('click', executeSceneSearch);
+                    }
+
+                    if (elements.processButton) {
+                        elements.processButton.addEventListener('click', executeProcessing);
+                    }
+
+                    if (!credentialsConfigured) {
+                        setAutoResultContent('<p class="text-sm text-red-500">Copernicus credentials are not configured. Please contact the administrator.</p>');
+                    } else if (!hasSearchAccess) {
+                        setAutoResultContent('<p class="text-sm text-foreground/60">Sign in to search for Sentinel-2 scenes.</p>');
+                    } else {
+                        resetScenes();
+                    }
+
+                    window.AppMap = window.AppMap || {};
+                    window.AppMap.sentinelClip = window.AppMap.sentinelClip || {};
+                    window.AppMap.sentinelClip.refreshFromDrawing = handleDrawingUpdate;
+                    window.AppMap.sentinelClip.reset = () => {
+                        state.geometry = null;
+                        state.areaSqm = 0;
+                        state.areaHa = 0;
+                        computeCredits();
+                        updateAreaOutputs();
+                        updateGeojsonOutput();
+                        resetScenes();
+                        updateActionStates();
+                    };
+
+                    window.calculateTotalPrice = handleDrawingUpdate;
+
+                    handleDrawingUpdate();
+                };
+
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', init, { once: true });
+                } else {
+                    init();
                 }
             })();
         </script>

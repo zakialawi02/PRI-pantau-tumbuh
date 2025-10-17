@@ -56,6 +56,7 @@ return [
         'client_secret' => env('COPERNICUS_CLIENT_SECRET'),
         'token_endpoint' => env('COPERNICUS_TOKEN_ENDPOINT', 'https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token'),
         'token_cache_seconds' => env('COPERNICUS_TOKEN_CACHE_SECONDS', 3300),
+        'catalog_endpoint' => env('COPERNICUS_CATALOG_ENDPOINT', 'https://sh.dataspace.copernicus.eu/api/v1/catalog/1.0.0/search'),
     ],
 
 ];
