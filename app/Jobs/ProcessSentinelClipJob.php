@@ -136,7 +136,7 @@ class ProcessSentinelClipJob implements ShouldQueue
 
         $imagery->update([
             'processing_status' => 'processing',
-            'upload_status' => 'processing',
+            'upload_status' => 'uploading',
         ]);
 
         $overrides = [
