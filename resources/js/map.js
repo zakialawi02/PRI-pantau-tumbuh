@@ -906,6 +906,53 @@ function addInteraction(type = "Polygon") {
             )}</pre>`;
         }
 
+        const sentinelClipModule = document.getElementById(
+            "sentinelClipModule"
+        );
+        if (sentinelClipModule) {
+            const locale = document.documentElement.lang;
+            const areaHa = geojsonArea / 10000;
+
+            const clipAreaOutput = document.getElementById("clipAreaOutput");
+            if (clipAreaOutput) {
+                clipAreaOutput.textContent = `${formatNumber(
+                    areaHa,
+                    2,
+                    locale
+                )} ha`;
+            }
+
+            const clipCreditOutput = document.getElementById(
+                "clipCreditOutput"
+            );
+            if (clipCreditOutput) {
+                const creditRate = parseFloat(
+                    sentinelClipModule.dataset.creditRate || "0"
+                );
+                if (creditRate > 0) {
+                    const estimatedCost = areaHa * creditRate;
+                    clipCreditOutput.textContent = formatNumber(
+                        estimatedCost,
+                        2,
+                        locale
+                    );
+                } else {
+                    clipCreditOutput.textContent = "–";
+                }
+            }
+
+            const clipGeojsonOutput = document.getElementById(
+                "clipGeojsonOutput"
+            );
+            if (clipGeojsonOutput) {
+                clipGeojsonOutput.innerHTML = `<pre class="whitespace-pre-wrap">${JSON.stringify(
+                    geojsonFeature,
+                    null,
+                    2
+                )}</pre>`;
+            }
+        }
+
         // Display measurement result in the #measurementOutput div
         const measurementOutputEl =
             document.getElementById("measurementOutput");
