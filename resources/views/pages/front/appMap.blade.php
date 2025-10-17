@@ -1499,9 +1499,9 @@
                             LAYERS: scene.wms.layers,
                             FORMAT: 'image/png',
                             TRANSPARENT: true,
-                            SHOWLOGO: false,
-                            LOGO: false,
-                            showlogo: false,
+                            SHOWLOGO: 'false',
+                            LOGO: 'false',
+                            showlogo: 'false',
                             // Force legacy WMS axis order (lon/lat) to avoid transparent tiles caused by CRS swaps.
                             VERSION: '1.1.1',
                             SRS: projectionCode,
@@ -1509,8 +1509,26 @@
                             TILED: true,
                         };
                         if (scene.wms.time) {
-                            const isoTime = scene.wms.time;
-                            params.TIME = `${isoTime}/${isoTime}`;
+                            const candidate = new Date(scene.wms.time);
+                            if (!Number.isNaN(candidate.getTime())) {
+                                const utcDateParts = [
+                                    candidate.getUTCFullYear(),
+                                    candidate.getUTCMonth(),
+                                    candidate.getUTCDate(),
+                                ];
+                                const startOfDay = new Date(Date.UTC(utcDateParts[0], utcDateParts[1], utcDateParts[2], 0, 0, 0));
+                                const endOfDay = new Date(Date.UTC(utcDateParts[0], utcDateParts[1], utcDateParts[2], 23, 59, 59));
+                                const formatWmsDate = (date) => {
+                                    const year = date.getUTCFullYear();
+                                    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+                                    const day = String(date.getUTCDate()).padStart(2, '0');
+                                    return `${year}-${month}-${day}`;
+                                };
+                                params.TIME = `${formatWmsDate(startOfDay)}/${formatWmsDate(endOfDay)}`;
+                            } else {
+                                const isoTime = String(scene.wms.time);
+                                params.TIME = `${isoTime}/${isoTime}`;
+                            }
                         }
 
                         const geometryForMask = scene.geometry || geometryFromBbox(scene.bbox || []);
@@ -1523,12 +1541,17 @@
                                     featureProjection: 'EPSG:4326',
                                 });
                                 const wkt = wktWriter.writeGeometry(geometryObj);
-                                params.GEOMETRY = wkt;
-                                params.geometry = wkt;
+                                const sridPrefixed = `SRID=4326;${wkt}`;
+                                params.GEOMETRY = sridPrefixed;
+                                params.geometry = sridPrefixed;
                                 params.GEOMETRY_CRS = 'EPSG:4326';
                             } catch (error) {
                                 console.warn('Failed to encode Sentinel geometry for WMS mask:', error);
                             }
+                        }
+
+                        if (Number.isFinite(scene.cloudCover)) {
+                            params.MAXCC = Math.round(Math.max(0, Math.min(scene.cloudCover, 100)));
                         }
 
                         const bbox = scene.bbox || bboxFromGeometry(geometryForMask);
