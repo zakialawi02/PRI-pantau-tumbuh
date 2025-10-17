@@ -1,5 +1,9 @@
+import json
 import os
-from datetime import timedelta
+import shutil
+from datetime import datetime, timedelta, timezone
+from typing import Optional
+
 from dateutil import parser as dateparser
 import numpy as np
 import rasterio
@@ -7,71 +11,107 @@ from rasterio.merge import merge
 from rasterio import mask
 
 from sentinelhub import (
-    SHConfig, SentinelHubCatalog, SentinelHubRequest,
-    BBox, CRS, bbox_to_dimensions, MimeType, DataCollection, Geometry
+    SHConfig,
+    SentinelHubCatalog,
+    SentinelHubRequest,
+    CRS,
+    bbox_to_dimensions,
+    MimeType,
+    DataCollection,
+    Geometry,
 )
 from sentinelhub.areas import BBoxSplitter
 
-# ====== KONFIGURASI ======
-SH_CLIENT_ID = COPERNICUS_CLIENT_ID
-SH_CLIENT_SECRET = COPERNICUS_CLIENT_SECRET
+
+def require_env(name: str) -> str:
+    value = os.environ.get(name)
+    if not value:
+        raise SystemExit(f"Environment variable {name} is required")
+    return value
+
+
+def parse_start_date(raw: Optional[str]) -> datetime:
+    if not raw:
+        return datetime.now(timezone.utc) - timedelta(days=30)
+
+    dt = dateparser.isoparse(raw)
+    if isinstance(dt, datetime):
+        if dt.tzinfo is None:
+            return dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
+
+    raise SystemExit("Unable to parse CLIP_START_DATE")
+
+
+SH_CLIENT_ID = require_env("COPERNICUS_CLIENT_ID")
+SH_CLIENT_SECRET = require_env("COPERNICUS_CLIENT_SECRET")
 
 config = SHConfig()
 config.sh_client_id = SH_CLIENT_ID
 config.sh_client_secret = SH_CLIENT_SECRET
 config.sh_token_url = "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token"
-config.sh_base_url  = "https://sh.dataspace.copernicus.eu"
+config.sh_base_url = "https://sh.dataspace.copernicus.eu"
 
-# Folder untuk simpan
-tiles_dir = "tiles"
-merged_tif = "merged_fixed.tif"
-masked_tif = "merged_masked.tif"
+tiles_dir = os.environ.get("CLIP_TILES_DIR") or "tiles"
+output_path = os.environ.get("CLIP_OUTPUT") or os.path.join(os.getcwd(), "merged_masked.tif")
+merged_tif = os.path.join(tiles_dir, "merged_fixed.tif")
 os.makedirs(tiles_dir, exist_ok=True)
 
-# ====== PARAMETER ======
-DATE_FROM = "2025-08-01"
-DATE_TO   = "2025-08-31"
-MAX_CLOUD = 60
-LIMIT     = 100
-RES       = 10
-NODATA_VAL = 0   # ganti ke -9999 kalau lebih cocok
+for entry in os.listdir(tiles_dir):
+    entry_path = os.path.join(tiles_dir, entry)
+    if os.path.isdir(entry_path):
+        shutil.rmtree(entry_path)
+    else:
+        os.remove(entry_path)
 
-# ====== AOI dari GEOJSON ======
-AOI_GEOJSON = {}
+geometry_raw = require_env("CLIP_GEOMETRY")
+try:
+    geometry_obj = json.loads(geometry_raw)
+except json.JSONDecodeError as exc:
+    raise SystemExit(f"Unable to parse CLIP_GEOMETRY: {exc}")
 
-# Geometry untuk query & masking
-geom_dict = AOI_GEOJSON["features"][0]["geometry"]
+if geometry_obj.get("type") == "Feature" and geometry_obj.get("geometry"):
+    geom_dict = geometry_obj["geometry"]
+else:
+    geom_dict = geometry_obj
+
+if not isinstance(geom_dict, dict):
+    raise SystemExit("CLIP_GEOMETRY must describe a valid GeoJSON geometry")
+
 geometry = Geometry(geom_dict, crs=CRS.WGS84)
 bbox = geometry.bbox
 
-# ====== CARI SCENE ======
+start_date = parse_start_date(os.environ.get("CLIP_START_DATE"))
+end_date = datetime.now(timezone.utc)
+max_records = int(os.environ.get("CLIP_MAX_RECORDS", "10"))
+if max_records <= 0:
+    max_records = 10
+
+resolution = int(os.environ.get("CLIP_RESOLUTION", "10"))
+if resolution <= 0:
+    resolution = 10
+
 catalog = SentinelHubCatalog(config=config)
 search_iter = catalog.search(
-    DataCollection.SENTINEL2_L1C,
+    DataCollection.SENTINEL2_L2A,
     geometry=geometry,
-    time=(DATE_FROM, DATE_TO),
-    limit=LIMIT
+    time=(start_date.isoformat(), end_date.isoformat()),
+    limit=max_records,
 )
 items = list(search_iter)
 
-def get_cloud(item):
-    props = item.get("properties", {})
-    for k in ("eo:cloud_cover", "cloudCover"):
-        if k in props and props[k] is not None:
-            return float(props[k])
-    return None
-
 if not items:
-    raise SystemExit("Tidak ada scene cocok")
+    raise SystemExit("No Sentinel-2 scenes found for the provided area and date range")
 
-items.sort(key=lambda it: it["properties"]["datetime"], reverse=True)
-filtered = [it for it in items if (get_cloud(it) is None or get_cloud(it) <= MAX_CLOUD)]
-chosen = filtered[0] if filtered else items[0]
+items.sort(key=lambda it: it.get("properties", {}).get("datetime", ""), reverse=True)
+chosen = items[0]
+chosen_props = chosen.get("properties", {})
+chosen_time = chosen_props.get("datetime")
+if not chosen_time:
+    raise SystemExit("Selected Sentinel-2 item is missing acquisition datetime")
 
-chosen_time = chosen["properties"]["datetime"]
-print("Scene terpilih:", chosen["id"], "waktu:", chosen_time, "cloud:", get_cloud(chosen))
+print("Selected scene:", chosen.get("id"), "acquired at:", chosen_time)
 
-# ====== Evalscript ======
 evalscript_all_bands = """
 //VERSION=3
 function setup() {
@@ -90,11 +130,15 @@ function evaluatePixel(s) {
 """
 
 dt = dateparser.isoparse(chosen_time)
-t_from = (dt - timedelta(hours=1)).isoformat()
-t_to   = (dt + timedelta(hours=1)).isoformat()
+if dt.tzinfo is None:
+    dt = dt.replace(tzinfo=timezone.utc)
+else:
+    dt = dt.astimezone(timezone.utc)
 
-# ====== Tiling ======
-w_all, h_all = bbox_to_dimensions(bbox, resolution=RES)
+t_from = (dt - timedelta(hours=1)).isoformat()
+t_to = (dt + timedelta(hours=1)).isoformat()
+
+w_all, h_all = bbox_to_dimensions(bbox, resolution=resolution)
 max_px = 2500
 n_cols = int(np.ceil(w_all / max_px)) if w_all > max_px else 1
 n_rows = int(np.ceil(h_all / max_px)) if h_all > max_px else 1
@@ -105,73 +149,75 @@ tile_bboxes = splitter.get_bbox_list()
 
 tile_paths = []
 for idx, tile_bb in enumerate(tile_bboxes):
-    w, h = bbox_to_dimensions(tile_bb, resolution=RES)
-    w, h = min(w, max_px), min(h, max_px)
-    print(f"Tile {idx+1}/{len(tile_bboxes)}: {w}×{h}")
+    w, h = bbox_to_dimensions(tile_bb, resolution=resolution)
+    w = min(w, max_px)
+    h = min(h, max_px)
+    print(f"Tile {idx + 1}/{len(tile_bboxes)}: {w}×{h}")
 
     request = SentinelHubRequest(
         evalscript=evalscript_all_bands,
-        input_data=[{
-            "type": "sentinel-2-l1c",
-            "dataFilter": {
-                "timeRange": {"from": t_from, "to": t_to},
-                "mosaickingOrder": "mostRecent",
-                "maxCloudCoverage": MAX_CLOUD
-            },
-            "processing": {"upsampling": "BILINEAR","downsampling": "BILINEAR","harmonizeValues": True}
-        }],
+        input_data=[
+            SentinelHubRequest.input_data(
+                data_collection=DataCollection.SENTINEL2_L2A,
+                time_interval=(t_from, t_to),
+                mosaicking_order="mostRecent",
+            )
+        ],
         responses=[SentinelHubRequest.output_response("default", MimeType.TIFF)],
         bbox=tile_bb,
         size=(w, h),
         data_folder=tiles_dir,
-        config=config
+        config=config,
     )
-    _ = request.get_data(save_data=True, show_progress=True)
-    for p in request.get_filename_list():
-        tile_paths.append(os.path.join(tiles_dir, p))
 
-print("Tiles disimpan:", tile_paths)
+    request.get_data(save_data=True, show_progress=True)
+    for path in request.get_filename_list():
+        tile_paths.append(os.path.join(tiles_dir, path))
 
-# ====== Gabung & Masking ======
-if tile_paths:
-    srcs = [rasterio.open(p) for p in tile_paths]
+if not tile_paths:
+    raise SystemExit("No tile data was downloaded for the requested area")
+
+srcs = [rasterio.open(p) for p in tile_paths]
+try:
     mosaic, out_transform = merge(srcs)
+finally:
+    for src in srcs:
+        src.close()
 
-    base_meta = srcs[0].meta.copy()
-    meta = {
-        "driver": "GTiff",
-        "height": mosaic.shape[1],
-        "width": mosaic.shape[2],
-        "count": mosaic.shape[0],
-        "dtype": mosaic.dtype,
-        "crs": base_meta["crs"],
-        "transform": out_transform,
-        "compress": "lzw",
-        "photometric": "MINISBLACK",
-        "nodata": NODATA_VAL
-    }
+with rasterio.open(tile_paths[0]) as sample_src:
+    base_meta = sample_src.meta.copy()
+meta = {
+    "driver": "GTiff",
+    "height": mosaic.shape[1],
+    "width": mosaic.shape[2],
+    "count": mosaic.shape[0],
+    "dtype": mosaic.dtype,
+    "crs": base_meta["crs"],
+    "transform": out_transform,
+    "compress": "lzw",
+    "photometric": "MINISBLACK",
+    "nodata": 0,
+}
 
-    # tulis hasil merge sementara
-    with rasterio.open(merged_tif, "w", **meta) as dst:
-        dst.write(mosaic)
-    print("Merged TIFF (bbox) disimpan:", merged_tif)
+with rasterio.open(merged_tif, "w", **meta) as dst:
+    dst.write(mosaic)
+print("Merged TIFF saved:", merged_tif)
 
-    for s in srcs: s.close()
-
-    # mask ke poligon AOI
-    with rasterio.open(merged_tif) as src:
-        out_img, out_transform = mask.mask(src, [geom_dict], crop=True, nodata=NODATA_VAL)
-        out_meta = src.meta.copy()
-        out_meta.update({
+with rasterio.open(merged_tif) as src:
+    out_img, out_transform = mask.mask(src, [geom_dict], crop=True, nodata=0)
+    out_meta = src.meta.copy()
+    out_meta.update(
+        {
             "driver": "GTiff",
             "height": out_img.shape[1],
             "width": out_img.shape[2],
             "transform": out_transform,
             "compress": "lzw",
-            "nodata": NODATA_VAL
-        })
+            "nodata": 0,
+        }
+    )
 
-    with rasterio.open(masked_tif, "w", **out_meta) as dst:
-        dst.write(out_img)
+with rasterio.open(output_path, "w", **out_meta) as dst:
+    dst.write(out_img)
 
-    print("Merged TIFF masked (poligon AOI) disimpan:", masked_tif)
+print("Clipped Sentinel-2 imagery saved to:", output_path)

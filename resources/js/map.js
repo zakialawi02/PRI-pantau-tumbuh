@@ -914,6 +914,21 @@ function addInteraction(type = "Polygon") {
                 formatNumber(geojsonArea / 10000) + " ha"; // Convert m² to hectares;
         }
 
+        try {
+            window.dispatchEvent(
+                new CustomEvent("map:polygon-drawn", {
+                    detail: {
+                        feature: geojsonFeature,
+                        geometry: geojsonFeature?.geometry ?? null,
+                        areaSqm: geojsonArea,
+                        area_sqm: geojsonArea,
+                    },
+                })
+            );
+        } catch (error) {
+            console.warn("Unable to dispatch map:polygon-drawn event", error);
+        }
+
         drawingEnd();
 
         // Show feature properties after drawing
@@ -939,6 +954,11 @@ function drawingStart() {
     buttonStateDrawing();
     $("#featureProperties").addClass("hidden");
     $("#drawerGeojson").html("");
+    try {
+        window.dispatchEvent(new CustomEvent("map:polygon-reset"));
+    } catch (error) {
+        console.warn("Unable to dispatch map:polygon-reset event", error);
+    }
 }
 
 /**
@@ -973,6 +993,14 @@ function drawingEnd() {
     if (listener) {
         unByKey(listener);
         listener = null;
+    }
+
+    if (!drawed) {
+        try {
+            window.dispatchEvent(new CustomEvent("map:polygon-reset"));
+        } catch (error) {
+            console.warn("Unable to dispatch map:polygon-reset event", error);
+        }
     }
 
     buttonStateDrawing();
@@ -1021,38 +1049,30 @@ function createMeasureTooltip() {
  * @returns {void}
  */
 function buttonStateDrawing() {
-    $("#drawPolygonBtn").html(
+    const button = $("#clipDrawPolygonBtn");
+    if (!button.length) {
+        return;
+    }
+
+    button.html(
         drawingRunning
-            ? "Cancel Drawing"
-            : "<i class='ri-pencil-line'></i>&nbsp; Draw Polygon"
+            ? "<i class='ri-close-line'></i>&nbsp;<span>Cancel Drawing</span>"
+            : "<i class='ri-pencil-line'></i>&nbsp;<span>Draw Polygon</span>"
     );
-    $("#drawPolygonBtn")
-        .removeClass()
-        .addClass(
-            drawingRunning ? "btn btn-sm btn-danger" : "btn btn-sm btn-primary"
-        );
+    button.attr("data-drawing", drawingRunning ? "true" : "false");
 }
 
 // Button to start/cancel the draw/measurement
-$("#drawPolygonBtn").click(function (e) {
+$("#clipDrawPolygonBtn").on("click", function () {
     if (drawingRunning) {
         drawingEnd();
     } else {
         drawingStart();
-        $("#featurePropertiesForm")[0].reset();
+        if ($("#featurePropertiesForm").length) {
+            $("#featurePropertiesForm")[0].reset();
+        }
     }
 });
-
-const clipDrawPolygonBtn = document.getElementById("clipDrawPolygonBtn");
-if (clipDrawPolygonBtn) {
-    clipDrawPolygonBtn.addEventListener("click", function () {
-        if (drawingRunning) {
-            drawingEnd();
-        } else {
-            drawingStart();
-        }
-    });
-}
 
 /**
  * Zoom in function

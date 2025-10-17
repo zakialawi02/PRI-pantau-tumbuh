@@ -2,13 +2,16 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\ProcessSentinelClipJob;
 use App\Jobs\ProcessSentinelSceneJob;
+use App\Models\FieldArea;
 use App\Models\ImageryData;
 use App\Services\CreditService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Carbon\Carbon;
 use Throwable;
 
 class SentinelProcessingController extends Controller
@@ -154,6 +157,200 @@ class SentinelProcessingController extends Controller
     public function processClip(Request $request)
     {
         $user = $request->user();
+
+        $validated = $request->validate([
+            'geometry' => ['required'],
+            'field_name' => ['nullable', 'string', 'max:255'],
+            'area_square_meters' => ['required', 'numeric', 'min:1'],
+            'start_date' => ['nullable', 'date'],
+        ]);
+
+        $geometryInput = $validated['geometry'];
+        if (is_string($geometryInput)) {
+            $decoded = json_decode($geometryInput, true);
+            if (json_last_error() !== JSON_ERROR_NONE || !is_array($decoded)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid geometry payload provided.',
+                ], 422);
+            }
+            $geometryInput = $decoded;
+        }
+
+        if (!is_array($geometryInput)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Geometry payload must be a valid GeoJSON structure.',
+            ], 422);
+        }
+
+        $geometry = $geometryInput;
+        if (isset($geometryInput['type']) && strtolower($geometryInput['type']) === 'feature' && isset($geometryInput['geometry'])) {
+            $geometry = $geometryInput['geometry'];
+        }
+
+        if (!is_array($geometry) || !isset($geometry['type']) || empty($geometry['coordinates'])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'A valid polygon geometry is required.',
+            ], 422);
+        }
+
+        $areaSqm = (float) $validated['area_square_meters'];
+        if ($areaSqm <= 0) {
+            return response()->json([
+                'success' => false,
+                'message' => 'The provided area must be greater than zero.',
+            ], 422);
+        }
+
+        $areaHa = $areaSqm / 10000;
+        $creditRate = (float) config('app-constants.imagery_credit_cost_per_hectare', 0);
+        $estimatedCredits = round(max(0, $areaHa * $creditRate), 2);
+
+        $currentCredits = $this->creditService->getRemainingCredits($user->id);
+        if ($estimatedCredits > 0 && $currentCredits < $estimatedCredits) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Insufficient credits to queue Sentinel-2 clipping.',
+                'data' => [
+                    'current_credits' => $currentCredits,
+                    'required_credits' => $estimatedCredits,
+                ],
+            ], 402);
+        }
+
+        try {
+            $startDate = !empty($validated['start_date'])
+                ? Carbon::parse($validated['start_date'])->startOfDay()
+                : now()->subMonth()->startOfDay();
+        } catch (Throwable $exception) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid start date provided.',
+            ], 422);
+        }
+
+        $fieldName = trim($validated['field_name'] ?? '');
+        if ($fieldName === '') {
+            $fieldName = 'Sentinel Clip ' . now()->format('YmdHis');
+        }
+
+        $displayBase = $this->sanitizeDisplayName($fieldName . '_' . now()->format('YmdHis'));
+        $outputBase = Str::limit($displayBase . '_clip', 160, '');
+
+        $disk = Storage::disk('public');
+        $disk->makeDirectory('imagery');
+        $disk->makeDirectory('imagery/clipped');
+
+        $outputFilename = $this->ensureUniqueFilename('imagery', $outputBase, 'tif');
+        $storedPath = 'storage/imagery/clipped/' . $outputFilename;
+
+        $feature = [
+            'type' => 'Feature',
+            'properties' => new \stdClass(),
+            'geometry' => $geometry,
+        ];
+
+        $fieldArea = null;
+        $imagery = null;
+        $deductedCredits = false;
+
+        try {
+            $fieldArea = FieldArea::create([
+                'user_id' => $user->id,
+                'name' => $fieldName,
+                'area_ha' => round($areaHa, 4),
+                'geom' => $feature,
+            ]);
+
+            $imagery = ImageryData::create([
+                'user_id' => $user->id,
+                'source_type' => 'sentinel-2-clip',
+                'original_name' => $displayBase . '.tif',
+                'stored_name' => $outputFilename,
+                'size' => 0,
+                'format' => 'tif',
+                'path' => $storedPath,
+                'upload_status' => 'uploading',
+                'processing_status' => 'waiting',
+                'uploaded_at' => now(),
+            ]);
+
+            if ($estimatedCredits > 0) {
+                $deductedCredits = $this->creditService->deductCreditsForProcessing($user->id, $estimatedCredits, 'SentinelClip');
+
+                if (!$deductedCredits) {
+                    $currentCredits = $this->creditService->getRemainingCredits($user->id);
+                    $imagery->delete();
+                    $fieldArea->delete();
+
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Insufficient credits to queue Sentinel-2 clipping.',
+                        'data' => [
+                            'current_credits' => $currentCredits,
+                            'required_credits' => $estimatedCredits,
+                        ],
+                    ], 402);
+                }
+            }
+        } catch (Throwable $exception) {
+            Log::error('SentinelProcessingController@processClip failed to initialize clip request.', [
+                'error' => $exception->getMessage(),
+            ]);
+
+            if ($imagery) {
+                $imagery->delete();
+            }
+            if ($fieldArea) {
+                $fieldArea->delete();
+            }
+
+            if ($deductedCredits && $estimatedCredits > 0) {
+                $this->creditService->addCreditsToUser($user->id, $estimatedCredits, 'SentinelClipInit');
+            }
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Unable to queue Sentinel-2 clip at this time.',
+            ], 500);
+        }
+
+        ProcessSentinelClipJob::dispatch(
+            $imagery->id,
+            $fieldArea->id,
+            [
+                'geometry' => $feature,
+                'output_filename' => $outputFilename,
+                'start_date' => $startDate->toDateString(),
+                'charged_credits' => $estimatedCredits,
+                'area_square_meters' => $areaSqm,
+                'field_name' => $fieldName,
+            ]
+        )->onQueue('download');
+
+        $remainingCredits = $this->creditService->getRemainingCredits($user->id);
+
+        Log::info('SentinelProcessingController@processClip queued clipping request.', [
+            'imagery_id' => $imagery->id,
+            'field_area_id' => $fieldArea->id,
+            'user_id' => $user->id,
+            'start_date' => $startDate->toDateString(),
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Sentinel-2 clip has been queued for processing.',
+            'data' => [
+                'imagery_id' => $imagery->id,
+                'field_area_id' => $fieldArea->id,
+                'current_credits' => $remainingCredits,
+                'charged_credits' => $estimatedCredits,
+                'area_hectares' => round($areaHa, 4),
+                'start_date' => $startDate->toDateString(),
+            ],
+        ], 202);
     }
 
     private function sanitizeDisplayName(string $value): string

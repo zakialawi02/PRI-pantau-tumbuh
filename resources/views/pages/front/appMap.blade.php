@@ -316,7 +316,7 @@
 
                     <!-- Clip Tab Content -->
                     <div class="tab-content hidden" id="sentinel-clip-panel" role="tabpanel" aria-labelledby="sentinel-clip-tab">
-                        <div class="space-y-3" id="sentinelClipModule" data-credit-rate="{{ config('app-constants.imagery_credit_cost_per_hectare') }}" data-process-url="{{ auth()->check() ? route('admin.sentinel.process') : '' }}" data-processing-cost="{{ config('app-constants.imagery_processing_cost', 10) }}">
+                        <div class="space-y-3" id="sentinelClipModule" data-credit-rate="{{ config('app-constants.imagery_credit_cost_per_hectare') }}" data-clip-url="{{ auth()->check() ? route('sentinel.clip') : '' }}" data-processing-cost="{{ config('app-constants.imagery_processing_cost', 10) }}">
                             <div class="bg-background/60 border-foreground/10 space-y-3 rounded-lg border p-3 shadow-sm">
                                 <div class="flex flex-wrap items-center justify-between gap-2">
                                     <div>
@@ -324,7 +324,7 @@
                                         <p class="text-foreground/70 text-sm">Draw a polygon on the map to clip Sentinel-2 imagery for your field.</p>
                                     </div>
                                     <div class="flex items-center gap-2">
-                                        <x-button-primary id="drawPolygonBtn" type="button" size="small">
+                                        <x-button-primary id="clipDrawPolygonBtn" type="button" size="small">
                                             <i class="ri-pencil-line"></i>
                                             <span>Draw Polygon</span>
                                         </x-button-primary>
@@ -334,13 +334,13 @@
                                 <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
                                     <div class="space-y-1">
                                         <x-input-label class="text-sm font-medium" for="clipAreaOutput">Area (hectares)</x-input-label>
-                                        <div class="border-foreground/20 rounded-lg border border-dashed px-3 py-2 text-sm" id="clipAreaOutput">
+                                        <div class="border-foreground/20 rounded-lg border border-dashed px-3 py-2 text-sm" id="clipAreaOutput" data-placeholder="Draw a polygon to calculate the area.">
                                             Draw a polygon to calculate the area.
                                         </div>
                                     </div>
                                     <div class="space-y-1">
                                         <x-input-label class="text-sm font-medium" for="clipCreditOutput">Estimated Credit Cost</x-input-label>
-                                        <div class="border-foreground/20 rounded-lg border px-3 py-2 text-sm" id="clipCreditOutput">
+                                        <div class="border-foreground/20 rounded-lg border px-3 py-2 text-sm" id="clipCreditOutput" data-placeholder="–">
                                             –
                                         </div>
                                         <p class="text-foreground/60 text-xs">{{ Number::format(config('app-constants.imagery_credit_cost_per_hectare'), locale: app()->getLocale()) }} credit points per hectare.</p>
@@ -349,51 +349,31 @@
 
                                 <div class="space-y-1">
                                     <x-input-label class="text-sm font-medium" for="clipGeojsonOutput">AOI GeoJSON</x-input-label>
-                                    <div class="border-foreground/10 bg-foreground/5 max-h-36 overflow-auto rounded-lg border p-2 font-mono text-xs" id="clipGeojsonOutput">
+                                    <div class="border-foreground/10 bg-foreground/5 max-h-36 overflow-auto rounded-lg border p-2 font-mono text-xs" id="clipGeojsonOutput" data-placeholder="Coordinates will appear here after drawing.">
                                         <span class="text-foreground/60">Coordinates will appear here after drawing.</span>
                                     </div>
                                 </div>
 
-                                <div class="space-y-1">
-                                    <x-input-label class="text-sm font-medium" for="clipFieldName">Field Name</x-input-label>
-                                    <x-text-input class="w-full" id="clipFieldName" name="field_name" size="small" placeholder="e.g. North Farm Block" />
-                                </div>
-                            </div>
-
-                            <div class="bg-background/60 border-foreground/10 space-y-3 rounded-lg border p-3 shadow-sm">
-                                <div class="flex flex-wrap items-center justify-between gap-2">
-                                    <h4 class="text-foreground text-lg font-semibold">Scene Selection</h4>
-                                    <div class="border-foreground/20 inline-flex overflow-hidden rounded-full border" role="tablist">
-                                        <button class="bg-primary px-3 py-1 text-xs font-semibold transition" id="clipModeAutoBtn" data-mode="auto" type="button" aria-pressed="true">Auto Mode</button>
-                                        <button class="px-3 py-1 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-60" id="clipModeManualBtn" data-mode="manual" type="button" aria-pressed="false" aria-disabled="true" disabled>Manual Mode</button>
+                                <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+                                    <div class="space-y-1">
+                                        <x-input-label class="text-sm font-medium" for="clipFieldName">Field Name</x-input-label>
+                                        <x-text-input class="w-full" id="clipFieldName" name="field_name" size="small" placeholder="e.g. North Farm Block" />
+                                    </div>
+                                    <div class="space-y-1">
+                                        <x-input-label class="text-sm font-medium" for="clipStartDate">Start Date</x-input-label>
+                                        <x-text-input class="w-full" id="clipStartDate" name="start_date" type="date" size="small" value="{{ now()->subMonth()->toDateString() }}" />
+                                        <p class="text-foreground/60 text-xs">Latest scenes after this date will be considered.</p>
                                     </div>
                                 </div>
 
-                                <div class="space-y-2" id="clipAutoPanel">
-                                    <p class="text-foreground/70 text-sm">The system will analyse the date range and automatically choose the clearest Sentinel-2 scene intersecting your polygon.</p>
-                                    <x-button-primary id="clipAutoSearchBtn" type="button" size="small" disabled>
-                                        <i class="ri-magic-line"></i>
-                                        <span>Find Best Scene</span>
+                                <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                                    <x-button-primary class="w-full md:w-auto" id="clipProcessBtn" type="button" size="small" disabled>
+                                        <i class="ri-cpu-line"></i>
+                                        <span>Process Clip</span>
                                     </x-button-primary>
-                                    <div class="border-foreground/15 rounded-lg border border-dashed p-3 text-sm" id="clipAutoResult">
-                                        Draw an area and search to preview the recommended scene.
-                                    </div>
+                                    <p class="text-foreground/60 text-xs" id="clipProcessNotice">Processing runs in the background. You will be notified when the clipped imagery is ready.</p>
                                 </div>
-
                             </div>
-
-                            <div class="bg-background/60 border-foreground/10 space-y-2 rounded-lg border p-3 shadow-sm">
-                                <h4 class="text-foreground text-lg font-semibold">Selected Scene</h4>
-                                <div class="border-foreground/15 rounded-lg border p-3 text-sm" id="clipSelectionSummary">
-                                    No scene selected yet. Use auto mode to pick one.
-                                </div>
-                                <x-button-primary class="w-full md:w-auto" id="clipProcessBtn" type="button" size="small" disabled>
-                                    <i class="ri-cpu-line"></i>
-                                    <span>Process &amp; Download</span>
-                                </x-button-primary>
-                                <p class="text-foreground/60 text-xs" id="clipProcessNotice">Processing will run in the background via job queue. We will notify you when the imagery is ready.</p>
-                            </div>
-
                         </div>
                     </div>
                 </div>
@@ -1588,6 +1568,247 @@
                 ();
             </script>
         @endauth
+    @endpush
+    @push('javascript')
+        <script>
+            (() => {
+                const moduleEl = document.getElementById('sentinelClipModule');
+                if (!moduleEl) {
+                    return;
+                }
+
+                const areaOutput = document.getElementById('clipAreaOutput');
+                const creditOutput = document.getElementById('clipCreditOutput');
+                const geojsonOutput = document.getElementById('clipGeojsonOutput');
+                const processBtn = document.getElementById('clipProcessBtn');
+                const fieldInput = document.getElementById('clipFieldName');
+                const startDateInput = document.getElementById('clipStartDate');
+                const noticeEl = document.getElementById('clipProcessNotice');
+
+                const locale = document.documentElement.lang || 'en-US';
+                const clipUrl = moduleEl.dataset.clipUrl || '';
+                const creditRate = Number(moduleEl.dataset.creditRate || 0);
+
+                const placeholders = {
+                    area: areaOutput?.dataset.placeholder || 'Draw a polygon to calculate the area.',
+                    credit: creditOutput?.dataset.placeholder || '–',
+                    geojson: geojsonOutput?.dataset.placeholder || '',
+                };
+
+                const state = {
+                    feature: null,
+                    areaSqm: 0,
+                    areaHa: 0,
+                    estimatedCredits: 0,
+                    processing: false,
+                };
+
+                const formatValue = (value, fraction = 2) => {
+                    const numeric = Number(value);
+                    if (!Number.isFinite(numeric)) {
+                        return '0';
+                    }
+                    if (typeof window.formatNumber === 'function') {
+                        return window.formatNumber(numeric, fraction, locale);
+                    }
+                    return numeric.toFixed(fraction);
+                };
+
+                const refreshButtonState = () => {
+                    if (!processBtn) {
+                        return;
+                    }
+                    const canProcess = Boolean(state.feature) && clipUrl !== '' && !state.processing;
+                    processBtn.disabled = !canProcess;
+                };
+
+                const setProcessing = (processing) => {
+                    if (!processBtn) {
+                        return;
+                    }
+                    state.processing = processing;
+                    if (processing) {
+                        processBtn.innerHTML = "<i class='ri-loader-4-line animate-spin'></i><span>Processing...</span>";
+                        processBtn.disabled = true;
+                    } else {
+                        processBtn.innerHTML = "<i class='ri-cpu-line'></i><span>Process Clip</span>";
+                        refreshButtonState();
+                    }
+                };
+
+                const renderPlaceholders = () => {
+                    if (areaOutput) {
+                        areaOutput.textContent = placeholders.area;
+                    }
+                    if (creditOutput) {
+                        creditOutput.textContent = placeholders.credit;
+                    }
+                    if (geojsonOutput) {
+                        geojsonOutput.innerHTML = '';
+                        if (placeholders.geojson) {
+                            const span = document.createElement('span');
+                            span.className = 'text-foreground/60';
+                            span.textContent = placeholders.geojson;
+                            geojsonOutput.appendChild(span);
+                        }
+                    }
+                };
+
+                const resetState = () => {
+                    state.feature = null;
+                    state.areaSqm = 0;
+                    state.areaHa = 0;
+                    state.estimatedCredits = 0;
+                    renderPlaceholders();
+                    refreshButtonState();
+                };
+
+                const updateOutputs = () => {
+                    if (areaOutput) {
+                        areaOutput.textContent = `${formatValue(state.areaHa, 2)} ha`;
+                    }
+
+                    if (creditOutput) {
+                        const credits = Math.max(0, state.estimatedCredits);
+                        creditOutput.textContent = credits > 0
+                            ? `${formatValue(credits, 2)} credit${credits === 1 ? '' : 's'}`
+                            : placeholders.credit;
+                    }
+
+                    if (geojsonOutput && state.feature) {
+                        geojsonOutput.innerHTML = '';
+                        const pre = document.createElement('pre');
+                        pre.className = 'whitespace-pre-wrap text-xs';
+                        pre.textContent = JSON.stringify(state.feature, null, 2);
+                        geojsonOutput.appendChild(pre);
+                    }
+                };
+
+                const handlePolygonDrawn = (event) => {
+                    const detail = event.detail || {};
+                    const feature = detail.feature
+                        || (detail.geometry ? { type: 'Feature', geometry: detail.geometry } : null);
+                    const areaSqm = Number(detail.areaSqm ?? detail.area_sqm ?? 0);
+
+                    if (!feature || !Number.isFinite(areaSqm) || areaSqm <= 0) {
+                        return;
+                    }
+
+                    state.feature = feature;
+                    state.areaSqm = areaSqm;
+                    state.areaHa = areaSqm / 10000;
+                    state.estimatedCredits = Math.max(0, state.areaHa * creditRate);
+
+                    updateOutputs();
+                    refreshButtonState();
+                };
+
+                const submitClipRequest = async () => {
+                    if (!clipUrl || !state.feature) {
+                        return;
+                    }
+
+                    const payload = {
+                        geometry: state.feature,
+                        area_square_meters: state.areaSqm,
+                        field_name: fieldInput?.value?.trim() || null,
+                        start_date: startDateInput?.value?.trim() || null,
+                    };
+
+                    setProcessing(true);
+
+                    try {
+                        const response = await fetch(clipUrl, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/json',
+                                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}',
+                            },
+                            body: JSON.stringify(payload),
+                        });
+
+                        const result = await response.json().catch(() => ({}));
+
+                        if (response.ok) {
+                            if (typeof window.$ === 'function' && result?.data?.current_credits !== undefined) {
+                                window.$('#current-myCredits').text(formatValue(result.data.current_credits, 2));
+                            }
+
+                            const successMessage = result?.message || 'Sentinel clip has been queued for processing.';
+                            window.MyZkToast?.success?.(successMessage);
+
+                            if (typeof window.AppMap?.uploader?.reload === 'function') {
+                                window.AppMap.uploader.reload();
+                            }
+                        } else {
+                            const errorMessage = result?.message || 'Failed to queue Sentinel clip for processing.';
+                            window.MyZkToast?.error?.(errorMessage);
+                        }
+                    } catch (error) {
+                        console.error('Failed to queue Sentinel clip', error);
+                        window.MyZkToast?.error?.(error?.message || 'Unable to queue Sentinel clip.');
+                    } finally {
+                        setProcessing(false);
+                    }
+                };
+
+                processBtn?.addEventListener('click', () => {
+                    if (processBtn.disabled || state.processing) {
+                        return;
+                    }
+
+                    if (!clipUrl) {
+                        window.MyZkToast?.warning?.('Please sign in to process Sentinel-2 clips.');
+                        return;
+                    }
+
+                    if (!state.feature) {
+                        window.MyZkToast?.warning?.('Draw a polygon on the map before processing.');
+                        return;
+                    }
+
+                    const creditsText = state.estimatedCredits > 0
+                        ? `${formatValue(state.estimatedCredits, 2)} credit point${Math.abs(state.estimatedCredits - 1) < Number.EPSILON ? '' : 's'}`
+                        : 'no credit points';
+
+                    const confirmAction = () => {
+                        submitClipRequest();
+                    };
+
+                    if (window.ZkPopAlert) {
+                        window.ZkPopAlert.show({
+                            message: `Processing this clip will deduct ${creditsText}. Continue?`,
+                            icon: '<i class="ri-cpu-line text-2xl text-primary"></i>',
+                            confirmClass: 'focus:ring-primary/80 rounded-md text-sm px-2.5 py-1.5 bg-primary text-primary-foreground border border-primary hover:bg-primary/80 focus:outline-none focus:ring-primary',
+                            confirmText: 'Yes, Process',
+                            cancelText: 'Cancel',
+                            onConfirm: confirmAction,
+                        });
+                    } else {
+                        confirmAction();
+                    }
+                });
+
+                window.addEventListener('map:polygon-reset', resetState);
+                window.addEventListener('map:polygon-drawn', handlePolygonDrawn);
+
+                if (!clipUrl && noticeEl) {
+                    noticeEl.textContent = 'Please sign in to queue Sentinel-2 clipping jobs.';
+                }
+
+                renderPlaceholders();
+                refreshButtonState();
+
+                window.AppMap = window.AppMap || {};
+                window.AppMap.sentinelClip = {
+                    reset: resetState,
+                    get state() {
+                        return { ...state };
+                    },
+                };
+            })();
+        </script>
     @endpush
     @push('javascript')
         <script>
