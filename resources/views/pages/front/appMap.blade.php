@@ -797,6 +797,11 @@
                     // Layer stacking order: keep WMS below the highlighted footprint polygons.
                     previewWmsZIndex: 10,
                     previewFootprintZIndex: 50,
+                    // Copernicus WMS enforces a ~200 m/px ceiling; clamp tiles below this threshold.
+                    previewMaxMetersPerPixel: 190,
+                    // Ensure enough zoom levels for over-zooming while keeping tile math predictable.
+                    previewTileZoomLevels: 22,
+                    previewTileSize: 256,
                 };
 
                 // Track loaded scenes, pending requests, and map preview state.
@@ -1080,6 +1085,91 @@
                         console.warn('Failed to transform Sentinel extent:', error);
                         return null;
                     }
+                };
+
+                /**
+                 * Build a tile grid tailored to the scene extent so WMS requests stay within Copernicus limits.
+                 */
+                const createTileGridForExtent = (extent, projection) => {
+                    if (
+                        !extent ||
+                        extent.length < 4 ||
+                        !window.ol?.tilegrid ||
+                        (!window.ol.tilegrid.createXYZ && !window.ol.tilegrid.TileGrid)
+                    ) {
+                        return null;
+                    }
+
+                    const [minX, minY, maxX, maxY] = extent;
+                    if (
+                        !Number.isFinite(minX) ||
+                        !Number.isFinite(minY) ||
+                        !Number.isFinite(maxX) ||
+                        !Number.isFinite(maxY) ||
+                        maxX <= minX ||
+                        maxY <= minY
+                    ) {
+                        return null;
+                    }
+
+                    const units = projection?.getUnits?.();
+                    if (units && units !== 'm') {
+                        // Only clamp resolutions for metre-based projections; degrees don't trigger the Copernicus cap.
+                        return null;
+                    }
+
+                    const tileSize = Number.isFinite(config.previewTileSize)
+                        ? config.previewTileSize
+                        : 256;
+                    const spanX = maxX - minX;
+                    const spanY = maxY - minY;
+                    const dominantSpan = Math.max(spanX, spanY);
+                    if (!Number.isFinite(dominantSpan) || dominantSpan <= 0) {
+                        return null;
+                    }
+
+                    const baseResolution = dominantSpan / tileSize;
+                    if (!Number.isFinite(baseResolution) || baseResolution <= 0) {
+                        return null;
+                    }
+
+                    const cap = Number.isFinite(config.previewMaxMetersPerPixel)
+                        ? Math.max(1, config.previewMaxMetersPerPixel)
+                        : 190;
+                    const startingResolution = Math.min(baseResolution, cap);
+
+                    const zoomLevels = Number.isFinite(config.previewTileZoomLevels)
+                        ? Math.max(1, Math.floor(config.previewTileZoomLevels))
+                        : 22;
+
+                    // Precompute the resolution pyramid so we can fall back if createXYZ is unavailable.
+                    const resolutions = [];
+                    for (let i = 0; i < zoomLevels; i += 1) {
+                        resolutions.push(startingResolution / Math.pow(2, i));
+                    }
+
+                    try {
+                        if (window.ol.tilegrid.createXYZ) {
+                            return window.ol.tilegrid.createXYZ({
+                                extent,
+                                tileSize,
+                                maxResolution: startingResolution,
+                                maxZoom: zoomLevels - 1,
+                            });
+                        }
+
+                        if (window.ol.tilegrid.TileGrid) {
+                            return new window.ol.tilegrid.TileGrid({
+                                extent,
+                                tileSize,
+                                resolutions,
+                            });
+                        }
+                    } catch (error) {
+                        console.warn('Failed to construct Sentinel tile grid:', error);
+                    }
+
+                    return null;
                 };
 
                 /**
@@ -1548,11 +1638,13 @@
                     }
 
                     const wmsUrl = withAccessToken(scene.wms.url);
+                    const tileGrid = extent ? createTileGridForExtent(extent, projection) : null;
                     const source = new ol.source.TileWMS({
                         url: wmsUrl,
                         params,
                         crossOrigin: 'anonymous',
                         wrapX: false,
+                        tileGrid: tileGrid || undefined,
                     });
 
                     if (!state.preview.wmsLayer) {
