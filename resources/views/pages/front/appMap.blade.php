@@ -909,7 +909,7 @@
                     params.set('maxRecords', String(maxRecords || config.defaultMaxRecords));
                     params.set('productType', values['product-level'] || 'S2MSI2A');
                     params.set('cloudCover', String(Math.min(100, Math.max(0, parseNumber(values['cloud-cover']) ?? 40))));
-                    params.set('sortParam', 'beginposition');
+                    params.set('sortParam', 'startDate');
                     params.set('sortOrder', 'descending');
 
                     const startDate = toIsoDate(values['start-date']);
