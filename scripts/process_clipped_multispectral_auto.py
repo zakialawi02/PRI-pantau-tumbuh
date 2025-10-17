@@ -1,4 +1,5 @@
 import os
+import json
 from datetime import timedelta
 from dateutil import parser as dateparser
 import numpy as np
@@ -13,8 +14,17 @@ from sentinelhub import (
 from sentinelhub.areas import BBoxSplitter
 
 # ====== KONFIGURASI ======
-SH_CLIENT_ID = COPERNICUS_CLIENT_ID
-SH_CLIENT_SECRET = COPERNICUS_CLIENT_SECRET
+def read_env(name: str, default: str | None = None) -> str | None:
+    value = os.getenv(name)
+    if value is not None and value != "":
+        return value
+    return default
+
+SH_CLIENT_ID = read_env("SENTINELHUB_CLIENT_ID", read_env("SH_CLIENT_ID", ""))
+SH_CLIENT_SECRET = read_env("SENTINELHUB_CLIENT_SECRET", read_env("SH_CLIENT_SECRET", ""))
+
+if not SH_CLIENT_ID or not SH_CLIENT_SECRET:
+    raise SystemExit("Sentinel Hub credentials are not configured.")
 
 config = SHConfig()
 config.sh_client_id = SH_CLIENT_ID
@@ -23,28 +33,116 @@ config.sh_token_url = "https://identity.dataspace.copernicus.eu/auth/realms/CDSE
 config.sh_base_url  = "https://sh.dataspace.copernicus.eu"
 
 # Folder untuk simpan
-tiles_dir = "tiles"
-merged_tif = "merged_fixed.tif"
-masked_tif = "merged_masked.tif"
-os.makedirs(tiles_dir, exist_ok=True)
+tiles_dir = read_env("SENTINEL_CLIP_TILE_DIR", "tiles")
+merged_tif = read_env("SENTINEL_CLIP_MERGED_PATH", "merged_fixed.tif")
+masked_tif = read_env("SENTINEL_CLIP_OUTPUT", "merged_masked.tif")
+
+if tiles_dir:
+    os.makedirs(tiles_dir, exist_ok=True)
+if merged_tif:
+    os.makedirs(os.path.dirname(os.path.abspath(merged_tif)), exist_ok=True)
+if masked_tif:
+    os.makedirs(os.path.dirname(os.path.abspath(masked_tif)), exist_ok=True)
 
 # ====== PARAMETER ======
-DATE_FROM = "2025-08-01"
-DATE_TO   = "2025-08-31"
-MAX_CLOUD = 60
-LIMIT     = 100
-RES       = 10
-NODATA_VAL = 0   # ganti ke -9999 kalau lebih cocok
+DATE_FROM = read_env("SENTINEL_CLIP_DATE_FROM", "2025-10-17")
+DATE_TO   = read_env("SENTINEL_CLIP_DATE_TO", "2025-08-31")
+LIMIT     = int(float(read_env("SENTINEL_CLIP_LIMIT", "100")))
+RES       = int(float(read_env("SENTINEL_CLIP_RESOLUTION", "10")))
+NODATA_VAL = float(read_env("SENTINEL_CLIP_NODATA", "0"))
 
 # ====== AOI dari GEOJSON ======
-AOI_GEOJSON = {}
+default_geojson = {
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {},
+      "geometry": {
+        "coordinates": [
+          [
+            [
+              113.10556948908851,
+              -1.4785838381847753
+            ],
+            [
+              113.13498704735412,
+              -1.477397860955648
+            ],
+            [
+              113.13260498344499,
+              -1.4551146096165866
+            ],
+            [
+              113.110312887968,
+              -1.4572450555405538
+            ],
+            [
+              113.11363295381193,
+              -1.4361448121779006
+            ],
+            [
+              113.13663824669305,
+              -1.439465002506239
+            ],
+            [
+              113.13305713167733,
+              -1.4245759676015979
+            ],
+            [
+              113.09608125915514,
+              -1.4261803371710613
+            ],
+            [
+              113.09750378353874,
+              -1.454632040366974
+            ],
+            [
+              113.07592870194452,
+              -1.4544083417368086
+            ],
+            [
+              113.07640527659169,
+              -1.4764538947092234
+            ],
+            [
+              113.0778250907295,
+              -1.5169874677712585
+            ],
+            [
+              113.10912758274577,
+              -1.5172370048352803
+            ],
+            [
+              113.10746676566316,
+              -1.4902033659093803
+            ],
+            [
+              113.10556948908851,
+              -1.4785838381847753
+            ]
+          ]
+        ],
+        "type": "Polygon"
+      }
+    }
+  ]
+}
 
-# Geometry untuk query & masking
+geojson_env = read_env("SENTINEL_CLIP_GEOJSON") or read_env("CLIP_GEOJSON")
+if geojson_env:
+    try:
+        AOI_GEOJSON = json.loads(geojson_env)
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"Invalid SENTINEL_CLIP_GEOJSON provided: {exc}")
+else:
+    AOI_GEOJSON = default_geojson
+
 geom_dict = AOI_GEOJSON["features"][0]["geometry"]
 geometry = Geometry(geom_dict, crs=CRS.WGS84)
 bbox = geometry.bbox
 
-# ====== CARI SCENE ======
+# ====== CARI SCENE TANPA FILTER CLOUD ======
 catalog = SentinelHubCatalog(config=config)
 search_iter = catalog.search(
     DataCollection.SENTINEL2_L1C,
@@ -54,32 +152,29 @@ search_iter = catalog.search(
 )
 items = list(search_iter)
 
-def get_cloud(item):
-    props = item.get("properties", {})
-    for k in ("eo:cloud_cover", "cloudCover"):
-        if k in props and props[k] is not None:
-            return float(props[k])
-    return None
-
 if not items:
     raise SystemExit("Tidak ada scene cocok")
 
 items.sort(key=lambda it: it["properties"]["datetime"], reverse=True)
-filtered = [it for it in items if (get_cloud(it) is None or get_cloud(it) <= MAX_CLOUD)]
-chosen = filtered[0] if filtered else items[0]
+filtered = items   # <- tidak ada filter cloud coverage
+
+# pilih scene
+preferred_scene_id = read_env("SENTINEL_CLIP_SCENE_ID") or read_env("CLIP_SCENE_ID")
+chosen = None
+if preferred_scene_id:
+    chosen = next((it for it in items if str(it.get("id")) == preferred_scene_id), None)
+if chosen is None:
+    chosen = filtered[0]
 
 chosen_time = chosen["properties"]["datetime"]
-print("Scene terpilih:", chosen["id"], "waktu:", chosen_time, "cloud:", get_cloud(chosen))
+print("Scene terpilih:", chosen["id"], "waktu:", chosen_time)
 
 # ====== Evalscript ======
 evalscript_all_bands = """
 //VERSION=3
 function setup() {
     return {
-        input: [{
-            bands: ["B01","B02","B03","B04","B05","B06","B07","B08","B8A","B09","B11","B12"],
-            units: "DN"
-        }],
+        input: [{ bands: ["B01","B02","B03","B04","B05","B06","B07","B08","B8A","B09","B11","B12"], units: "DN" }],
         output: { bands: 12, sampleType: "INT16" }
     };
 }
@@ -116,7 +211,7 @@ for idx, tile_bb in enumerate(tile_bboxes):
             "dataFilter": {
                 "timeRange": {"from": t_from, "to": t_to},
                 "mosaickingOrder": "mostRecent",
-                "maxCloudCoverage": MAX_CLOUD
+                "maxCloudCoverage": 100   # <- full range 0–100%
             },
             "processing": {"upsampling": "BILINEAR","downsampling": "BILINEAR","harmonizeValues": True}
         }],
@@ -128,7 +223,8 @@ for idx, tile_bb in enumerate(tile_bboxes):
     )
     _ = request.get_data(save_data=True, show_progress=True)
     for p in request.get_filename_list():
-        tile_paths.append(os.path.join(tiles_dir, p))
+        absolute = os.path.join(tiles_dir, p) if not os.path.isabs(p) else p
+        tile_paths.append(absolute)
 
 print("Tiles disimpan:", tile_paths)
 
@@ -151,14 +247,13 @@ if tile_paths:
         "nodata": NODATA_VAL
     }
 
-    # tulis hasil merge sementara
     with rasterio.open(merged_tif, "w", **meta) as dst:
         dst.write(mosaic)
-    print("Merged TIFF (bbox) disimpan:", merged_tif)
+    print("Merged TIFF disimpan:", merged_tif)
 
     for s in srcs: s.close()
 
-    # mask ke poligon AOI
+    # clip ke AOI
     with rasterio.open(merged_tif) as src:
         out_img, out_transform = mask.mask(src, [geom_dict], crop=True, nodata=NODATA_VAL)
         out_meta = src.meta.copy()
@@ -174,4 +269,4 @@ if tile_paths:
     with rasterio.open(masked_tif, "w", **out_meta) as dst:
         dst.write(out_img)
 
-    print("Merged TIFF masked (poligon AOI) disimpan:", masked_tif)
+    print("Merged TIFF masked disimpan:", masked_tif)
