@@ -862,6 +862,16 @@ function addInteraction(type = "Polygon") {
     createHelpTooltip();
 
     draw.on("drawstart", function (evt) {
+        document.dispatchEvent(
+            new CustomEvent("app:clip:geometry", { detail: null })
+        );
+        const clipProcessBtn = document.getElementById("clipProcessBtn");
+        if (clipProcessBtn) {
+            clipProcessBtn.disabled = true;
+        }
+        if (window.AppMap?.clip) {
+            window.AppMap.clip = {};
+        }
         sketch = evt.feature;
         let tooltipCoord = evt.coordinate;
 
@@ -896,6 +906,13 @@ function addInteraction(type = "Polygon") {
         });
         geojsonFeature = JSON.parse(geojson);
 
+        const featureCollection = {
+            type: "FeatureCollection",
+            features: [geojsonFeature],
+        };
+
+        const areaHectares = geojsonArea ? geojsonArea / 10000 : 0;
+
         // Display the GeoJSON string in the #drawerGeojson element
         const drawerGeojsonEl = document.getElementById("drawerGeojson");
         if (drawerGeojsonEl) {
@@ -911,8 +928,88 @@ function addInteraction(type = "Polygon") {
             document.getElementById("measurementOutput");
         if (measurementOutputEl) {
             measurementOutputEl.innerHTML =
-                formatNumber(geojsonArea / 10000) + " ha"; // Convert m² to hectares;
+                formatNumber(areaHectares, 2, document.documentElement.lang) +
+                " ha";
         }
+
+        const clipModule = document.getElementById("sentinelClipModule");
+        let estimatedCredits = 0;
+        if (clipModule) {
+            const areaOutput = document.getElementById("clipAreaOutput");
+            if (areaOutput) {
+                areaOutput.textContent =
+                    formatNumber(areaHectares, 2, document.documentElement.lang) +
+                    " ha";
+            }
+
+            const creditRate = parseFloat(
+                clipModule.dataset.creditRate || "0"
+            );
+            const processingCost = parseFloat(
+                clipModule.dataset.processingCost || "0"
+            );
+            if (Number.isFinite(creditRate) || Number.isFinite(processingCost)) {
+                const baseCredits = Number.isFinite(creditRate)
+                    ? areaHectares * creditRate
+                    : 0;
+                const extraCost = Number.isFinite(processingCost)
+                    ? processingCost
+                    : 0;
+                estimatedCredits = Math.max(baseCredits + extraCost, 0);
+            }
+
+            const creditOutput = document.getElementById("clipCreditOutput");
+            if (creditOutput) {
+                creditOutput.textContent =
+                    estimatedCredits > 0
+                        ? `${formatNumber(
+                              estimatedCredits,
+                              2,
+                              document.documentElement.lang
+                          )} credits`
+                        : "–";
+            }
+
+            const geojsonOutput = document.getElementById("clipGeojsonOutput");
+            if (geojsonOutput) {
+                geojsonOutput.innerHTML = `<pre>${JSON.stringify(
+                    featureCollection,
+                    null,
+                    2
+                )}</pre>`;
+            }
+
+            const processBtn = document.getElementById("clipProcessBtn");
+            if (processBtn) {
+                const processUrl = (clipModule.dataset.processUrl || "").trim();
+                processBtn.disabled = !processUrl;
+            }
+
+            window.AppMap = window.AppMap || {};
+            window.AppMap.clip = window.AppMap.clip || {};
+            window.AppMap.clip.feature = geojsonFeature;
+            window.AppMap.clip.featureCollection = featureCollection;
+            window.AppMap.clip.areaSquareMeters = geojsonArea || 0;
+            window.AppMap.clip.areaHectares = areaHectares;
+            window.AppMap.clip.estimatedCredits = estimatedCredits;
+            window.AppMap.clip.processingCost = parseFloat(
+                clipModule.dataset.processingCost || "0"
+            );
+        }
+
+        document.dispatchEvent(
+            new CustomEvent("app:clip:geometry", {
+                detail: {
+                    geojson: featureCollection,
+                    areaHectares,
+                    areaSquareMeters: geojsonArea || 0,
+                    estimatedCredits,
+                    processingCost: parseFloat(
+                        clipModule?.dataset.processingCost || "0"
+                    ),
+                },
+            })
+        );
 
         drawingEnd();
 
