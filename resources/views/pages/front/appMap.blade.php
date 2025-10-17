@@ -1033,16 +1033,14 @@
                     const params = new URLSearchParams();
                     params.set('maxRecords', String(maxRecords));
                     params.set('productType', (elements.productInput?.value || '').trim() || 'S2MSI2A');
-                    params.set('orderby', 'startDate');
-                    params.set('sortOrder', 'descending');
 
                     const cloudValue = Number(elements.cloudInput?.value ?? '');
                     if (Number.isFinite(cloudValue)) {
                         const bounded = Math.min(Math.max(cloudValue, 0), 100);
                         const rangeValue = `0-${bounded}`;
+                        // Only set the documented "cloudCover" parameter; the API rejects other
+                        // aliases (cloudCoverPercentage/cloudcoverpercentage) with a 400 error.
                         params.set('cloudCover', rangeValue);
-                        params.set('cloudCoverPercentage', rangeValue);
-                        params.set('cloudcoverpercentage', rangeValue);
                     }
 
                     const startValue = (elements.startInput?.value || '').trim();
