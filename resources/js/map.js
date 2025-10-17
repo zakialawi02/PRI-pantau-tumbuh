@@ -914,6 +914,19 @@ function addInteraction(type = "Polygon") {
                 formatNumber(geojsonArea / 10000) + " ha"; // Convert m² to hectares;
         }
 
+        try {
+            window.dispatchEvent(
+                new CustomEvent("app:sentinelClip:aoi", {
+                    detail: {
+                        geojson: geojsonFeature,
+                        areaSqm: geojsonArea || 0,
+                    },
+                })
+            );
+        } catch (error) {
+            console.warn("Unable to dispatch clip AOI event", error);
+        }
+
         drawingEnd();
 
         // Show feature properties after drawing
@@ -939,6 +952,15 @@ function drawingStart() {
     buttonStateDrawing();
     $("#featureProperties").addClass("hidden");
     $("#drawerGeojson").html("");
+    try {
+        window.dispatchEvent(
+            new CustomEvent("app:sentinelClip:aoi", {
+                detail: null,
+            })
+        );
+    } catch (error) {
+        console.warn("Unable to reset clip AOI state", error);
+    }
 }
 
 /**

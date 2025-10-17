@@ -315,8 +315,9 @@
                     </div>
 
                     <!-- Clip Tab Content -->
+                    @php($defaultClipStartDate = now()->subDays(30)->toDateString())
                     <div class="tab-content hidden" id="sentinel-clip-panel" role="tabpanel" aria-labelledby="sentinel-clip-tab">
-                        <div class="space-y-3" id="sentinelClipModule" data-credit-rate="{{ config('app-constants.imagery_credit_cost_per_hectare') }}" data-process-url="{{ auth()->check() ? route('admin.sentinel.process') : '' }}" data-processing-cost="{{ config('app-constants.imagery_processing_cost', 10) }}">
+                        <div class="space-y-3" id="sentinelClipModule" data-credit-rate="{{ config('app-constants.imagery_credit_cost_per_hectare') }}" data-process-url="{{ auth()->check() ? route('admin.sentinel.clip') : '' }}" data-processing-cost="{{ config('app-constants.imagery_processing_cost', 10) }}" data-authenticated="{{ auth()->check() ? 'true' : 'false' }}">
                             <div class="bg-background/60 border-foreground/10 space-y-3 rounded-lg border p-3 shadow-sm">
                                 <div class="flex flex-wrap items-center justify-between gap-2">
                                     <div>
@@ -361,37 +362,19 @@
                             </div>
 
                             <div class="bg-background/60 border-foreground/10 space-y-3 rounded-lg border p-3 shadow-sm">
-                                <div class="flex flex-wrap items-center justify-between gap-2">
-                                    <h4 class="text-foreground text-lg font-semibold">Scene Selection</h4>
-                                    <div class="border-foreground/20 inline-flex overflow-hidden rounded-full border" role="tablist">
-                                        <button class="bg-primary px-3 py-1 text-xs font-semibold transition" id="clipModeAutoBtn" data-mode="auto" type="button" aria-pressed="true">Auto Mode</button>
-                                        <button class="px-3 py-1 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-60" id="clipModeManualBtn" data-mode="manual" type="button" aria-pressed="false" aria-disabled="true" disabled>Manual Mode</button>
-                                    </div>
-                                </div>
-
-                                <div class="space-y-2" id="clipAutoPanel">
-                                    <p class="text-foreground/70 text-sm">The system will analyse the date range and automatically choose the clearest Sentinel-2 scene intersecting your polygon.</p>
-                                    <x-button-primary id="clipAutoSearchBtn" type="button" size="small" disabled>
-                                        <i class="ri-magic-line"></i>
-                                        <span>Find Best Scene</span>
-                                    </x-button-primary>
-                                    <div class="border-foreground/15 rounded-lg border border-dashed p-3 text-sm" id="clipAutoResult">
-                                        Draw an area and search to preview the recommended scene.
-                                    </div>
-                                </div>
-
-                            </div>
-
-                            <div class="bg-background/60 border-foreground/10 space-y-2 rounded-lg border p-3 shadow-sm">
-                                <h4 class="text-foreground text-lg font-semibold">Selected Scene</h4>
-                                <div class="border-foreground/15 rounded-lg border p-3 text-sm" id="clipSelectionSummary">
-                                    No scene selected yet. Use auto mode to pick one.
+                                <h4 class="text-foreground text-lg font-semibold">Process Sentinel-2 Clip</h4>
+                                <p class="text-foreground/70 text-sm">Draw your area of interest and start the clipping workflow. The latest Sentinel-2 scene available for the selected location will be used.</p>
+                                <div class="space-y-1">
+                                    <x-input-label class="text-sm font-medium" for="clipStartDate">Start Date</x-input-label>
+                                    <x-text-input class="w-full" id="clipStartDate" name="start_date" size="small" type="date" value="{{ $defaultClipStartDate }}" max="{{ now()->toDateString() }}" />
+                                    <p class="text-foreground/60 text-xs">Scenes acquired on or after this date will be considered.</p>
                                 </div>
                                 <x-button-primary class="w-full md:w-auto" id="clipProcessBtn" type="button" size="small" disabled>
                                     <i class="ri-cpu-line"></i>
-                                    <span>Process &amp; Download</span>
+                                    <span>Process Clip</span>
                                 </x-button-primary>
-                                <p class="text-foreground/60 text-xs" id="clipProcessNotice">Processing will run in the background via job queue. We will notify you when the imagery is ready.</p>
+                                <div class="hidden rounded-lg border border-foreground/10 bg-foreground/5 p-2 text-xs" id="clipProcessStatus" role="status"></div>
+                                <p class="text-foreground/60 text-xs" id="clipProcessNotice">Processing runs in the background via the job queue. You will be notified when the imagery is ready.</p>
                             </div>
 
                         </div>
@@ -1588,6 +1571,245 @@
                 ();
             </script>
         @endauth
+    @endpush
+    @push('javascript')
+        <script>
+            (() => {
+                const moduleEl = document.getElementById('sentinelClipModule');
+                if (!moduleEl) {
+                    return;
+                }
+
+                const areaOutputEl = document.getElementById('clipAreaOutput');
+                const creditOutputEl = document.getElementById('clipCreditOutput');
+                const geojsonOutputEl = document.getElementById('clipGeojsonOutput');
+                const fieldNameInput = document.getElementById('clipFieldName');
+                const startDateInput = document.getElementById('clipStartDate');
+                const processBtn = document.getElementById('clipProcessBtn');
+                const statusEl = document.getElementById('clipProcessStatus');
+
+                const creditRate = Number.parseFloat(moduleEl.dataset.creditRate ?? '') || 0;
+                const processUrl = (moduleEl.dataset.processUrl || '').trim();
+                const isAuthenticated = moduleEl.dataset.authenticated === 'true';
+
+                window.AppMap = window.AppMap || {};
+                window.AppMap.constants = window.AppMap.constants || {};
+                if (!Number.isFinite(window.AppMap.constants.clipCreditRate) || window.AppMap.constants.clipCreditRate <= 0) {
+                    window.AppMap.constants.clipCreditRate = creditRate;
+                }
+
+                const defaultAreaHtml = areaOutputEl?.innerHTML ?? '';
+                const defaultCreditHtml = creditOutputEl?.innerHTML ?? '';
+                const defaultGeojsonHtml = geojsonOutputEl?.innerHTML ?? '';
+                const defaultButtonHtml = processBtn?.innerHTML ?? '';
+
+                const statusBaseClasses = ['rounded-lg', 'border', 'p-2', 'text-xs'];
+                const statusVariants = {
+                    info: ['bg-foreground/5', 'border-foreground/20', 'text-foreground/70'],
+                    success: ['bg-success/10', 'border-success/30', 'text-success'],
+                    error: ['bg-destructive/10', 'border-destructive/30', 'text-destructive'],
+                    warning: ['bg-amber-50', 'border-amber-300', 'text-amber-700'],
+                };
+
+                if (statusEl) {
+                    statusEl.classList.remove('hidden');
+                    statusEl.classList.add(...statusBaseClasses);
+                    statusEl.classList.add('hidden');
+                }
+
+                let currentState = null;
+
+                const applyVariantClasses = (variant) => {
+                    if (!statusEl) {
+                        return;
+                    }
+                    statusEl.classList.remove(...statusBaseClasses);
+                    Object.values(statusVariants).forEach((classes) => {
+                        statusEl.classList.remove(...classes);
+                    });
+                    statusEl.classList.add(...statusBaseClasses);
+                    const variantClasses = statusVariants[variant] || statusVariants.info;
+                    statusEl.classList.add(...variantClasses);
+                };
+
+                const setStatus = (message, variant = 'info') => {
+                    if (!statusEl) {
+                        return;
+                    }
+                    if (!message) {
+                        statusEl.textContent = '';
+                        statusEl.classList.add('hidden');
+                        return;
+                    }
+                    applyVariantClasses(variant);
+                    statusEl.textContent = message;
+                    statusEl.classList.remove('hidden');
+                };
+
+                const setProcessButtonState = (disabled, html) => {
+                    if (!processBtn) {
+                        return;
+                    }
+                    const shouldDisable = Boolean(disabled);
+                    processBtn.disabled = shouldDisable;
+                    processBtn.setAttribute('aria-disabled', shouldDisable ? 'true' : 'false');
+                    if (typeof html === 'string') {
+                        processBtn.innerHTML = html;
+                    } else {
+                        processBtn.innerHTML = defaultButtonHtml;
+                    }
+                };
+
+                const resetOutputs = () => {
+                    currentState = null;
+                    if (window.AppMap?.clip) {
+                        window.AppMap.clip.state = null;
+                    }
+                    if (areaOutputEl) {
+                        areaOutputEl.innerHTML = defaultAreaHtml;
+                    }
+                    if (creditOutputEl) {
+                        creditOutputEl.innerHTML = defaultCreditHtml;
+                    }
+                    if (geojsonOutputEl) {
+                        geojsonOutputEl.innerHTML = defaultGeojsonHtml;
+                    }
+                    setStatus('');
+                    const canProcess = Boolean(processUrl && isAuthenticated && currentState?.geojson);
+                    setProcessButtonState(!canProcess);
+                };
+
+                const updateOutputs = (detail) => {
+                    if (!detail || !detail.geojson || !Number.isFinite(detail.areaSqm) || detail.areaSqm <= 0) {
+                        resetOutputs();
+                        return;
+                    }
+
+                    const areaHa = detail.areaSqm / 10000;
+                    const estimatedCredits = Math.max(0, areaHa * creditRate);
+
+                    currentState = {
+                        geojson: detail.geojson,
+                        areaSqm: detail.areaSqm,
+                        areaHa,
+                        estimatedCredits,
+                    };
+
+                    window.AppMap.clip = window.AppMap.clip || {};
+                    window.AppMap.clip.state = currentState;
+
+                    if (areaOutputEl) {
+                        areaOutputEl.textContent = `${formatNumber(areaHa, 2, document.documentElement.lang)} ha`;
+                    }
+
+                    if (creditOutputEl) {
+                        if (creditRate > 0) {
+                            creditOutputEl.textContent = `${formatNumber(estimatedCredits, 2, document.documentElement.lang)} credits`;
+                        } else {
+                            creditOutputEl.textContent = defaultCreditHtml;
+                        }
+                    }
+
+                    if (geojsonOutputEl) {
+                        const pre = document.createElement('pre');
+                        pre.textContent = JSON.stringify(detail.geojson, null, 2);
+                        geojsonOutputEl.innerHTML = '';
+                        geojsonOutputEl.appendChild(pre);
+                    }
+
+                    const canProcess = Boolean(processUrl && isAuthenticated);
+                    setProcessButtonState(!canProcess);
+                };
+
+                window.addEventListener('app:sentinelClip:aoi', (event) => {
+                    const detail = event?.detail;
+                    if (!detail) {
+                        resetOutputs();
+                        return;
+                    }
+
+                    const geometry = detail.geojson || detail.geometry || null;
+                    const areaSqm = Number(detail.areaSqm ?? detail.area_sqm ?? 0);
+
+                    if (!geometry || !Number.isFinite(areaSqm)) {
+                        resetOutputs();
+                        return;
+                    }
+
+                    updateOutputs({
+                        geojson: geometry,
+                        areaSqm,
+                    });
+                });
+
+                if (processBtn) {
+                    if (!isAuthenticated || !processUrl) {
+                        processBtn.title = 'Please sign in to process Sentinel-2 clips.';
+                    }
+
+                    processBtn.addEventListener('click', async () => {
+                        if (!processUrl) {
+                            MyZkToast?.warning?.('Please sign in to process Sentinel-2 clips.');
+                            return;
+                        }
+
+                        if (!currentState?.geojson) {
+                            MyZkToast?.warning?.('Draw a polygon before processing the clip.');
+                            return;
+                        }
+
+                        const payload = {
+                            field_name: fieldNameInput?.value?.trim() || null,
+                            geometry: currentState.geojson,
+                            area_hectares: currentState.areaHa,
+                            estimated_credits: currentState.estimatedCredits,
+                            start_date: startDateInput?.value || null,
+                        };
+
+                        setProcessButtonState(true, '<i class="ri-loader-4-line animate-spin"></i><span>Submitting...</span>');
+                        setStatus('Queuing Sentinel-2 clip for processing...', 'info');
+
+                        try {
+                            const response = await fetch(processUrl, {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    Accept: 'application/json',
+                                    'X-CSRF-TOKEN':
+                                        document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}',
+                                },
+                                body: JSON.stringify(payload),
+                            });
+
+                            const result = await response.json().catch(() => ({}));
+
+                            if (response.ok) {
+                                resetOutputs();
+                                setStatus(result?.message || 'Sentinel-2 clip queued for processing.', 'success');
+                                $('#current-myCredits')?.text(formatNumber(result?.data?.current_credits ?? 0, 2));
+                                if (typeof window.AppMap?.uploader?.reload === 'function') {
+                                    window.AppMap.uploader.reload();
+                                }
+                                MyZkToast?.success?.(result?.message || 'Sentinel-2 clip queued for processing.');
+                            } else {
+                                const errorMessage = result?.message || 'Unable to queue Sentinel-2 clip.';
+                                const variant = response.status === 402 ? 'warning' : 'error';
+                                setStatus(errorMessage, variant);
+                                MyZkToast?.error?.(errorMessage);
+                            }
+                        } catch (error) {
+                            console.error('Failed to queue Sentinel-2 clip', error);
+                            setStatus('An unexpected error occurred while queuing the clip.', 'error');
+                            MyZkToast?.error?.(error?.message || 'Unable to queue Sentinel-2 clip.');
+                        } finally {
+                            setProcessButtonState(false);
+                        }
+                    });
+                }
+
+                resetOutputs();
+            })();
+        </script>
     @endpush
     @push('javascript')
         <script>
