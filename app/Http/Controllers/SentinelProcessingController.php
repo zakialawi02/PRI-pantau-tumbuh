@@ -2,10 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\ProcessSentinelClipJob;
 use App\Jobs\ProcessSentinelSceneJob;
 use App\Models\ImageryData;
+use App\Models\FieldArea;
 use App\Services\CreditService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -154,6 +157,189 @@ class SentinelProcessingController extends Controller
     public function processClip(Request $request)
     {
         $user = $request->user();
+
+        $validated = $request->validate([
+            'field_name' => ['nullable', 'string', 'max:255'],
+            'geometry' => ['required', 'array'],
+            'geometry.type' => ['required', 'string'],
+            'area_square_meters' => ['required', 'numeric', 'min:1'],
+            'area_hectares' => ['nullable', 'numeric', 'min:0'],
+            'credit_cost' => ['nullable', 'numeric', 'min:0'],
+            'date_from' => ['nullable', 'date'],
+            'date_to' => ['nullable', 'date'],
+        ]);
+
+        $fieldName = trim($validated['field_name'] ?? '') ?: null;
+        $geometryPayload = $validated['geometry'];
+
+        try {
+            $featureCollection = $this->ensureFeatureCollection($geometryPayload);
+        } catch (\InvalidArgumentException $exception) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid geometry provided for clipping.',
+            ], 422);
+        }
+
+        $areaSquareMeters = (float) $validated['area_square_meters'];
+        $areaHectares = $areaSquareMeters / 10000;
+
+        $baseProcessingCost = (float) config('app-constants.imagery_processing_cost', 0);
+        $perHectareRate = (float) config('app-constants.imagery_credit_cost_per_hectare', 0);
+
+        $areaCreditCost = $areaHectares * $perHectareRate;
+        $requiredCredits = round($baseProcessingCost + $areaCreditCost, 2);
+        if ($baseProcessingCost > 0 && $requiredCredits < $baseProcessingCost) {
+            $requiredCredits = round($baseProcessingCost, 2);
+        }
+
+        $currentCredits = $this->creditService->getRemainingCredits($user->id);
+        if ($requiredCredits > 0 && $currentCredits < $requiredCredits) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Insufficient credits to process Sentinel clipping.',
+                'data' => [
+                    'current_credits' => $currentCredits,
+                    'required_credits' => $requiredCredits,
+                ],
+            ], 402);
+        }
+
+        $deductedCredits = false;
+        $fieldArea = null;
+        $imagery = null;
+
+        try {
+            if ($requiredCredits > 0) {
+                $deductedCredits = $this->creditService->deductCreditsForProcessing(
+                    $user->id,
+                    $requiredCredits,
+                    'SentinelProcessingController@processClip'
+                );
+
+                if (!$deductedCredits) {
+                    $currentCredits = $this->creditService->getRemainingCredits($user->id);
+
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Insufficient credits to process Sentinel clipping.',
+                        'data' => [
+                            'current_credits' => $currentCredits,
+                            'required_credits' => $requiredCredits,
+                        ],
+                    ], 402);
+                }
+            } else {
+                $deductedCredits = true;
+            }
+
+            DB::beginTransaction();
+
+            $fieldAreaName = $fieldName ?? ('Sentinel Clip ' . now()->format('Y-m-d'));
+
+            $fieldArea = FieldArea::create([
+                'user_id' => $user->id,
+                'name' => $fieldAreaName,
+                'area_ha' => round($areaHectares, 4),
+                'geom' => $featureCollection,
+            ]);
+
+            $displayBase = $fieldName ?: 'SentinelClip';
+            $sanitizedBase = $this->sanitizeDisplayName(
+                $displayBase . '_' . now()->format('Ymd_His')
+            );
+            $outputFilename = $this->ensureUniqueFilename(
+                'imagery/clipped',
+                $sanitizedBase,
+                'tif'
+            );
+            $originalName = $displayBase . '.tif';
+
+            $imagery = ImageryData::create([
+                'user_id' => $user->id,
+                'source_type' => 'sentinel-2-clip',
+                'original_name' => $originalName,
+                'stored_name' => $outputFilename,
+                'size' => 0,
+                'format' => 'tif',
+                'path' => 'storage/imagery/clipped/' . $outputFilename,
+                'upload_status' => 'processing',
+                'processing_status' => 'waiting',
+                'uploaded_at' => now(),
+            ]);
+
+            DB::commit();
+
+            $payload = [
+                'geometry' => $featureCollection,
+                'field_name' => $fieldName,
+                'area_square_meters' => $areaSquareMeters,
+                'area_hectares' => $areaHectares,
+                'credit_cost' => $requiredCredits,
+                'output_filename' => $outputFilename,
+            ];
+
+            if (!empty($validated['date_from'])) {
+                $payload['date_from'] = $validated['date_from'];
+            }
+
+            if (!empty($validated['date_to'])) {
+                $payload['date_to'] = $validated['date_to'];
+            }
+
+            ProcessSentinelClipJob::dispatch(
+                $imagery->id,
+                $fieldArea->id,
+                $payload
+            )->onQueue('processing');
+
+            $remainingCredits = $this->creditService->getRemainingCredits($user->id);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Sentinel clipping request has been queued for processing.',
+                'data' => [
+                    'imagery_id' => $imagery->id,
+                    'field_area_id' => $fieldArea->id,
+                    'current_credits' => $remainingCredits,
+                    'required_credits' => $requiredCredits,
+                ],
+            ], 202);
+        } catch (Throwable $exception) {
+            if (DB::transactionLevel() > 0) {
+                DB::rollBack();
+            }
+
+            Log::error('SentinelProcessingController@processClip failed to queue processing.', [
+                'error' => $exception->getMessage(),
+                'trace' => $exception->getTraceAsString(),
+            ]);
+
+            if ($imagery) {
+                $imagery->delete();
+            }
+
+            if ($fieldArea) {
+                $fieldArea->delete();
+            }
+
+            if ($deductedCredits && $requiredCredits > 0) {
+                $this->creditService->addCreditsToUser(
+                    $user->id,
+                    $requiredCredits,
+                    'SentinelProcessingController@processClip'
+                );
+            }
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Unable to queue Sentinel clipping at this time.',
+                'data' => [
+                    'current_credits' => $this->creditService->getRemainingCredits($user->id),
+                    'required_credits' => $requiredCredits,
+                ],
+            ], 500);
+        }
     }
 
     private function sanitizeDisplayName(string $value): string
@@ -198,5 +384,42 @@ class SentinelProcessingController extends Controller
         }
 
         return $filename;
+    }
+
+    private function ensureFeatureCollection(array $geometry): array
+    {
+        $type = $geometry['type'] ?? null;
+
+        if ($type === 'FeatureCollection') {
+            if (!isset($geometry['features']) || !is_array($geometry['features'])) {
+                throw new \InvalidArgumentException('Feature collection is missing features.');
+            }
+
+            return $geometry;
+        }
+
+        if ($type === 'Feature') {
+            if (!isset($geometry['geometry']) || !is_array($geometry['geometry'])) {
+                throw new \InvalidArgumentException('Feature geometry is missing.');
+            }
+
+            return [
+                'type' => 'FeatureCollection',
+                'features' => [$geometry],
+            ];
+        }
+
+        if (!isset($geometry['coordinates'])) {
+            throw new \InvalidArgumentException('Geometry coordinates missing.');
+        }
+
+        return [
+            'type' => 'FeatureCollection',
+            'features' => [[
+                'type' => 'Feature',
+                'properties' => [],
+                'geometry' => $geometry,
+            ]],
+        ];
     }
 }

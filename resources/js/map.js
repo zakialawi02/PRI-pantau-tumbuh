@@ -662,6 +662,122 @@ function updatePanel(t, d) {
 // Global variabel
 let geojsonFeature;
 let geojsonArea;
+const sentinelClipModule = document.getElementById("sentinelClipModule");
+const clipAreaOutputEl = sentinelClipModule
+    ? document.getElementById("clipAreaOutput")
+    : null;
+const clipCreditOutputEl = sentinelClipModule
+    ? document.getElementById("clipCreditOutput")
+    : null;
+const clipGeojsonOutputEl = sentinelClipModule
+    ? document.getElementById("clipGeojsonOutput")
+    : null;
+const clipProcessBtn = sentinelClipModule
+    ? document.getElementById("clipProcessBtn")
+    : null;
+const clipFieldNameInput = sentinelClipModule
+    ? document.getElementById("clipFieldName")
+    : null;
+const clipProcessNoticeEl = sentinelClipModule
+    ? document.getElementById("clipProcessNotice")
+    : null;
+const clipAreaDefaultText = clipAreaOutputEl
+    ? clipAreaOutputEl.textContent.trim() || "Draw a polygon to calculate the area."
+    : "Draw a polygon to calculate the area.";
+const clipCreditDefaultText = clipCreditOutputEl
+    ? clipCreditOutputEl.textContent.trim() || "–"
+    : "–";
+const clipGeojsonDefaultHtml = clipGeojsonOutputEl
+    ? clipGeojsonOutputEl.innerHTML
+    : "";
+const clipProcessNoticeDefault = clipProcessNoticeEl
+    ? clipProcessNoticeEl.textContent.trim()
+    : "Processing will run in the background via job queue. We will notify you when the imagery is ready.";
+let sentinelClipSubmissionLocked = false;
+const sentinelClipState = {
+    feature: null,
+    areaSquareMeters: 0,
+    areaHectares: 0,
+    creditEstimate: 0,
+};
+const csrfTokenMeta = document.querySelector('meta[name="csrf-token"]');
+const csrfToken = csrfTokenMeta ? csrfTokenMeta.getAttribute("content") : "";
+
+function renderSentinelClipOutputs() {
+    if (!sentinelClipModule) {
+        return;
+    }
+
+    if (clipAreaOutputEl) {
+        if (sentinelClipState.areaHectares > 0) {
+            clipAreaOutputEl.textContent =
+                formatNumber(
+                    sentinelClipState.areaHectares,
+                    2,
+                    document.documentElement.lang
+                ) + " ha";
+        } else {
+            clipAreaOutputEl.textContent = clipAreaDefaultText;
+        }
+    }
+
+    if (clipCreditOutputEl) {
+        if (sentinelClipState.creditEstimate > 0) {
+            clipCreditOutputEl.textContent =
+                "≈ " +
+                formatNumber(
+                    sentinelClipState.creditEstimate,
+                    2,
+                    document.documentElement.lang
+                ) +
+                " credits";
+        } else {
+            clipCreditOutputEl.textContent = clipCreditDefaultText;
+        }
+    }
+
+    if (clipGeojsonOutputEl) {
+        if (sentinelClipState.feature) {
+            clipGeojsonOutputEl.innerHTML =
+                "<pre class=\"whitespace-pre-wrap break-all\">" +
+                JSON.stringify(sentinelClipState.feature, null, 2) +
+                "</pre>";
+        } else {
+            clipGeojsonOutputEl.innerHTML = clipGeojsonDefaultHtml;
+        }
+    }
+
+    sentinelClipModule.dataset.areaSquareMeters = String(
+        sentinelClipState.areaSquareMeters
+    );
+    sentinelClipModule.dataset.areaHa = String(sentinelClipState.areaHectares);
+    sentinelClipModule.dataset.creditEstimate = String(
+        sentinelClipState.creditEstimate
+    );
+
+    if (clipProcessBtn) {
+        const hasGeometry = Boolean(sentinelClipState.feature);
+        const hasEndpoint = Boolean(sentinelClipModule.dataset.processUrl);
+        clipProcessBtn.disabled =
+            sentinelClipSubmissionLocked || !hasGeometry || !hasEndpoint;
+    }
+}
+
+function resetSentinelClipOutputs() {
+    sentinelClipSubmissionLocked = false;
+    sentinelClipState.feature = null;
+    sentinelClipState.areaSquareMeters = 0;
+    sentinelClipState.areaHectares = 0;
+    sentinelClipState.creditEstimate = 0;
+    if (clipProcessNoticeEl) {
+        clipProcessNoticeEl.textContent = clipProcessNoticeDefault;
+    }
+    renderSentinelClipOutputs();
+}
+
+if (sentinelClipModule) {
+    renderSentinelClipOutputs();
+}
 let drawingRunning;
 let drawed;
 let minimapVisible = true;
@@ -925,6 +1041,26 @@ function addInteraction(type = "Polygon") {
         if (typeof window.calculateTotalPrice === "function") {
             window.calculateTotalPrice();
         }
+
+        if (sentinelClipModule) {
+            sentinelClipState.feature = geojsonFeature;
+            sentinelClipState.areaSquareMeters =
+                typeof geojsonArea === "number" ? geojsonArea : 0;
+            sentinelClipState.areaHectares =
+                sentinelClipState.areaSquareMeters / 10000;
+
+            const creditRate = parseFloat(
+                sentinelClipModule.dataset.creditRate || "0"
+            );
+            const processingCost = parseFloat(
+                sentinelClipModule.dataset.processingCost || "0"
+            );
+
+            const areaCost = sentinelClipState.areaHectares * creditRate;
+            sentinelClipState.creditEstimate = processingCost + areaCost;
+            sentinelClipSubmissionLocked = false;
+            renderSentinelClipOutputs();
+        }
     });
 }
 
@@ -939,6 +1075,9 @@ function drawingStart() {
     buttonStateDrawing();
     $("#featureProperties").addClass("hidden");
     $("#drawerGeojson").html("");
+    if (sentinelClipModule) {
+        resetSentinelClipOutputs();
+    }
 }
 
 /**
@@ -1158,6 +1297,105 @@ document.addEventListener("DOMContentLoaded", function () {
         toggleMinimap();
     }
 });
+
+if (clipProcessBtn && sentinelClipModule) {
+    const defaultClipBtnHtml = clipProcessBtn.innerHTML;
+    clipProcessBtn.addEventListener("click", async () => {
+        if (!sentinelClipState.feature || sentinelClipState.areaSquareMeters <= 0) {
+            if (typeof MyZkToast?.warning === "function") {
+                MyZkToast.warning("Draw a polygon before requesting Sentinel clipping.");
+            }
+            return;
+        }
+
+        const processUrl = sentinelClipModule.dataset.processUrl;
+        if (!processUrl) {
+            if (typeof MyZkToast?.warning === "function") {
+                MyZkToast.warning("Please sign in to process Sentinel imagery.");
+            }
+            return;
+        }
+
+        const payload = {
+            field_name: clipFieldNameInput?.value?.trim() || null,
+            geometry: sentinelClipState.feature,
+            area_square_meters: sentinelClipState.areaSquareMeters,
+            area_hectares: sentinelClipState.areaHectares,
+            credit_cost: sentinelClipState.creditEstimate,
+        };
+
+        const dateFrom = sentinelClipModule.dataset.dateFrom;
+        const dateTo = sentinelClipModule.dataset.dateTo;
+        if (dateFrom) {
+            payload.date_from = dateFrom;
+        }
+        if (dateTo) {
+            payload.date_to = dateTo;
+        }
+
+        sentinelClipSubmissionLocked = true;
+        clipProcessBtn.disabled = true;
+        clipProcessBtn.innerHTML =
+            "<i class=\"ri-loader-4-line animate-spin\"></i><span>Queueing...</span>";
+
+        try {
+            const response = await fetch(processUrl, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Accept: "application/json",
+                    ...(csrfToken ? { "X-CSRF-TOKEN": csrfToken } : {}),
+                },
+                body: JSON.stringify(payload),
+            });
+
+            const result = await response.json().catch(() => ({ success: false }));
+
+            if (!response.ok || !result?.success) {
+                throw new Error(
+                    result?.message ||
+                        "Failed to queue Sentinel clipping. Please try again."
+                );
+            }
+
+            if (typeof MyZkToast?.success === "function") {
+                MyZkToast.success(
+                    result?.message || "Sentinel clipping queued successfully."
+                );
+            }
+
+            if (
+                typeof result?.data?.current_credits !== "undefined" &&
+                result.data.current_credits !== null
+            ) {
+                const currentCreditsEl = document.getElementById(
+                    "current-myCredits"
+                );
+                if (currentCreditsEl) {
+                    currentCreditsEl.textContent = formatNumber(
+                        result.data.current_credits,
+                        2,
+                        document.documentElement.lang
+                    );
+                }
+            }
+
+            if (clipProcessNoticeEl && result?.message) {
+                clipProcessNoticeEl.textContent = result.message;
+            }
+
+            renderSentinelClipOutputs();
+        } catch (error) {
+            sentinelClipSubmissionLocked = false;
+            if (typeof MyZkToast?.error === "function") {
+                MyZkToast.error(error?.message || "Unable to process Sentinel clip.");
+            }
+        } finally {
+            clipProcessBtn.innerHTML = defaultClipBtnHtml;
+            renderSentinelClipOutputs();
+        }
+    });
+}
 
 // Export functions to global scope for access from HTML
 window.map = map;

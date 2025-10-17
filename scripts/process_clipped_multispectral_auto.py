@@ -1,6 +1,6 @@
 import os
 import json
-from datetime import timedelta
+from datetime import datetime, timedelta
 from dateutil import parser as dateparser
 import numpy as np
 import rasterio
@@ -8,8 +8,15 @@ from rasterio.merge import merge
 from rasterio import mask
 
 from sentinelhub import (
-    SHConfig, SentinelHubCatalog, SentinelHubRequest,
-    BBox, CRS, bbox_to_dimensions, MimeType, DataCollection, Geometry
+    SHConfig,
+    SentinelHubCatalog,
+    SentinelHubRequest,
+    BBox,
+    CRS,
+    bbox_to_dimensions,
+    MimeType,
+    DataCollection,
+    Geometry,
 )
 from sentinelhub.areas import BBoxSplitter
 
@@ -20,8 +27,14 @@ def read_env(name: str, default: str | None = None) -> str | None:
         return value
     return default
 
-SH_CLIENT_ID = read_env("SENTINELHUB_CLIENT_ID", read_env("SH_CLIENT_ID", ""))
-SH_CLIENT_SECRET = read_env("SENTINELHUB_CLIENT_SECRET", read_env("SH_CLIENT_SECRET", ""))
+SH_CLIENT_ID = read_env(
+    "COPERNICUS_CLIENT_ID",
+    read_env("SENTINELHUB_CLIENT_ID", read_env("SH_CLIENT_ID", "")),
+)
+SH_CLIENT_SECRET = read_env(
+    "COPERNICUS_CLIENT_SECRET",
+    read_env("SENTINELHUB_CLIENT_SECRET", read_env("SH_CLIENT_SECRET", "")),
+)
 
 if not SH_CLIENT_ID or not SH_CLIENT_SECRET:
     raise SystemExit("Sentinel Hub credentials are not configured.")
@@ -45,11 +58,46 @@ if masked_tif:
     os.makedirs(os.path.dirname(os.path.abspath(masked_tif)), exist_ok=True)
 
 # ====== PARAMETER ======
-DATE_FROM = read_env("SENTINEL_CLIP_DATE_FROM", "2025-10-17")
-DATE_TO   = read_env("SENTINEL_CLIP_DATE_TO", "2025-08-31")
-LIMIT     = int(float(read_env("SENTINEL_CLIP_LIMIT", "100")))
-RES       = int(float(read_env("SENTINEL_CLIP_RESOLUTION", "10")))
+today_utc = datetime.utcnow().date()
+default_date_to = today_utc.isoformat()
+default_date_from = (today_utc - timedelta(days=30)).isoformat()
+
+DATE_FROM = read_env("SENTINEL_CLIP_DATE_FROM", default_date_from)
+DATE_TO = read_env("SENTINEL_CLIP_DATE_TO", default_date_to)
+LIMIT = int(float(read_env("SENTINEL_CLIP_LIMIT", "100")))
+RES = int(float(read_env("SENTINEL_CLIP_RESOLUTION", "10")))
 NODATA_VAL = float(read_env("SENTINEL_CLIP_NODATA", "0"))
+MAX_CLOUD = float(read_env("SENTINEL_CLIP_MAX_CLOUD", "100"))
+
+MAX_CLOUD = max(0.0, min(100.0, MAX_CLOUD))
+
+try:
+    parsed_from = dateparser.isoparse(DATE_FROM)
+    parsed_to = dateparser.isoparse(DATE_TO)
+except Exception as exc:
+    raise SystemExit(f"Invalid date range supplied: {exc}")
+
+if parsed_from > parsed_to:
+    parsed_from, parsed_to = parsed_to, parsed_from
+
+DATE_FROM = parsed_from.date().isoformat()
+DATE_TO = parsed_to.date().isoformat()
+
+collection_name_env = (read_env("SENTINEL_CLIP_COLLECTION", "SENTINEL2_L2A") or "").strip()
+normalized_collection_name = collection_name_env.upper().replace("-", "_")
+try:
+    collection = getattr(DataCollection, normalized_collection_name)
+except AttributeError:
+    collection = DataCollection.SENTINEL2_L2A
+    normalized_collection_name = "SENTINEL2_L2A"
+
+collection_type_lookup = {
+    "SENTINEL2_L1C": "sentinel-2-l1c",
+    "SENTINEL2_L2A": "sentinel-2-l2a",
+}
+collection_type = collection_type_lookup.get(
+    normalized_collection_name, "sentinel-2-l2a"
+)
 
 # ====== AOI dari GEOJSON ======
 default_geojson = {
@@ -129,14 +177,47 @@ default_geojson = {
   ]
 }
 
-geojson_env = read_env("SENTINEL_CLIP_GEOJSON") or read_env("CLIP_GEOJSON")
-if geojson_env:
+def load_geojson() -> dict:
+    geojson_env = read_env("SENTINEL_CLIP_GEOJSON") or read_env("CLIP_GEOJSON")
+    if not geojson_env:
+        return default_geojson
+
     try:
-        AOI_GEOJSON = json.loads(geojson_env)
+        parsed = json.loads(geojson_env)
     except json.JSONDecodeError as exc:
         raise SystemExit(f"Invalid SENTINEL_CLIP_GEOJSON provided: {exc}")
-else:
-    AOI_GEOJSON = default_geojson
+
+    gtype = parsed.get("type")
+
+    if gtype == "FeatureCollection":
+        if not parsed.get("features"):
+            raise SystemExit("FeatureCollection requires a non-empty features array.")
+        return parsed
+
+    if gtype == "Feature":
+        if not parsed.get("geometry"):
+            raise SystemExit("Feature payload missing geometry definition.")
+        return {"type": "FeatureCollection", "features": [parsed]}
+
+    if gtype in {"Polygon", "MultiPolygon"}:
+        return {
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+                    "properties": {},
+                    "geometry": parsed,
+                }
+            ],
+        }
+
+    raise SystemExit(f"Unsupported geometry type for clipping: {gtype}")
+
+
+AOI_GEOJSON = load_geojson()
+
+if not AOI_GEOJSON["features"]:
+    raise SystemExit("Geometry feature collection is empty.")
 
 geom_dict = AOI_GEOJSON["features"][0]["geometry"]
 geometry = Geometry(geom_dict, crs=CRS.WGS84)
@@ -145,7 +226,7 @@ bbox = geometry.bbox
 # ====== CARI SCENE TANPA FILTER CLOUD ======
 catalog = SentinelHubCatalog(config=config)
 search_iter = catalog.search(
-    DataCollection.SENTINEL2_L1C,
+    collection,
     geometry=geometry,
     time=(DATE_FROM, DATE_TO),
     limit=LIMIT
@@ -207,11 +288,11 @@ for idx, tile_bb in enumerate(tile_bboxes):
     request = SentinelHubRequest(
         evalscript=evalscript_all_bands,
         input_data=[{
-            "type": "sentinel-2-l1c",
+            "type": collection_type,
             "dataFilter": {
                 "timeRange": {"from": t_from, "to": t_to},
                 "mosaickingOrder": "mostRecent",
-                "maxCloudCoverage": 100   # <- full range 0–100%
+                "maxCloudCoverage": MAX_CLOUD
             },
             "processing": {"upsampling": "BILINEAR","downsampling": "BILINEAR","harmonizeValues": True}
         }],

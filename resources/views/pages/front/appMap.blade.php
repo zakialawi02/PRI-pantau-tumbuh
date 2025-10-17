@@ -316,7 +316,7 @@
 
                     <!-- Clip Tab Content -->
                     <div class="tab-content hidden" id="sentinel-clip-panel" role="tabpanel" aria-labelledby="sentinel-clip-tab">
-                        <div class="space-y-3" id="sentinelClipModule" data-credit-rate="{{ config('app-constants.imagery_credit_cost_per_hectare') }}" data-process-url="{{ auth()->check() ? route('admin.sentinel.process') : '' }}" data-processing-cost="{{ config('app-constants.imagery_processing_cost', 10) }}">
+                        <div class="space-y-3" id="sentinelClipModule" data-credit-rate="{{ config('app-constants.imagery_credit_cost_per_hectare') }}" data-process-url="{{ auth()->check() ? route('admin.sentinel.clip') : '' }}" data-processing-cost="{{ config('app-constants.imagery_processing_cost', 10) }}">
                             <div class="bg-background/60 border-foreground/10 space-y-3 rounded-lg border p-3 shadow-sm">
                                 <div class="flex flex-wrap items-center justify-between gap-2">
                                     <div>
@@ -339,11 +339,11 @@
                                         </div>
                                     </div>
                                     <div class="space-y-1">
-                                        <x-input-label class="text-sm font-medium" for="clipCreditOutput">Estimated Credit Cost</x-input-label>
-                                        <div class="border-foreground/20 rounded-lg border px-3 py-2 text-sm" id="clipCreditOutput">
-                                            –
-                                        </div>
-                                        <p class="text-foreground/60 text-xs">{{ Number::format(config('app-constants.imagery_credit_cost_per_hectare'), locale: app()->getLocale()) }} credit points per hectare.</p>
+                                    <x-input-label class="text-sm font-medium" for="clipCreditOutput">Estimated Credit Cost</x-input-label>
+                                    <div class="border-foreground/20 rounded-lg border px-3 py-2 text-sm" id="clipCreditOutput">
+                                        –
+                                    </div>
+                                    <p class="text-foreground/60 text-xs">{{ Number::format(config('app-constants.imagery_credit_cost_per_hectare'), locale: app()->getLocale()) }} credit points per hectare + {{ Number::format(config('app-constants.imagery_processing_cost', 10), locale: app()->getLocale()) }} base processing credits.</p>
                                     </div>
                                 </div>
 
@@ -358,40 +358,13 @@
                                     <x-input-label class="text-sm font-medium" for="clipFieldName">Field Name</x-input-label>
                                     <x-text-input class="w-full" id="clipFieldName" name="field_name" size="small" placeholder="e.g. North Farm Block" />
                                 </div>
-                            </div>
-
-                            <div class="bg-background/60 border-foreground/10 space-y-3 rounded-lg border p-3 shadow-sm">
-                                <div class="flex flex-wrap items-center justify-between gap-2">
-                                    <h4 class="text-foreground text-lg font-semibold">Scene Selection</h4>
-                                    <div class="border-foreground/20 inline-flex overflow-hidden rounded-full border" role="tablist">
-                                        <button class="bg-primary px-3 py-1 text-xs font-semibold transition" id="clipModeAutoBtn" data-mode="auto" type="button" aria-pressed="true">Auto Mode</button>
-                                        <button class="px-3 py-1 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-60" id="clipModeManualBtn" data-mode="manual" type="button" aria-pressed="false" aria-disabled="true" disabled>Manual Mode</button>
-                                    </div>
-                                </div>
-
-                                <div class="space-y-2" id="clipAutoPanel">
-                                    <p class="text-foreground/70 text-sm">The system will analyse the date range and automatically choose the clearest Sentinel-2 scene intersecting your polygon.</p>
-                                    <x-button-primary id="clipAutoSearchBtn" type="button" size="small" disabled>
-                                        <i class="ri-magic-line"></i>
-                                        <span>Find Best Scene</span>
+                                <div class="space-y-2 pt-1">
+                                    <x-button-primary class="w-full md:w-auto" id="clipProcessBtn" type="button" size="small" disabled>
+                                        <i class="ri-cpu-line"></i>
+                                        <span>Process Sentinel Clip</span>
                                     </x-button-primary>
-                                    <div class="border-foreground/15 rounded-lg border border-dashed p-3 text-sm" id="clipAutoResult">
-                                        Draw an area and search to preview the recommended scene.
-                                    </div>
+                                    <p class="text-foreground/60 text-xs" id="clipProcessNotice">Processing will run in the background via job queue. We will notify you when the imagery is ready.</p>
                                 </div>
-
-                            </div>
-
-                            <div class="bg-background/60 border-foreground/10 space-y-2 rounded-lg border p-3 shadow-sm">
-                                <h4 class="text-foreground text-lg font-semibold">Selected Scene</h4>
-                                <div class="border-foreground/15 rounded-lg border p-3 text-sm" id="clipSelectionSummary">
-                                    No scene selected yet. Use auto mode to pick one.
-                                </div>
-                                <x-button-primary class="w-full md:w-auto" id="clipProcessBtn" type="button" size="small" disabled>
-                                    <i class="ri-cpu-line"></i>
-                                    <span>Process &amp; Download</span>
-                                </x-button-primary>
-                                <p class="text-foreground/60 text-xs" id="clipProcessNotice">Processing will run in the background via job queue. We will notify you when the imagery is ready.</p>
                             </div>
 
                         </div>
