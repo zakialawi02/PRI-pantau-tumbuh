@@ -316,7 +316,14 @@
 
                     <!-- Clip Tab Content -->
                     <div class="tab-content hidden" id="sentinel-clip-panel" role="tabpanel" aria-labelledby="sentinel-clip-tab">
-                        <div class="space-y-3" id="sentinelClipModule" data-credit-rate="{{ config('app-constants.imagery_credit_cost_per_hectare') }}" data-process-url="{{ auth()->check() ? route('admin.sentinel.process') : '' }}" data-processing-cost="{{ config('app-constants.imagery_processing_cost', 10) }}">
+                        <div
+                            class="space-y-3"
+                            id="sentinelClipModule"
+                            data-credit-rate="{{ config('app-constants.imagery_credit_cost_per_hectare') }}"
+                            data-process-url="{{ auth()->check() ? route('admin.sentinel.process') : '' }}"
+                            data-clip-process-url="{{ auth()->check() ? route('admin.sentinel.clip.process') : '' }}"
+                            data-processing-cost="{{ config('app-constants.imagery_processing_cost', 10) }}"
+                        >
                             <div class="bg-background/60 border-foreground/10 space-y-3 rounded-lg border p-3 shadow-sm">
                                 <div class="flex flex-wrap items-center justify-between gap-2">
                                     <div>
@@ -358,6 +365,25 @@
                                     <x-input-label class="text-sm font-medium" for="clipFieldName">Field Name</x-input-label>
                                     <x-text-input class="w-full" id="clipFieldName" name="field_name" size="small" placeholder="e.g. North Farm Block" />
                                 </div>
+                            </div>
+
+                            <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                                <div class="flex items-center gap-2">
+                                    @auth
+                                        <x-button-primary id="clipProcessImageryBtn" type="button" size="small">
+                                            <i class="ri-cpu-line"></i>
+                                            <span>Process Imagery</span>
+                                        </x-button-primary>
+                                    @else
+                                        <x-button-primary id="clipProcessImageryBtn" type="button" size="small" variant="outline" disabled title="Login to process imagery">
+                                            <i class="ri-lock-line"></i>
+                                            <span>Login to Process</span>
+                                        </x-button-primary>
+                                    @endauth
+                                </div>
+                                <p class="text-foreground/60 text-xs" id="clipProcessStatus" hidden>
+                                    Draw an area and provide a field name before processing the imagery clip.
+                                </p>
                             </div>
 
                         </div>
@@ -1593,6 +1619,233 @@
                     previewImageryLabel: previewPanelEl?.querySelector('[data-sentinel-preview-imagery-label]'),
                     previewClearBtn: previewClearBtnEl,
                 };
+
+                const clipElements = {
+                    module: document.getElementById('sentinelClipModule'),
+                    processButton: document.getElementById('clipProcessImageryBtn'),
+                    status: document.getElementById('clipProcessStatus'),
+                    fieldName: document.getElementById('clipFieldName'),
+                    creditsDisplay: document.getElementById('current-myCredits'),
+                };
+
+                const clipState = {
+                    get processUrl() {
+                        return clipElements.module?.dataset.clipProcessUrl?.trim() || '';
+                    },
+                    get locale() {
+                        return document.documentElement.lang || 'en';
+                    },
+                    get areaHectares() {
+                        const rawArea = typeof window.geojsonArea === 'number'
+                            ? window.geojsonArea
+                            : Number(window.geojsonArea || 0);
+                        if (!Number.isFinite(rawArea) || rawArea <= 0) {
+                            return 0;
+                        }
+                        return rawArea / 10000;
+                    },
+                    get featureCollection() {
+                        const feature = window.geojsonFeature;
+                        if (!feature) {
+                            return null;
+                        }
+                        if (feature.type === 'FeatureCollection') {
+                            return feature;
+                        }
+                        return {
+                            type: 'FeatureCollection',
+                            features: [feature],
+                        };
+                    },
+                    get originalButtonHtml() {
+                        if (!this._originalButtonHtml && clipElements.processButton) {
+                            this._originalButtonHtml = clipElements.processButton.innerHTML;
+                        }
+                        return this._originalButtonHtml || '<i class="ri-cpu-line"></i><span>Process Imagery</span>';
+                    },
+                    set originalButtonHtml(value) {
+                        this._originalButtonHtml = value;
+                    },
+                };
+
+                const clipStatusVariants = ['text-success', 'text-destructive', 'text-foreground/70', 'text-foreground/60'];
+
+                const notify = (type, message) => {
+                    const toast = window.MyZkToast;
+                    const handler = toast?.[type];
+                    if (typeof handler === 'function' && message) {
+                        handler(message);
+                    }
+                };
+
+                const setClipStatus = (message, variant = 'info') => {
+                    const statusEl = clipElements.status;
+                    if (!statusEl || !message) {
+                        return;
+                    }
+
+                    statusEl.hidden = false;
+                    clipStatusVariants.forEach((cls) => statusEl.classList.remove(cls));
+
+                    const variantClass = (() => {
+                        switch (variant) {
+                            case 'success':
+                                return 'text-success';
+                            case 'error':
+                                return 'text-destructive';
+                            case 'muted':
+                                return 'text-foreground/60';
+                            default:
+                                return 'text-foreground/70';
+                        }
+                    })();
+
+                    statusEl.classList.add(variantClass);
+                    statusEl.textContent = message;
+                };
+
+                const resetClipStatus = () => {
+                    const statusEl = clipElements.status;
+                    if (!statusEl) {
+                        return;
+                    }
+                    statusEl.hidden = true;
+                    clipStatusVariants.forEach((cls) => statusEl.classList.remove(cls));
+                    statusEl.classList.add('text-foreground/60');
+                    statusEl.textContent = '';
+                };
+
+                const setClipButtonState = (state) => {
+                    const button = clipElements.processButton;
+                    if (!button) {
+                        return;
+                    }
+
+                    if (!clipState.originalButtonHtml) {
+                        clipState.originalButtonHtml = button.innerHTML;
+                    }
+
+                    if (state === 'loading') {
+                        button.disabled = true;
+                        button.innerHTML = '<span class="flex items-center gap-2"><span class="h-3 w-3 animate-spin rounded-full border border-current border-r-transparent"></span><span>Submitting...</span></span>';
+                        return;
+                    }
+
+                    button.disabled = false;
+                    button.innerHTML = clipState.originalButtonHtml;
+                };
+
+                const getCsrfToken = () => document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+
+                const updateCreditBalance = (credits) => {
+                    if (!Number.isFinite(credits)) {
+                        return;
+                    }
+
+                    const target = clipElements.creditsDisplay;
+                    if (!target) {
+                        return;
+                    }
+
+                    const formatted = typeof window.formatNumber === 'function'
+                        ? window.formatNumber(Number(credits), 2, clipState.locale)
+                        : Number(credits).toFixed(2);
+                    target.textContent = formatted;
+                };
+
+                const handleClipProcess = async () => {
+                    if (!clipElements.module) {
+                        return;
+                    }
+
+                    const processUrl = clipState.processUrl;
+                    if (!processUrl) {
+                        setClipStatus('Login to your account to start Sentinel-2 clip processing.', 'error');
+                        notify('warning', 'Please log in to process Sentinel-2 clips.');
+                        return;
+                    }
+
+                    const featureCollection = clipState.featureCollection;
+                    if (!featureCollection || clipState.areaHectares <= 0) {
+                        setClipStatus('Draw a polygon on the map to define the area you want to clip.', 'info');
+                        notify('warning', 'Please draw an area of interest before processing.');
+                        return;
+                    }
+
+                    const fieldName = clipElements.fieldName?.value?.trim() || '';
+                    if (!fieldName) {
+                        setClipStatus('Please provide a field name before processing the imagery.', 'error');
+                        clipElements.fieldName?.focus();
+                        return;
+                    }
+
+                    const csrfToken = getCsrfToken();
+                    if (!csrfToken) {
+                        setClipStatus('Unable to find a CSRF token for the request.', 'error');
+                        return;
+                    }
+
+                    setClipButtonState('loading');
+                    setClipStatus('Submitting Sentinel-2 clip request...', 'info');
+
+                    const payload = {
+                        field_name: fieldName,
+                        geometry: JSON.stringify(featureCollection),
+                        area_hectares: Number(clipState.areaHectares.toFixed(4)),
+                    };
+
+                    try {
+                        const response = await fetch(processUrl, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/json',
+                                'X-CSRF-TOKEN': csrfToken,
+                            },
+                            body: JSON.stringify(payload),
+                        });
+
+                        let result = null;
+                        try {
+                            result = await response.clone().json();
+                        } catch (jsonError) {
+                            result = null;
+                        }
+
+                        if (response.ok) {
+                            const message = result?.message || 'Sentinel-2 clip request queued successfully.';
+                            setClipStatus(message, 'success');
+                            notify('success', message);
+
+                            const remainingCredits = result?.data?.current_credits;
+                            if (remainingCredits !== undefined) {
+                                updateCreditBalance(Number(remainingCredits));
+                            }
+
+                            if (clipElements.fieldName) {
+                                clipElements.fieldName.value = '';
+                            }
+
+                            if (typeof window.AppMap?.uploader?.reload === 'function') {
+                                window.AppMap.uploader.reload();
+                            }
+                        } else {
+                            const message = result?.message || 'Unable to queue Sentinel-2 clip processing. Please try again later.';
+                            setClipStatus(message, 'error');
+                            notify('error', message);
+                        }
+                    } catch (error) {
+                        const message = error?.message || 'Unable to queue Sentinel-2 clip processing at this time.';
+                        setClipStatus(message, 'error');
+                        notify('error', message);
+                    } finally {
+                        setClipButtonState('idle');
+                    }
+                };
+
+                if (clipElements.processButton) {
+                    clipElements.processButton.addEventListener('click', handleClipProcess);
+                }
 
                 if (!elements.template || !elements.list || !elements.status) {
                     console.warn('Sentinel collection template or container missing. Skipping Sentinel module bootstrap.');
@@ -2895,6 +3148,11 @@
                     clearPreview: clearPreviewPanel,
                     resetFilters,
                     helpers,
+                    clip: {
+                        trigger: handleClipProcess,
+                        resetStatus: resetClipStatus,
+                        setStatus: setClipStatus,
+                    },
                 };
 
                 window.AppMap.sentinel = sentinelModule;
