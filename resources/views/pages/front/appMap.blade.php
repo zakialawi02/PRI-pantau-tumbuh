@@ -808,10 +808,53 @@
                     },
                 };
 
+                /**
+                 * Resolve the underlying OpenLayers map instance from various potential wrappers.
+                 */
+                const resolveMapInstance = (candidate) => {
+                    if (candidate && typeof candidate.addLayer === 'function' && typeof candidate.getView === 'function') {
+                        return candidate;
+                    }
+                    if (candidate?.map && typeof candidate.map.addLayer === 'function') {
+                        return candidate.map;
+                    }
+                    if (candidate?.detail) {
+                        return resolveMapInstance(candidate.detail);
+                    }
+                    return null;
+                };
+
+                /**
+                 * Persist and return the active OpenLayers map instance.
+                 */
+                const assignMapInstance = (candidate) => {
+                    const resolved = resolveMapInstance(candidate);
+                    if (resolved) {
+                        state.preview.map = resolved;
+                    }
+                    return resolved;
+                };
+
+                /**
+                 * Retrieve the OpenLayers map, refreshing the cached instance when necessary.
+                 */
+                const getMapInstance = () => {
+                    const resolved =
+                        resolveMapInstance(state.preview.map) ||
+                        assignMapInstance(window.map);
+                    if (resolved && state.preview.map !== resolved) {
+                        state.preview.map = resolved;
+                    }
+                    return resolved;
+                };
+
+                // Cache any immediately available map reference.
+                assignMapInstance(window.map);
+
                 // Lazily capture the OpenLayers map instance when it becomes available.
                 if (!state.preview.map) {
                     window.addEventListener('map:ready', (event) => {
-                        state.preview.map = event.detail?.map || event.detail || state.preview.map;
+                        assignMapInstance(event.detail);
                     }, { once: true });
                 }
 
@@ -1226,7 +1269,7 @@
                     if (state.preview.footprintLayer) {
                         return state.preview.footprintLayer;
                     }
-                    const mapInstance = state.preview.map || window.map;
+                    const mapInstance = getMapInstance();
                     if (
                         !mapInstance ||
                         !window.ol?.layer?.Vector ||
@@ -1235,6 +1278,10 @@
                         !window.ol?.style?.Stroke ||
                         !window.ol?.style?.Fill
                     ) {
+                        return null;
+                    }
+
+                    if (typeof mapInstance.addLayer !== 'function') {
                         return null;
                     }
 
@@ -1257,8 +1304,13 @@
                  * Show the Sentinel footprint geometry on the OpenLayers map.
                  */
                 const showFootprint = (geometry) => {
-                    const mapInstance = state.preview.map || window.map;
-                    if (!mapInstance || !geometry || !window.ol?.format?.GeoJSON) {
+                    const mapInstance = getMapInstance();
+                    if (
+                        !mapInstance ||
+                        typeof mapInstance.getView !== 'function' ||
+                        !geometry ||
+                        !window.ol?.format?.GeoJSON
+                    ) {
                         return false;
                     }
 
@@ -1304,8 +1356,13 @@
                         return false;
                     }
 
-                    const mapInstance = state.preview.map || window.map;
-                    if (!mapInstance || !window.ol?.layer?.Tile || !window.ol?.source?.TileWMS) {
+                    const mapInstance = getMapInstance();
+                    if (
+                        !mapInstance ||
+                        typeof mapInstance.addLayer !== 'function' ||
+                        !window.ol?.layer?.Tile ||
+                        !window.ol?.source?.TileWMS
+                    ) {
                         return false;
                     }
 
