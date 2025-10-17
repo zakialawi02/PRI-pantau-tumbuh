@@ -742,822 +742,817 @@
 
 
     </div>
+    
     @push('javascript')
         <script>
-            (() => {
-                // Centralized DOM references used by the panel controller.
-                const selectors = {
-                    panelWrapper: document.getElementById('panel-wrapper'),
-                    panels: Array.from(document.querySelectorAll('#panel-wrapper section')),
-                    sidebarButtons: Array.from(document.querySelectorAll('.sidebar-btn')),
-                    scroll: {
-                        container: document.getElementById('scroll-container'),
-                        left: document.getElementById('scroll-left'),
-                        right: document.getElementById('scroll-right')
-                    }
-                };
+        (function () {
+            function onReady(callback) {
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', callback, { once: true });
+                } else {
+                    callback();
+                }
+            }
 
-                if (!selectors.panelWrapper) {
+            function getPanelId(button) {
+                if (!button) {
+                    return null;
+                }
+                if (!button.dataset.panelTarget) {
+                    var inline = button.getAttribute('onclick') || '';
+                    var match = inline.match(/showPanel\('([^']+)'/);
+                    if (match) {
+                        button.dataset.panelTarget = match[1];
+                    }
+                }
+                return button.dataset.panelTarget || null;
+            }
+
+            function setActiveButtons(panelId, triggerButton, buttons) {
+                for (var i = 0; i < buttons.length; i += 1) {
+                    buttons[i].classList.remove('active');
+                    getPanelId(buttons[i]);
+                }
+
+                if (triggerButton) {
+                    triggerButton.classList.add('active');
+                }
+
+                if (!panelId) {
                     return;
                 }
 
-                window.AppMap = window.AppMap || {};
+                for (var j = 0; j < buttons.length; j += 1) {
+                    if (getPanelId(buttons[j]) === panelId) {
+                        buttons[j].classList.add('active');
+                    }
+                }
+            }
 
-                // Track the currently visible panel via a getter/setter for clarity.
-                const state = {
-                    get activePanelId() {
-                        return selectors.panelWrapper.dataset.activePanel || null;
-                    },
-                    set activePanelId(value) {
-                        if (!value) {
-                            delete selectors.panelWrapper.dataset.activePanel;
-                            return;
+            function applyWrapperState(wrapper, activePanelId, isMobile) {
+                if (!wrapper) {
+                    return;
+                }
+
+                wrapper.classList.remove('slide-up', 'slide-down');
+
+                if (!activePanelId) {
+                    wrapper.classList.remove('opacity-100');
+                    wrapper.classList.remove('translate-y-0');
+                    wrapper.classList.add('translate-y-full');
+                    wrapper.classList.add('w-0', 'md:w-0');
+                    wrapper.classList.remove('w-80', 'md:w-80');
+                    return;
+                }
+
+                wrapper.classList.add('opacity-100');
+                wrapper.classList.remove('translate-y-full');
+
+                if (isMobile) {
+                    wrapper.classList.add('translate-y-0');
+                    wrapper.classList.remove('w-0', 'md:w-0', 'w-80', 'md:w-80');
+                } else {
+                    wrapper.classList.remove('translate-y-0');
+                    wrapper.classList.remove('w-0', 'md:w-0');
+                    wrapper.classList.add('w-80', 'md:w-80');
+                }
+            }
+
+            function requestSentinelCollections() {
+                if (!window.AppMap) {
+                    window.AppMap = {};
+                }
+                var sentinelModule = window.AppMap.sentinel;
+                if (sentinelModule && typeof sentinelModule.loadCollections === 'function' && !sentinelModule.loadedOnce) {
+                    sentinelModule.loadCollections();
+                    return;
+                }
+                if (!sentinelModule) {
+                    document.addEventListener('app:sentinel:ready', function (event) {
+                        var module = event.detail;
+                        if (module && typeof module.loadCollections === 'function' && !module.loadedOnce) {
+                            module.loadCollections();
                         }
-                        selectors.panelWrapper.dataset.activePanel = value;
+                    }, { once: true });
+                }
+            }
+
+            function initMobileScroll(container, leftButton, rightButton) {
+                if (!container || !leftButton || !rightButton) {
+                    return;
+                }
+
+                function scrollByAmount(amount) {
+                    container.scrollBy({ left: amount, behavior: 'smooth' });
+                }
+
+                leftButton.addEventListener('click', function () {
+                    scrollByAmount(-150);
+                });
+
+                rightButton.addEventListener('click', function () {
+                    scrollByAmount(150);
+                });
+
+                var isDragging = false;
+                var dragStartX = 0;
+                var scrollStartLeft = 0;
+
+                function stopDragging() {
+                    isDragging = false;
+                    container.classList.remove('cursor-grabbing');
+                }
+
+                container.addEventListener('mousedown', function (event) {
+                    isDragging = true;
+                    container.classList.add('cursor-grabbing');
+                    dragStartX = event.pageX - container.offsetLeft;
+                    scrollStartLeft = container.scrollLeft;
+                });
+
+                container.addEventListener('mouseleave', stopDragging);
+                container.addEventListener('mouseup', stopDragging);
+
+                container.addEventListener('mousemove', function (event) {
+                    if (!isDragging) {
+                        return;
                     }
+                    event.preventDefault();
+                    var currentX = event.pageX - container.offsetLeft;
+                    var delta = (currentX - dragStartX) * 2;
+                    container.scrollLeft = scrollStartLeft - delta;
+                });
+            }
+
+            function formatNumberSafe(value, decimals) {
+                var numeric = Number(value || 0);
+                if (!isFinite(numeric)) {
+                    return '0';
+                }
+                if (typeof window.formatNumber === 'function') {
+                    return window.formatNumber(numeric, decimals);
+                }
+                return numeric.toFixed(decimals);
+            }
+
+            function formatReadableDateSafe(value) {
+                if (typeof window.formatReadableDate === 'function') {
+                    return window.formatReadableDate(value);
+                }
+                if (!value) {
+                    return '–';
+                }
+                var parsed = new Date(value);
+                if (isNaN(parsed.getTime())) {
+                    return value;
+                }
+                return parsed.toISOString().replace('T', ' ').replace('Z', ' UTC');
+            }
+
+            function getDefaultClipDateRange(windowDays) {
+                var end = new Date();
+                var start = new Date();
+                start.setDate(start.getDate() - windowDays);
+                return {
+                    start: start.toISOString().split('T')[0],
+                    end: end.toISOString().split('T')[0]
                 };
+            }
 
-                // Quick helper that checks the viewport width to decide layout mode.
-                const isMobileView = () => window.innerWidth < 768;
+            function computeGeometryCentroid(geometry) {
+                if (!geometry || !Array.isArray(geometry.coordinates)) {
+                    return null;
+                }
+                var ring = geometry.coordinates[0] || [];
+                if (!ring.length) {
+                    return null;
+                }
+                var sumX = 0;
+                var sumY = 0;
+                var count = 0;
+                for (var i = 0; i < ring.length; i += 1) {
+                    var point = ring[i];
+                    if (Array.isArray(point) && point.length >= 2) {
+                        sumX += Number(point[0]);
+                        sumY += Number(point[1]);
+                        count += 1;
+                    }
+                }
+                if (!count) {
+                    return null;
+                }
+                return [sumX / count, sumY / count];
+            }
 
-                // Ensure a sidebar button exposes its target panel id for later lookups.
-                const resolvePanelTarget = (button) => {
-                    if (!button) return null;
-                    if (!button.dataset.panelTarget) {
-                        const inline = button.getAttribute('onclick') || '';
-                        const match = inline.match(/showPanel\('([^']+)'/);
-                        if (match) {
-                            button.dataset.panelTarget = match[1];
+            function geometryToWkt(geometry) {
+                if (!geometry || typeof geometry !== 'object') {
+                    return null;
+                }
+                var type = geometry.type;
+                var coords = geometry.coordinates;
+                if (!type || !coords) {
+                    return null;
+                }
+
+                function normalizeRing(ring) {
+                    if (!Array.isArray(ring) || !ring.length) {
+                        return null;
+                    }
+                    var points = [];
+                    for (var i = 0; i < ring.length; i += 1) {
+                        var coord = ring[i];
+                        if (Array.isArray(coord) && coord.length >= 2) {
+                            points.push([Number(coord[0]), Number(coord[1])]);
                         }
                     }
-                    return button.dataset.panelTarget || null;
-                };
-
-                // Resolve every sidebar button that points to the given panel id.
-                const getButtonsByPanel = (panelId) => {
-                    if (!panelId) return [];
-                    return selectors.sidebarButtons.filter((button) => resolvePanelTarget(button) === panelId);
-                };
-
-                // Ask the Sentinel module to load its catalogue as soon as it is ready.
-                const requestSentinelCatalogue = () => {
-                    const sentinelModule = window.AppMap?.sentinel;
-                    if (sentinelModule?.loadCollections && !sentinelModule.loadedOnce) {
-                        sentinelModule.loadCollections();
-                        return;
+                    if (!points.length) {
+                        return null;
                     }
-
-                    if (!sentinelModule) {
-                        document.addEventListener('app:sentinel:ready', (event) => {
-                            const module = event.detail;
-                            if (module?.loadCollections && !module.loadedOnce) {
-                                module.loadCollections();
-                            }
-                        }, {
-                            once: true
-                        });
+                    var first = points[0];
+                    var last = points[points.length - 1];
+                    if (first[0] !== last[0] || first[1] !== last[1]) {
+                        points.push([first[0], first[1]]);
                     }
-                };
+                    return points;
+                }
 
-                // Hide every panel element before showing the newly selected one.
-                const hideAllPanels = () => {
-                    selectors.panels.forEach((panel) => panel.classList.add('hidden'));
-                };
-
-                // Apply the active state on the button that triggered the panel change.
-                const setActiveButton = (panelId, triggerButton) => {
-                    selectors.sidebarButtons.forEach((button) => {
-                        button.classList.remove('active');
-                        resolvePanelTarget(button);
-                    });
-
-                    if (triggerButton) {
-                        triggerButton.classList.add('active');
-                        triggerButton.dataset.panelTarget = panelId;
+                function formatRing(ring) {
+                    var normalized = normalizeRing(ring);
+                    if (!normalized) {
+                        return null;
                     }
-
-                    const relatedButtons = getButtonsByPanel(panelId);
-                    relatedButtons.forEach((button) => button.classList.add('active'));
-                };
-
-                // Toggle classes that animate the panel opening for mobile and desktop.
-                const animatePanelOpen = () => {
-                    if (isMobileView()) {
-                        selectors.panelWrapper.classList.remove('translate-y-full', 'slide-down');
-                        selectors.panelWrapper.classList.add('translate-y-0', 'slide-up');
-                        return;
+                    var parts = [];
+                    for (var i = 0; i < normalized.length; i += 1) {
+                        parts.push(normalized[i][0] + ' ' + normalized[i][1]);
                     }
+                    return parts.join(', ');
+                }
 
-                    selectors.panelWrapper.classList.remove('w-0', 'md:w-0');
-                    selectors.panelWrapper.classList.add('w-80', 'md:w-80');
-                };
-
-                // Revert the open animation by hiding or collapsing the panel wrapper.
-                const animatePanelClose = () => {
-                    if (isMobileView()) {
-                        selectors.panelWrapper.classList.remove('slide-up');
-                        selectors.panelWrapper.classList.add('slide-down');
-                        setTimeout(() => {
-                            selectors.panelWrapper.classList.remove('translate-y-0');
-                            selectors.panelWrapper.classList.add('translate-y-full');
-                        }, 480);
-                        return;
+                function formatPolygon(polygon) {
+                    if (!Array.isArray(polygon) || !polygon.length) {
+                        return null;
                     }
-
-                    selectors.panelWrapper.classList.remove('w-80', 'md:w-80');
-                    selectors.panelWrapper.classList.add('w-0', 'md:w-0');
-                };
-
-                // Display a specific panel while making sure supporting UI stays in sync.
-                const showPanel = (panelId, triggerButton = null) => {
-                    const targetPanel = document.getElementById(panelId);
-                    if (!targetPanel) {
-                        console.warn(`Panel with id "${panelId}" not found.`);
-                        return;
-                    }
-
-                    hideAllPanels();
-                    targetPanel.classList.remove('hidden');
-
-                    setActiveButton(panelId, triggerButton);
-                    animatePanelOpen();
-
-                    state.activePanelId = panelId;
-
-                    if (panelId === 'sentinel-panel') {
-                        requestSentinelCatalogue();
-                    }
-                };
-
-                // Close the active panel and reset the wrapper back to its hidden state.
-                const closePanels = () => {
-                    hideAllPanels();
-                    selectors.sidebarButtons.forEach((button) => button.classList.remove('active'));
-                    animatePanelClose();
-                    state.activePanelId = null;
-                };
-
-                // Ensure the panel layout matches the current viewport (mobile vs. desktop).
-                const syncPanelLayoutWithViewport = () => {
-                    const activePanel = state.activePanelId;
-
-                    selectors.panelWrapper.classList.remove('slide-up', 'slide-down');
-
-                    if (!activePanel) {
-                        selectors.panelWrapper.classList.add('translate-y-full');
-                        selectors.panelWrapper.classList.remove('translate-y-0', 'w-80', 'md:w-80');
-                        return;
-                    }
-
-                    if (isMobileView()) {
-                        selectors.panelWrapper.classList.remove('w-0', 'md:w-0', 'w-80', 'md:w-80');
-                        selectors.panelWrapper.classList.remove('translate-y-full');
-                        selectors.panelWrapper.classList.add('translate-y-0', 'opacity-100');
-                    } else {
-                        selectors.panelWrapper.classList.remove('translate-y-full', 'translate-y-0');
-                        selectors.panelWrapper.classList.add('w-80', 'md:w-80', 'opacity-100');
-                    }
-
-                    const activeButtons = getButtonsByPanel(activePanel);
-                    selectors.sidebarButtons.forEach((button) => button.classList.remove('active'));
-                    activeButtons.forEach((button) => button.classList.add('active'));
-                };
-
-                // Setup horizontal scrolling interaction for the mobile navigation pills.
-                const initialiseHorizontalScroll = () => {
-                    const {
-                        container,
-                        left,
-                        right
-                    } = selectors.scroll;
-                    if (!container || !left || !right) {
-                        return;
-                    }
-
-                    // Scroll the button container by the provided amount with smooth motion.
-                    const scrollByAmount = (amount) => {
-                        container.scrollBy({
-                            left: amount,
-                            behavior: 'smooth'
-                        });
-                    };
-
-                    left.addEventListener('click', () => scrollByAmount(-150));
-                    right.addEventListener('click', () => scrollByAmount(150));
-
-                    let isDragging = false;
-                    let dragStartX = 0;
-                    let scrollStartLeft = 0;
-
-                    // Allow mouse dragging to scroll the mobile navigation list.
-                    container.addEventListener('mousedown', (event) => {
-                        isDragging = true;
-                        container.classList.add('cursor-grabbing');
-                        dragStartX = event.pageX - container.offsetLeft;
-                        scrollStartLeft = container.scrollLeft;
-                    });
-
-                    // Reset dragging flags when the pointer leaves or releases the container.
-                    const stopDragging = () => {
-                        isDragging = false;
-                        container.classList.remove('cursor-grabbing');
-                    };
-
-                    container.addEventListener('mouseleave', stopDragging);
-                    container.addEventListener('mouseup', stopDragging);
-
-                    container.addEventListener('mousemove', (event) => {
-                        if (!isDragging) return;
-                        event.preventDefault();
-                        const currentX = event.pageX - container.offsetLeft;
-                        const delta = (currentX - dragStartX) * 2;
-                        container.scrollLeft = scrollStartLeft - delta;
-                    });
-                };
-
-                // Automatically open the data panel on initial load.
-                const initialiseDefaultPanel = () => {
-                    const defaultPanelId = 'data-panel';
-                    const button = isMobileView() ?
-                        document.querySelector(`#scroll-container .sidebar-btn[onclick*='${defaultPanelId}']`) :
-                        document.querySelector(`aside .sidebar-btn[onclick*='${defaultPanelId}']`);
-
-                    showPanel(defaultPanelId, button);
-                };
-
-                // Connect resize handlers relevant to the dashboard.
-                const registerEventListeners = () => {
-                    window.addEventListener('resize', syncPanelLayoutWithViewport);
-                };
-
-                const initialiseClipModule = () => {
-                    const moduleEl = document.getElementById('sentinelClipModule');
-                    if (!moduleEl) {
-                        return;
-                    }
-
-                    const clipConfig = {
-                        endpoint: 'https://catalogue.dataspace.copernicus.eu/resto/api/collections/Sentinel2/search.json',
-                        maxRecords: 50,
-                        defaultDateWindowDays: 30,
-                        defaultMaxCloud: 60,
-                    };
-
-                    const elements = {
-                        areaOutput: document.getElementById('clipAreaOutput'),
-                        creditOutput: document.getElementById('clipCreditOutput'),
-                        geojsonOutput: document.getElementById('clipGeojsonOutput'),
-                        fieldInput: document.getElementById('clipFieldName'),
-                        autoBtn: document.getElementById('clipAutoSearchBtn'),
-                        modeButtons: Array.from(document.querySelectorAll('.clip-mode-btn')),
-                        autoPanel: document.getElementById('clipAutoPanel'),
-                        autoResult: document.getElementById('clipAutoResult'),
-                        selectionSummary: document.getElementById('clipSelectionSummary'),
-                        processBtn: document.getElementById('clipProcessBtn'),
-                        processNotice: document.getElementById('clipProcessNotice'),
-                        processUrl: moduleEl.dataset.processUrl || '',
-                    };
-
-                    const state = {
-                        geometry: null,
-                        feature: null,
-                        areaSqMeters: 0,
-                        areaHectares: 0,
-                        creditRate: Number(moduleEl.dataset.creditRate ?? '0') || 0,
-                        mode: 'auto',
-                        autoScene: null,
-                        selectedScene: null,
-                    };
-
-                    const safeFormatNumber = (value, decimals = 2) => {
-                        const numeric = Number(value ?? 0);
-                        if (!Number.isFinite(numeric)) {
-                            return '0';
+                    var rings = [];
+                    for (var i = 0; i < polygon.length; i += 1) {
+                        var ring = formatRing(polygon[i]);
+                        if (ring) {
+                            rings.push('(' + ring + ')');
                         }
-                        if (typeof window.formatNumber === 'function') {
-                            return window.formatNumber(numeric, decimals);
-                        }
-                        return numeric.toFixed(decimals);
-                    };
+                    }
+                    return rings.length ? '(' + rings.join(', ') + ')' : null;
+                }
 
-                    const formatIsoDate = (date) => {
-                        const copy = new Date(date.getTime());
-                        copy.setHours(0, 0, 0, 0);
-                        return copy.toISOString().split('T')[0];
-                    };
+                if (type === 'Polygon') {
+                    var polygonText = formatPolygon(coords);
+                    return polygonText ? 'POLYGON ' + polygonText : null;
+                }
 
-                    const formatHumanDate = (value) => {
-                        if (typeof window.formatReadableDate === 'function') {
-                            return window.formatReadableDate(value);
+                if (type === 'MultiPolygon') {
+                    var polygons = [];
+                    for (var p = 0; p < coords.length; p += 1) {
+                        var polyText = formatPolygon(coords[p]);
+                        if (polyText) {
+                            polygons.push(polyText);
                         }
-                        if (!value) {
-                            return '–';
-                        }
-                        try {
-                            const parsed = new Date(value);
-                            return parsed.toISOString().replace('T', ' ').replace('Z', ' UTC');
-                        } catch (_) {
+                    }
+                    return polygons.length ? 'MULTIPOLYGON (' + polygons.join(', ') + ')' : null;
+                }
+
+                return null;
+            }
+
+            function extractCloudCover(feature) {
+                var props = feature && feature.properties ? feature.properties : {};
+                var keys = ['eo:cloudCover', 'cloudCover', 'cloudcoverpercentage', 'cloudCoverageAssessment'];
+                for (var i = 0; i < keys.length; i += 1) {
+                    var key = keys[i];
+                    if (props[key] !== undefined && props[key] !== null) {
+                        var value = Number(props[key]);
+                        if (isFinite(value)) {
                             return value;
                         }
-                    };
+                    }
+                }
+                return null;
+            }
 
-                    const getDefaultDateRange = () => {
-                        const end = new Date();
-                        const start = new Date();
-                        start.setDate(start.getDate() - clipConfig.defaultDateWindowDays);
-                        return {
-                            start: formatIsoDate(start),
-                            end: formatIsoDate(end),
-                        };
-                    };
+            function extractAcquisitionTime(feature) {
+                var props = feature && feature.properties ? feature.properties : {};
+                var candidates = [
+                    props.completionDate,
+                    props.endPosition,
+                    props.startDate,
+                    props.contentDate && props.contentDate.end,
+                    props.contentDate && props.contentDate.start,
+                    props.datetime,
+                    feature && typeof feature.id === 'string' && feature.id.indexOf('T') !== -1 ? feature.id : null
+                ];
+                for (var i = 0; i < candidates.length; i += 1) {
+                    var candidate = candidates[i];
+                    if (!candidate) {
+                        continue;
+                    }
+                    var date = new Date(candidate);
+                    if (!isNaN(date.getTime())) {
+                        return date.getTime();
+                    }
+                }
+                return 0;
+            }
 
-                    const computeCreditCost = () => {
-                        const cost = state.areaHectares * state.creditRate;
-                        return Number.isFinite(cost) ? cost : 0;
-                    };
+            function buildScenePayload(feature) {
+                var props = feature && feature.properties ? feature.properties : {};
+                var sceneId = feature && feature.id ? feature.id : null;
+                if (!sceneId) {
+                    sceneId = props.productIdentifier || props.title || props.id || null;
+                }
+                var acquisition = props.completionDate || props.startDate || props.datetime || props.endPosition || props.beginPosition || null;
+                return {
+                    id: sceneId ? String(sceneId) : null,
+                    product_id: props.productIdentifier || null,
+                    title: props.title || props.productIdentifier || (sceneId ? String(sceneId) : 'Sentinel-2 Scene'),
+                    datetime: acquisition || null,
+                    cloud_cover: extractCloudCover(feature),
+                    collection: props.collection || props.collectionName || null,
+                    mgrs: props.mgrsId || props.tileId || props.MGRS || null
+                };
+            }
 
-                    const updateAreaDisplay = () => {
-                        if (!elements.areaOutput) return;
-                        if (state.areaHectares > 0) {
-                            elements.areaOutput.innerHTML = `<strong>${safeFormatNumber(state.areaHectares, 2)} ha</strong>`;
-                        } else {
-                            elements.areaOutput.textContent = 'Draw a polygon to calculate the area.';
+            function initClipModule() {
+                var moduleEl = document.getElementById('sentinelClipModule');
+                if (!moduleEl) {
+                    return;
+                }
+
+                var config = {
+                    endpoint: 'https://catalogue.dataspace.copernicus.eu/resto/api/collections/Sentinel2/search.json',
+                    maxRecords: 50,
+                    defaultDateWindowDays: 30,
+                    defaultMaxCloud: 60
+                };
+
+                var elements = {
+                    areaOutput: document.getElementById('clipAreaOutput'),
+                    creditOutput: document.getElementById('clipCreditOutput'),
+                    geojsonOutput: document.getElementById('clipGeojsonOutput'),
+                    fieldInput: document.getElementById('clipFieldName'),
+                    autoBtn: document.getElementById('clipAutoSearchBtn'),
+                    modeButtons: Array.prototype.slice.call(document.querySelectorAll('.clip-mode-btn')),
+                    autoPanel: document.getElementById('clipAutoPanel'),
+                    autoResult: document.getElementById('clipAutoResult'),
+                    selectionSummary: document.getElementById('clipSelectionSummary'),
+                    processBtn: document.getElementById('clipProcessBtn'),
+                    processNotice: document.getElementById('clipProcessNotice'),
+                    processUrl: moduleEl.getAttribute('data-process-url') || ''
+                };
+
+                var state = {
+                    geometry: null,
+                    feature: null,
+                    areaSqMeters: 0,
+                    areaHectares: 0,
+                    creditRate: Number(moduleEl.getAttribute('data-credit-rate') || '0') || 0,
+                    mode: 'auto',
+                    autoScene: null,
+                    selectedScene: null
+                };
+
+                function computeCreditCost() {
+                    var cost = state.areaHectares * state.creditRate;
+                    return isFinite(cost) ? cost : 0;
+                }
+
+                function updateAreaDisplay() {
+                    if (!elements.areaOutput) {
+                        return;
+                    }
+                    if (state.areaHectares > 0) {
+                        elements.areaOutput.innerHTML = '<strong>' + formatNumberSafe(state.areaHectares, 2) + ' ha</strong>';
+                    } else {
+                        elements.areaOutput.textContent = 'Draw a polygon to calculate the area.';
+                    }
+                }
+
+                function updateCreditDisplay() {
+                    if (!elements.creditOutput) {
+                        return;
+                    }
+                    if (state.areaHectares > 0 && state.creditRate > 0) {
+                        elements.creditOutput.innerHTML = '<span class="font-semibold text-primary">' + formatNumberSafe(computeCreditCost(), 2) + ' Credit Points</span>';
+                    } else {
+                        elements.creditOutput.textContent = '–';
+                    }
+                }
+
+                function updateGeojsonDisplay() {
+                    if (!elements.geojsonOutput) {
+                        return;
+                    }
+                    if (state.feature) {
+                        elements.geojsonOutput.innerHTML = '<pre>' + JSON.stringify(state.feature, null, 2) + '</pre>';
+                    } else {
+                        elements.geojsonOutput.innerHTML = '<span class="text-foreground/60">Coordinates will appear here after drawing.</span>';
+                    }
+                }
+
+                function updateAutoMessage() {
+                    if (!elements.autoResult) {
+                        return;
+                    }
+                    if (state.geometry) {
+                        elements.autoResult.textContent = 'Click “Find Best Scene” to analyse the area.';
+                    } else {
+                        elements.autoResult.textContent = 'Draw an area and search to preview the recommended scene.';
+                    }
+                }
+
+                function updateProcessState() {
+                    if (!elements.processBtn) {
+                        return;
+                    }
+                    var fieldName = elements.fieldInput ? elements.fieldInput.value.trim() : '';
+                    var urlAvailable = elements.processUrl !== '';
+                    var enabled = Boolean(fieldName && state.selectedScene && state.geometry && urlAvailable);
+                    elements.processBtn.disabled = !enabled;
+                    if (!urlAvailable && elements.processNotice) {
+                        elements.processNotice.textContent = 'Log in to clip and download imagery.';
+                    } else if (elements.processNotice) {
+                        elements.processNotice.textContent = 'Processing will run in the background via job queue. We will notify you when the imagery is ready.';
+                    }
+                }
+
+                function updateSelectionSummary() {
+                    if (!elements.selectionSummary) {
+                        return;
+                    }
+                    if (!state.selectedScene) {
+                        elements.selectionSummary.textContent = 'No scene selected yet. Use auto mode to pick one.';
+                        updateProcessState();
+                        return;
+                    }
+                    var html = '';
+                    html += '<div class="font-semibold">' + (state.selectedScene.title || 'Sentinel-2 Scene') + '</div>';
+                    if (state.selectedScene.datetime) {
+                        html += '<div>Captured: ' + formatReadableDateSafe(state.selectedScene.datetime) + '</div>';
+                    }
+                    if (state.selectedScene.cloud_cover !== null && state.selectedScene.cloud_cover !== undefined) {
+                        html += '<div>Cloud cover: ' + formatNumberSafe(state.selectedScene.cloud_cover, 1) + '%</div>';
+                    }
+                    if (state.selectedScene.mgrs) {
+                        html += '<div>Tile: ' + state.selectedScene.mgrs + '</div>';
+                    }
+                    elements.selectionSummary.innerHTML = html;
+                    updateProcessState();
+                }
+
+                function setMode(mode) {
+                    if (mode) {
+                        state.mode = mode;
+                    }
+                    for (var i = 0; i < elements.modeButtons.length; i += 1) {
+                        var button = elements.modeButtons[i];
+                        var isActive = button.getAttribute('data-mode') === state.mode;
+                        button.setAttribute('data-active', isActive ? 'true' : 'false');
+                        button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+                    }
+                    if (elements.autoPanel) {
+                        elements.autoPanel.classList.toggle('hidden', state.mode !== 'auto');
+                    }
+                    updateProcessState();
+                }
+
+                function selectScene(scene) {
+                    state.selectedScene = scene;
+                    updateSelectionSummary();
+                    updateProcessState();
+                }
+
+                function buildQueryParams() {
+                    var params = new URLSearchParams();
+                    var range = getDefaultClipDateRange(config.defaultDateWindowDays);
+                    params.set('startDate', range.start + 'T00:00:00Z');
+                    params.set('completionDate', range.end + 'T23:59:59Z');
+                    params.set('maxRecords', String(config.maxRecords));
+                    if (state.geometry) {
+                        var wkt = geometryToWkt(state.geometry);
+                        if (wkt) {
+                            params.set('geometry', wkt);
                         }
-                    };
-
-                    const updateCreditDisplay = () => {
-                        if (!elements.creditOutput) return;
-                        if (state.areaHectares > 0 && state.creditRate > 0) {
-                            const cost = computeCreditCost();
-                            elements.creditOutput.innerHTML = `<span class="font-semibold text-primary">${safeFormatNumber(cost, 2)} Credit Points</span>`;
-                        } else {
-                            elements.creditOutput.textContent = '–';
+                        var centroid = computeGeometryCentroid(state.geometry);
+                        if (centroid) {
+                            params.set('lat', centroid[1].toFixed(6));
+                            params.set('lon', centroid[0].toFixed(6));
                         }
-                    };
+                    }
+                    return params;
+                }
 
-                    const updateGeojsonDisplay = () => {
-                        if (!elements.geojsonOutput) return;
-                        if (state.feature) {
-                            elements.geojsonOutput.innerHTML = `<pre>${JSON.stringify(state.feature, null, 2)}</pre>`;
-                        } else {
-                            elements.geojsonOutput.innerHTML = '<span class="text-foreground/60">Coordinates will appear here after drawing.</span>';
+                async function fetchScenes() {
+                    var params = buildQueryParams();
+                    var requestUrl = config.endpoint + '?' + params.toString();
+                    var response = await fetch(requestUrl);
+                    if (!response.ok) {
+                        throw new Error('Failed to fetch Sentinel-2 scenes.');
+                    }
+                    var data = await response.json();
+                    var features = Array.isArray(data && data.features) ? data.features : [];
+                    return features.sort(function (a, b) {
+                        return extractAcquisitionTime(b) - extractAcquisitionTime(a);
+                    });
+                }
+
+                async function handleAutoSearch() {
+                    if (!state.geometry) {
+                        if (window.MyZkToast && typeof window.MyZkToast.warning === 'function') {
+                            window.MyZkToast.warning('Draw a polygon first to enable auto selection.');
                         }
-                    };
-
-                    const resetAutoResult = () => {
-                        if (!elements.autoResult) return;
-                        elements.autoResult.textContent = state.geometry
-                            ? 'Click “Find Best Scene” to analyse the area.'
-                            : 'Draw an area and search to preview the recommended scene.';
-                    };
-
-                    const updateProcessAvailability = () => {
-                        if (!elements.processBtn) return;
-                        const fieldNameFilled = (elements.fieldInput?.value ?? '').trim().length > 0;
-                        const hasScene = !!state.selectedScene;
-                        const hasGeometry = !!state.geometry;
-                        const urlAvailable = elements.processUrl !== '';
-
-                        elements.processBtn.disabled = !(fieldNameFilled && hasScene && hasGeometry && urlAvailable);
-
-                        if (!urlAvailable && elements.processNotice) {
-                            elements.processNotice.textContent = 'Log in to clip and download imagery.';
-                        } else if (elements.processNotice) {
-                            elements.processNotice.textContent = 'Processing will run in the background via job queue. We will notify you when the imagery is ready.';
-                        }
-                    };
-
-                    const updateSelectionSummary = () => {
-                        if (!elements.selectionSummary) return;
-                        if (!state.selectedScene) {
-                            elements.selectionSummary.textContent = 'No scene selected yet. Use auto mode to pick one.';
-                            updateProcessAvailability();
-                            return;
-                        }
-
-                        const parts = [];
-                        parts.push(`<div class="font-semibold">${state.selectedScene.title ?? 'Sentinel-2 Scene'}</div>`);
-                        if (state.selectedScene.datetime) {
-                            parts.push(`<div class="text-xs text-foreground/70">Acquired: ${formatHumanDate(state.selectedScene.datetime)}</div>`);
-                        }
-                        if (state.selectedScene.cloud_cover !== undefined && state.selectedScene.cloud_cover !== null) {
-                            parts.push(`<div class="text-xs text-foreground/70">Cloud cover: ${safeFormatNumber(state.selectedScene.cloud_cover, 2)}%</div>`);
-                        }
-                        parts.push('<div class="text-xs text-foreground/60">Mode: Auto selection</div>');
-
-                        elements.selectionSummary.innerHTML = parts.join('');
-                        updateProcessAvailability();
-                    };
-
-                    const selectScene = (scene) => {
-                        state.autoScene = scene || null;
-                        state.selectedScene = scene || null;
-                        if (scene && elements.autoResult) {
-                            elements.autoResult.innerHTML = `
-                                <div class="font-semibold">${scene.title ?? 'Latest Scene'}</div>
-                                <div class="text-xs text-foreground/70">Acquired: ${formatHumanDate(scene.datetime)}</div>
-                                <div class="text-xs text-foreground/70">Cloud cover: ${safeFormatNumber(scene.cloud_cover ?? 0, 2)}%</div>
-                            `;
-                        } else if (elements.autoResult) {
-                            resetAutoResult();
-                        }
-
-                        updateSelectionSummary();
-                    };
-
-                    const setMode = () => {
-                        state.mode = 'auto';
-                        elements.modeButtons.forEach((button) => {
-                            const isAuto = button.dataset.mode === 'auto';
-                            if (!isAuto) {
-                                button.disabled = true;
-                                button.setAttribute('aria-disabled', 'true');
-                            }
-                            button.dataset.active = isAuto ? 'true' : 'false';
-                            button.setAttribute('aria-pressed', isAuto ? 'true' : 'false');
-                        });
-
-                        if (elements.autoPanel) {
-                            elements.autoPanel.classList.remove('hidden');
-                        }
-                    };
-
-                    const computeCentroid = (geometry) => {
-                        if (!geometry) return null;
-                        const coords = Array.isArray(geometry.coordinates) ? geometry.coordinates : [];
-                        const ring = coords[0] ?? [];
-                        if (!ring.length) return null;
-                        let sumX = 0;
-                        let sumY = 0;
-                        let count = 0;
-                        ring.forEach((point) => {
-                            if (Array.isArray(point) && point.length >= 2) {
-                                sumX += Number(point[0]);
-                                sumY += Number(point[1]);
-                                count++;
-                            }
-                        });
-                        if (!count) return null;
-                        return [sumX / count, sumY / count];
-                    };
-
-                    const toWkt = (geometry) => {
-                        if (!geometry || typeof geometry !== 'object') return null;
-                        const type = geometry.type;
-                        const coords = geometry.coordinates;
-                        if (!type || !coords) return null;
-
-                        const normalizeRing = (ring) => {
-                            if (!Array.isArray(ring) || !ring.length) return null;
-                            const points = ring
-                                .map((coord) =>
-                                    Array.isArray(coord) && coord.length >= 2
-                                        ? [Number(coord[0]), Number(coord[1])]
-                                        : null
-                                )
-                                .filter((coord) => Array.isArray(coord));
-                            if (!points.length) return null;
-                            const [firstLon, firstLat] = points[0];
-                            const [lastLon, lastLat] = points[points.length - 1];
-                            if (firstLon !== lastLon || firstLat !== lastLat) {
-                                points.push([firstLon, firstLat]);
-                            }
-                            return points;
-                        };
-
-                        const formatRing = (ring) => {
-                            const normalized = normalizeRing(ring);
-                            if (!normalized) return null;
-                            return normalized
-                                .map((coord) => `${coord[0]} ${coord[1]}`)
-                                .join(', ');
-                        };
-
-                        switch (type) {
-                            case 'Polygon': {
-                                if (!Array.isArray(coords) || !coords.length) return null;
-                                const rings = coords
-                                    .map((ring) => {
-                                        if (!Array.isArray(ring) || !ring.length) return null;
-                                        const wktRing = formatRing(ring);
-                                        return wktRing ? `(${wktRing})` : null;
-                                    })
-                                    .filter(Boolean);
-                                return rings.length ? `POLYGON (${rings.join(', ')})` : null;
-                            }
-                            case 'MultiPolygon': {
-                                if (!Array.isArray(coords) || !coords.length) return null;
-                                const polygons = coords
-                                    .map((polygon) => {
-                                        if (!Array.isArray(polygon) || !polygon.length) return null;
-                                        const rings = polygon
-                                            .map((ring) => {
-                                                if (!Array.isArray(ring) || !ring.length) return null;
-                                                const wktRing = formatRing(ring);
-                                                return wktRing ? `(${wktRing})` : null;
-                                            })
-                                            .filter(Boolean);
-                                        return rings.length ? `(${rings.join(', ')})` : null;
-                                    })
-                                    .filter(Boolean);
-                                return polygons.length ? `MULTIPOLYGON (${polygons.join(', ')})` : null;
-                            }
-                            default:
-                                return null;
-                        }
-                    };
-
-                    const buildQueryParams = () => {
-                        const params = new URLSearchParams();
-                        const { start, end } = getDefaultDateRange();
-                        params.set('startDate', `${start}T00:00:00Z`);
-                        params.set('completionDate', `${end}T23:59:59Z`);
-                        params.set('maxRecords', String(clipConfig.maxRecords));
-
-                        if (state.geometry) {
-                            const wkt = toWkt(state.geometry);
-                            if (wkt) {
-                                params.set('geometry', wkt);
-                            }
-                            const centroid = computeCentroid(state.geometry);
-                            if (centroid) {
-                                params.set('lat', centroid[1].toFixed(6));
-                                params.set('lon', centroid[0].toFixed(6));
-                            }
-                        }
-
-                        return params;
-                    };
-
-                    const getCloudCover = (feature) => {
-                        const props = feature?.properties ?? {};
-                        const keys = ['eo:cloudCover', 'cloudCover', 'cloudcoverpercentage', 'cloudCoverageAssessment'];
-                        for (const key of keys) {
-                            if (props[key] !== undefined && props[key] !== null) {
-                                const value = Number(props[key]);
-                                if (Number.isFinite(value)) {
-                                    return value;
-                                }
-                            }
-                        }
-                        return null;
-                    };
-
-                    const getAcquisitionTimestamp = (feature) => {
-                        const props = feature?.properties ?? {};
-                        const candidates = [
-                            props.completionDate,
-                            props.endPosition,
-                            props.startDate,
-                            props.contentDate?.end,
-                            props.contentDate?.start,
-                            props.datetime,
-                            feature?.id && typeof feature.id === 'string' && feature.id.includes('T') ? feature.id : null,
-                        ];
-
-                        for (const candidate of candidates) {
-                            if (!candidate) continue;
-                            const date = new Date(candidate);
-                            if (!Number.isNaN(date.getTime())) {
-                                return date.getTime();
-                            }
-                        }
-
-                        return 0;
-                    };
-
-                    const buildScenePayload = (feature) => {
-                        const props = feature?.properties ?? {};
-                        const sceneId = feature?.id || props.productIdentifier || props.title || props.id || null;
-                        const acquisition = props.completionDate || props.startDate || props.datetime || props.endPosition || props.beginPosition || null;
-                        return {
-                            id: sceneId ? String(sceneId) : null,
-                            product_id: props.productIdentifier || null,
-                            title: props.title || props.productIdentifier || (sceneId ? String(sceneId) : 'Sentinel-2 Scene'),
-                            datetime: acquisition || null,
-                            cloud_cover: getCloudCover(feature),
-                            collection: props.collection || props.collectionName || null,
-                            mgrs: props.mgrsId || props.tileId || props.MGRS || null,
-                        };
-                    };
-
-                    const fetchScenes = async () => {
-                        const params = buildQueryParams();
-                        const requestUrl = `${clipConfig.endpoint}?${params.toString()}`;
-                        const response = await fetch(requestUrl);
-                        if (!response.ok) {
-                            throw new Error('Failed to fetch Sentinel-2 scenes.');
-                        }
-                        const data = await response.json();
-                        const features = Array.isArray(data?.features) ? data.features : [];
-                        return features.sort((a, b) => getAcquisitionTimestamp(b) - getAcquisitionTimestamp(a));
-                    };
-
-                    const handleAutoSearch = async () => {
-                        if (!state.geometry) {
-                            window.MyZkToast?.warning?.('Draw a polygon first to enable auto selection.');
-                            return;
-                        }
-                        if (!elements.autoBtn) return;
-                        const originalHtml = elements.autoBtn.innerHTML;
-                        elements.autoBtn.disabled = true;
-                        elements.autoBtn.innerHTML = '<i class="ri-loader-4-line animate-spin"></i><span>Searching...</span>';
-
-                        try {
-                            const features = await fetchScenes();
-                            if (!features.length) {
-                                if (elements.autoResult) {
-                                    elements.autoResult.textContent = 'No recent scenes found for this area.';
-                                }
-                                state.autoScene = null;
-                                selectScene(null);
-                                return;
-                            }
-
-                            const latestFeature = features[0];
-                            const sceneData = buildScenePayload(latestFeature);
-                            state.autoScene = sceneData;
-                            selectScene(sceneData);
-                        } catch (error) {
+                        return;
+                    }
+                    if (!elements.autoBtn) {
+                        return;
+                    }
+                    var originalHtml = elements.autoBtn.innerHTML;
+                    elements.autoBtn.disabled = true;
+                    elements.autoBtn.innerHTML = '<i class="ri-loader-4-line animate-spin"></i><span>Searching...</span>';
+                    try {
+                        var features = await fetchScenes();
+                        if (!features.length) {
                             if (elements.autoResult) {
-                                elements.autoResult.textContent = error?.message || 'Unable to fetch scenes. Please try again later.';
+                                elements.autoResult.textContent = 'No recent scenes found for this area.';
                             }
-                        } finally {
-                            elements.autoBtn.disabled = false;
-                            elements.autoBtn.innerHTML = originalHtml;
-                            updateProcessAvailability();
-                        }
-                    };
-
-                    const updateGeometryState = (detail) => {
-                        state.geometry = detail?.geometry || null;
-                        state.feature = detail?.feature || (state.geometry ? { type: 'Feature', properties: {}, geometry: state.geometry } : null);
-                        state.areaSqMeters = detail?.areaSqMeters || 0;
-                        state.areaHectares = detail?.areaHectares || 0;
-
-                        if (!state.geometry) {
                             state.autoScene = null;
-                            state.selectedScene = null;
-                            resetAutoResult();
-                        }
-
-                        updateAreaDisplay();
-                        updateCreditDisplay();
-                        updateGeojsonDisplay();
-                        if (elements.autoBtn) {
-                            elements.autoBtn.disabled = !state.geometry;
-                        }
-                        updateSelectionSummary();
-                        updateProcessAvailability();
-                    };
-
-                    const handleProcess = () => {
-                        if (!elements.processBtn) return;
-                        if (!elements.processUrl) {
-                            window.MyZkToast?.warning?.('Please sign in to process Sentinel-2 imagery.');
+                            selectScene(null);
                             return;
                         }
-                        if (!state.geometry) {
-                            window.MyZkToast?.warning?.('Draw a polygon before processing.');
-                            return;
+                        var latestFeature = features[0];
+                        var sceneData = buildScenePayload(latestFeature);
+                        state.autoScene = sceneData;
+                        selectScene(sceneData);
+                    } catch (error) {
+                        if (elements.autoResult) {
+                            elements.autoResult.textContent = error && error.message ? error.message : 'Unable to fetch scenes. Please try again later.';
                         }
-                        if (!state.selectedScene) {
-                            window.MyZkToast?.warning?.('Select a Sentinel-2 scene first.');
-                            return;
-                        }
+                    } finally {
+                        elements.autoBtn.disabled = false;
+                        elements.autoBtn.innerHTML = originalHtml;
+                        updateProcessState();
+                    }
+                }
 
-                        const fieldName = (elements.fieldInput?.value || '').trim();
-                        if (!fieldName) {
-                            window.MyZkToast?.warning?.('Please enter a field name.');
-                            elements.fieldInput?.focus();
-                            return;
-                        }
-
-                        const { start: defaultDateFrom, end: defaultDateTo } = getDefaultDateRange();
-
-                        const payload = {
-                            field_name: fieldName,
-                            geometry: state.feature?.geometry ?? state.geometry,
-                            area_hectares: Number(state.areaHectares.toFixed(4)),
-                            mode: state.mode,
-                            date_from: defaultDateFrom,
-                            date_to: defaultDateTo,
-                            max_cloud: clipConfig.defaultMaxCloud,
-                            limit: clipConfig.maxRecords,
-                            resolution: 10,
-                            nodata: 0,
-                            selected_scene: state.selectedScene,
-                        };
-
-                        const creditCost = computeCreditCost();
-
-                        const proceed = () => {
-                            const originalHtml = elements.processBtn.innerHTML;
-                            elements.processBtn.disabled = true;
-                            elements.processBtn.innerHTML = '<i class="ri-loader-4-line animate-spin"></i><span>Processing...</span>';
-
-                            fetch(elements.processUrl, {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                    Accept: 'application/json',
-                                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}',
-                                },
-                                body: JSON.stringify(payload),
-                            })
-                                .then(async (response) => {
-                                    const data = await response.json().catch(() => ({}));
-                                    if (!response.ok) {
-                                        const message = data?.message || 'Unable to queue Sentinel-2 clipping request.';
-                                        throw new Error(message);
-                                    }
-                                    if (data?.data?.current_credits !== undefined) {
-                                        $('#current-myCredits')?.text(safeFormatNumber(data.data.current_credits, 2));
-                                    }
-                                    if (window.MyZkToast?.success) {
-                                        window.MyZkToast.success(data?.message || 'Sentinel-2 clipping queued successfully.');
-                                    }
-                                })
-                                .catch((error) => {
-                                    if (window.MyZkToast?.error) {
-                                        window.MyZkToast.error(error?.message || 'Failed to queue clipping request.');
-                                    }
-                                })
-                                .finally(() => {
-                                    elements.processBtn.disabled = false;
-                                    elements.processBtn.innerHTML = originalHtml;
-                                    updateProcessAvailability();
-                                });
-                        };
-
-                        const message = `This action will deduct ${safeFormatNumber(creditCost, 2)} credit points. Continue?`;
-                        if (window.ZkPopAlert?.show) {
-                            ZkPopAlert.show({
-                                message,
-                                icon: '<i class="ri-cpu-line text-2xl text-primary"></i>',
-                                confirmText: 'Yes, Process',
-                                cancelText: 'Cancel',
-                                onConfirm: proceed,
-                            });
-                        } else if (window.confirm(message)) {
-                            proceed();
-                        }
-                    };
-
+                function updateFromGeometry(detail) {
+                    state.geometry = detail && detail.geometry ? detail.geometry : null;
+                    state.feature = detail && detail.feature ? detail.feature : (state.geometry ? { type: 'Feature', properties: {}, geometry: state.geometry } : null);
+                    state.areaSqMeters = detail && detail.areaSqMeters ? detail.areaSqMeters : 0;
+                    state.areaHectares = detail && detail.areaHectares ? detail.areaHectares : 0;
+                    if (!state.geometry) {
+                        state.autoScene = null;
+                        selectScene(null);
+                    }
                     updateAreaDisplay();
                     updateCreditDisplay();
                     updateGeojsonDisplay();
-                    resetAutoResult();
-                    setMode();
-                    updateSelectionSummary();
-                    updateProcessAvailability();
+                    updateAutoMessage();
                     if (elements.autoBtn) {
-                        elements.autoBtn.disabled = true;
+                        elements.autoBtn.disabled = !state.geometry;
                     }
-
-                    elements.modeButtons.forEach((button) => {
-                        button.addEventListener('click', () => {
-                            setMode();
+                    updateProcessState();
+                    if (window.AppMap && window.AppMap.clip && typeof window.AppMap.clip.updatePanelOutputs === 'function') {
+                        window.AppMap.clip.updatePanelOutputs({
+                            geometry: state.geometry,
+                            feature: state.feature,
+                            areaSqMeters: state.areaSqMeters,
+                            areaHectares: state.areaHectares
                         });
-                    });
-
-                    elements.autoBtn?.addEventListener('click', handleAutoSearch);
-                    elements.fieldInput?.addEventListener('input', updateProcessAvailability);
-                    elements.processBtn?.addEventListener('click', handleProcess);
-
-                    document.addEventListener('app:clip:geometry', (event) => {
-                        updateGeometryState(event.detail || {});
-                    });
-
-                    if (window.AppMap?.clip?.latest) {
-                        updateGeometryState(window.AppMap.clip.latest);
                     }
-                };
-
-                const bootstrapPanels = () => {
-                    window.showPanel = showPanel;
-                    window.closePanels = closePanels;
-
-                    initialiseHorizontalScroll();
-                    initialiseDefaultPanel();
-                    registerEventListeners();
-                    initialiseClipModule();
-                    syncPanelLayoutWithViewport();
-
-                    const sentinelModule = window.AppMap?.sentinel;
-                    if (sentinelModule?.loadCollections && !sentinelModule.loadedOnce) {
-                        sentinelModule.loadCollections();
-                    }
-                };
-
-                if (document.readyState === 'loading') {
-                    document.addEventListener('DOMContentLoaded', bootstrapPanels, { once: true });
-                } else {
-                    bootstrapPanels();
                 }
-            })();
-        </script>
+
+                function handleProcess() {
+                    if (!elements.processBtn) {
+                        return;
+                    }
+                    if (!elements.processUrl) {
+                        if (window.MyZkToast && typeof window.MyZkToast.warning === 'function') {
+                            window.MyZkToast.warning('Please sign in to process Sentinel-2 imagery.');
+                        }
+                        return;
+                    }
+                    if (!state.geometry) {
+                        if (window.MyZkToast && typeof window.MyZkToast.warning === 'function') {
+                            window.MyZkToast.warning('Draw a polygon before processing.');
+                        }
+                        return;
+                    }
+                    if (!state.selectedScene) {
+                        if (window.MyZkToast && typeof window.MyZkToast.warning === 'function') {
+                            window.MyZkToast.warning('Select a Sentinel-2 scene first.');
+                        }
+                        return;
+                    }
+                    var fieldName = elements.fieldInput ? elements.fieldInput.value.trim() : '';
+                    if (!fieldName) {
+                        if (window.MyZkToast && typeof window.MyZkToast.warning === 'function') {
+                            window.MyZkToast.warning('Please enter a field name.');
+                        }
+                        if (elements.fieldInput) {
+                            elements.fieldInput.focus();
+                        }
+                        return;
+                    }
+                    var range = getDefaultClipDateRange(config.defaultDateWindowDays);
+                    var payload = {
+                        field_name: fieldName,
+                        geometry: state.feature && state.feature.geometry ? state.feature.geometry : state.geometry,
+                        area_hectares: Number(state.areaHectares.toFixed(4)),
+                        mode: state.mode,
+                        date_from: range.start,
+                        date_to: range.end,
+                        max_cloud: config.defaultMaxCloud,
+                        limit: config.maxRecords,
+                        resolution: 10,
+                        nodata: 0,
+                        selected_scene: state.selectedScene
+                    };
+                    var creditCost = computeCreditCost();
+                    var message = 'This action will deduct ' + formatNumberSafe(creditCost, 2) + ' credit points. Continue?';
+                    function proceed() {
+                        var originalHtml = elements.processBtn.innerHTML;
+                        elements.processBtn.disabled = true;
+                        elements.processBtn.innerHTML = '<i class="ri-loader-4-line animate-spin"></i><span>Processing...</span>';
+                        fetch(elements.processUrl, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                Accept: 'application/json',
+                                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]') ? document.querySelector('meta[name="csrf-token"]').getAttribute('content') : '{{ csrf_token() }}'
+                            },
+                            body: JSON.stringify(payload)
+                        })
+                            .then(function (response) {
+                                return response.json().catch(function () {
+                                    return {};
+                                }).then(function (data) {
+                                    if (!response.ok) {
+                                        throw new Error(data && data.message ? data.message : 'Unable to queue Sentinel-2 clipping request.');
+                                    }
+                                    if (data && data.data && data.data.current_credits !== undefined) {
+                                        var formattedCredits = formatNumberSafe(data.data.current_credits, 2);
+                                        var creditElement = document.getElementById('current-myCredits');
+                                        if (creditElement) {
+                                            creditElement.textContent = formattedCredits;
+                                        }
+                                        if (typeof window.jQuery === 'function') {
+                                            window.jQuery('#current-myCredits').text(formattedCredits);
+                                        }
+                                    }
+                                    if (window.MyZkToast && typeof window.MyZkToast.success === 'function') {
+                                        window.MyZkToast.success(data && data.message ? data.message : 'Sentinel-2 clipping queued successfully.');
+                                    }
+                                });
+                            })
+                            .catch(function (error) {
+                                if (window.MyZkToast && typeof window.MyZkToast.error === 'function') {
+                                    window.MyZkToast.error(error && error.message ? error.message : 'Failed to queue clipping request.');
+                                }
+                            })
+                            .finally(function () {
+                                elements.processBtn.disabled = false;
+                                elements.processBtn.innerHTML = originalHtml;
+                                updateProcessState();
+                            });
+                    }
+                    if (window.ZkPopAlert && typeof window.ZkPopAlert.show === 'function') {
+                        window.ZkPopAlert.show({
+                            message: message,
+                            icon: '<i class="ri-cpu-line text-2xl text-primary"></i>',
+                            confirmText: 'Yes, Process',
+                            cancelText: 'Cancel',
+                            onConfirm: proceed
+                        });
+                    } else if (window.confirm(message)) {
+                        proceed();
+                    }
+                }
+
+                updateAreaDisplay();
+                updateCreditDisplay();
+                updateGeojsonDisplay();
+                updateAutoMessage();
+                updateSelectionSummary();
+                updateProcessState();
+                setMode(state.mode);
+                if (elements.autoBtn) {
+                    elements.autoBtn.disabled = true;
+                }
+
+                for (var i = 0; i < elements.modeButtons.length; i += 1) {
+                    elements.modeButtons[i].addEventListener('click', function (event) {
+                        setMode(event.currentTarget.getAttribute('data-mode'));
+                    });
+                }
+
+                if (elements.autoBtn) {
+                    elements.autoBtn.addEventListener('click', handleAutoSearch);
+                }
+                if (elements.fieldInput) {
+                    elements.fieldInput.addEventListener('input', updateProcessState);
+                }
+                if (elements.processBtn) {
+                    elements.processBtn.addEventListener('click', handleProcess);
+                }
+
+                document.addEventListener('app:clip:geometry', function (event) {
+                    updateFromGeometry(event.detail || {});
+                });
+
+                if (window.AppMap && window.AppMap.clip && window.AppMap.clip.latest) {
+                    updateFromGeometry(window.AppMap.clip.latest);
+                }
+            }
+
+            function initPanelController() {
+                var panelWrapper = document.getElementById('panel-wrapper');
+                if (!panelWrapper) {
+                    return;
+                }
+                var panels = Array.prototype.slice.call(panelWrapper.querySelectorAll('section'));
+                var buttons = Array.prototype.slice.call(document.querySelectorAll('.sidebar-btn'));
+                var state = { activePanel: null };
+
+                function isMobile() {
+                    return window.innerWidth < 768;
+                }
+
+                function hideAllPanels() {
+                    for (var i = 0; i < panels.length; i += 1) {
+                        panels[i].classList.add('hidden');
+                    }
+                }
+
+                function showPanel(panelId, triggerButton) {
+                    var panel = document.getElementById(panelId);
+                    if (!panel) {
+                        return;
+                    }
+                    hideAllPanels();
+                    panel.classList.remove('hidden');
+                    state.activePanel = panelId;
+                    panelWrapper.dataset.activePanel = panelId;
+                    setActiveButtons(panelId, triggerButton, buttons);
+                    applyWrapperState(panelWrapper, state.activePanel, isMobile());
+                    if (panelId === 'sentinel-panel') {
+                        requestSentinelCollections();
+                    }
+                }
+
+                function closePanels() {
+                    hideAllPanels();
+                    state.activePanel = null;
+                    delete panelWrapper.dataset.activePanel;
+                    setActiveButtons(null, null, buttons);
+                    applyWrapperState(panelWrapper, state.activePanel, isMobile());
+                }
+
+                window.showPanel = function (panelId, triggerButton) {
+                    showPanel(panelId, triggerButton || null);
+                };
+                window.closePanels = closePanels;
+
+                window.addEventListener('resize', function () {
+                    applyWrapperState(panelWrapper, state.activePanel, isMobile());
+                });
+
+                initMobileScroll(
+                    document.getElementById('scroll-container'),
+                    document.getElementById('scroll-left'),
+                    document.getElementById('scroll-right')
+                );
+
+                initClipModule();
+
+                var defaultPanelId = 'data-panel';
+                var defaultButton = null;
+                for (var i = 0; i < buttons.length; i += 1) {
+                    if (getPanelId(buttons[i]) === defaultPanelId) {
+                        defaultButton = buttons[i];
+                        break;
+                    }
+                }
+                if (defaultButton) {
+                    showPanel(defaultPanelId, defaultButton);
+                } else if (panels.length) {
+                    showPanel(panels[0].id, null);
+                }
+                applyWrapperState(panelWrapper, state.activePanel, isMobile());
+            }
+
+            onReady(function () {
+                initPanelController();
+                requestSentinelCollections();
+            });
+        })();
+    </script>
     @endpush
+
     @push('javascript')
         @auth
             <script>

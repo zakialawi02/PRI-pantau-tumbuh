@@ -662,6 +662,83 @@ function updatePanel(t, d) {
 // Global variabel
 let geojsonFeature;
 let geojsonArea;
+
+/**
+ * Update the Sentinel clip panel when a new geometry is drawn.
+ * This provides immediate feedback even if the dedicated clip
+ * module script has not initialised yet.
+ *
+ * @param {{
+ *  geometry: object|null,
+ *  feature: object|null,
+ *  areaSqMeters: number,
+ *  areaHectares: number
+ * }} detail
+ */
+function updateClipPanelOutputs(detail) {
+    const moduleEl = document.getElementById("sentinelClipModule");
+    if (!moduleEl || !detail) {
+        return;
+    }
+
+    const areaOutput = document.getElementById("clipAreaOutput");
+    const creditOutput = document.getElementById("clipCreditOutput");
+    const geojsonOutput = document.getElementById("clipGeojsonOutput");
+
+    const formatNumeric = (value, decimals = 2) => {
+        const numericValue = Number(value || 0);
+        if (typeof window.formatNumber === "function") {
+            return window.formatNumber(numericValue, decimals);
+        }
+        if (!Number.isFinite(numericValue)) {
+            return "0";
+        }
+        return numericValue.toFixed(decimals);
+    };
+
+    if (areaOutput) {
+        if (detail.areaHectares > 0) {
+            areaOutput.innerHTML = `<strong>${formatNumeric(
+                detail.areaHectares,
+                2
+            )} ha</strong>`;
+        } else {
+            areaOutput.textContent = "Draw a polygon to calculate the area.";
+        }
+    }
+
+    if (creditOutput) {
+        const creditRate = Number(moduleEl.dataset.creditRate || "0") || 0;
+        const creditCost = creditRate * (detail.areaHectares || 0);
+        if (creditRate > 0 && detail.areaHectares > 0) {
+            creditOutput.innerHTML = `<span class="font-semibold text-primary">${formatNumeric(
+                creditCost,
+                2
+            )} Credit Points</span>`;
+        } else {
+            creditOutput.textContent = "–";
+        }
+    }
+
+    if (geojsonOutput) {
+        if (detail.feature) {
+            geojsonOutput.innerHTML = `<pre>${JSON.stringify(
+                detail.feature,
+                null,
+                2
+            )}</pre>`;
+        } else {
+            geojsonOutput.innerHTML =
+                '<span class="text-foreground/60">Coordinates will appear here after drawing.</span>';
+        }
+    }
+}
+
+if (typeof window !== "undefined") {
+    window.AppMap = window.AppMap || {};
+    window.AppMap.clip = window.AppMap.clip || {};
+    window.AppMap.clip.updatePanelOutputs = updateClipPanelOutputs;
+}
 let drawingRunning;
 let drawed;
 let minimapVisible = true;
@@ -923,6 +1000,8 @@ function addInteraction(type = "Polygon") {
         window.AppMap = window.AppMap || {};
         window.AppMap.clip = window.AppMap.clip || {};
         window.AppMap.clip.latest = clipDetail;
+
+        updateClipPanelOutputs(clipDetail);
 
         document.dispatchEvent(
             new CustomEvent("app:clip:geometry", {
