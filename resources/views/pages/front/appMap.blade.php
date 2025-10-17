@@ -3314,6 +3314,7 @@
                         endpoint: 'https://catalogue.dataspace.copernicus.eu/resto/api/collections/Sentinel2/search.json',
                         maxRecords: 10,
                         defaultDateWindowDays: 30,
+                        defaultMaxCloud: 40,
                     };
 
                     const elements = {
@@ -3324,19 +3325,27 @@
                         selectionSummary: document.getElementById('clipSelectionSummary'),
                         processBtn: document.getElementById('clipProcessBtn'),
                         processNotice: document.getElementById('clipProcessNotice'),
-                        processUrl: moduleEl.dataset.processUrl || '',
+                        autoBtn: document.getElementById('clipAutoSearchBtn'),
+                        autoResult: document.getElementById('clipAutoResult'),
                     };
+
+                    const processUrl = moduleEl.dataset.processUrl || '';
+                    const csrfToken = document
+                        .querySelector('meta[name="csrf-token"]')
+                        ?.getAttribute('content') || '{{ csrf_token() }}';
 
                     const state = {
                         geometry: null,
                         feature: null,
                         areaSqMeters: 0,
                         areaHectares: 0,
-                        creditRate: Number(moduleEl.dataset.creditRate ?? '0') || 0,
+                        creditRate: Number.parseFloat(moduleEl.dataset.creditRate ?? '0') || 0,
                         selectedScene: null,
+                        autoScene: null,
+                        mode: 'auto',
                     };
 
-                    const safeFormatNumber = (value, decimals = 2) => {
+                    function safeFormatNumber(value, decimals = 2) {
                         const numeric = Number(value ?? 0);
                         if (!Number.isFinite(numeric)) {
                             return '0';
@@ -3345,15 +3354,15 @@
                             return window.formatNumber(numeric, decimals);
                         }
                         return numeric.toFixed(decimals);
-                    };
+                    }
 
-                    const formatIsoDate = (date) => {
+                    function formatIsoDate(date) {
                         const copy = new Date(date.getTime());
                         copy.setHours(0, 0, 0, 0);
                         return copy.toISOString().split('T')[0];
-                    };
+                    }
 
-                    const formatHumanDate = (value) => {
+                    function formatHumanDate(value) {
                         if (typeof window.formatReadableDate === 'function') {
                             return window.formatReadableDate(value);
                         }
@@ -3366,9 +3375,9 @@
                         } catch (_) {
                             return value;
                         }
-                    };
+                    }
 
-                    const getDefaultDateRange = () => {
+                    function getDefaultDateRange() {
                         const end = new Date();
                         const start = new Date();
                         start.setDate(start.getDate() - clipConfig.defaultDateWindowDays);
@@ -3376,66 +3385,90 @@
                             start: formatIsoDate(start),
                             end: formatIsoDate(end),
                         };
-                    };
+                    }
 
-                    const computeCreditCost = () => {
+                    function computeCreditCost() {
                         const cost = state.areaHectares * state.creditRate;
                         return Number.isFinite(cost) ? cost : 0;
-                    };
+                    }
 
-                    const updateAreaDisplay = () => {
-                        if (!elements.areaOutput) return;
+                    function renderArea() {
+                        if (!elements.areaOutput) {
+                            return;
+                        }
                         if (state.areaHectares > 0) {
                             elements.areaOutput.innerHTML = `<strong>${safeFormatNumber(state.areaHectares, 3)} ha</strong>`;
                         } else {
                             elements.areaOutput.textContent = 'Draw a polygon to calculate the area.';
                         }
-                    };
+                    }
 
-                    const updateCreditDisplay = () => {
-                        if (!elements.creditOutput) return;
+                    function renderCredit() {
+                        if (!elements.creditOutput) {
+                            return;
+                        }
                         if (state.areaHectares > 0 && state.creditRate > 0) {
                             const cost = computeCreditCost();
                             elements.creditOutput.innerHTML = `<span class="font-semibold text-primary">${safeFormatNumber(cost, 2)} Credit Points</span>`;
                         } else {
                             elements.creditOutput.textContent = '–';
                         }
-                    };
+                    }
 
-                    const updateGeojsonDisplay = () => {
-                        if (!elements.geojsonOutput) return;
+                    function renderGeojson() {
+                        if (!elements.geojsonOutput) {
+                            return;
+                        }
                         if (state.feature) {
                             elements.geojsonOutput.innerHTML = `<pre>${JSON.stringify(state.feature, null, 2)}</pre>`;
                         } else {
                             elements.geojsonOutput.innerHTML = '<span class="text-foreground/60">Coordinates will appear here after drawing.</span>';
                         }
-                    };
+                    }
 
-                    const resetAutoResult = () => {
-                        if (!elements.autoResult) return;
-                        elements.autoResult.textContent = state.geometry ?
-                            'Click “Find Best Scene” to analyse the area.' :
-                            'Draw an area and search to preview the recommended scene.';
-                    };
+                    function renderAutoResultDefault() {
+                        if (!elements.autoResult) {
+                            return;
+                        }
+                        elements.autoResult.textContent = state.geometry
+                            ? 'Click “Find Best Scene” to analyse the area.'
+                            : 'Draw an area and search to preview the recommended scene.';
+                    }
 
-                    const updateProcessAvailability = () => {
-                        if (!elements.processBtn) return;
-                        const fieldNameFilled = (elements.fieldInput?.value ?? '').trim().length > 0;
-                        const hasScene = !!state.selectedScene;
-                        const hasGeometry = !!state.geometry;
-                        const urlAvailable = elements.processUrl !== '';
+                    function updateAutoButtonState() {
+                        if (elements.autoBtn) {
+                            elements.autoBtn.disabled = !state.geometry;
+                        }
+                    }
 
-                        elements.processBtn.disabled = !(fieldNameFilled && hasScene && hasGeometry && urlAvailable);
-
-                        if (!urlAvailable && elements.processNotice) {
+                    function updateProcessNotice(urlAvailable) {
+                        if (!elements.processNotice) {
+                            return;
+                        }
+                        if (!urlAvailable) {
                             elements.processNotice.textContent = 'Log in to clip and download imagery.';
-                        } else if (elements.processNotice) {
+                        } else {
                             elements.processNotice.textContent = 'Processing will run in the background via job queue. We will notify you when the imagery is ready.';
                         }
-                    };
+                    }
 
-                    const updateSelectionSummary = () => {
-                        if (!elements.selectionSummary) return;
+                    function updateProcessAvailability() {
+                        if (!elements.processBtn) {
+                            return;
+                        }
+                        const fieldNameFilled = (elements.fieldInput?.value ?? '').trim().length > 0;
+                        const hasScene = Boolean(state.selectedScene);
+                        const hasGeometry = Boolean(state.geometry);
+                        const urlAvailable = processUrl !== '';
+
+                        elements.processBtn.disabled = !(fieldNameFilled && hasScene && hasGeometry && urlAvailable);
+                        updateProcessNotice(urlAvailable);
+                    }
+
+                    function renderSelectionSummary() {
+                        if (!elements.selectionSummary) {
+                            return;
+                        }
                         if (!state.selectedScene) {
                             elements.selectionSummary.textContent = 'No scene selected yet. Use auto mode to pick one.';
                             updateProcessAvailability();
@@ -3454,9 +3487,9 @@
 
                         elements.selectionSummary.innerHTML = parts.join('');
                         updateProcessAvailability();
-                    };
+                    }
 
-                    const selectScene = (scene) => {
+                    function selectScene(scene) {
                         state.autoScene = scene || null;
                         state.selectedScene = scene || null;
                         if (scene && elements.autoResult) {
@@ -3465,18 +3498,21 @@
                                 <div class="text-xs text-foreground/70">Acquired: ${formatHumanDate(scene.datetime)}</div>
                                 <div class="text-xs text-foreground/70">Cloud cover: ${safeFormatNumber(scene.cloud_cover ?? 0, 2)}%</div>
                             `;
-                        } else if (elements.autoResult) {
-                            resetAutoResult();
+                        } else {
+                            renderAutoResultDefault();
                         }
+                        renderSelectionSummary();
+                    }
 
-                        updateSelectionSummary();
-                    };
-
-                    const computeCentroid = (geometry) => {
-                        if (!geometry) return null;
+                    function computeCentroid(geometry) {
+                        if (!geometry) {
+                            return null;
+                        }
                         const coords = Array.isArray(geometry.coordinates) ? geometry.coordinates : [];
                         const ring = coords[0] ?? [];
-                        if (!ring.length) return null;
+                        if (!ring.length) {
+                            return null;
+                        }
                         let sumX = 0;
                         let sumY = 0;
                         let count = 0;
@@ -3484,84 +3520,96 @@
                             if (Array.isArray(point) && point.length >= 2) {
                                 sumX += Number(point[0]);
                                 sumY += Number(point[1]);
-                                count++;
+                                count += 1;
                             }
                         });
-                        if (!count) return null;
-                        return [sumX / count, sumY / count];
-                    };
-
-                    const toWkt = (geometry) => {
-                        if (!geometry || typeof geometry !== 'object') return null;
-                        const type = geometry.type;
-                        const coords = geometry.coordinates;
-                        if (!type || !coords) return null;
-
-                        const normalizeRing = (ring) => {
-                            if (!Array.isArray(ring) || !ring.length) return null;
-                            const points = ring
-                                .map((coord) =>
-                                    Array.isArray(coord) && coord.length >= 2 ? [Number(coord[0]), Number(coord[1])] :
-                                    null
-                                )
-                                .filter((coord) => Array.isArray(coord));
-                            if (!points.length) return null;
-                            const [firstLon, firstLat] = points[0];
-                            const [lastLon, lastLat] = points[points.length - 1];
-                            if (firstLon !== lastLon || firstLat !== lastLat) {
-                                points.push([firstLon, firstLat]);
-                            }
-                            return points;
-                        };
-
-                        const formatRing = (ring) => {
-                            const normalized = normalizeRing(ring);
-                            if (!normalized) return null;
-                            return normalized
-                                .map((coord) => `${coord[0]} ${coord[1]}`)
-                                .join(', ');
-                        };
-
-                        switch (type) {
-                            case 'Polygon': {
-                                if (!Array.isArray(coords) || !coords.length) return null;
-                                const rings = coords
-                                    .map((ring) => {
-                                        if (!Array.isArray(ring) || !ring.length) return null;
-                                        const wktRing = formatRing(ring);
-                                        return wktRing ? `(${wktRing})` : null;
-                                    })
-                                    .filter(Boolean);
-                                return rings.length ? `POLYGON (${rings.join(', ')})` : null;
-                            }
-                            case 'MultiPolygon': {
-                                if (!Array.isArray(coords) || !coords.length) return null;
-                                const polygons = coords
-                                    .map((polygon) => {
-                                        if (!Array.isArray(polygon) || !polygon.length) return null;
-                                        const rings = polygon
-                                            .map((ring) => {
-                                                if (!Array.isArray(ring) || !ring.length) return null;
-                                                const wktRing = formatRing(ring);
-                                                return wktRing ? `(${wktRing})` : null;
-                                            })
-                                            .filter(Boolean);
-                                        return rings.length ? `(${rings.join(', ')})` : null;
-                                    })
-                                    .filter(Boolean);
-                                return polygons.length ? `MULTIPOLYGON (${polygons.join(', ')})` : null;
-                            }
-                            default:
-                                return null;
+                        if (!count) {
+                            return null;
                         }
-                    };
+                        return [sumX / count, sumY / count];
+                    }
 
-                    const buildQueryParams = () => {
+                    function normalizeRing(ring) {
+                        if (!Array.isArray(ring) || !ring.length) {
+                            return null;
+                        }
+                        const points = ring
+                            .map((coord) => (Array.isArray(coord) && coord.length >= 2 ? [Number(coord[0]), Number(coord[1])] : null))
+                            .filter((coord) => Array.isArray(coord));
+                        if (!points.length) {
+                            return null;
+                        }
+                        const [firstLon, firstLat] = points[0];
+                        const [lastLon, lastLat] = points[points.length - 1];
+                        if (firstLon !== lastLon || firstLat !== lastLat) {
+                            points.push([firstLon, firstLat]);
+                        }
+                        return points;
+                    }
+
+                    function formatRing(ring) {
+                        const normalized = normalizeRing(ring);
+                        if (!normalized) {
+                            return null;
+                        }
+                        return normalized.map((coord) => `${coord[0]} ${coord[1]}`).join(', ');
+                    }
+
+                    function toWkt(geometry) {
+                        if (!geometry || typeof geometry !== 'object') {
+                            return null;
+                        }
+                        const { type, coordinates } = geometry;
+                        if (!type || !coordinates) {
+                            return null;
+                        }
+
+                        if (type === 'Polygon') {
+                            if (!Array.isArray(coordinates) || !coordinates.length) {
+                                return null;
+                            }
+                            const rings = coordinates
+                                .map((ring) => {
+                                    if (!Array.isArray(ring) || !ring.length) {
+                                        return null;
+                                    }
+                                    const wktRing = formatRing(ring);
+                                    return wktRing ? `(${wktRing})` : null;
+                                })
+                                .filter(Boolean);
+                            return rings.length ? `POLYGON (${rings.join(', ')})` : null;
+                        }
+
+                        if (type === 'MultiPolygon') {
+                            if (!Array.isArray(coordinates) || !coordinates.length) {
+                                return null;
+                            }
+                            const polygons = coordinates
+                                .map((polygon) => {
+                                    if (!Array.isArray(polygon) || !polygon.length) {
+                                        return null;
+                                    }
+                                    const rings = polygon
+                                        .map((ring) => {
+                                            if (!Array.isArray(ring) || !ring.length) {
+                                                return null;
+                                            }
+                                            const wktRing = formatRing(ring);
+                                            return wktRing ? `(${wktRing})` : null;
+                                        })
+                                        .filter(Boolean);
+                                    return rings.length ? `(${rings.join(', ')})` : null;
+                                })
+                                .filter(Boolean);
+                            return polygons.length ? `MULTIPOLYGON (${polygons.join(', ')})` : null;
+                        }
+
+                        return null;
+                    }
+
+                    function buildQueryParams() {
                         const params = new URLSearchParams();
-                        const {
-                            start,
-                            end
-                        } = getDefaultDateRange();
+                        const { start, end } = getDefaultDateRange();
                         params.set('startDate', `${start}T00:00:00Z`);
                         params.set('completionDate', `${end}T23:59:59Z`);
                         params.set('maxRecords', String(clipConfig.maxRecords));
@@ -3579,9 +3627,9 @@
                         }
 
                         return params;
-                    };
+                    }
 
-                    const getCloudCover = (feature) => {
+                    function getCloudCover(feature) {
                         const props = feature?.properties ?? {};
                         const keys = ['eo:cloudCover', 'cloudCover', 'cloudcoverpercentage', 'cloudCoverageAssessment'];
                         for (const key of keys) {
@@ -3593,9 +3641,9 @@
                             }
                         }
                         return null;
-                    };
+                    }
 
-                    const getAcquisitionTimestamp = (feature) => {
+                    function getAcquisitionTimestamp(feature) {
                         const props = feature?.properties ?? {};
                         const candidates = [
                             props.completionDate,
@@ -3608,7 +3656,9 @@
                         ];
 
                         for (const candidate of candidates) {
-                            if (!candidate) continue;
+                            if (!candidate) {
+                                continue;
+                            }
                             const date = new Date(candidate);
                             if (!Number.isNaN(date.getTime())) {
                                 return date.getTime();
@@ -3616,9 +3666,9 @@
                         }
 
                         return 0;
-                    };
+                    }
 
-                    const buildScenePayload = (feature) => {
+                    function buildScenePayload(feature) {
                         const props = feature?.properties ?? {};
                         const sceneId = feature?.id || props.productIdentifier || props.title || props.id || null;
                         const acquisition = props.completionDate || props.startDate || props.datetime || props.endPosition || props.beginPosition || null;
@@ -3631,9 +3681,9 @@
                             collection: props.collection || props.collectionName || null,
                             mgrs: props.mgrsId || props.tileId || props.MGRS || null,
                         };
-                    };
+                    }
 
-                    const fetchScenes = async () => {
+                    async function fetchScenes() {
                         const params = buildQueryParams();
                         const requestUrl = `${clipConfig.endpoint}?${params.toString()}`;
                         const response = await fetch(requestUrl);
@@ -3643,14 +3693,16 @@
                         const data = await response.json();
                         const features = Array.isArray(data?.features) ? data.features : [];
                         return features.sort((a, b) => getAcquisitionTimestamp(b) - getAcquisitionTimestamp(a));
-                    };
+                    }
 
-                    const handleAutoSearch = async () => {
+                    async function handleAutoSearch() {
                         if (!state.geometry) {
                             window.MyZkToast?.warning?.('Draw a polygon first to enable auto selection.');
                             return;
                         }
-                        if (!elements.autoBtn) return;
+                        if (!elements.autoBtn) {
+                            return;
+                        }
                         const originalHtml = elements.autoBtn.innerHTML;
                         elements.autoBtn.disabled = true;
                         elements.autoBtn.innerHTML = '<i class="ri-loader-4-line animate-spin"></i><span>Searching...</span>';
@@ -3679,37 +3731,39 @@
                             elements.autoBtn.innerHTML = originalHtml;
                             updateProcessAvailability();
                         }
-                    };
+                    }
 
-                    const updateGeometryState = (detail) => {
-                        state.geometry = detail?.geometry || null;
-                        state.feature = detail?.feature || (state.geometry ? {
-                            type: 'Feature',
-                            properties: {},
-                            geometry: state.geometry
-                        } : null);
-                        state.areaSqMeters = detail?.areaSqMeters || 0;
-                        state.areaHectares = detail?.areaHectares || 0;
+                    function applyGeometry(detail = {}) {
+                        state.geometry = detail.geometry || null;
+                        state.feature = detail.feature || (state.geometry
+                            ? {
+                                type: 'Feature',
+                                properties: {},
+                                geometry: state.geometry,
+                            }
+                            : null);
+                        state.areaSqMeters = Number(detail.areaSqMeters ?? 0);
+                        state.areaHectares = Number(detail.areaHectares ?? 0);
 
                         if (!state.geometry) {
                             state.autoScene = null;
                             state.selectedScene = null;
-                            resetAutoResult();
                         }
+                        renderAutoResultDefault();
 
-                        updateAreaDisplay();
-                        updateCreditDisplay();
-                        updateGeojsonDisplay();
-                        if (elements.autoBtn) {
-                            elements.autoBtn.disabled = !state.geometry;
-                        }
-                        updateSelectionSummary();
+                        renderArea();
+                        renderCredit();
+                        renderGeojson();
+                        updateAutoButtonState();
+                        renderSelectionSummary();
                         updateProcessAvailability();
-                    };
+                    }
 
-                    const handleProcess = () => {
-                        if (!elements.processBtn) return;
-                        if (!elements.processUrl) {
+                    async function handleProcess() {
+                        if (!elements.processBtn) {
+                            return;
+                        }
+                        if (!processUrl) {
                             window.MyZkToast?.warning?.('Please sign in to process Sentinel-2 imagery.');
                             return;
                         }
@@ -3729,10 +3783,7 @@
                             return;
                         }
 
-                        const {
-                            start: defaultDateFrom,
-                            end: defaultDateTo
-                        } = getDefaultDateRange();
+                        const { start: defaultDateFrom, end: defaultDateTo } = getDefaultDateRange();
 
                         const payload = {
                             field_name: fieldName,
@@ -3749,82 +3800,86 @@
                         };
 
                         const creditCost = computeCreditCost();
+                        const confirmationMessage = `This action will deduct ${safeFormatNumber(creditCost, 2)} credit points. Continue?`;
 
-                        const proceed = () => {
+                        const proceed = async () => {
                             const originalHtml = elements.processBtn.innerHTML;
                             elements.processBtn.disabled = true;
                             elements.processBtn.innerHTML = '<i class="ri-loader-4-line animate-spin"></i><span>Processing...</span>';
 
-                            fetch(elements.processUrl, {
+                            try {
+                                const response = await fetch(processUrl, {
                                     method: 'POST',
                                     headers: {
                                         'Content-Type': 'application/json',
                                         Accept: 'application/json',
-                                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}',
+                                        'X-CSRF-TOKEN': csrfToken,
                                     },
                                     body: JSON.stringify(payload),
-                                })
-                                .then(async (response) => {
-                                    const data = await response.json().catch(() => ({}));
-                                    if (!response.ok) {
-                                        const message = data?.message || 'Unable to queue Sentinel-2 clipping request.';
-                                        throw new Error(message);
-                                    }
-                                    if (data?.data?.current_credits !== undefined) {
-                                        $('#current-myCredits')?.text(safeFormatNumber(data.data.current_credits, 2));
-                                    }
-                                    if (window.MyZkToast?.success) {
-                                        window.MyZkToast.success(data?.message || 'Sentinel-2 clipping queued successfully.');
-                                    }
-                                })
-                                .catch((error) => {
-                                    if (window.MyZkToast?.error) {
-                                        window.MyZkToast.error(error?.message || 'Failed to queue clipping request.');
-                                    }
-                                })
-                                .finally(() => {
-                                    elements.processBtn.disabled = false;
-                                    elements.processBtn.innerHTML = originalHtml;
-                                    updateProcessAvailability();
                                 });
+                                const data = await response.json().catch(() => ({}));
+                                if (!response.ok) {
+                                    const message = data?.message || 'Unable to queue Sentinel-2 clipping request.';
+                                    throw new Error(message);
+                                }
+                                if (data?.data?.current_credits !== undefined) {
+                                    $('#current-myCredits')?.text(safeFormatNumber(data.data.current_credits, 2));
+                                }
+                                if (window.MyZkToast?.success) {
+                                    window.MyZkToast.success(data?.message || 'Sentinel-2 clipping queued successfully.');
+                                }
+                            } catch (error) {
+                                if (window.MyZkToast?.error) {
+                                    window.MyZkToast.error(error?.message || 'Failed to queue clipping request.');
+                                }
+                            } finally {
+                                elements.processBtn.disabled = false;
+                                elements.processBtn.innerHTML = originalHtml;
+                                updateProcessAvailability();
+                            }
                         };
 
-                        const message = `This action will deduct ${safeFormatNumber(creditCost, 2)} credit points. Continue?`;
                         if (window.ZkPopAlert?.show) {
                             ZkPopAlert.show({
-                                message,
+                                message: confirmationMessage,
                                 icon: '<i class="ri-cpu-line text-2xl text-primary"></i>',
                                 confirmText: 'Yes, Process',
                                 cancelText: 'Cancel',
                                 onConfirm: proceed,
                             });
-                        } else if (window.confirm(message)) {
+                        } else if (window.confirm(confirmationMessage)) {
                             proceed();
                         }
-                    };
-
-                    updateAreaDisplay();
-                    updateCreditDisplay();
-                    updateGeojsonDisplay();
-                    resetAutoResult();
-                    updateSelectionSummary();
-                    updateProcessAvailability();
-                    if (elements.autoBtn) {
-                        elements.autoBtn.disabled = true;
                     }
+
+                    renderArea();
+                    renderCredit();
+                    renderGeojson();
+                    renderAutoResultDefault();
+                    renderSelectionSummary();
+                    updateProcessAvailability();
+                    updateAutoButtonState();
 
                     elements.autoBtn?.addEventListener('click', handleAutoSearch);
                     elements.fieldInput?.addEventListener('input', updateProcessAvailability);
                     elements.processBtn?.addEventListener('click', handleProcess);
 
                     document.addEventListener('app:clip:geometry', (event) => {
-                        updateGeometryState(event.detail || {});
+                        applyGeometry(event.detail || {});
                     });
 
                     if (window.AppMap?.clip?.latest) {
-                        updateGeometryState(window.AppMap.clip.latest);
+                        applyGeometry(window.AppMap.clip.latest);
                     }
                 };
+
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', initialiseClipModule, {
+                        once: true
+                    });
+                } else {
+                    initialiseClipModule();
+                }
 
             })();
         </script>

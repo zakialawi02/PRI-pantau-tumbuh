@@ -778,7 +778,7 @@ const formatLength = function (line) {
  * @return {string} Formatted area.
  */
 const formatArea = function (polygon) {
-    const area = getArea(polygon);
+    const area = getArea(polygon, { projection: "EPSG:3857" });
     let output;
     if (area > 10000) {
         output =
@@ -875,7 +875,7 @@ function addInteraction(type = "Polygon") {
                 output = formatLength(geom);
                 tooltipCoord = geom.getLastCoordinate();
             }
-            geojsonArea = getArea(geom);
+            geojsonArea = getArea(geom, { projection: "EPSG:3857" });
             window.geojsonArea = geojsonArea;
             measureTooltipElement.innerHTML = output;
             measureTooltip.setPosition(tooltipCoord);
@@ -896,11 +896,14 @@ function addInteraction(type = "Polygon") {
         });
         geojsonFeature = JSON.parse(geojson);
 
+        const areaSqMeters = Number(geojsonArea || 0);
+        const areaHectares = areaSqMeters ? areaSqMeters / 10000 : 0;
+
         const clipDetail = {
             geometry: geojsonFeature?.geometry || null,
             feature: geojsonFeature || null,
-            areaSqMeters: geojsonArea || 0,
-            areaHectares: geojsonArea ? geojsonArea / 10000 : 0,
+            areaSqMeters,
+            areaHectares,
         };
 
         window.AppMap = window.AppMap || {};
