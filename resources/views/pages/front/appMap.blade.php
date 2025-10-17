@@ -1491,6 +1491,10 @@
 
                     if (enable) {
                         const wmsUrl = withAccessToken(scene.wms.url);
+                        const view = typeof mapInstance.getView === 'function' ? mapInstance.getView() : null;
+                        const projection = view?.getProjection?.();
+                        const projectionCode = typeof projection?.getCode === 'function' ? projection.getCode() : 'EPSG:3857';
+
                         const params = {
                             LAYERS: scene.wms.layers,
                             FORMAT: 'image/png',
@@ -1498,9 +1502,15 @@
                             SHOWLOGO: false,
                             LOGO: false,
                             showlogo: false,
+                            // Force legacy WMS axis order (lon/lat) to avoid transparent tiles caused by CRS swaps.
+                            VERSION: '1.1.1',
+                            SRS: projectionCode,
+                            CRS: projectionCode,
+                            TILED: true,
                         };
                         if (scene.wms.time) {
-                            params.TIME = scene.wms.time;
+                            const isoTime = scene.wms.time;
+                            params.TIME = `${isoTime}/${isoTime}`;
                         }
 
                         const geometryForMask = scene.geometry || geometryFromBbox(scene.bbox || []);
@@ -1515,6 +1525,7 @@
                                 const wkt = wktWriter.writeGeometry(geometryObj);
                                 params.GEOMETRY = wkt;
                                 params.geometry = wkt;
+                                params.GEOMETRY_CRS = 'EPSG:4326';
                             } catch (error) {
                                 console.warn('Failed to encode Sentinel geometry for WMS mask:', error);
                             }
