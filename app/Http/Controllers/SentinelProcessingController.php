@@ -388,12 +388,42 @@ class SentinelProcessingController extends Controller
 
     private function ensureFeatureCollection(array $geometry): array
     {
+        if (is_string($geometry)) {
+            $decoded = json_decode($geometry, true);
+
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                throw new \InvalidArgumentException('Geometry payload is not valid JSON.');
+            }
+
+            $geometry = $decoded;
+        }
+
+        if (!is_array($geometry)) {
+            throw new \InvalidArgumentException('Geometry payload must be an array.');
+        }
+
         $type = $geometry['type'] ?? null;
 
+        if (!is_string($type) || $type === '') {
+            throw new \InvalidArgumentException('Geometry type is missing.');
+        }
+
         if ($type === 'FeatureCollection') {
-            if (!isset($geometry['features']) || !is_array($geometry['features'])) {
+            if (!isset($geometry['features']) || !is_array($geometry['features']) || empty($geometry['features'])) {
                 throw new \InvalidArgumentException('Feature collection is missing features.');
             }
+
+            $features = [];
+
+            foreach ($geometry['features'] as $feature) {
+                if (!is_array($feature)) {
+                    throw new \InvalidArgumentException('Feature collection contains an invalid feature.');
+                }
+
+                $features[] = $this->normalizeFeature($feature);
+            }
+
+            $geometry['features'] = $features;
 
             return $geometry;
         }
@@ -405,7 +435,9 @@ class SentinelProcessingController extends Controller
 
             return [
                 'type' => 'FeatureCollection',
-                'features' => [$geometry],
+                'features' => [
+                    $this->normalizeFeature($geometry),
+                ],
             ];
         }
 
@@ -418,8 +450,52 @@ class SentinelProcessingController extends Controller
             'features' => [[
                 'type' => 'Feature',
                 'properties' => [],
-                'geometry' => $geometry,
+                'geometry' => $this->normalizeGeometry($geometry),
             ]],
+        ];
+    }
+
+    private function normalizeFeature(array $feature): array
+    {
+        $featureType = $feature['type'] ?? 'Feature';
+        if ($featureType !== 'Feature') {
+            throw new \InvalidArgumentException('Invalid feature type provided.');
+        }
+
+        if (!isset($feature['geometry']) || !is_array($feature['geometry'])) {
+            throw new \InvalidArgumentException('Feature geometry is missing.');
+        }
+
+        $normalized = [
+            'type' => 'Feature',
+            'properties' => isset($feature['properties']) && is_array($feature['properties'])
+                ? $feature['properties']
+                : [],
+            'geometry' => $this->normalizeGeometry($feature['geometry']),
+        ];
+
+        if (isset($feature['id'])) {
+            $normalized['id'] = $feature['id'];
+        }
+
+        return $normalized;
+    }
+
+    private function normalizeGeometry(array $geometry): array
+    {
+        $geomType = $geometry['type'] ?? null;
+
+        if (!is_string($geomType) || $geomType === '') {
+            throw new \InvalidArgumentException('Geometry type is missing.');
+        }
+
+        if (!isset($geometry['coordinates']) || !is_array($geometry['coordinates'])) {
+            throw new \InvalidArgumentException('Geometry coordinates missing.');
+        }
+
+        return [
+            'type' => $geomType,
+            'coordinates' => $geometry['coordinates'],
         ];
     }
 }
