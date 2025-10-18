@@ -2,8 +2,9 @@
 
 namespace App\Jobs;
 
-use App\Models\ImageryData;
 use App\Jobs\ProcessImageryJob;
+use App\Models\ImageryData;
+use App\Services\GeoServerService;
 use Exception;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -139,11 +140,29 @@ class MergeImageryChunksJob implements ShouldQueue
 
             $fileSize = File::exists($this->finalPath) ? File::size($this->finalPath) : null;
 
+            $geoserverService = app(GeoServerService::class);
+            $geoserverData = null;
+
+            try {
+                $geoserverData = $geoserverService->publishImageryLayer($imagery, $this->finalPath, 'source');
+            } catch (Exception $geoserverException) {
+                Log::warning('MergeImageryChunksJob: Failed to publish source imagery to GeoServer.', [
+                    'imagery_id' => $this->imageryId,
+                    'error' => $geoserverException->getMessage(),
+                ]);
+            }
+
             $updates = [
                 'upload_status' => 'done',
                 'processing_status' => $this->skipProcessing ? 'skip' : 'waiting',
                 'path' => 'storage/imagery/' . $this->storedName,
             ];
+
+            if ($geoserverData) {
+                $updates['geoserver_store_name'] = $geoserverData['store'];
+                $updates['geoserver_layer_name'] = $geoserverData['layer'];
+                $updates['geoserver_bounds'] = $geoserverData['bounds'] ?? null;
+            }
 
             if ($fileSize !== null) {
                 $updates['size'] = $fileSize;
