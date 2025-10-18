@@ -118,6 +118,8 @@ class ProcessSentinelClipJob implements ShouldQueue
             ];
 
             $overrides = [
+                'SENTINELHUB_CLIENT_ID' => env('COPERNICUS_CLIENT_ID'),
+                'SENTINELHUB_SECRET_ID' => env('COPERNICUS_CLIENT_SECRET'),
                 'SENTINEL_CLIP_TILE_DIR' => $tilesDir,
                 'SENTINEL_CLIP_MERGED_PATH' => $mergedPath,
                 'SENTINEL_CLIP_OUTPUT' => $outputPath,
@@ -125,6 +127,8 @@ class ProcessSentinelClipJob implements ShouldQueue
             ];
 
             $optionalEnvMap = [
+                'SENTINELHUB_CLIENT_ID' => 'SENTINEL_CLIP_CLIENT_ID',
+                'SENTINELHUB_SECRET_ID' => 'SENTINELHUB_SECRET_ID',
                 'date_from' => 'SENTINEL_CLIP_DATE_FROM',
                 'date_to' => 'SENTINEL_CLIP_DATE_TO',
                 'limit' => 'SENTINEL_CLIP_LIMIT',
