@@ -929,7 +929,7 @@ class ImageryDataController extends Controller
 
                 $absolutePath = $path;
 
-                if (!Str::startsWith($absolutePath, ['/']) && !preg_match('/^[A-Za-z]:\\/', $absolutePath)) {
+                if (!Str::startsWith($absolutePath, ['/']) && !preg_match('/^[A-Za-z]:/', $absolutePath)) {
                     $absolutePath = public_path($absolutePath);
                 }
 

@@ -870,7 +870,7 @@
                             LAYERS: layerName,
                             TILED: true,
                             FORMAT: 'image/png',
-                            TRANSPARENT: 'FALSE',
+                            TRANSPARENT: true,
                         },
                         serverType: 'geoserver',
                         crossOrigin: 'anonymous',
