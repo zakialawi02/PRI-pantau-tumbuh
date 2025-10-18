@@ -32,6 +32,14 @@ class ImageryData extends Model
         'geoserver_layer',
         'geoserver_bbox',
         'geoserver_published_at',
+        'geoserver_source_store',
+        'geoserver_source_layer',
+        'geoserver_source_bbox',
+        'geoserver_source_published_at',
+        'geoserver_processed_store',
+        'geoserver_processed_layer',
+        'geoserver_processed_bbox',
+        'geoserver_processed_published_at',
         'scheduled_deletion_at'
     ];
 
@@ -42,6 +50,10 @@ class ImageryData extends Model
         'chunk_total' => 'integer',
         'geoserver_bbox' => 'array',
         'geoserver_published_at' => 'datetime',
+        'geoserver_source_bbox' => 'array',
+        'geoserver_source_published_at' => 'datetime',
+        'geoserver_processed_bbox' => 'array',
+        'geoserver_processed_published_at' => 'datetime',
         'scheduled_deletion_at' => 'datetime'
     ];
 

@@ -269,6 +269,14 @@ class ImageryDataController extends Controller
                     'geoserver_layer',
                     'geoserver_bbox',
                     'geoserver_published_at',
+                    'geoserver_source_store',
+                    'geoserver_source_layer',
+                    'geoserver_source_bbox',
+                    'geoserver_source_published_at',
+                    'geoserver_processed_store',
+                    'geoserver_processed_layer',
+                    'geoserver_processed_bbox',
+                    'geoserver_processed_published_at',
                 ]);
 
             return response()->json([
@@ -864,23 +872,30 @@ class ImageryDataController extends Controller
     public function destroy(ImageryData $imagery)
     {
         try {
-            $geoserverIdentifiers = array_filter([
-                'store' => $imagery->geoserver_store,
-                'layer' => $imagery->geoserver_layer,
-            ]);
+            $layerNames = array_values(array_unique(array_filter([
+                $imagery->geoserver_layer,
+                $imagery->geoserver_source_layer,
+                $imagery->geoserver_processed_layer,
+            ])));
 
-            if (!empty($geoserverIdentifiers) && !empty(config('geoserver.url'))) {
+            $storeNames = array_values(array_unique(array_filter([
+                $imagery->geoserver_store,
+                $imagery->geoserver_source_store,
+                $imagery->geoserver_processed_store,
+            ])));
+
+            if ((!empty($layerNames) || !empty($storeNames)) && !empty(config('geoserver.url'))) {
                 try {
                     $geoServer = app(\App\Services\GeoServerService::class);
 
-                    if (!empty($geoserverIdentifiers['layer'])) {
-                        $geoServer->deleteLayer($geoserverIdentifiers['layer'], [
+                    foreach ($layerNames as $layerName) {
+                        $geoServer->deleteLayer($layerName, [
                             'recurse' => true,
                         ]);
                     }
 
-                    if (!empty($geoserverIdentifiers['store'])) {
-                        $geoServer->deleteCoverageStore($geoserverIdentifiers['store'], [
+                    foreach ($storeNames as $storeName) {
+                        $geoServer->deleteCoverageStore($storeName, [
                             'recurse' => true,
                         ]);
                     }
@@ -888,6 +903,8 @@ class ImageryDataController extends Controller
                     Log::warning('ImageryDataController@destroy: Failed to remove GeoServer resources', [
                         'user_id' => Auth::id(),
                         'imagery_id' => $imagery->id,
+                        'layers' => $layerNames,
+                        'stores' => $storeNames,
                         'error' => $geoserverException->getMessage(),
                     ]);
                 }

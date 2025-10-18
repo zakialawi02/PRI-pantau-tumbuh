@@ -152,28 +152,84 @@ class ProcessImageryJob implements ShouldQueue
                         $geoServer = app(GeoServerService::class);
                         $nameSeed = 'imagery_' . Str::slug($imagery->id, '_');
 
-                        $publishResult = $geoServer->publishGeoTiff(
-                            $nameSeed,
-                            $nameSeed,
-                            $outputPath,
-                            [
-                                'enabled' => true,
-                            ]
-                        );
+                        $publications = [
+                            'source' => null,
+                            'processed' => null,
+                        ];
 
-                        $updatePayload['geoserver_store'] = $publishResult['store'] ?? null;
-                        $updatePayload['geoserver_layer'] = $publishResult['layer'] ?? null;
-                        $updatePayload['geoserver_bbox'] = $publishResult['bounding_box'] ?? null;
-                        $updatePayload['geoserver_published_at'] = now();
+                        $sourceStore = $nameSeed . '_source';
+                        $processedStore = $nameSeed . '_processed';
 
-                        Log::info('🗺️ [Job] GeoServer layer published.', [
-                            'imagery_id' => $imagery->id,
-                            'store' => $updatePayload['geoserver_store'],
-                            'layer' => $updatePayload['geoserver_layer'],
-                        ]);
+                        try {
+                            $publications['source'] = $geoServer->publishGeoTiff(
+                                $sourceStore,
+                                $sourceStore,
+                                $filePath,
+                                [
+                                    'enabled' => true,
+                                    'projection_policy' => 'FORCE_DECLARED',
+                                ]
+                            );
+
+                            Log::info('🗺️ [Job] GeoServer source layer published.', [
+                                'imagery_id' => $imagery->id,
+                                'store' => $publications['source']['store'] ?? null,
+                                'layer' => $publications['source']['layer'] ?? null,
+                            ]);
+                        } catch (\Throwable $publicationException) {
+                            Log::error('❌ [Job] Failed to publish GeoServer source layer.', [
+                                'imagery_id' => $imagery->id,
+                                'error' => $publicationException->getMessage(),
+                            ]);
+                        }
+
+                        try {
+                            $publications['processed'] = $geoServer->publishGeoTiff(
+                                $processedStore,
+                                $processedStore,
+                                $outputPath,
+                                [
+                                    'enabled' => true,
+                                    'projection_policy' => 'FORCE_DECLARED',
+                                ]
+                            );
+
+                            Log::info('🗺️ [Job] GeoServer processed layer published.', [
+                                'imagery_id' => $imagery->id,
+                                'store' => $publications['processed']['store'] ?? null,
+                                'layer' => $publications['processed']['layer'] ?? null,
+                            ]);
+                        } catch (\Throwable $publicationException) {
+                            Log::error('❌ [Job] Failed to publish GeoServer processed layer.', [
+                                'imagery_id' => $imagery->id,
+                                'error' => $publicationException->getMessage(),
+                            ]);
+                        }
+
+                        $sourcePublishedAt = !empty($publications['source']) ? now() : null;
+                        $processedPublishedAt = !empty($publications['processed']) ? now() : null;
+
+                        $updatePayload['geoserver_source_store'] = $publications['source']['store'] ?? null;
+                        $updatePayload['geoserver_source_layer'] = $publications['source']['layer'] ?? null;
+                        $updatePayload['geoserver_source_bbox'] = $publications['source']['bounding_box'] ?? null;
+                        $updatePayload['geoserver_source_published_at'] = $sourcePublishedAt;
+
+                        $updatePayload['geoserver_processed_store'] = $publications['processed']['store'] ?? null;
+                        $updatePayload['geoserver_processed_layer'] = $publications['processed']['layer'] ?? null;
+                        $updatePayload['geoserver_processed_bbox'] = $publications['processed']['bounding_box'] ?? null;
+                        $updatePayload['geoserver_processed_published_at'] = $processedPublishedAt;
+
+                        // Maintain backwards compatibility for any consumers expecting single layer metadata.
+                        $updatePayload['geoserver_store'] = $updatePayload['geoserver_processed_store']
+                            ?? $updatePayload['geoserver_source_store'];
+                        $updatePayload['geoserver_layer'] = $updatePayload['geoserver_processed_layer']
+                            ?? $updatePayload['geoserver_source_layer'];
+                        $updatePayload['geoserver_bbox'] = $updatePayload['geoserver_processed_bbox']
+                            ?? $updatePayload['geoserver_source_bbox'];
+                        $updatePayload['geoserver_published_at'] = $processedPublishedAt ?? $sourcePublishedAt;
                     }
                 } catch (\Throwable $exception) {
-                    Log::error('❌ [Job] Failed to publish GeoServer layer.', [
+                    Log::error('❌ [Job] Failed to publish GeoServer layers.', [
                         'imagery_id' => $imagery->id,
                         'error' => $exception->getMessage(),
                     ]);

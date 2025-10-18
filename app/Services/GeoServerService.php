@@ -277,10 +277,13 @@ class GeoServerService
         $storeName = $this->sanitizeName($storeName);
         $coverageName = $this->sanitizeName($coverageName);
 
+        $projectionPolicy = strtoupper((string) ($options['projection_policy'] ?? 'FORCE_DECLARED'));
+
         $coveragePayload = [
             'enabled' => $options['enabled'] ?? true,
             'srs' => $options['srs'] ?? $this->defaultSrs,
             'nativeCRS' => $options['native_srs'] ?? $options['srs'] ?? $this->defaultSrs,
+            'projectionPolicy' => $projectionPolicy !== '' ? $projectionPolicy : null,
         ];
 
         if (!empty($options['supported_formats'])) {

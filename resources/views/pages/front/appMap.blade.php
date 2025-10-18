@@ -755,10 +755,43 @@
                     queue: [],
                 };
 
-                const dispatchVisibility = (id, visible) => {
+                const normaliseVariant = (variant) => {
+                    if (typeof variant !== 'string') {
+                        return 'processed';
+                    }
+
+                    const value = variant.toLowerCase();
+                    return value === 'source' ? 'source' : 'processed';
+                };
+
+                const buildLayerKey = (id, variant) => `${id}:${normaliseVariant(variant)}`;
+
+                const hasAnyLayerForId = (id) => {
+                    if (!id) {
+                        return false;
+                    }
+
+                    const prefix = `${id}:`;
+                    for (const key of state.layers.keys()) {
+                        if (key.startsWith(prefix)) {
+                            return true;
+                        }
+                    }
+
+                    return false;
+                };
+
+                const dispatchVisibility = (id, variant, visible) => {
+                    const normalisedVariant = normaliseVariant(variant);
+
                     document.dispatchEvent(
                         new CustomEvent('app:imagery:layer-visibility', {
-                            detail: { id, visible },
+                            detail: {
+                                id,
+                                variant: normalisedVariant,
+                                visible: Boolean(visible),
+                                anyVisible: hasAnyLayerForId(id),
+                            },
                         })
                     );
                 };
@@ -788,19 +821,56 @@
                     });
                 };
 
-                const createLayer = (item) => {
+                const resolveLayerName = (item, variant) => {
+                    const normalisedVariant = normaliseVariant(variant);
+
+                    if (!item) {
+                        return null;
+                    }
+
+                    if (normalisedVariant === 'source') {
+                        return item.geoserver_source_layer || null;
+                    }
+
+                    return item.geoserver_processed_layer || item.geoserver_layer || null;
+                };
+
+                const resolveBoundingBox = (item, variant) => {
+                    if (!item) {
+                        return null;
+                    }
+
+                    const normalisedVariant = normaliseVariant(variant);
+                    const source = normalisedVariant === 'source'
+                        ? item.geoserver_source_bbox ?? null
+                        : item.geoserver_processed_bbox ?? item.geoserver_bbox ?? null;
+
+                    if (!source) {
+                        return null;
+                    }
+
+                    if (source.latLon) {
+                        return source.latLon;
+                    }
+
+                    return source;
+                };
+
+                const createLayer = (item, variant) => {
                     const geoserver = window.AppMap.geoserver || {};
-                    if (!geoserver.wmsUrl || !item.geoserver_layer) {
+                    const layerName = resolveLayerName(item, variant);
+
+                    if (!geoserver.wmsUrl || !layerName) {
                         return null;
                     }
 
                     const source = new ol.source.TileWMS({
                         url: geoserver.wmsUrl,
                         params: {
-                            LAYERS: item.geoserver_layer,
+                            LAYERS: layerName,
                             TILED: true,
                             FORMAT: 'image/png',
-                            TRANSPARENT: true,
+                            TRANSPARENT: 'FALSE',
                         },
                         serverType: 'geoserver',
                         crossOrigin: 'anonymous',
@@ -808,16 +878,17 @@
 
                     const layer = new ol.layer.Tile({
                         source,
-                        opacity: 0.85,
+                        opacity: 1,
                         visible: true,
                     });
 
-                    layer.set('imageryId', item.id || null);
+                    layer.set('imageryId', item?.id || null);
+                    layer.set('imageryVariant', normaliseVariant(variant));
                     return layer;
                 };
 
-                const fitToLayer = (mapInstance, item) => {
-                    const bbox = item.geoserver_bbox?.latLon;
+                const fitToLayer = (mapInstance, item, variant) => {
+                    const bbox = resolveBoundingBox(item, variant);
                     if (!bbox) {
                         return;
                     }
@@ -854,55 +925,99 @@
                     });
                 };
 
-                const toggleLayer = (item) => {
-                    if (!item?.id || !item.geoserver_layer) {
+                const toggleLayer = (item, variant = 'processed') => {
+                    const id = item?.id;
+                    const normalisedVariant = normaliseVariant(variant);
+
+                    if (!id) {
+                        return;
+                    }
+
+                    const layerName = resolveLayerName(item, normalisedVariant);
+                    if (!layerName) {
                         window.MyZkToast?.warning?.('GeoServer layer is not ready yet.');
                         return;
                     }
 
                     ensureMap((mapInstance) => {
-                        const existing = state.layers.get(item.id);
+                        const key = buildLayerKey(id, normalisedVariant);
+                        const existing = state.layers.get(key);
                         if (existing) {
                             mapInstance.removeLayer(existing);
-                            state.layers.delete(item.id);
-                            dispatchVisibility(item.id, false);
+                            state.layers.delete(key);
+                            dispatchVisibility(id, normalisedVariant, false);
                             return;
                         }
 
-                        const layer = createLayer(item);
+                        const layer = createLayer(item, normalisedVariant);
                         if (!layer) {
-                            dispatchVisibility(item.id, false);
+                            dispatchVisibility(id, normalisedVariant, false);
                             return;
                         }
 
-                        state.layers.set(item.id, layer);
+                        state.layers.set(key, layer);
                         mapInstance.addLayer(layer);
-                        dispatchVisibility(item.id, true);
-                        fitToLayer(mapInstance, item);
+                        dispatchVisibility(id, normalisedVariant, true);
+                        fitToLayer(mapInstance, item, normalisedVariant);
                     });
                 };
 
-                const removeLayer = (id) => {
+                const removeLayer = (id, variant = 'processed') => {
                     if (!id) {
                         return;
                     }
 
-                    const layer = state.layers.get(id);
+                    const normalisedVariant = normaliseVariant(variant);
+                    const key = buildLayerKey(id, normalisedVariant);
+                    const layer = state.layers.get(key);
                     if (!layer || !state.map) {
                         return;
                     }
 
                     state.map.removeLayer(layer);
-                    state.layers.delete(id);
-                    dispatchVisibility(id, false);
+                    state.layers.delete(key);
+                    dispatchVisibility(id, normalisedVariant, false);
                 };
 
-                const isLayerVisible = (id) => state.layers.has(id);
+                const removeAllLayers = (id) => {
+                    if (!id || !state.map) {
+                        return;
+                    }
+
+                    const keysToRemove = [];
+                    for (const key of state.layers.keys()) {
+                        if (key.startsWith(`${id}:`)) {
+                            keysToRemove.push(key);
+                        }
+                    }
+
+                    keysToRemove.forEach((key) => {
+                        const layer = state.layers.get(key);
+                        if (layer) {
+                            state.map.removeLayer(layer);
+                        }
+                        state.layers.delete(key);
+                        const [, variant = 'processed'] = key.split(':');
+                        dispatchVisibility(id, normaliseVariant(variant), false);
+                    });
+                };
+
+                const isLayerVisible = (id, variant = 'processed') => {
+                    if (!id) {
+                        return false;
+                    }
+
+                    return state.layers.has(buildLayerKey(id, variant));
+                };
+
+                const isAnyLayerVisible = (id) => hasAnyLayerForId(id);
 
                 window.AppMap.imagery = {
                     toggleLayer,
                     removeLayer,
+                    removeAllLayers,
                     isLayerVisible,
+                    isAnyLayerVisible,
                 };
 
                 window.addEventListener(
@@ -1634,12 +1749,13 @@
 
                         button.setAttribute('disabled', 'true');
                         button.classList.add('opacity-40', 'cursor-not-allowed');
+                        button.setAttribute('aria-pressed', 'false');
                         if (tooltip) {
                             button.setAttribute('title', tooltip);
                         }
                     };
 
-                    const setProcessedButtonState = (button, isVisible) => {
+                    const setPreviewButtonState = (button, isVisible) => {
                         if (!button) {
                             return;
                         }
@@ -1730,44 +1846,68 @@
                             className: 'text-foreground/60',
                         };
 
-                        const geoserverStatusInfo = item.geoserver_layer
-                            ? { label: 'GeoServer Ready', className: 'text-primary' }
-                            : { label: 'GeoServer Pending', className: 'text-foreground/60' };
+                        const hasSourceLayer = Boolean(item.geoserver_source_layer);
+                        const hasProcessedLayer = Boolean(item.geoserver_processed_layer || item.geoserver_layer);
+
+                        let geoserverStatusInfo;
+                        if (hasSourceLayer && hasProcessedLayer) {
+                            geoserverStatusInfo = { label: 'GeoServer Ready', className: 'text-primary' };
+                        } else if (hasSourceLayer || hasProcessedLayer) {
+                            geoserverStatusInfo = { label: 'GeoServer Partial', className: 'text-warning' };
+                        } else {
+                            geoserverStatusInfo = { label: 'GeoServer Pending', className: 'text-foreground/60' };
+                        }
 
                         const meta = `${sizeMb} MB • ${uploadDate} • <span class="imagery-status font-semibold ${uploadStatusInfo.className}">${uploadStatusInfo.label}</span> • <span class="imagery-status font-semibold ${processingStatusInfo.className}">${processingStatusInfo.label}</span> • <span class="imagery-status font-semibold ${geoserverStatusInfo.className}">${geoserverStatusInfo.label}</span>`;
                         card.querySelector('.imagery-meta').innerHTML = meta;
 
+                        const imageryModule = window.AppMap?.imagery;
                         const sourceButton = card.querySelector('.view-source-btn');
                         if (sourceButton) {
-                            const sourceUrl = resolveAssetUrl(item.path);
-                            if (!sourceUrl) {
-                                disablePreviewButton(sourceButton, 'Source file is unavailable.');
-                            } else {
+                            if (!imageryModule?.toggleLayer) {
+                                disablePreviewButton(sourceButton, 'Map preview is not available in this session.');
+                            } else if (hasSourceLayer) {
                                 sourceButton.addEventListener('click', (event) => {
                                     event.preventDefault();
-                                    window.open(sourceUrl, '_blank', 'noopener');
+                                    imageryModule.toggleLayer(item, 'source');
                                 });
+
+                                const isSourceVisible = imageryModule.isLayerVisible?.(item.id, 'source') ?? false;
+                                setPreviewButtonState(sourceButton, isSourceVisible);
+                            } else {
+                                const sourceUrl = resolveAssetUrl(item.path);
+                                if (!sourceUrl) {
+                                    disablePreviewButton(sourceButton, 'Source imagery is not available yet.');
+                                } else {
+                                    sourceButton.addEventListener('click', (event) => {
+                                        event.preventDefault();
+                                        window.open(sourceUrl, '_blank', 'noopener');
+                                    });
+                                    sourceButton.setAttribute('title', 'Open source file in a new tab');
+                                    setPreviewButtonState(sourceButton, false);
+                                }
                             }
                         }
 
                         const processedButton = card.querySelector('.view-processed-btn');
                         if (processedButton) {
-                            const imageryModule = window.AppMap?.imagery;
-
-                            if (!item.geoserver_layer || !imageryModule?.toggleLayer) {
-                                disablePreviewButton(processedButton, 'GeoServer layer not published yet.');
+                            if (!imageryModule?.toggleLayer) {
+                                disablePreviewButton(processedButton, 'Map preview is not available in this session.');
+                            } else if (!hasProcessedLayer) {
+                                disablePreviewButton(processedButton, 'Processed GeoServer layer not published yet.');
                             } else {
                                 processedButton.addEventListener('click', (event) => {
                                     event.preventDefault();
-                                    imageryModule.toggleLayer(item);
+                                    imageryModule.toggleLayer(item, 'processed');
                                 });
 
-                                const isVisible = imageryModule.isLayerVisible?.(item.id) ?? false;
-                                setProcessedButtonState(processedButton, isVisible);
-                                if (isVisible) {
-                                    card.classList.add('ring-2', 'ring-primary/60');
-                                }
+                                const isProcessedVisible = imageryModule.isLayerVisible?.(item.id, 'processed') ?? false;
+                                setPreviewButtonState(processedButton, isProcessedVisible);
                             }
+                        }
+
+                        if (imageryModule?.isAnyLayerVisible?.(item.id)) {
+                            card.classList.add('ring-2', 'ring-primary/60');
                         }
 
                         return fragment;
@@ -1790,13 +1930,20 @@
                             return;
                         }
 
-                        const button = card.querySelector('.view-processed-btn');
-                        if (detail.visible) {
+                        const variant = detail.variant === 'source' ? 'source' : 'processed';
+                        const selector = variant === 'source' ? '.view-source-btn' : '.view-processed-btn';
+                        const button = card.querySelector(selector);
+                        setPreviewButtonState(button, Boolean(detail.visible));
+
+                        const imageryModule = window.AppMap?.imagery;
+                        const anyVisible = typeof detail.anyVisible === 'boolean'
+                            ? detail.anyVisible
+                            : imageryModule?.isAnyLayerVisible?.(id) ?? false;
+
+                        if (anyVisible) {
                             card.classList.add('ring-2', 'ring-primary/60');
-                            setProcessedButtonState(button, true);
                         } else {
                             card.classList.remove('ring-2', 'ring-primary/60');
-                            setProcessedButtonState(button, false);
                         }
                     });
 
