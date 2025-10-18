@@ -18,6 +18,7 @@ let {
     transform,
     transformExtent,
 } = ol.proj;
+let { createForProjection } = ol.tilegrid;
 let VectorLayer = ol.layer.Vector;
 let VectorSource = ol.source.Vector;
 let LayerGroup = ol.layer.Group;
@@ -393,6 +394,10 @@ function normaliseLayerOptions(options = {}) {
             typeof options.maxZoom === "number" ? options.maxZoom : undefined,
         duration:
             typeof options.duration === "number" ? options.duration : undefined,
+        projection:
+            typeof options.projection === "string" && options.projection.trim()
+                ? options.projection.trim()
+                : undefined,
     };
 
     if (bounds) {
@@ -410,24 +415,7 @@ function createGeoserverLayer(options = {}) {
         return null;
     }
 
-    const params = {
-        LAYERS: layer,
-        TILED: true,
-        STYLES: normalised.style || "",
-        FORMAT: "image/png",
-        TRANSPARENT: true,
-    };
-
-    if (normalised.parameters) {
-        Object.assign(params, normalised.parameters);
-    }
-
-    const source = new TileWMS({
-        url,
-        params,
-        transition: 200,
-        crossOrigin: normalised.crossOrigin,
-    });
+    const source = createTileWmsSource(normalised);
 
     const tileLayer = new TileLayer({
         source,
@@ -456,7 +444,258 @@ function createGeoserverLayer(options = {}) {
 
     mergeEntryOptions(entry, normalised);
 
+    resolveGeoserverLayerProjection(entry).catch((error) => {
+        console.warn("Failed to resolve GeoServer layer projection", error);
+    });
+
     return entry;
+}
+
+function normaliseProjectionCode(value) {
+    if (typeof value !== "string") {
+        return null;
+    }
+
+    const trimmed = value.trim();
+    if (!trimmed) {
+        return null;
+    }
+
+    const epsgMatch = trimmed.match(/EPSG[:/](\d+)/i);
+    if (epsgMatch && epsgMatch[1]) {
+        return `EPSG:${epsgMatch[1]}`;
+    }
+
+    if (/^\d+$/.test(trimmed)) {
+        return `EPSG:${trimmed}`;
+    }
+
+    return trimmed.toUpperCase();
+}
+
+function createTileGridForProjection(projectionCode) {
+    const projection = getProjection(projectionCode);
+    if (!projection || typeof createForProjection !== "function") {
+        return undefined;
+    }
+
+    try {
+        return createForProjection(projection, undefined, [256]);
+    } catch (error) {
+        console.warn(
+            `Failed to create tile grid for projection ${projectionCode}`,
+            error
+        );
+        return undefined;
+    }
+}
+
+function createTileWmsSource(options, projectionCode) {
+    if (!options || typeof options !== "object") {
+        return null;
+    }
+
+    const params = {
+        LAYERS: options.layer,
+        TILED: true,
+        STYLES: options.style || "",
+        FORMAT: "image/png",
+        TRANSPARENT: true,
+    };
+
+    if (options.parameters) {
+        Object.assign(params, options.parameters);
+    }
+
+    if (!params.VERSION) {
+        params.VERSION = "1.3.0";
+    }
+
+    const sourceOptions = {
+        url: options.url,
+        params,
+        transition: 200,
+        crossOrigin: options.crossOrigin || "anonymous",
+        serverType: "geoserver",
+    };
+
+    const normalisedProjection = normaliseProjectionCode(projectionCode);
+    if (normalisedProjection) {
+        params.CRS = normalisedProjection;
+        params.SRS = normalisedProjection;
+        sourceOptions.projection = normalisedProjection;
+        const tileGrid = createTileGridForProjection(normalisedProjection);
+        if (tileGrid) {
+            sourceOptions.tileGrid = tileGrid;
+        }
+    }
+
+    return new TileWMS(sourceOptions);
+}
+
+function extractLayerSupportedCrs(layer) {
+    const result = new Set();
+
+    if (!layer || typeof layer !== "object") {
+        return result;
+    }
+
+    const pushCode = (code) => {
+        const normalised = normaliseProjectionCode(code);
+        if (normalised) {
+            result.add(normalised);
+        }
+    };
+
+    if (Array.isArray(layer.CRS)) {
+        layer.CRS.forEach(pushCode);
+    }
+
+    if (typeof layer.SRS === "string") {
+        layer.SRS.split(/\s+/).forEach(pushCode);
+    } else if (Array.isArray(layer.SRS)) {
+        layer.SRS.forEach(pushCode);
+    }
+
+    if (Array.isArray(layer.BoundingBox)) {
+        layer.BoundingBox.forEach((bbox) => {
+            if (bbox) {
+                pushCode(bbox.crs || bbox.CRS);
+            }
+        });
+    }
+
+    if (layer.supportedCRS) {
+        if (Array.isArray(layer.supportedCRS)) {
+            layer.supportedCRS.forEach(pushCode);
+        } else if (typeof layer.supportedCRS === "string") {
+            layer.supportedCRS.split(/\s+/).forEach(pushCode);
+        }
+    }
+
+    if (typeof layer.DefaultCRS === "string") {
+        pushCode(layer.DefaultCRS);
+    }
+
+    return result;
+}
+
+function pickPreferredProjectionCode(codes) {
+    if (!codes || codes.size === 0) {
+        return null;
+    }
+
+    const preferredOrder = ["EPSG:4326", "EPSG:3857", "EPSG:900913"];
+    for (const candidate of preferredOrder) {
+        if (codes.has(candidate)) {
+            return candidate === "EPSG:900913" ? "EPSG:3857" : candidate;
+        }
+    }
+
+    const [first] = codes;
+    return first || null;
+}
+
+function applyProjectionToEntry(entry, projectionCode) {
+    if (!entry || !entry.layer) {
+        return;
+    }
+
+    const normalisedProjection = normaliseProjectionCode(projectionCode);
+    if (!normalisedProjection) {
+        return;
+    }
+
+    let currentProjectionCode = null;
+    if (entry.source && typeof entry.source.getProjection === "function") {
+        const currentProjection = entry.source.getProjection();
+        if (typeof currentProjection === "string") {
+            currentProjectionCode = normaliseProjectionCode(currentProjection);
+        } else if (
+            currentProjection &&
+            typeof currentProjection.getCode === "function"
+        ) {
+            currentProjectionCode = normaliseProjectionCode(
+                currentProjection.getCode()
+            );
+        }
+    }
+
+    if (currentProjectionCode === normalisedProjection) {
+        return;
+    }
+
+    const updatedSource = createTileWmsSource(entry.options, normalisedProjection);
+    if (!updatedSource) {
+        return;
+    }
+
+    entry.source = updatedSource;
+    entry.layer.setSource(updatedSource);
+}
+
+async function resolveGeoserverLayerProjection(entry, options = {}) {
+    if (!entry) {
+        return null;
+    }
+
+    const providedProjection =
+        normaliseProjectionCode(options.projection) ||
+        normaliseProjectionCode(entry.options?.projection);
+
+    if (providedProjection) {
+        applyProjectionToEntry(entry, providedProjection);
+        entry.options.projection = providedProjection;
+        return providedProjection;
+    }
+
+    const layerName = options.layer || entry.options?.layer;
+    const wmsUrl = options.url || entry.options?.url;
+
+    if (!layerName || !wmsUrl) {
+        return null;
+    }
+
+    try {
+        const capabilities = await loadWmsCapabilities(wmsUrl);
+        if (!capabilities) {
+            return null;
+        }
+
+        const topLayer = capabilities.Capability?.Layer;
+        if (!topLayer) {
+            return null;
+        }
+
+        const layers = Array.isArray(topLayer.Layer)
+            ? topLayer.Layer
+            : [topLayer];
+        const targetLayer = findLayerByName(layers, layerName);
+
+        if (!targetLayer) {
+            return null;
+        }
+
+        const supportedCrs = extractLayerSupportedCrs(targetLayer);
+        if (!supportedCrs || supportedCrs.size === 0) {
+            return null;
+        }
+
+        const chosenProjection = pickPreferredProjectionCode(supportedCrs);
+        if (!chosenProjection) {
+            return null;
+        }
+
+        entry.options = {
+            ...entry.options,
+            projection: chosenProjection,
+        };
+        applyProjectionToEntry(entry, chosenProjection);
+        return chosenProjection;
+    } catch (error) {
+        console.warn("Failed to resolve layer projection", error);
+        return null;
+    }
 }
 
 function normaliseExtent(values) {
@@ -618,6 +857,10 @@ function mergeEntryOptions(entry, normalised) {
 
     if (preferred) {
         entry.bounds = preferred;
+    }
+
+    if (typeof merged.projection === "string" && merged.projection.trim()) {
+        applyProjectionToEntry(entry, merged.projection);
     }
 }
 
@@ -832,6 +1075,7 @@ function toggleGeoserverLayer(options = {}) {
     }
 
     mergeEntryOptions(entry, normalised);
+    resolveGeoserverLayerProjection(entry, normalised);
 
     if (entry.layer.getVisible()) {
         entry.layer.setVisible(false);
@@ -889,6 +1133,7 @@ function showGeoserverLayer(options = {}) {
         entry.layer.setVisible(true);
         entry.visible = true;
         mergeEntryOptions(entry, normalised);
+        resolveGeoserverLayerProjection(entry, normalised);
 
         if (typeof entry.options?.opacity === "number") {
             entry.layer.setOpacity(entry.options.opacity);
@@ -959,6 +1204,8 @@ async function zoomToGeoserverLayer(options = {}) {
     } else {
         mergeEntryOptions(entry, normalised);
     }
+
+    await resolveGeoserverLayerProjection(entry, normalised);
 
     const boundsInfo = await ensureLayerBounds(entry, normalised);
     if (!boundsInfo || !Array.isArray(boundsInfo.extent)) {
