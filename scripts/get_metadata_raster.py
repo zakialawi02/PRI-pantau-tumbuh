@@ -198,6 +198,8 @@ def collect_raster_metadata(
             "height": src.height,
             "count": src.count,
             "crs": src.crs.to_string() if src.crs else None,
+            "crs_wkt": src.crs.to_wkt() if src.crs else None,
+            "crs_epsg": src.crs.to_epsg() if src.crs else None,
             "bounds": {
                 "left": src.bounds.left,
                 "bottom": src.bounds.bottom,

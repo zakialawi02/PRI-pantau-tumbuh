@@ -3,9 +3,11 @@
 namespace App\Services;
 
 use App\Models\ImageryData;
+use App\Services\PythonService;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use Symfony\Component\Process\Process;
 
 class GeoServerService
 {
@@ -65,6 +67,26 @@ class GeoServerService
         $storeName = $this->buildIdentifier($imagery->id, $suffix . '_store');
         $layerName = $this->buildIdentifier($imagery->id, $suffix . '_layer');
 
+        $crsInfo = $this->detectRasterSrs($filePath);
+        $nativeSrs = $crsInfo['native'] ?? null;
+        $authoritativeSrs = $crsInfo['authority'] ?? null;
+        $declaredSrs = $this->defaultSrs;
+
+        $projectionPolicy = 'FORCE_DECLARED';
+        if ($nativeSrs && strcasecmp($nativeSrs, $declaredSrs) !== 0) {
+            $projectionPolicy = 'REPROJECT_TO_DECLARED';
+        }
+
+        $requestResponseSrs = [$declaredSrs];
+        if ($authoritativeSrs && strcasecmp($authoritativeSrs, $declaredSrs) !== 0) {
+            $requestResponseSrs[] = $authoritativeSrs;
+        }
+
+        $requestResponseSrs = array_values(array_unique(array_filter($requestResponseSrs)));
+        if (empty($requestResponseSrs)) {
+            $requestResponseSrs = [$declaredSrs];
+        }
+
         $this->deleteLayer($layerName);
         $this->deleteCoverageStore($storeName);
 
@@ -100,6 +122,18 @@ class GeoServerService
 
         $qualifiedName = $this->workspace . ':' . $layerName;
 
+        $coveragePayload = [
+            'coverage' => [
+                'srs' => $declaredSrs,
+                'requestSRS' => ['string' => $requestResponseSrs],
+                'responseSRS' => ['string' => $requestResponseSrs],
+                'projectionPolicy' => $projectionPolicy,
+                'enabled' => true,
+            ],
+        ];
+
+        $coveragePayload['coverage']['nativeCRS'] = $nativeSrs ?: $declaredSrs;
+
         $coverageResponse = $this->client()->put(
             sprintf(
                 '%s/workspaces/%s/coveragestores/%s/coverages/%s',
@@ -108,16 +142,7 @@ class GeoServerService
                 $storeName,
                 $layerName
             ),
-            [
-                'coverage' => [
-                    'srs' => $this->defaultSrs,
-                    'nativeCRS' => $this->defaultSrs,
-                    'requestSRS' => ['string' => [$this->defaultSrs]],
-                    'responseSRS' => ['string' => [$this->defaultSrs]],
-                    'projectionPolicy' => 'FORCE_DECLARED',
-                    'enabled' => true,
-                ],
-            ]
+            $coveragePayload
         );
 
         if ($coverageResponse->failed()) {
@@ -135,8 +160,8 @@ class GeoServerService
                     'enabled' => true,
                     'advertised' => true,
                     'type' => 'RASTER',
-                    'projectionPolicy' => 'FORCE_DECLARED',
-                    'srs' => $this->defaultSrs,
+                    'projectionPolicy' => $projectionPolicy,
+                    'srs' => $declaredSrs,
                 ],
             ]
         );
@@ -157,6 +182,8 @@ class GeoServerService
             'qualified' => $qualifiedName,
             'wms_url' => $this->wmsUrl,
             'bounds' => $bounds,
+            'native_srs' => $nativeSrs ?: $declaredSrs,
+            'declared_srs' => $declaredSrs,
         ];
     }
 
@@ -190,6 +217,113 @@ class GeoServerService
         }
 
         return $this->fetchCoverageBounds($storeName, $layerName);
+    }
+
+    protected function detectRasterSrs(string $filePath): array
+    {
+        if (!is_file($filePath)) {
+            return [];
+        }
+
+        try {
+            $scriptsBase = base_path('scripts');
+            $scriptPath = $scriptsBase . DIRECTORY_SEPARATOR . 'get_metadata_raster.py';
+
+            if (!is_file($scriptPath)) {
+                return [];
+            }
+
+            /** @var PythonService $pythonService */
+            $pythonService = app(PythonService::class);
+            $pythonPath = $pythonService->resolvePythonPath($scriptsBase);
+
+            if (!$pythonPath) {
+                return [];
+            }
+
+            $process = new Process([
+                $pythonPath,
+                $scriptPath,
+                $filePath,
+            ], $scriptsBase, $pythonService->buildProcessEnvironment());
+
+            $process->setTimeout(60);
+            $process->run();
+
+            if (!$process->isSuccessful()) {
+                Log::debug('GeoServerService: CRS detection failed.', [
+                    'path' => $filePath,
+                    'status' => $process->getExitCode(),
+                    'stderr' => trim($process->getErrorOutput()),
+                ]);
+
+                return [];
+            }
+
+            $output = trim($process->getOutput());
+            if ($output === '') {
+                return [];
+            }
+
+            $metadata = json_decode($output, true);
+            if (!is_array($metadata)) {
+                return [];
+            }
+
+            $result = [];
+
+            $epsg = $metadata['crs_epsg'] ?? null;
+            if (is_numeric($epsg)) {
+                $authority = 'EPSG:' . (int) $epsg;
+                $result['native'] = $authority;
+                $result['authority'] = $authority;
+
+                return $result;
+            }
+
+            $crsString = $metadata['crs'] ?? null;
+            $normalised = $this->normaliseSrsString($crsString);
+            if ($normalised) {
+                $result['native'] = $normalised;
+                if (str_starts_with($normalised, 'EPSG:')) {
+                    $result['authority'] = $normalised;
+                }
+            }
+
+            if (empty($result['native'])) {
+                $wkt = $metadata['crs_wkt'] ?? null;
+                if (is_string($wkt) && trim($wkt) !== '') {
+                    $result['native'] = trim($wkt);
+                }
+            }
+
+            return $result;
+        } catch (\Throwable $exception) {
+            Log::debug('GeoServerService: Exception while detecting CRS.', [
+                'path' => $filePath,
+                'error' => $exception->getMessage(),
+            ]);
+        }
+
+        return [];
+    }
+
+    protected function normaliseSrsString($value): ?string
+    {
+        if (!is_string($value)) {
+            return null;
+        }
+
+        $trimmed = trim($value);
+        if ($trimmed === '') {
+            return null;
+        }
+
+        if (preg_match('/EPSG[:=\s]*(\d{3,6})/i', $trimmed, $matches)) {
+            return 'EPSG:' . $matches[1];
+        }
+
+        return $trimmed;
     }
 
     protected function deleteLayer(string $layerName): void
