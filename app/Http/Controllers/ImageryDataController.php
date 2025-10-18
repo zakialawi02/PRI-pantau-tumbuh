@@ -264,6 +264,11 @@ class ImageryDataController extends Controller
                     'upload_status',
                     'processing_status',
                     'uploaded_at',
+                    'processed_path',
+                    'geoserver_store',
+                    'geoserver_layer',
+                    'geoserver_bbox',
+                    'geoserver_published_at',
                 ]);
 
             return response()->json([

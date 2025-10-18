@@ -5,9 +5,11 @@ namespace App\Jobs;
 use App\Models\ImageryData;
 use Illuminate\Bus\Queueable;
 use App\Services\CreditService;
+use App\Services\GeoServerService;
 use App\Services\PythonService;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Str;
 use Illuminate\Queue\SerializesModels;
 use Symfony\Component\Process\Process;
 use Illuminate\Queue\InteractsWithQueue;
@@ -133,25 +135,60 @@ class ProcessImageryJob implements ShouldQueue
         // Cek hasil eksekusi
         if ($process->isSuccessful()) {
             $publicPath = "storage/imagery/processed/{$processedFileName}";
+            $hasOutputFile = File::exists($outputPath);
 
-            if (File::exists($outputPath)) {
-                $imagery->update([
-                    'processing_status' => 'completed',
-                    'processed_path' => $publicPath,
-                    'processed_at' => now(),
-                ]);
+            $updatePayload = [
+                'processing_status' => 'completed',
+                'processed_path' => $publicPath,
+                'processed_at' => now(),
+            ];
 
+            if ($hasOutputFile) {
+                try {
+                    $geoserverUrl = config('geoserver.url');
+                    if (empty($geoserverUrl)) {
+                        Log::warning('⚠️ [Job] GeoServer publish skipped due to missing configuration.');
+                    } else {
+                        $geoServer = app(GeoServerService::class);
+                        $nameSeed = 'imagery_' . Str::slug($imagery->id, '_');
+
+                        $publishResult = $geoServer->publishGeoTiff(
+                            $nameSeed,
+                            $nameSeed,
+                            $outputPath,
+                            [
+                                'enabled' => true,
+                            ]
+                        );
+
+                        $updatePayload['geoserver_store'] = $publishResult['store'] ?? null;
+                        $updatePayload['geoserver_layer'] = $publishResult['layer'] ?? null;
+                        $updatePayload['geoserver_bbox'] = $publishResult['bounding_box'] ?? null;
+                        $updatePayload['geoserver_published_at'] = now();
+
+                        Log::info('🗺️ [Job] GeoServer layer published.', [
+                            'imagery_id' => $imagery->id,
+                            'store' => $updatePayload['geoserver_store'],
+                            'layer' => $updatePayload['geoserver_layer'],
+                        ]);
+                    }
+                } catch (\Throwable $exception) {
+                    Log::error('❌ [Job] Failed to publish GeoServer layer.', [
+                        'imagery_id' => $imagery->id,
+                        'error' => $exception->getMessage(),
+                    ]);
+                }
+            }
+
+            $imagery->update($updatePayload);
+
+            if ($hasOutputFile) {
                 Log::info("✅ [Job] Processing completed successfully. Output file found at: {$outputPath}");
-                return;
             } else {
-                // Simpan path-nya tetap, tapi log kalau file gak terdeteksi
-                $imagery->update([
-                    'processing_status' => 'completed',
-                    'processed_path' => $publicPath,
-                    'processed_at' => now(),
-                ]);
                 Log::warning("⚠️ [Job] Processing done, but output file not detected in expected location.");
             }
+
+            return;
         } else {
             // Refund credits when processing fails
             $creditService->refundCreditsForFailure($imagery, "Job");

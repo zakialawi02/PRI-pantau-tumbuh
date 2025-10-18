@@ -28,6 +28,10 @@ class ImageryData extends Model
         'processing_status',
         'processed_path',
         'processed_at',
+        'geoserver_store',
+        'geoserver_layer',
+        'geoserver_bbox',
+        'geoserver_published_at',
         'scheduled_deletion_at'
     ];
 
@@ -36,6 +40,8 @@ class ImageryData extends Model
         'uploaded_at' => 'datetime',
         'processed_at' => 'datetime',
         'chunk_total' => 'integer',
+        'geoserver_bbox' => 'array',
+        'geoserver_published_at' => 'datetime',
         'scheduled_deletion_at' => 'datetime'
     ];
 

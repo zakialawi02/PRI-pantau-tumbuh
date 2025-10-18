@@ -724,6 +724,195 @@
     @push('javascript')
         <script>
             (() => {
+                if (typeof window === 'undefined') {
+                    return;
+                }
+
+                const config = @json($geoserverConfig ?? []);
+                window.AppMap = window.AppMap || {};
+                window.AppMap.geoserver = {
+                    workspace: config.workspace || '',
+                    wmsUrl: config.wmsUrl || '',
+                    wmtsUrl: config.wmtsUrl || '',
+                };
+
+                if (typeof window.ol === 'undefined') {
+                    console.warn('OpenLayers is not available; GeoServer imagery layers are disabled.');
+                    return;
+                }
+
+                const state = {
+                    map: null,
+                    layers: new Map(),
+                    queue: [],
+                };
+
+                const dispatchVisibility = (id, visible) => {
+                    document.dispatchEvent(
+                        new CustomEvent('app:imagery:layer-visibility', {
+                            detail: { id, visible },
+                        })
+                    );
+                };
+
+                const ensureMap = (callback) => {
+                    if (state.map) {
+                        callback(state.map);
+                        return;
+                    }
+
+                    state.queue.push(callback);
+                };
+
+                const registerMap = (mapInstance) => {
+                    state.map = mapInstance;
+                    if (!state.queue.length) {
+                        return;
+                    }
+
+                    const pending = state.queue.splice(0, state.queue.length);
+                    pending.forEach((callback) => {
+                        try {
+                            callback(mapInstance);
+                        } catch (error) {
+                            console.error('Deferred map callback failed', error);
+                        }
+                    });
+                };
+
+                const createLayer = (item) => {
+                    const geoserver = window.AppMap.geoserver || {};
+                    if (!geoserver.wmsUrl || !item.geoserver_layer) {
+                        return null;
+                    }
+
+                    const source = new ol.source.TileWMS({
+                        url: geoserver.wmsUrl,
+                        params: {
+                            LAYERS: item.geoserver_layer,
+                            TILED: true,
+                            FORMAT: 'image/png',
+                            TRANSPARENT: true,
+                        },
+                        serverType: 'geoserver',
+                        crossOrigin: 'anonymous',
+                    });
+
+                    const layer = new ol.layer.Tile({
+                        source,
+                        opacity: 0.85,
+                        visible: true,
+                    });
+
+                    layer.set('imageryId', item.id || null);
+                    return layer;
+                };
+
+                const fitToLayer = (mapInstance, item) => {
+                    const bbox = item.geoserver_bbox?.latLon;
+                    if (!bbox) {
+                        return;
+                    }
+
+                    const extent = [bbox.minx, bbox.miny, bbox.maxx, bbox.maxy];
+                    const view = mapInstance.getView?.();
+                    if (!view) {
+                        return;
+                    }
+
+                    let transformedExtent = extent;
+                    const projection = view.getProjection?.();
+                    if (
+                        projection &&
+                        projection.getCode &&
+                        projection.getCode() !== 'EPSG:4326' &&
+                        window.ol?.proj?.transformExtent
+                    ) {
+                        try {
+                            transformedExtent = window.ol.proj.transformExtent(
+                                extent,
+                                'EPSG:4326',
+                                projection
+                            );
+                        } catch (error) {
+                            console.warn('Failed to transform extent for imagery layer', error);
+                        }
+                    }
+
+                    view.fit(transformedExtent, {
+                        duration: 700,
+                        padding: [64, 64, 64, 64],
+                        maxZoom: 16,
+                    });
+                };
+
+                const toggleLayer = (item) => {
+                    if (!item?.id || !item.geoserver_layer) {
+                        window.MyZkToast?.warning?.('GeoServer layer is not ready yet.');
+                        return;
+                    }
+
+                    ensureMap((mapInstance) => {
+                        const existing = state.layers.get(item.id);
+                        if (existing) {
+                            mapInstance.removeLayer(existing);
+                            state.layers.delete(item.id);
+                            dispatchVisibility(item.id, false);
+                            return;
+                        }
+
+                        const layer = createLayer(item);
+                        if (!layer) {
+                            dispatchVisibility(item.id, false);
+                            return;
+                        }
+
+                        state.layers.set(item.id, layer);
+                        mapInstance.addLayer(layer);
+                        dispatchVisibility(item.id, true);
+                        fitToLayer(mapInstance, item);
+                    });
+                };
+
+                const removeLayer = (id) => {
+                    if (!id) {
+                        return;
+                    }
+
+                    const layer = state.layers.get(id);
+                    if (!layer || !state.map) {
+                        return;
+                    }
+
+                    state.map.removeLayer(layer);
+                    state.layers.delete(id);
+                    dispatchVisibility(id, false);
+                };
+
+                const isLayerVisible = (id) => state.layers.has(id);
+
+                window.AppMap.imagery = {
+                    toggleLayer,
+                    removeLayer,
+                    isLayerVisible,
+                };
+
+                window.addEventListener(
+                    'map:ready',
+                    (event) => {
+                        const mapInstance = event.detail?.map;
+                        if (mapInstance) {
+                            registerMap(mapInstance);
+                        }
+                    },
+                    { once: true }
+                );
+            })();
+        </script>
+    @endpush
+    @push('javascript')
+        <script>
+            (() => {
                 // Centralized DOM references used by the panel controller.
                 const selectors = {
                     panelWrapper: document.getElementById('panel-wrapper'),
@@ -1426,6 +1615,8 @@
                             return null;
                         }
 
+                        card.dataset.imageryId = item.id || '';
+
                         const formatLabel = (item.format || '').slice(0, 3).toUpperCase() || 'N/A';
                         card.querySelector('.imagery-format').textContent = formatLabel;
                         const displayName = item.stored_name || item.original_name || 'Imagery File';
@@ -1494,14 +1685,71 @@
                             className: 'text-foreground/60',
                         };
 
-                        const meta = `${sizeMb} MB • ${uploadDate} • <span class="imagery-status font-semibold ${uploadStatusInfo.className}">${uploadStatusInfo.label}</span> • <span class="imagery-status font-semibold ${processingStatusInfo.className}">${processingStatusInfo.label}</span>`;
+                        const geoserverStatusInfo = item.geoserver_layer
+                            ? { label: 'GeoServer Ready', className: 'text-primary' }
+                            : { label: 'GeoServer Pending', className: 'text-foreground/60' };
+
+                        const meta = `${sizeMb} MB • ${uploadDate} • <span class="imagery-status font-semibold ${uploadStatusInfo.className}">${uploadStatusInfo.label}</span> • <span class="imagery-status font-semibold ${processingStatusInfo.className}">${processingStatusInfo.label}</span> • <span class="imagery-status font-semibold ${geoserverStatusInfo.className}">${geoserverStatusInfo.label}</span>`;
                         card.querySelector('.imagery-meta').innerHTML = meta;
 
                         const viewBtn = card.querySelector('.view-btn');
-                        viewBtn?.addEventListener('click', () => viewImagery(item));
+                        if (viewBtn) {
+                            const imageryModule = window.AppMap?.imagery;
+
+                            if (!item.geoserver_layer || !imageryModule?.toggleLayer) {
+                                viewBtn.setAttribute('disabled', 'true');
+                                viewBtn.classList.add('opacity-40', 'cursor-not-allowed');
+                                viewBtn.setAttribute('title', 'GeoServer layer not published yet.');
+                            } else {
+                                viewBtn.addEventListener('click', (event) => {
+                                    event.preventDefault();
+                                    imageryModule.toggleLayer(item);
+                                });
+
+                                const isVisible = imageryModule.isLayerVisible?.(item.id) ?? false;
+                                viewBtn.setAttribute('aria-pressed', String(Boolean(isVisible)));
+                                if (isVisible) {
+                                    viewBtn.innerHTML = '<i class="ri-eye-off-line"></i>';
+                                    card.classList.add('ring-2', 'ring-primary/60');
+                                }
+                            }
+                        }
 
                         return fragment;
                     };
+
+                    document.addEventListener('app:imagery:layer-visibility', (event) => {
+                        const detail = event.detail || {};
+                        const id = detail.id;
+                        if (!id) {
+                            return;
+                        }
+
+                        const container = elements.myDataContainer;
+                        if (!container) {
+                            return;
+                        }
+
+                        const card = container.querySelector(`[data-imagery-id="${id}"]`);
+                        if (!card) {
+                            return;
+                        }
+
+                        const button = card.querySelector('.view-btn');
+                        if (detail.visible) {
+                            card.classList.add('ring-2', 'ring-primary/60');
+                            if (button) {
+                                button.innerHTML = '<i class="ri-eye-off-line"></i>';
+                                button.setAttribute('aria-pressed', 'true');
+                            }
+                        } else {
+                            card.classList.remove('ring-2', 'ring-primary/60');
+                            if (button) {
+                                button.innerHTML = '<i class="ri-eye-line"></i>';
+                                button.setAttribute('aria-pressed', 'false');
+                            }
+                        }
+                    });
 
                     // Retrieve the user's imagery list and render it into the panel.
                     const loadMyData = async () => {
