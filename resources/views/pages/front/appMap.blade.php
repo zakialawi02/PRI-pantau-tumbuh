@@ -61,7 +61,9 @@
                 </div>
             @endauth
 
-            <x-button-primary href="{{ route('login') }}" size="small" variant="outline">Login</x-button-primary>
+            @guest
+                <x-button-primary href="{{ route('login') }}" size="small" variant="outline">Login</x-button-primary>
+            @endguest
 
             <!-- Nav Menu -->
             <div class="text-foreground bg-background z-51 fixed inset-0 hidden w-full flex-col items-center justify-center space-y-6 whitespace-nowrap text-center uppercase opacity-0 transition-all duration-500 ease-in-out" id="navbar">
@@ -84,7 +86,7 @@
         <aside class="bg-background hidden shadow-lg md:flex md:w-20 md:flex-col md:items-center md:py-4">
             <nav class="flex flex-1 flex-col items-center space-y-6">
                 <button class="sidebar-btn hover:text-primary flex flex-col items-center text-xs" onclick="showPanel('data-panel', this)">
-                    <span class="text-xl">🛰️</span>
+                    <span class="text-xl">🗺️</span>
                     <span>My Data</span>
                 </button>
                 <button class="sidebar-btn hover:text-primary flex flex-col items-center text-xs" onclick="showPanel('uploads-panel', this)">
@@ -105,6 +107,7 @@
                 </button>
             </nav>
             <div class="text-foreground/70 mt-auto text-xs">© 2025</div>
+            <div class="text-foreground/70 mt-auto text-xs">v0.1.210</div>
         </aside>
 
         <!-- MOBILE SIDEBAR HORIZONTAL -->
@@ -115,7 +118,7 @@
 
             <div class="flex space-x-2 overflow-x-hidden scroll-smooth" id="scroll-container">
                 <button class="sidebar-btn bg-neutral inline-flex items-center space-x-2 rounded-full border border-gray-300 px-3 py-1 text-sm font-medium" onclick="showPanel('data-panel', this)">
-                    <span class="text-xl">🛰️</span>
+                    <span class="text-xl">🗺️</span>
                     <span>My Data</span>
                 </button>
                 <button class="sidebar-btn bg-neutral inline-flex items-center space-x-2 rounded-full border border-gray-300 px-3 py-1 text-sm font-medium" onclick="showPanel('uploads-panel', this)">
@@ -148,22 +151,24 @@
             <!-- ========== MY DATA PANEL ========== -->
             <section class="flex hidden h-full flex-col shadow-xl" id="data-panel">
                 <div class="bg-background border-foreground/10 sticky top-0 z-20 flex items-center justify-between border-b p-2">
-                    <h2 class="text-lg font-bold">📡 My Data Imagery</h2>
+                    <h2 class="text-lg font-bold">🗺️ My Data Imagery</h2>
                     <button class="hover:bg-foreground/20 bg-foreground/10 rounded px-2 py-1 text-sm" onclick="closePanels()">✖</button>
                 </div>
 
                 <!-- content -->
                 <div class="panel-content flex-1 space-y-3 overflow-y-auto p-3">
                     <div class="space-y-2">
-                        <div class="flex items-center justify-between space-x-1">
-                            <x-button-primary class="px-2! py-1!" href="{{ route('admin.imagery.index') }}" size="small" variant="outline">
-                                <i class="ri-dashboard-line"></i>
-                                <span class="ml-1">Go to Dashboard</span>
-                            </x-button-primary>
-                            <button class="hover:bg-foreground/20 bg-foreground/10 rounded px-2 py-1 text-sm" onclick="window.AppMap.uploader.reload()">
-                                <i class="ri-refresh-line"></i>
-                            </button>
-                        </div>
+                        @auth
+                            <div class="flex items-center justify-between space-x-1">
+                                <x-button-primary class="px-2! py-1!" href="{{ route('admin.imagery.index') }}" size="small" variant="outline">
+                                    <i class="ri-dashboard-line"></i>
+                                    <span class="ml-1">Go to Dashboard</span>
+                                </x-button-primary>
+                                <button class="hover:bg-foreground/20 bg-foreground/10 rounded px-2 py-1 text-sm" onclick="window.AppMap.uploader.reload()">
+                                    <i class="ri-refresh-line"></i>
+                                </button>
+                            </div>
+                        @endauth
                         <div class="space-y-2">
                             @auth
                                 <div class="space-y-2" id="myDataContainer">
@@ -230,75 +235,158 @@
             </section>
 
             <!-- ========== SENTINEL COLLECTION PANEL ========== -->
-            <section class="flex hidden h-full flex-col shadow-xl" id="sentinel-panel" data-sentinel-token="{{ $copernicusAccessToken ?? '' }}" data-sentinel-credentials="{{ $copernicusCredentialsConfigured ?? false ? 'true' : 'false' }}">
+            <section class="flex hidden h-full flex-col shadow-xl" id="sentinel-panel" data-sentinel-token="{{ $copernicusAccessToken ?? '' }}" data-sentinel-credentials="{{ $copernicusCredentialsConfigured ?? false ? 'true' : 'false' }}" data-sentinel-process-url="{{ auth()->check() ? route('admin.sentinel.process') : '' }}" data-sentinel-clip-process-url="{{ auth()->check() ? route('admin.sentinel.clip') : '' }}" data-sentinel-processing-cost="{{ config('app-constants.imagery_processing_cost', 10) }}">
                 <div class="bg-background border-foreground/10 sticky top-0 z-20 flex items-center justify-between border-b p-2">
                     <h2 class="text-lg font-bold">🛰️ Sentinel-2 Collections</h2>
                     <button class="hover:bg-foreground/20 bg-foreground/10 rounded px-2 py-1 text-sm" onclick="closePanels()">✖</button>
                 </div>
 
                 <div class="panel-content flex-1 space-y-1 overflow-y-auto p-2">
-                    <form class="bg-background/60 border-foreground/10 rounded-lg border p-2 shadow-sm" id="sentinelFilterForm">
-                        <div class="mb-1.5 flex items-center justify-between">
-                            <h3 class="text-foreground text-sm font-semibold">Filter Collections</h3>
-                            <button class="text-foreground/60 hover:text-primary text-xs font-medium transition" id="sentinelFilterResetButton" type="button">
-                                Reset
-                            </button>
+                    <!-- Tab Navigation -->
+                    <div class="flex">
+                        <div class="bg-foreground/10 hover:bg-foreground/20 flex rounded-lg p-1 transition">
+                            <nav class="flex gap-x-1" role="tablist" aria-label="Tabs" aria-orientation="horizontal">
+                                <button class="hs-tab-active:bg-neutral hs-tab-active:text-foreground/80 text-foreground/50 hover:text-foreground/80 focus:outline-hidden focus:text-foreground/80 hover:hover:text-primary active inline-flex items-center gap-x-2 rounded-lg bg-transparent px-2 py-1 text-sm font-medium disabled:pointer-events-none disabled:opacity-50" id="sentinel-collection-tab" data-hs-tab="#sentinel-collection-panel" type="button" role="tab" aria-selected="true" aria-controls="sentinel-collection-panel">
+                                    Data Collection (Scene)
+                                </button>
+                                <button class="hs-tab-active:bg-neutral hs-tab-active:text-foreground/80 text-foreground/50 hover:text-foreground/80 focus:outline-hidden focus:text-foreground/80 hover:hover:text-primary inline-flex items-center gap-x-2 rounded-lg bg-transparent px-2 py-1 text-sm font-medium disabled:pointer-events-none disabled:opacity-50" id="sentinel-clip-tab" data-hs-tab="#sentinel-clip-panel" type="button" role="tab" aria-selected="false" aria-controls="sentinel-clip-panel">
+                                    Imagery by Clip
+                                </button>
+                            </nav>
                         </div>
-                        <div class="flex flex-col space-y-1">
-                            <div class="grid grid-cols-2 gap-1">
-                                <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="sentinelCloudFilter">
-                                    <span>Max Cloud Cover (%)</span>
-                                    <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-1.5 py-0.5 text-sm focus:outline-none focus:ring" id="sentinelCloudFilter" name="cloud-cover" type="number" value="40" max="100" min="0" placeholder="e.g. 30" step="1" />
-                                </label>
-                                <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="sentinelProductLevel">
-                                    <span>Product Level</span>
-                                    <select class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-1.5 py-0.5 text-sm focus:outline-none focus:ring" id="sentinelProductLevel" name="product-level">
-                                        <option value="S2MSI2A" selected>Level-2A (Surface Reflectance)</option>
-                                        <option value="S2MSI1C">Level-1C (Top-of-Atmosphere)</option>
-                                    </select>
-                                </label>
-                            </div>
-                            <div class="grid grid-cols-1 gap-1 sm:grid-cols-2">
-                                <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="sentinelStartDate">
-                                    <span>Start Date</span>
-                                    <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-1.5 py-0.5 text-sm focus:outline-none focus:ring" id="sentinelStartDate" name="start-date" type="date" autocomplete="off" />
-                                </label>
-                                <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="sentinelEndDate">
-                                    <span>End Date</span>
-                                    <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-1.5 py-0.5 text-sm focus:outline-none focus:ring" id="sentinelEndDate" name="end-date" type="date" autocomplete="off" />
-                                </label>
-                            </div>
-                            <div class="grid grid-cols-1 gap-1">
-                                <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="sentinelLatFilter">
-                                    <span>Latitude</span>
-                                    <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-1.5 py-0.5 text-sm focus:outline-none focus:ring" id="sentinelLatFilter" name="latitude" type="number" value="-1.24536" max="90" min="-90" placeholder="e.g. -6.2" step="0.000001" />
-                                </label>
-                                <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="sentinelLonFilter">
-                                    <span>Longitude</span>
-                                    <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-1.5 py-0.5 text-sm focus:outline-none focus:ring" id="sentinelLonFilter" name="longitude" type="number" value="114.54535" max="180" min="-180" placeholder="e.g. 106.8" step="0.000001" />
-                                </label>
-                            </div>
-                        </div>
-                        <p class="text-foreground/60 text-[11px]">Provide both latitude and longitude to focus on a specific location, or clear both fields to search globally.</p>
-                        <div class="mt-1 flex flex-wrap gap-1.5">
-                            <button class="bg-primary hover:bg-primary/90 text-background inline-flex items-center justify-center rounded-lg px-3 py-1.5 text-xs font-semibold transition" type="submit">
-                                Apply Filters
-                            </button>
-                        </div>
-                    </form>
-
-                    <div class="text-foreground/70 mt-4 text-sm" id="sentinelCollectionStatus">
-                        Loading latest Sentinel-2 acquisitions...
                     </div>
-                    <div class="mt-2 space-y-2" id="sentinelCollectionList"></div>
+
+                    <!-- Data Tab Content -->
+                    <div class="tab-content" id="sentinel-collection-panel" role="tabpanel" aria-labelledby="sentinel-collection-tab">
+                        <form class="bg-background/60 border-foreground/10 rounded-lg border p-2 shadow-sm" id="sentinelFilterForm">
+                            <div class="mb-1.5 flex items-center justify-between">
+                                <h3 class="text-foreground text-sm font-semibold">Filter Collections</h3>
+                                <button class="text-foreground/60 hover:text-primary text-xs font-medium transition" id="sentinelFilterResetButton" type="button">
+                                    Reset
+                                </button>
+                            </div>
+                            <div class="flex flex-col space-y-1">
+                                <div class="grid grid-cols-2 gap-1">
+                                    <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="sentinelCloudFilter">
+                                        <span>Max Cloud Cover (%)</span>
+                                        <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-1.5 py-0.5 text-sm focus:outline-none focus:ring" id="sentinelCloudFilter" name="cloud-cover" type="number" value="40" max="100" min="0" placeholder="e.g. 30" step="1" />
+                                    </label>
+                                    <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="sentinelProductLevel">
+                                        <span>Product Level</span>
+                                        <select class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-1.5 py-0.5 text-sm focus:outline-none focus:ring" id="sentinelProductLevel" name="product-level">
+                                            <option value="S2MSI2A" selected>Level-2A (Surface Reflectance)</option>
+                                            <option value="S2MSI1C">Level-1C (Top-of-Atmosphere)</option>
+                                        </select>
+                                    </label>
+                                </div>
+                                <div class="grid grid-cols-1 gap-1 sm:grid-cols-2">
+                                    <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="sentinelStartDate">
+                                        <span>Start Date</span>
+                                        <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-1.5 py-0.5 text-sm focus:outline-none focus:ring" id="sentinelStartDate" name="start-date" type="date" autocomplete="off" />
+                                    </label>
+                                    <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="sentinelEndDate">
+                                        <span>End Date</span>
+                                        <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-1.5 py-0.5 text-sm focus:outline-none focus:ring" id="sentinelEndDate" name="end-date" type="date" autocomplete="off" />
+                                    </label>
+                                </div>
+                                <div class="grid grid-cols-1 gap-1">
+                                    <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="sentinelLatFilter">
+                                        <span>Latitude</span>
+                                        <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-1.5 py-0.5 text-sm focus:outline-none focus:ring" id="sentinelLatFilter" name="latitude" type="number" value="-1.24536" max="90" min="-90" placeholder="e.g. -6.2" step="0.000001" />
+                                    </label>
+                                    <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="sentinelLonFilter">
+                                        <span>Longitude</span>
+                                        <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-1.5 py-0.5 text-sm focus:outline-none focus:ring" id="sentinelLonFilter" name="longitude" type="number" value="114.54535" max="180" min="-180" placeholder="e.g. 106.8" step="0.000001" />
+                                    </label>
+                                </div>
+                            </div>
+                            <p class="text-foreground/60 text-[11px]">Provide both latitude and longitude to focus on a specific location, or clear both fields to search globally.</p>
+                            <div class="mt-1 flex flex-wrap gap-1.5">
+                                <button class="bg-primary hover:bg-primary/90 text-background inline-flex items-center justify-center rounded-lg px-3 py-1.5 text-xs font-semibold transition" type="submit">
+                                    Apply Filters
+                                </button>
+                            </div>
+                        </form>
+
+                        <div class="text-foreground/70 mt-4 text-sm" id="sentinelCollectionStatus">
+                            Loading latest Sentinel-2 acquisitions...
+                        </div>
+                        <div class="mt-2 space-y-2" id="sentinelCollectionList"></div>
+                    </div>
+
+                    <!-- Clip Tab Content -->
+                    <div class="tab-content hidden" id="sentinel-clip-panel" role="tabpanel" aria-labelledby="sentinel-clip-tab">
+                        <div class="space-y-3" id="sentinelClipModule" data-credit-rate="{{ config('app-constants.imagery_credit_cost_per_hectare') }}" data-process-url="{{ auth()->check() ? route('admin.sentinel.process') : '' }}" data-clip-process-url="{{ auth()->check() ? route('admin.sentinel.clip') : '' }}" data-processing-cost="{{ config('app-constants.imagery_processing_cost', 10) }}">
+                            <div class="bg-background/60 border-foreground/10 space-y-3 rounded-lg border p-3 shadow-sm">
+                                <div class="flex flex-wrap items-center justify-between gap-2">
+                                    <div>
+                                        <h4 class="text-foreground font-semibold">Define Area of Interest</h4>
+                                        <p class="text-foreground/70 text-sm">Draw a polygon on the map to clip Sentinel-2 imagery for your field.</p>
+                                    </div>
+                                    <div class="flex items-center gap-2">
+                                        <x-button-primary id="drawPolygonBtn" type="button" size="xsmall">
+                                            <i class="ri-pencil-line"></i>
+                                            <span>Draw Polygon</span>
+                                        </x-button-primary>
+                                    </div>
+                                </div>
+
+                                <div class="space-y-1">
+                                    <x-input-label class="text-sm font-medium" for="clipAreaOutput">Area (hectares)</x-input-label>
+                                    <div class="border-foreground/20 rounded-lg border border-dashed px-3 py-2 text-sm" id="clipAreaOutput">
+                                        Draw a polygon to calculate the area.
+                                    </div>
+                                </div>
+
+                                <div class="space-y-1">
+                                    <x-input-label class="text-sm font-medium" for="clipCreditOutput">Estimated Credit Cost</x-input-label>
+                                    <div class="border-foreground/20 rounded-lg border px-3 py-2 text-sm" id="clipCreditOutput">
+                                        –
+                                    </div>
+                                    <p class="text-foreground/60 text-xs">{{ Number::format(config('app-constants.imagery_credit_cost_per_hectare'), locale: app()->getLocale()) }} credit points per hectare.</p>
+                                </div>
+
+                                <div class="space-y-1">
+                                    <x-input-label class="text-sm font-medium" for="clipGeojsonOutput">AOI GeoJSON</x-input-label>
+                                    <div class="border-foreground/10 bg-foreground/5 max-h-14 overflow-auto rounded-lg border p-2 font-mono text-xs" id="clipGeojsonOutput">
+                                        <span class="text-foreground/60">Coordinates will appear here after drawing.</span>
+                                    </div>
+                                </div>
+
+                                <div class="space-y-1">
+                                    <x-input-label class="text-sm font-medium" for="clipFieldName">Field Name</x-input-label>
+                                    <x-text-input class="w-full" id="clipFieldName" name="field_name" size="small" placeholder="e.g. North Farm Block" />
+                                </div>
+                            </div>
+
+                            <div class="bg-background/60 border-foreground/10 flex gap-2 rounded-lg border p-3 shadow-sm">
+                                <div class="flex flex-col gap-2 md:items-center">
+                                    <div>
+                                        <h5 class="text-foreground text-sm font-semibold uppercase tracking-wide">Process Clipped Imagery</h5>
+                                        <p class="text-foreground/60 mt-1 text-xs" id="clipProcessStatus">Draw an area and provide a field name before processing.</p>
+                                        <p class="text-foreground/60 mt-1 text-xs" id="clipProcessStatus">The system will analyse the date range and automatically choose the latest Sentinel-2 scene intersecting your polygon.</p>
+                                    </div>
+                                    @auth
+                                        <x-button-primary id="clipProcessImageryBtn" type="button" size="small">
+                                            <i class="ri-cpu-line"></i>
+                                            <span>Process Imagery</span>
+                                        </x-button-primary>
+                                    @else
+                                        <button class="bg-success/10 text-success inline-flex items-center space-x-1 rounded-lg px-3 py-2 text-sm font-semibold opacity-60" type="button" title="Log in to process imagery" disabled>
+                                            <i class="ri-cpu-line"></i>
+                                            <span>Process Imagery</span>
+                                        </button>
+                                    @endauth
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
                 </div>
 
                 <div class="bg-background border-foreground/10 sticky bottom-0 border-t p-3">
                     <div class="text-foreground/70 text-xs">
                         Data source: Copernicus Sentinel-2 (via public catalogue)
-                    </div>
-                    <div class="text-foreground/50 text-xs">
-                        Last updated: <span id="sentinelLastUpdated">–</span>
                     </div>
                 </div>
 
@@ -320,11 +408,22 @@
                             </div>
                         </div>
                         <div class="mt-2 flex flex-wrap gap-1" data-sentinel-actions>
-                            <a class="bg-primary text-background hover:bg-primary/90 inline-flex hidden items-center space-x-1 rounded-lg px-2 py-1 text-xs font-semibold transition" data-sentinel-download href="#" aria-disabled="true" target="_blank" rel="noopener noreferrer">
+                            <a class="bg-primary text-background enabled:hover:bg-primary/90 inline-flex hidden items-center space-x-1 rounded-lg px-2 py-1 text-xs font-semibold transition" data-sentinel-download href="#" aria-disabled="true" target="_blank" rel="noopener noreferrer">
                                 <i class="ri-download-cloud-2-line"></i>
                                 <span>Download Scene</span>
                             </a>
-                            <button class="hover:bg-primary/10 text-primary border-primary/40 inline-flex items-center space-x-1 rounded-lg border px-2 py-1 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50" data-sentinel-preview type="button">
+                            @auth
+                                <button class="bg-success/10 text-success enabled:hover:bg-success/20 inline-flex hidden items-center space-x-1 rounded-lg px-2 py-1 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-60" data-sentinel-process type="button">
+                                    <i class="ri-cpu-line"></i>
+                                    <span>Process Imagery</span>
+                                </button>
+                            @else
+                                <button class="bg-success/10 text-success enabled:hover:bg-success/20 inline-flex hidden items-center space-x-1 rounded-lg px-2 py-1 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-60" type="button" title="Log in to process imagery" disabled>
+                                    <i class="ri-cpu-line"></i>
+                                    <span>Process This Imagery</span>
+                                </button>
+                            @endauth
+                            <button class="enabled:hover:bg-primary/10 text-primary border-primary/40 inline-flex items-center space-x-1 rounded-lg border px-2 py-1 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50" data-sentinel-preview type="button">
                                 <i class="ri-image-line"></i>
                                 <span>Preview on Map</span>
                             </button>
@@ -336,7 +435,7 @@
             <!-- ========== Upload PANEL ========== -->
             <section class="flex hidden h-full flex-col shadow-xl" id="uploads-panel">
                 <div class="bg-background border-foreground/10 sticky top-0 z-20 flex items-center justify-between border-b p-2">
-                    <h2 class="text-lg font-bold">⬆️ Imagery Collection</h2>
+                    <h2 class="text-lg font-bold">⬆️ Imagery Upload</h2>
                     <button class="hover:bg-foreground/20 bg-foreground/10 rounded px-2 py-1 text-sm" onclick="closePanels()">✖</button>
                 </div>
 
@@ -344,151 +443,84 @@
                 <div class="panel-content flex-1 space-y-3 overflow-y-auto p-3">
                     <div class="space-y-2">
                         @auth
-                            <!-- Tab Navigation -->
-                            <div class="flex">
-                                <div class="bg-foreground/10 hover:bg-foreground/20 flex rounded-lg p-1 transition">
-                                    <nav class="flex gap-x-1" role="tablist" aria-label="Tabs" aria-orientation="horizontal">
-                                        <button class="hs-tab-active:bg-neutral hs-tab-active:text-foreground/80 text-foreground/50 hover:text-foreground/80 focus:outline-hidden focus:text-foreground/80 hover:hover:text-primary inline-flex items-center gap-x-2 rounded-lg bg-transparent px-2 py-1 text-sm font-medium disabled:pointer-events-none disabled:opacity-50" id="buy-tab" data-hs-tab="#buy-panel" type="button" role="tab" aria-selected="false" aria-controls="buy-panel">
-                                            Buy Imagery
-                                        </button>
-                                        <button class="hs-tab-active:bg-neutral hs-tab-active:text-foreground/80 text-foreground/50 hover:text-foreground/80 focus:outline-hidden focus:text-foreground/80 hover:hover:text-primary active inline-flex items-center gap-x-2 rounded-lg bg-transparent px-2 py-1 text-sm font-medium disabled:pointer-events-none disabled:opacity-50" id="upload-tab" data-hs-tab="#upload-panel" type="button" role="tab" aria-selected="true" aria-controls="upload-panel">
-                                            Upload Imagery
-                                        </button>
-                                    </nav>
+                            <div class="bg-primary/10 space-y-2 rounded-lg p-2">
+                                <h4 class="text-foreground flex items-center text-lg font-semibold">
+                                    <i class="ri-upload-cloud-line text-primary mr-2"></i>
+                                    Upload Your Own Imagery
+                                </h4>
+                                <p class="text-foreground/80 text-sm">
+                                    Have your own satellite imagery? Upload it directly to our platform for advanced PRI analysis and crop health monitoring.
+                                </p>
+                                <p class="text-foreground/80 text-sm font-bold">Follow the instructions.</p>
+
+                                <div class="bg-primary/20 space-y-2 rounded-lg p-2">
+                                    <h5 class="text-foreground font-medium">Supported Formats</h5>
+                                    <ul class="text-foreground/70 space-y-1 text-sm">
+                                        <li class="flex items-center">
+                                            <i class="ri-check-line text-success mr-2 text-xs"></i>
+                                            <span>GeoTIFF (.tif, .tiff, .geotif)</span>
+                                        </li>
+                                        {{-- <li class="flex items-center">
+                                            <i class="ri-check-line text-success mr-2 text-xs"></i>
+                                            <span>Enhanced Compressed Wavelet (.ecw)</span>
+                                        </li>
+                                        <li class="flex items-center">
+                                            <i class="ri-check-line text-success mr-2 text-xs"></i>
+                                            <span>ZIP Archives (.zip)</span>
+                                        </li> --}}
+                                    </ul>
                                 </div>
-                            </div>
 
-                            <!-- Upload Tab Content -->
-                            <div class="tab-content" id="upload-panel" role="tabpanel" aria-labelledby="upload-tab">
-                                <div class="bg-primary/10 space-y-2 rounded-lg p-2">
-                                    <h4 class="text-foreground flex items-center text-lg font-semibold">
-                                        <i class="ri-upload-cloud-line text-primary mr-2"></i>
-                                        Upload Your Own Imagery
-                                    </h4>
-                                    <p class="text-foreground/80 text-sm">
-                                        Have your own satellite imagery? Upload it directly to our platform for advanced PRI analysis and crop health monitoring.
-                                    </p>
-
-                                    <div class="bg-primary/20 space-y-2 rounded-lg p-2">
-                                        <h5 class="text-foreground font-medium">Supported Formats</h5>
-                                        <ul class="text-foreground/70 grid grid-cols-2 gap-2 text-sm">
-                                            <li class="flex items-center">
-                                                <i class="ri-check-line text-success mr-2 text-xs"></i>
-                                                <span>GeoTIFF (.tif, .tiff)</span>
-                                            </li>
-                                            <li class="flex items-center">
-                                                <i class="ri-check-line text-success mr-2 text-xs"></i>
-                                                <span>Enhanced Compressed Wavelet (.ecw)</span>
-                                            </li>
-                                            <li class="flex items-center">
-                                                <i class="ri-check-line text-success mr-2 text-xs"></i>
-                                                <span>ZIP Archives (.zip)</span>
-                                            </li>
-                                        </ul>
-                                    </div>
-
-                                    <div class="bg-primary/20 space-y-2 rounded-lg p-2">
-                                        <h5 class="text-foreground font-medium">Compatible Sources</h5>
-                                        <ul class="text-foreground/70 space-y-1 text-sm">
-                                            <li class="flex items-start">
-                                                <i class="ri-check-line text-success mr-2 mt-0.5 text-xs"></i>
-                                                <span>Sentinel-2, Landsat, and QuickSat</span>
-                                            </li>
-                                            <li class="flex items-start">
-                                                <i class="ri-check-line text-success mr-2 mt-0.5 text-xs"></i>
-                                                <span>Get detailed plant stress analysis with our AI-powered engine</span>
-                                            </li>
-                                        </ul>
-                                    </div>
-
-                                    <div class="space-y-3">
-                                        <h5 class="text-lg font-semibold">Upload Your File</h5>
-
-                                        <!-- input form -->
-                                        <form class="space-y-2">
-                                            <x-input-label class="text-sm font-medium" for="source-type">Source Type</x-input-label>
-                                            <x-select-input class="px-2! py-1!" id="sourceType" name="source-type" required>
-                                                <option value="sentinel-2">Sentinel-2</option>
-                                                <option value="landsat">Landsat</option>
-                                                <option value="quicksat">Quicksat</option>
-                                            </x-select-input>
-                                            <x-input-error class="mt-2" :messages="$errors->get('source-type')" />
-
-                                            <x-input-label class="text-sm font-medium" for="imagery-upload">Upload your imagery file</x-input-label>
-                                            <input class="border-foreground/30 bg-neutral file:bg-foreground/10 focus:border-primary focus:ring-primary block w-full rounded-lg border text-sm shadow-sm file:me-4 file:border-0 file:px-4 file:py-2 focus:z-10 disabled:pointer-events-none disabled:opacity-50" id="fileInput" name="imagery-upload" type="file" accept=".tif,.tiff,.ecw,.zip">
-                                            <x-input-error class="mt-2" :messages="$errors->get('imagery-upload')" />
-                                        </form>
-
-                                        <!-- info file -->
-                                        <div class="text-foreground-70 mt-2 hidden text-sm" id="fileInfo"></div>
-
-                                        <!-- progress bar -->
-                                        <div class="bg-foreground/20 mt-2 h-4 w-full rounded">
-                                            <div class="bg-primary h-4 rounded" id="progressBar" style="width: 0%;"></div>
-                                        </div>
-                                        <p class="text-foreground/100 mt-1 text-sm" id="progressText">Belum ada upload.</p>
-
-                                        <!-- tombol kontrol -->
-                                        <div class="flex flex-wrap gap-2">
-                                            <x-button-primary id="startBtn" type="button" size="small">Start Upload</x-button-primary>
-                                            <x-button-danger id="pauseBtn" type="button" size="small">⏸️ Pause</x-button-danger>
-                                            <x-button-secondary id="resumeBtn" type="button" size="small">▶️ Resume</x-button-secondary>
-                                        </div>
-                                    </div>
+                                <div class="bg-primary/20 space-y-2 rounded-lg p-2">
+                                    <h5 class="text-foreground font-medium">Compatible Sources</h5>
+                                    <ul class="text-foreground/70 space-y-1 text-sm">
+                                        <li class="flex items-start">
+                                            <i class="ri-check-line text-success mr-2 mt-0.5 text-xs"></i>
+                                            <span>Sentinel-2 [band order: 1, 2, 3, 4, 5, 6, 7, 8, 8A, 9, 11, 12]</span>
+                                        </li>
+                                        {{-- <li class="flex items-start">
+                                            <i class="ri-check-line text-success mr-2 mt-0.5 text-xs"></i>
+                                            <span>Landsat 8/7</span>
+                                        </li> --}}
+                                        <li class="flex items-start">
+                                            <i class="ri-check-line text-success mr-2 mt-0.5 text-xs"></i>
+                                            <span>Get detailed plant stress analysis with our AI-powered engine</span>
+                                        </li>
+                                    </ul>
                                 </div>
-                            </div>
 
-                            <!-- Buy Tab Content -->
-                            <div class="tab-content hidden" class="hidden" id="buy-panel" role="tabpanel" aria-labelledby="buy-tab">
-                                <div class="bg-primary/10 space-y-2 rounded-lg p-2">
-                                    <h4 class="text-foreground flex items-center text-lg font-semibold">
-                                        <i class="ri-shopping-bag-line text-primary mr-2"></i>
-                                        Buy from Our Collection
-                                    </h4>
-                                    <p class="text-foreground/80 text-sm">
-                                        Don't have satellite data? Purchase high-resolution imagery directly from our platform, captured by leading satellite constellations.
-                                    </p>
+                                <div class="space-y-3">
+                                    <h5 class="text-lg font-semibold">Upload Your File</h5>
 
-                                    <div class="bg-primary/20 rounded-lg p-2">
-                                        <h5 class="text-foreground mb-2 font-medium">What You Get</h5>
-                                        <ul class="text-foreground/70 space-y-1 text-sm">
-                                            <li class="flex items-start">
-                                                <i class="ri-check-line text-success mr-2 mt-0.5 text-xs"></i>
-                                                <span>Access to daily updated satellite imagery</span>
-                                            </li>
-                                            <li class="flex items-start">
-                                                <i class="ri-check-line text-success mr-2 mt-0.5 text-xs"></i>
-                                                <span>Global coverage</span>
-                                            </li>
-                                            <li class="flex items-start">
-                                                <i class="ri-check-line text-success mr-2 mt-0.5 text-xs"></i>
-                                                <span>Automatic PRI analysis and health reports included</span>
-                                            </li>
-                                        </ul>
+                                    <!-- input form -->
+                                    <form class="space-y-2">
+                                        <x-input-label class="text-sm font-medium" for="source-type">Source Type</x-input-label>
+                                        <x-select-input class="px-2! py-1!" id="sourceType" name="source-type" required>
+                                            <option value="sentinel-2">Sentinel-2</option>
+                                            <option value="landsat">Landsat</option>
+                                            <option value="quicksat">Quicksat</option>
+                                        </x-select-input>
+                                        <x-input-error class="mt-2" :messages="$errors->get('source-type')" />
+
+                                        <x-input-label class="text-sm font-medium" for="imagery-upload">Upload your imagery file</x-input-label>
+                                        <input class="border-foreground/30 bg-neutral file:bg-foreground/10 focus:border-primary focus:ring-primary block w-full rounded-lg border text-sm shadow-sm file:me-4 file:border-0 file:px-4 file:py-2 focus:z-10 disabled:pointer-events-none disabled:opacity-50" id="fileInput" name="imagery-upload" type="file" accept=".tif,.tiff,.ecw,.zip">
+                                        <x-input-error class="mt-2" :messages="$errors->get('imagery-upload')" />
+                                    </form>
+
+                                    <!-- info file -->
+                                    <div class="text-foreground-70 mt-2 hidden text-sm" id="fileInfo"></div>
+
+                                    <!-- progress bar -->
+                                    <div class="bg-foreground/20 mt-2 h-4 w-full rounded">
+                                        <div class="bg-primary h-4 rounded" id="progressBar" style="width: 0%;"></div>
                                     </div>
+                                    <p class="text-foreground/100 mt-1 text-sm" id="progressText">Belum ada upload.</p>
 
-                                    <div class="bg-primary/20 rounded-lg p-2">
-                                        <h5 class="text-foreground mb-2 font-medium">Satellite Sources</h5>
-                                        <div class="grid grid-cols-2 gap-2 text-sm">
-                                            <div class="flex items-center">
-                                                <i class="ri-satellite-line text-success mr-2"></i>
-                                                <span>Sentinel-2</span>
-                                            </div>
-                                            <div class="flex items-center">
-                                                <i class="ri-satellite-line text-success mr-2"></i>
-                                                <span>Landsat 8/9</span>
-                                            </div>
-                                            <div class="flex items-center">
-                                                <i class="ri-satellite-line text-success mr-2"></i>
-                                                <span>Quicksat</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div class="">
-                                        <x-button-primary id="buySatelliteBtn" type="button" size="small">
-                                            <i class="ri-shopping-cart-line"></i>
-                                            <span>Buy Satellite Imagery</span>
-                                        </x-button-primary>
+                                    <!-- tombol kontrol -->
+                                    <div class="flex flex-wrap gap-2">
+                                        <x-button-primary id="startBtn" type="button" size="small">Start Upload</x-button-primary>
+                                        <x-button-danger id="pauseBtn" type="button" size="small">⏸️ Pause</x-button-danger>
+                                        <x-button-secondary id="resumeBtn" type="button" size="small">▶️ Resume</x-button-secondary>
                                     </div>
                                 </div>
                             </div>
@@ -646,7 +678,7 @@
             </div>
 
             <!-- Info panel -->
-            <div class="shadow-soft bottom-22 pointer-events-none absolute left-0 z-40 mx-auto hidden max-w-xl rounded-lg bg-white/90 p-2 ring-1 ring-black/5 backdrop-blur supports-[backdrop-filter]:bg-white/60 sm:right-auto sm:w-[380px] md:left-20" id="panel">
+            {{-- <div class="shadow-soft bottom-22 pointer-events-none absolute left-0 z-40 mx-auto hidden max-w-xl rounded-lg bg-white/90 p-2 ring-1 ring-black/5 backdrop-blur supports-[backdrop-filter]:bg-white/60 sm:right-auto sm:w-[380px] md:left-20" id="panel">
                 <div class="pointer-events-auto">
                     <div class="flex items-start justify-between gap-2">
                         <div>
@@ -663,7 +695,7 @@
                         </div>
                     </div>
                 </div>
-            </div>
+            </div> --}}
 
             <!-- Info map controls -->
             <div class="absolute bottom-11 left-0 flex items-end space-x-2 text-xs md:left-2 md:text-base">
@@ -688,123 +720,6 @@
         </div>
 
 
-        <!-- Right/Overlay Panel -->
-        <div class="bg-background absolute bottom-0 left-0 z-50 hidden max-h-[60%] w-full max-w-full overflow-hidden rounded-t-xl shadow-xl transition-all duration-300 ease-in-out md:bottom-auto md:left-auto md:right-2 md:top-1/2 md:max-w-[30rem] md:-translate-y-1/2 md:transform md:rounded-xl" id="buyingPanel">
-            <div class="flex h-full w-full min-w-full flex-col p-2" id="drawer-sidebar-left-panel1-label">
-                <!-- Header drawer -->
-                <div class="mb-2 flex items-center justify-between">
-                    <h2 class="text-lg font-semibold">Purchase a field</h2>
-                    <button class="hover:text-primary/80 close-panel-btn text-foreground/50" id="buyingPanelCloseBtn" data-drawer-hide="drawer-sidebar-left-panel1" type="button">✕</button>
-                </div>
-                <!-- Drawer content -->
-                <div class="flex h-full max-h-96 flex-1 flex-col overflow-hidden">
-                    <div class="mb-8 flex-1 space-y-3 overflow-y-auto px-1">
-                        <!-- Draw Polygon Section -->
-                        <div class="flex flex-col items-center justify-center py-2 text-center">
-                            <div class="mb-2">
-                                <h3 class="text-foreground/70 mb-3 text-lg font-semibold">Purchase Satellite Imagery</h3>
-                                <p class="text-foreground-70 mb-3 text-xs">Draw a polygon on the map to define your area of interest for satellite imagery analysis.</p>
-                                <x-button-primary id="drawPolygonBtn" type="button" size="small">
-                                    <i class="ri-pencil-line"></i>
-                                    <span>Draw Polygon</span>
-                                </x-button-primary>
-                            </div>
-
-                            <!-- GeoJSON Output -->
-                            <div class="w-full">
-                                <div class="border-muted bg-foreground/10 mt-3 max-h-11 w-full overflow-auto rounded border p-2 text-xs" id="drawerGeojson">
-                                    <span class="text-foreground/50">Polygon coordinates will appear here...</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <hr class="border-gray-300">
-
-                        <!-- Feature Properties Form -->
-                        <form class="space-y-4" id="featurePropertiesForm" action="{{ route('imageryOrder') }}" method="POST">
-                            @csrf
-                            @method('POST')
-
-                            <input id="geometryInput" name="geometry" type="hidden">
-                            <input id="areaInput" name="area_hectares" type="hidden">
-
-                            <!-- Feature Name -->
-                            <div class="space-y-2">
-                                <x-input-label class="text-sm font-medium" for="name_feature">Field Name</x-input-label>
-                                <x-text-input class="w-full" id="name_feature" name="name_feature" size="small" placeholder="Enter field/region name" required />
-                            </div>
-
-                            <!-- Area Information -->
-                            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                                <div class="space-y-2">
-                                    <x-input-label class="text-sm font-medium" for="luas">Area</x-input-label>
-                                    <div class="border-muted bg-foreground/10 rounded border p-2 text-sm" id="measurementOutput">
-                                        <div class="text-foreground/50 flex items-center">
-                                            <i class="ri-crop-line mr-2"></i>
-                                            <span>Calculate area...</span>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- Credit Points Information -->
-                                <div class="space-y-2">
-                                    <x-input-label class="text-sm font-medium" for="credit_info">Credit Points</x-input-label>
-                                    <div class="border-muted rounded border p-2 text-sm">
-                                        <div class="text-foreground/50 flex items-center">
-                                            <i class="ri-coins-line mr-2"></i>
-                                            <span>{{ Number::format(config('app-constants.imagery_credit_cost_per_hectare'), locale: app()->getLocale()) }} Credit Points per hectare</span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Total Price -->
-                            <div class="space-y-2">
-                                <x-input-label class="text-sm font-medium" for="harga">Total Credit Points Needed</x-input-label>
-                                <div class="border-muted bg-muted/60 rounded border p-2 text-sm" id="priceOutput">
-                                    <span class="text-primary font-semibold" id="total_price">Total will be calculated...</span>
-                                </div>
-                            </div>
-
-                            <!-- Action Buttons -->
-                            <div class="flex flex-col gap-2 pt-2 sm:flex-row">
-                                <x-button-primary class="flex-1" id="saveFeatureProperties" type="submit" role="button" size="small">
-                                    <i class="ri-arrow-right-line mr-1"></i>
-                                    Continue to Checkout
-                                </x-button-primary>
-                                <x-button-secondary class="flex-1" id="cancelFeatureProperties" type="reset" role="button" size="small">
-                                    <i class="ri-close-line mr-1"></i>
-                                    Cancel
-                                </x-button-secondary>
-                            </div>
-                        </form>
-
-                        <!-- Additional Information -->
-                        <div class="bg-primary/60 rounded-lg p-3">
-                            <h4 class="text-primary-foreground mb-2 text-sm font-medium">What you'll get:</h4>
-                            <ul class="text-primary-foreground/80 space-y-1 text-xs">
-                                <li class="flex items-center">
-                                    <i class="ri-check-line text-success mr-1"></i>
-                                    High-resolution satellite imagery
-                                </li>
-                                <li class="flex items-center">
-                                    <i class="ri-check-line text-success mr-1"></i>
-                                    PRI stress analysis
-                                </li>
-                                <li class="flex items-center">
-                                    <i class="ri-check-line text-success mr-1"></i>
-                                    Detailed crop health reports
-                                </li>
-                                <li class="flex items-center">
-                                    <i class="ri-check-line text-success mr-1"></i>
-                                    Historical data comparison
-                                </li>
-                            </ul>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
     </div>
     @push('javascript')
         <script>
@@ -1049,2279 +964,2183 @@
                     showPanel(defaultPanelId, button);
                 };
 
-                // Connect resize handlers and modal toggles relevant to the dashboard.
+                // Connect resize handlers relevant to the dashboard.
                 const registerEventListeners = () => {
                     window.addEventListener('resize', syncPanelLayoutWithViewport);
-
-                    document.getElementById('buySatelliteBtn')?.addEventListener('click', () => {
-                        document.getElementById('buyingPanel')?.classList.remove('hidden');
-                    });
-
-                    document.getElementById('buyingPanelCloseBtn')?.addEventListener('click', () => {
-                        document.getElementById('buyingPanel')?.classList.add('hidden');
-                    });
                 };
 
-                const initialisePriceCalculator = () => {
-                    // Convert area from square meters to hectares.
-                    const toHectares = (squareMeters) => squareMeters / 10000;
-                    // Provide a subtle animation whenever the price updates.
-                    const highlightContainer = (container) => {
-                        container.style.transform = 'scale(1.02)';
-                        setTimeout(() => {
-                            container.style.transform = 'scale(1)';
-                        }, 200);
-                    };
-
-                    // Compute total credit points needed and update the display widget.
-                    const calculateTotalPrice = () => {
-                        const areaInSquareMeters = window.geojsonArea || 0;
-                        const areaInHectares = toHectares(areaInSquareMeters);
-                        const totalPriceElement = document.getElementById('total_price');
-
-                        if (!totalPriceElement) {
-                            return;
-                        }
-
-                        const priceContainer = totalPriceElement.parentElement;
-                        const creditPointsNeeded = areaInHectares * {{ config('app-constants.imagery_credit_cost_per_hectare') }};
-
-                        if (areaInHectares > 0) {
-                            totalPriceElement.innerHTML = `
-                            <div class="flex justify-between items-center">
-                                <span class="text-lg font-bold text-green-700">${formatNumber(creditPointsNeeded.toFixed(2), 2)} Credit Points</span>
-                                <i class="ri-coins-line font-base text-success text-xl"></i>
-                            </div>
-                            <div class="text-xs text-foreground-70 mt-1">
-                                ${formatNumber(areaInHectares)} hectares × {{ Number::format(config('app-constants.imagery_credit_cost_per_hectare'), locale: app()->getLocale()) }} credit points/hectare
-                            </div>
-                        `;
-                            priceContainer.classList.remove('bg-muted/60', 'border-muted', 'bg-amber-50', 'border-amber-300');
-                            priceContainer.classList.add('bg-green-50', 'border-green-300', 'shadow-sm');
-                            highlightContainer(priceContainer);
-                        } else {
-                            totalPriceElement.innerHTML = `
-                            <div class="flex items-center text-foreground/50">
-                                <i class="ri-information-line mr-2"></i>
-                                Draw an area to calculate credit points
-                            </div>
-                        `;
-                            priceContainer.classList.remove('bg-green-50', 'border-green-300', 'shadow-sm');
-                            priceContainer.classList.add('bg-muted/60', 'border-muted');
-                        }
-
-                        priceContainer.style.transition = 'all 0.3s ease-in-out';
-                    };
-
-                    window.calculateTotalPrice = calculateTotalPrice;
-                };
-
-                // Bootstrap the panel experience once the DOM has finished loading.
-                document.addEventListener('DOMContentLoaded', () => {
+                const bootstrapPanels = () => {
                     window.showPanel = showPanel;
                     window.closePanels = closePanels;
 
                     initialiseHorizontalScroll();
                     initialiseDefaultPanel();
                     registerEventListeners();
-                    initialisePriceCalculator();
                     syncPanelLayoutWithViewport();
 
                     const sentinelModule = window.AppMap?.sentinel;
                     if (sentinelModule?.loadCollections && !sentinelModule.loadedOnce) {
                         sentinelModule.loadCollections();
                     }
-                });
-            })();
-        </script>
-    @endpush
-    @push('javascript')
-        <script>
-            (() => {
-                // Cache frequently used DOM references for the uploader workflow.
-                const elements = {
-                    sourceInput: document.getElementById('sourceType'),
-                    fileInput: document.getElementById('fileInput'),
-                    fileInfo: document.getElementById('fileInfo'),
-                    progressBar: document.getElementById('progressBar'),
-                    progressText: document.getElementById('progressText'),
-                    startBtn: document.getElementById('startBtn'),
-                    pauseBtn: document.getElementById('pauseBtn'),
-                    resumeBtn: document.getElementById('resumeBtn'),
-                    myDataContainer: document.getElementById('myDataContainer'),
-                    cardTemplate: document.getElementById('imageryCardTemplate')
-                };
-
-                const allElementsReady = Object.values(elements).every(Boolean);
-
-                if (!allElementsReady) {
-                    console.warn('Imagery uploader controls missing. Skipping uploader bootstrap.', {
-                        hasSourceInput: Boolean(elements.sourceInput),
-                        hasFileInput: Boolean(elements.fileInput),
-                        hasFileInfo: Boolean(elements.fileInfo),
-                        hasProgressBar: Boolean(elements.progressBar),
-                        hasProgressText: Boolean(elements.progressText),
-                        hasStartBtn: Boolean(elements.startBtn),
-                        hasPauseBtn: Boolean(elements.pauseBtn),
-                        hasResumeBtn: Boolean(elements.resumeBtn),
-                        hasMyDataContainer: Boolean(elements.myDataContainer),
-                        hasTemplate: Boolean(elements.cardTemplate)
-                    });
-                    return;
-                }
-
-                // Configuration values that control chunking and retry behaviour.
-                const config = {
-                    chunkSize: 5 * 1024 * 1024,
-                    maxRetries: 3,
-                    autoResetDelay: 4000,
-                    imageryProcessingCost: {{ config('app-constants.imagery_processing_cost', 10) }}
-                };
-
-                // Endpoints required throughout the upload process.
-                const endpoints = {
-                    chunk: '{{ route('upload.chunk') }}',
-                    merge: '{{ route('upload.merge') }}',
-                    list: '{{ route('imagery.list') }}'
-                };
-
-                // Mutable state object tracking progress and timings.
-                const state = {
-                    paused: false,
-                    uploading: false,
-                    file: null,
-                    uploadId: null,
-                    currentChunk: 0,
-                    totalChunks: 0,
-                    startTime: 0,
-                    uploadedBytes: 0
-                };
-
-                // Ensure the uploader exposes hooks on the global AppMap namespace.
-                const ensureAppNamespace = () => {
-                    window.AppMap = window.AppMap || {};
-                    window.AppMap.uploader = window.AppMap.uploader || {};
-                };
-
-                // Toggle button states based on the current upload lifecycle stage.
-                const setButtonState = (mode) => {
-                    const {
-                        startBtn,
-                        pauseBtn,
-                        resumeBtn
-                    } = elements;
-
-                    const disableAll = () => {
-                        startBtn.disabled = true;
-                        pauseBtn.disabled = true;
-                        resumeBtn.disabled = true;
-                    };
-
-                    switch (mode) {
-                        case 'ready':
-                            startBtn.disabled = false;
-                            pauseBtn.disabled = true;
-                            resumeBtn.disabled = true;
-                            // Restore original button text if it was changed to loading state
-                            if (startBtn.innerHTML.includes('Checking')) {
-                                startBtn.innerHTML = startBtn.innerHTML.replace(/<i class="ri-loader-4-line animate-spin"><\/i> Checking.../, 'Start Upload');
-                            }
-                            break;
-                        case 'uploading':
-                            startBtn.disabled = true;
-                            pauseBtn.disabled = false;
-                            resumeBtn.disabled = true;
-                            break;
-                        case 'paused':
-                            startBtn.disabled = true;
-                            pauseBtn.disabled = true;
-                            resumeBtn.disabled = false;
-                            break;
-                        case 'merging':
-                        case 'completed':
-                        case 'error':
-                            disableAll();
-                            if (mode === 'error') {
-                                startBtn.disabled = false;
-                            }
-                            // Restore original button text if it was changed to loading state
-                            if (startBtn.innerHTML.includes('Checking')) {
-                                startBtn.innerHTML = startBtn.innerHTML.replace(/<i class="ri-loader-4-line animate-spin"><\/i> Checking.../, 'Start Upload');
-                            }
-                            break;
-                        case 'loading':
-                            startBtn.disabled = true;
-                            startBtn.innerHTML = '<i class="ri-loader-4-line animate-spin"></i> Checking...';
-                            pauseBtn.disabled = true;
-                            resumeBtn.disabled = true;
-                            break;
-                        case 'idle':
-                        default:
-                            disableAll();
-                            // Restore original button text if it was changed to loading state
-                            if (startBtn.innerHTML.includes('Checking')) {
-                                startBtn.innerHTML = startBtn.innerHTML.replace(/<i class="ri-loader-4-line animate-spin"><\/i> Checking.../, 'Start Upload');
-                            }
-                            break;
-                    }
-                };
-
-                // Clear all runtime bookkeeping for a fresh upload session.
-                const resetState = () => {
-                    state.paused = false;
-                    state.uploading = false;
-                    state.file = null;
-                    state.uploadId = null;
-                    state.currentChunk = 0;
-                    state.totalChunks = 0;
-                    state.startTime = 0;
-                    state.uploadedBytes = 0;
-                };
-
-                // Restore the UI to an idle appearance without progress.
-                const resetUI = () => {
-                    const {
-                        fileInput,
-                        fileInfo,
-                        progressBar,
-                        progressText
-                    } = elements;
-                    fileInput.value = '';
-                    fileInfo.classList.add('hidden');
-                    fileInfo.innerHTML = '';
-                    progressBar.style.width = '0%';
-                    progressText.textContent = 'Ready for next upload.';
-                };
-
-                // Present the selected file name and size before uploading.
-                const showFileSummary = (file) => {
-                    const {
-                        fileInfo,
-                        progressBar,
-                        progressText
-                    } = elements;
-                    const sizeMB = (file.size / 1024 / 1024).toFixed(2);
-                    const shortName = shortenFilename(file.name, 40);
-
-                    fileInfo.classList.remove('hidden');
-                    fileInfo.innerHTML = `
-                    <strong>Name:</strong> ${shortName}<br>
-                    <strong>Size:</strong> ${sizeMB} MB
-                `;
-
-                    progressText.textContent = "✅ File ready to upload. Click 'Start Upload' to begin.";
-                    progressBar.style.width = '0%';
-                };
-
-                // Update progress bar width and accompanying status text.
-                const updateProgressDisplay = (percentage, speedMBps, etaText) => {
-                    const {
-                        progressBar,
-                        progressText
-                    } = elements;
-                    progressBar.style.width = `${percentage}%`;
-                    const speedText = Number.isFinite(speedMBps) ? speedMBps.toFixed(2) : '0.00';
-                    progressText.textContent = `Uploading... ${percentage}% | 🚀 ${speedText} MB/s | ⏳ ETA: ${etaText}`;
-                };
-
-                // React to new file input selections and prime the uploader.
-                const handleFileChange = (event) => {
-                    state.file = event.target.files?.[0] || null;
-
-                    if (!state.file) {
-                        resetState();
-                        resetUI();
-                        setButtonState('idle');
-                        return;
-                    }
-
-                    showFileSummary(state.file);
-                    MyZkToast.info('File ready to upload, click Start to begin.');
-                    setButtonState('ready');
-                };
-
-                // Generate a lightweight identifier for coordinating chunk requests.
-                const generateUploadId = () => {
-                    const timestamp = Date.now();
-                    const random = Math.random().toString(36).substring(2, 10).toUpperCase();
-                    return `${timestamp}_${random}`;
-                };
-
-                // Convert bytes remaining and elapsed seconds into a readable ETA.
-                const formatEta = (remainingBytes, elapsedSeconds) => {
-                    if (!Number.isFinite(elapsedSeconds) || elapsedSeconds <= 0) {
-                        return '-';
-                    }
-                    const speedBytesPerSecond = state.uploadedBytes / elapsedSeconds;
-                    if (speedBytesPerSecond <= 0) {
-                        return '-';
-                    }
-                    const remainingSeconds = remainingBytes / speedBytesPerSecond;
-                    return remainingSeconds > 0 ? formatTimeETA(remainingSeconds) : '-';
-                };
-
-                // Upload the next chunk and retry if transient errors occur.
-                const uploadNextChunk = async (retryCount = 0) => {
-                    if (state.paused || !state.file) return;
-
-                    if (state.currentChunk >= state.totalChunks) {
-                        elements.progressText.textContent = '🧩 Preparing file for background merge...';
-                        await mergeChunks();
-                        return;
-                    }
-
-                    const start = state.currentChunk * config.chunkSize;
-                    const end = Math.min(state.file.size, start + config.chunkSize);
-                    const chunk = state.file.slice(start, end);
-
-                    const formData = new FormData();
-                    formData.append('upload_id', state.uploadId);
-                    formData.append('chunk_index', state.currentChunk);
-                    formData.append('chunk', chunk);
-
-                    try {
-                        const response = await fetch(endpoints.chunk, {
-                            method: 'POST',
-                            headers: {
-                                'X-CSRF-TOKEN': '{{ csrf_token() }}'
-                            },
-                            body: formData
-                        });
-
-                        const payload = await response.json();
-                        if (!response.ok || !payload.success) {
-                            throw new Error(payload.message || `Chunk ${state.currentChunk} failed.`);
-                        }
-
-                        state.currentChunk += 1;
-                        state.uploadedBytes += chunk.size;
-
-                        const elapsedSeconds = Math.max((performance.now() - state.startTime) / 1000, 0.001);
-                        const speedMBps = state.uploadedBytes / 1024 / 1024 / elapsedSeconds;
-                        const remainingBytes = state.file.size - state.uploadedBytes;
-                        const etaText = formatEta(remainingBytes, elapsedSeconds);
-                        const progress = Math.round((state.currentChunk / state.totalChunks) * 100);
-
-                        updateProgressDisplay(progress, speedMBps, etaText);
-
-                        if (progress === 100) {
-                            MyZkToast.info('Finalising upload on server...');
-                        }
-
-                        if (!state.paused) {
-                            await uploadNextChunk();
-                        }
-                    } catch (error) {
-                        if (retryCount < config.maxRetries) {
-                            const delay = 2000 * (retryCount + 1);
-                            setTimeout(() => uploadNextChunk(retryCount + 1), delay);
-                            return;
-                        }
-
-                        elements.progressText.textContent = `❌ Chunk ${state.currentChunk} failed after ${config.maxRetries} retries. Upload paused.`;
-                        MyZkToast.error(`Chunk ${state.currentChunk} failed after ${config.maxRetries} retries.`);
-                        state.paused = true;
-                        state.uploading = false;
-                        setButtonState('paused');
-                    }
-                };
-
-                // Ask the backend to merge all uploaded chunks into a single file.
-                const mergeChunks = async () => {
-                    setButtonState('merging');
-
-                    const formData = new FormData();
-                    formData.append('upload_id', state.uploadId);
-                    formData.append('filename', state.file.name);
-                    formData.append('total_chunks', state.totalChunks);
-                    formData.append('source_type', elements.sourceInput.value);
-
-                    // Check if user has enough credits to determine processing status
-                    const creditCheck = await checkUserCredits();
-                    if (!creditCheck.hasCredits) {
-                        formData.append('skip_processing', 'true');
-                    }
-
-                    try {
-                        const response = await fetch(endpoints.merge, {
-                            method: 'POST',
-                            headers: {
-                                'X-CSRF-TOKEN': '{{ csrf_token() }}'
-                            },
-                            body: formData
-                        });
-
-                        const result = await response.json();
-                        if (!response.ok || !result.success) {
-                            throw new Error(result.message || 'Failed to queue merge on server.');
-                        }
-
-                        elements.progressBar.style.width = '100%';
-                        elements.progressText.textContent = `✅ ${result.message || 'Upload received. Finalising in background.'}`;
-                        MyZkToast.success('File received! Finalising in the background.');
-                        setButtonState('completed');
-                        if (result.data?.currentCredits !== undefined) {
-                            $('#current-myCredits').text(formatNumber(result.data.currentCredits, 2));
-                        }
-                        await loadMyData();
-                        scheduleAutoReset();
-                    } catch (error) {
-                        elements.progressText.textContent = `❌ Error: ${error.message}`;
-                        MyZkToast.error(error.message || 'Server error while scheduling merge.');
-                        setButtonState('error');
-                        scheduleAutoReset();
-                    }
-                };
-
-                // After finishing, reset the UI back to idle after a short delay.
-                const scheduleAutoReset = () => {
-                    setTimeout(() => {
-                        resetState();
-                        resetUI();
-                        setButtonState('idle');
-                    }, config.autoResetDelay);
-                };
-
-                // Validate prerequisites and kick off the chunk upload loop.
-                const startUpload = () => {
-                    if (!state.file) {
-                        MyZkToast.warning('Please select a file first!');
-                        return;
-                    }
-
-                    // Show loading state on start button while checking credits
-                    setButtonState('loading');
-
-                    // Check user credits before proceeding
-                    checkUserCredits().then(res => {
-                        // Restore ready state if user has credits
-                        setButtonState('ready');
-                        $('#current-myCredits').text(formatNumber(res.currentCredits, 2));
-
-                        // Show confirmation modal before starting upload
-                        ZkPopAlert.show({
-                            message: `${res.hasCredits ? `This upload will cost ${res.requiredCredits} credit points for processing imagery. Do you want to proceed?` : `Insufficient credit points for processing. You need ${res.requiredCredits} credits. You can still upload the file, but processing will be skipped. Please purchase more credits to continue processing.`}`,
-                            icon: '<i class="ri-upload-cloud-2-line text-2xl text-primary"></i>',
-                            confirmClass: "focus:ring-primary/80 rounded-md text-sm px-2.5 py-1.5 bg-primary text-primary-foreground border border-primary hover:bg-primary/80 focus:outline-none focus:ring-primary",
-                            confirmText: "Yes, Upload",
-                            cancelText: "Cancel",
-                            onConfirm: () => {
-                                state.uploadId = generateUploadId();
-                                state.totalChunks = Math.ceil(state.file.size / config.chunkSize);
-                                state.currentChunk = 0;
-                                state.uploadedBytes = 0;
-                                state.paused = false;
-                                state.uploading = true;
-                                state.startTime = performance.now();
-
-                                MyZkToast.info('🚀 Upload started...');
-                                elements.progressText.textContent = `🚀 Uploading ${state.file.name}...`;
-                                setButtonState('uploading');
-                                uploadNextChunk();
-                            }
-                        });
-                    }).catch(error => {
-                        // Restore ready state on error
-                        setButtonState('ready');
-                        MyZkToast.error('Failed to check credit balance: ' + error.message);
-                    });
-                };
-
-                // Function to check user credits
-                const checkUserCredits = async () => {
-                    const response = await fetch('{{ route('user.credits.check') }}');
-                    const result = await response.json();
-
-                    if (!result.success) {
-                        MyZkToast.error(result.message || 'Failed to check credit balance.');
-                        return false;
-                    }
-
-                    const currentCredits = parseFloat(formatNumber(result.credits, 2));
-                    const requiredCredits = config.imageryProcessingCost || 10; // Default to 10 if not set
-
-                    return new Promise((resolve) => {
-                        resolve(data = {
-                            hasCredits: currentCredits >= requiredCredits,
-                            currentCredits: currentCredits,
-                            requiredCredits: requiredCredits
-                        });
-                    });
-                };
-
-                // Suspend ongoing uploads without losing progress state.
-                const pauseUpload = () => {
-                    if (!state.uploading) {
-                        return;
-                    }
-                    state.paused = true;
-                    state.uploading = false;
-                    elements.progressText.textContent = '⏸️ Upload paused.';
-                    MyZkToast.warning('Upload paused.');
-                    setButtonState('paused');
-                };
-
-                // Resume uploads after a pause by continuing from the current chunk.
-                const resumeUpload = () => {
-                    if (!state.file) {
-                        return;
-                    }
-                    state.paused = false;
-                    state.uploading = true;
-                    elements.progressText.textContent = '▶️ Upload resumed...';
-                    MyZkToast.info('Upload resumed...');
-                    setButtonState('uploading');
-                    uploadNextChunk();
-                };
-
-                // Create a DOM fragment describing a single imagery record.
-                const renderImageryCard = (item) => {
-                    const template = elements.cardTemplate;
-                    if (!template?.content) {
-                        return null;
-                    }
-
-                    const fragment = template.content.cloneNode(true);
-                    const card = fragment.querySelector('.imagery-card');
-                    if (!card) {
-                        return null;
-                    }
-
-                    const formatLabel = (item.format || '').slice(0, 3).toUpperCase() || 'N/A';
-                    card.querySelector('.imagery-format').textContent = formatLabel;
-                    const displayName = item.stored_name || item.original_name || 'Imagery File';
-                    card.querySelector('.imagery-name').textContent = shortenFilename(displayName, 25);
-
-                    const sizeValue = Number(item.size) || 0;
-                    const sizeMb = (sizeValue / 1024 / 1024).toFixed(2);
-                    const uploadDate = item.uploaded_at ? new Date(item.uploaded_at).toLocaleString() : '—';
-
-                    const uploadStatusKey = (item.upload_status || 'unknown').toLowerCase();
-                    const processingStatusKey = (item.processing_status || 'unknown').toLowerCase();
-
-                    const uploadStatusMap = {
-                        done: {
-                            label: 'Uploaded',
-                            className: 'text-success'
-                        },
-                        merging: {
-                            label: 'Finalising Upload',
-                            className: 'text-warning'
-                        },
-                        pending: {
-                            label: 'Awaiting Merge',
-                            className: 'text-warning'
-                        },
-                        failed: {
-                            label: 'Upload Failed',
-                            className: 'text-red-500'
-                        },
-                    };
-
-                    const processingStatusMap = {
-                        completed: {
-                            label: 'Processing Complete',
-                            className: 'text-success'
-                        },
-                        processing: {
-                            label: 'Processing',
-                            className: 'text-warning'
-                        },
-                        waiting: {
-                            label: 'Queued for Processing',
-                            className: 'text-warning'
-                        },
-                        queued: {
-                            label: 'Queued',
-                            className: 'text-warning'
-                        },
-                        skip: {
-                            label: 'Processing Skipped',
-                            className: 'text-foreground/60'
-                        },
-                        error: {
-                            label: 'Processing Failed',
-                            className: 'text-red-500'
-                        },
-                    };
-
-                    const uploadStatusInfo = uploadStatusMap[uploadStatusKey] || {
-                        label: uploadStatusKey.charAt(0).toUpperCase() + uploadStatusKey.slice(1),
-                        className: 'text-foreground/60',
-                    };
-
-                    const processingStatusInfo = processingStatusMap[processingStatusKey] || {
-                        label: processingStatusKey.charAt(0).toUpperCase() + processingStatusKey.slice(1),
-                        className: 'text-foreground/60',
-                    };
-
-                    const meta = `${sizeMb} MB • ${uploadDate} • <span class="imagery-status font-semibold ${uploadStatusInfo.className}">${uploadStatusInfo.label}</span> • <span class="imagery-status font-semibold ${processingStatusInfo.className}">${processingStatusInfo.label}</span>`;
-                    card.querySelector('.imagery-meta').innerHTML = meta;
-
-                    const viewBtn = card.querySelector('.view-btn');
-                    viewBtn?.addEventListener('click', () => viewImagery(item));
-
-                    return fragment;
-                };
-
-                // Retrieve the user's imagery list and render it into the panel.
-                const loadMyData = async () => {
-                    const container = elements.myDataContainer;
-                    container.innerHTML = `
-                    <div class="flex justify-center py-4">
-                        <p class="text-sm text-foreground/60 animate-pulse">Loading your imagery list...</p>
-                    </div>
-                `;
-
-                    try {
-                        const response = await fetch(endpoints.list);
-                        const payload = await response.json();
-                        if (!response.ok || !payload.success) {
-                            throw new Error(payload.message || 'Failed to fetch imagery data.');
-                        }
-
-                        const data = payload.data || [];
-                        container.innerHTML = '';
-
-                        if (data.length === 0) {
-                            container.innerHTML = '<p class="text-sm text-gray-400 text-center py-4">No imagery uploaded yet.</p>';
-                            return;
-                        }
-
-                        data.forEach((item) => {
-                            const fragment = renderImageryCard(item);
-                            if (fragment) {
-                                container.appendChild(fragment);
-                            }
-                        });
-                    } catch (error) {
-                        container.innerHTML = `
-                        <div class="text-sm text-red-500 bg-red-50 border border-red-200 rounded p-3">
-                            ❌ ${error.message}
-                        </div>
-                    `;
-                    }
-                };
-
-                // Attach DOM event listeners for file and control buttons.
-                const bindEventListeners = () => {
-                    elements.fileInput.addEventListener('change', handleFileChange);
-                    elements.startBtn.addEventListener('click', startUpload);
-                    elements.pauseBtn.addEventListener('click', pauseUpload);
-                    elements.resumeBtn.addEventListener('click', resumeUpload);
-                };
-
-                // Bootstrap the uploader module and fetch initial server data.
-                const initialise = () => {
-                    ensureAppNamespace();
-                    window.setButtonState = setButtonState;
-                    window.AppMap.uploader.reload = loadMyData;
-
-                    resetState();
-                    resetUI();
-                    setButtonState('idle');
-                    bindEventListeners();
-                    loadMyData();
                 };
 
                 if (document.readyState === 'loading') {
-                    document.addEventListener('DOMContentLoaded', initialise, {
+                    document.addEventListener('DOMContentLoaded', bootstrapPanels, {
                         once: true
                     });
                 } else {
-                    initialise();
+                    bootstrapPanels();
                 }
             })();
         </script>
     @endpush
+
+    @push('javascript')
+        @auth
+            <script>
+                (() => {
+                    // Cache frequently used DOM references for the uploader workflow.
+                    const elements = {
+                        sourceInput: document.getElementById('sourceType'),
+                        fileInput: document.getElementById('fileInput'),
+                        fileInfo: document.getElementById('fileInfo'),
+                        progressBar: document.getElementById('progressBar'),
+                        progressText: document.getElementById('progressText'),
+                        startBtn: document.getElementById('startBtn'),
+                        pauseBtn: document.getElementById('pauseBtn'),
+                        resumeBtn: document.getElementById('resumeBtn'),
+                        myDataContainer: document.getElementById('myDataContainer'),
+                        cardTemplate: document.getElementById('imageryCardTemplate')
+                    };
+
+                    const allElementsReady = Object.values(elements).every(Boolean);
+
+                    if (!allElementsReady) {
+                        console.warn('Imagery uploader controls missing. Skipping uploader bootstrap.', {
+                            hasSourceInput: Boolean(elements.sourceInput),
+                            hasFileInput: Boolean(elements.fileInput),
+                            hasFileInfo: Boolean(elements.fileInfo),
+                            hasProgressBar: Boolean(elements.progressBar),
+                            hasProgressText: Boolean(elements.progressText),
+                            hasStartBtn: Boolean(elements.startBtn),
+                            hasPauseBtn: Boolean(elements.pauseBtn),
+                            hasResumeBtn: Boolean(elements.resumeBtn),
+                            hasMyDataContainer: Boolean(elements.myDataContainer),
+                            hasTemplate: Boolean(elements.cardTemplate)
+                        });
+                        return;
+                    }
+
+                    // Configuration values that control chunking and retry behaviour.
+                    const config = {
+                        chunkSize: 5 * 1024 * 1024,
+                        maxRetries: 3,
+                        autoResetDelay: 4000,
+                        imageryProcessingCost: {{ config('app-constants.imagery_processing_cost', 10) }}
+                    };
+
+                    // Endpoints required throughout the upload process.
+                    const endpoints = {
+                        chunk: '{{ route('upload.chunk') }}',
+                        merge: '{{ route('upload.merge') }}',
+                        list: '{{ route('imagery.list') }}'
+                    };
+
+                    // Mutable state object tracking progress and timings.
+                    const state = {
+                        paused: false,
+                        uploading: false,
+                        file: null,
+                        uploadId: null,
+                        currentChunk: 0,
+                        totalChunks: 0,
+                        startTime: 0,
+                        uploadedBytes: 0
+                    };
+
+                    // Ensure the uploader exposes hooks on the global AppMap namespace.
+                    const ensureAppNamespace = () => {
+                        window.AppMap = window.AppMap || {};
+                        window.AppMap.uploader = window.AppMap.uploader || {};
+                    };
+
+                    // Toggle button states based on the current upload lifecycle stage.
+                    const setButtonState = (mode) => {
+                        const {
+                            startBtn,
+                            pauseBtn,
+                            resumeBtn
+                        } = elements;
+
+                        const disableAll = () => {
+                            startBtn.disabled = true;
+                            pauseBtn.disabled = true;
+                            resumeBtn.disabled = true;
+                        };
+
+                        switch (mode) {
+                            case 'ready':
+                                startBtn.disabled = false;
+                                pauseBtn.disabled = true;
+                                resumeBtn.disabled = true;
+                                // Restore original button text if it was changed to loading state
+                                if (startBtn.innerHTML.includes('Checking')) {
+                                    startBtn.innerHTML = startBtn.innerHTML.replace(/<i class="ri-loader-4-line animate-spin"><\/i> Checking.../, 'Start Upload');
+                                }
+                                break;
+                            case 'uploading':
+                                startBtn.disabled = true;
+                                pauseBtn.disabled = false;
+                                resumeBtn.disabled = true;
+                                break;
+                            case 'paused':
+                                startBtn.disabled = true;
+                                pauseBtn.disabled = true;
+                                resumeBtn.disabled = false;
+                                break;
+                            case 'merging':
+                            case 'completed':
+                            case 'error':
+                                disableAll();
+                                if (mode === 'error') {
+                                    startBtn.disabled = false;
+                                }
+                                // Restore original button text if it was changed to loading state
+                                if (startBtn.innerHTML.includes('Checking')) {
+                                    startBtn.innerHTML = startBtn.innerHTML.replace(/<i class="ri-loader-4-line animate-spin"><\/i> Checking.../, 'Start Upload');
+                                }
+                                break;
+                            case 'loading':
+                                startBtn.disabled = true;
+                                startBtn.innerHTML = '<i class="ri-loader-4-line animate-spin"></i> Checking...';
+                                pauseBtn.disabled = true;
+                                resumeBtn.disabled = true;
+                                break;
+                            case 'idle':
+                            default:
+                                disableAll();
+                                // Restore original button text if it was changed to loading state
+                                if (startBtn.innerHTML.includes('Checking')) {
+                                    startBtn.innerHTML = startBtn.innerHTML.replace(/<i class="ri-loader-4-line animate-spin"><\/i> Checking.../, 'Start Upload');
+                                }
+                                break;
+                        }
+                    };
+
+                    // Clear all runtime bookkeeping for a fresh upload session.
+                    const resetState = () => {
+                        state.paused = false;
+                        state.uploading = false;
+                        state.file = null;
+                        state.uploadId = null;
+                        state.currentChunk = 0;
+                        state.totalChunks = 0;
+                        state.startTime = 0;
+                        state.uploadedBytes = 0;
+                    };
+
+                    // Restore the UI to an idle appearance without progress.
+                    const resetUI = () => {
+                        const {
+                            fileInput,
+                            fileInfo,
+                            progressBar,
+                            progressText
+                        } = elements;
+                        fileInput.value = '';
+                        fileInfo.classList.add('hidden');
+                        fileInfo.innerHTML = '';
+                        progressBar.style.width = '0%';
+                        progressText.textContent = 'Ready for next upload.';
+                    };
+
+                    // Present the selected file name and size before uploading.
+                    const showFileSummary = (file) => {
+                        const {
+                            fileInfo,
+                            progressBar,
+                            progressText
+                        } = elements;
+                        const sizeMB = (file.size / 1024 / 1024).toFixed(2);
+                        const shortName = shortenFilename(file.name, 40);
+
+                        fileInfo.classList.remove('hidden');
+                        fileInfo.innerHTML = `
+                    <strong>Name:</strong> ${shortName}<br>
+                    <strong>Size:</strong> ${sizeMB} MB
+                    `;
+
+                        progressText.textContent = "✅ File ready to upload. Click 'Start Upload' to begin.";
+                        progressBar.style.width = '0%';
+                    };
+
+                    // Update progress bar width and accompanying status text.
+                    const updateProgressDisplay = (percentage, speedMBps, etaText) => {
+                        const {
+                            progressBar,
+                            progressText
+                        } = elements;
+                        progressBar.style.width = `${percentage}%`;
+                        const speedText = Number.isFinite(speedMBps) ? speedMBps.toFixed(2) : '0.00';
+                        progressText.textContent = `Uploading... ${percentage}% | 🚀 ${speedText} MB/s | ⏳ ETA: ${etaText}`;
+                    };
+
+                    // React to new file input selections and prime the uploader.
+                    const handleFileChange = (event) => {
+                        state.file = event.target.files?.[0] || null;
+
+                        if (!state.file) {
+                            resetState();
+                            resetUI();
+                            setButtonState('idle');
+                            return;
+                        }
+
+                        showFileSummary(state.file);
+                        MyZkToast.info('File ready to upload, click Start to begin.');
+                        setButtonState('ready');
+                    };
+
+                    // Generate a lightweight identifier for coordinating chunk requests.
+                    const generateUploadId = () => {
+                        const timestamp = Date.now();
+                        const random = Math.random().toString(36).substring(2, 10).toUpperCase();
+                        return `${timestamp}_${random}`;
+                    };
+
+                    // Convert bytes remaining and elapsed seconds into a readable ETA.
+                    const formatEta = (remainingBytes, elapsedSeconds) => {
+                        if (!Number.isFinite(elapsedSeconds) || elapsedSeconds <= 0) {
+                            return '-';
+                        }
+                        const speedBytesPerSecond = state.uploadedBytes / elapsedSeconds;
+                        if (speedBytesPerSecond <= 0) {
+                            return '-';
+                        }
+                        const remainingSeconds = remainingBytes / speedBytesPerSecond;
+                        return remainingSeconds > 0 ? formatTimeETA(remainingSeconds) : '-';
+                    };
+
+                    // Upload the next chunk and retry if transient errors occur.
+                    const uploadNextChunk = async (retryCount = 0) => {
+                        if (state.paused || !state.file) return;
+
+                        if (state.currentChunk >= state.totalChunks) {
+                            elements.progressText.textContent = '🧩 Preparing file for background merge...';
+                            await mergeChunks();
+                            return;
+                        }
+
+                        const start = state.currentChunk * config.chunkSize;
+                        const end = Math.min(state.file.size, start + config.chunkSize);
+                        const chunk = state.file.slice(start, end);
+
+                        const formData = new FormData();
+                        formData.append('upload_id', state.uploadId);
+                        formData.append('chunk_index', state.currentChunk);
+                        formData.append('chunk', chunk);
+
+                        try {
+                            const response = await fetch(endpoints.chunk, {
+                                method: 'POST',
+                                headers: {
+                                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                                },
+                                body: formData
+                            });
+
+                            const payload = await response.json();
+                            if (!response.ok || !payload.success) {
+                                throw new Error(payload.message || `Chunk ${state.currentChunk} failed.`);
+                            }
+
+                            state.currentChunk += 1;
+                            state.uploadedBytes += chunk.size;
+
+                            const elapsedSeconds = Math.max((performance.now() - state.startTime) / 1000, 0.001);
+                            const speedMBps = state.uploadedBytes / 1024 / 1024 / elapsedSeconds;
+                            const remainingBytes = state.file.size - state.uploadedBytes;
+                            const etaText = formatEta(remainingBytes, elapsedSeconds);
+                            const progress = Math.round((state.currentChunk / state.totalChunks) * 100);
+
+                            updateProgressDisplay(progress, speedMBps, etaText);
+
+                            if (progress === 100) {
+                                MyZkToast.info('Finalising upload on server...');
+                            }
+
+                            if (!state.paused) {
+                                await uploadNextChunk();
+                            }
+                        } catch (error) {
+                            if (retryCount < config.maxRetries) {
+                                const delay = 2000 * (retryCount + 1);
+                                setTimeout(() => uploadNextChunk(retryCount + 1), delay);
+                                return;
+                            }
+
+                            elements.progressText.textContent = `❌ Chunk ${state.currentChunk} failed after ${config.maxRetries} retries. Upload paused.`;
+                            MyZkToast.error(`Chunk ${state.currentChunk} failed after ${config.maxRetries} retries.`);
+                            state.paused = true;
+                            state.uploading = false;
+                            setButtonState('paused');
+                        }
+                    };
+
+                    // Ask the backend to merge all uploaded chunks into a single file.
+                    const mergeChunks = async () => {
+                        setButtonState('merging');
+
+                        const formData = new FormData();
+                        formData.append('upload_id', state.uploadId);
+                        formData.append('filename', state.file.name);
+                        formData.append('total_chunks', state.totalChunks);
+                        formData.append('source_type', elements.sourceInput.value);
+
+                        // Check if user has enough credits to determine processing status
+                        const creditCheck = await checkUserCredits();
+                        if (!creditCheck.hasCredits) {
+                            formData.append('skip_processing', 'true');
+                        }
+
+                        try {
+                            const response = await fetch(endpoints.merge, {
+                                method: 'POST',
+                                headers: {
+                                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                                },
+                                body: formData
+                            });
+
+                            const result = await response.json();
+                            if (!response.ok || !result.success) {
+                                throw new Error(result.message || 'Failed to queue merge on server.');
+                            }
+
+                            elements.progressBar.style.width = '100%';
+                            elements.progressText.textContent = `✅ ${result.message || 'Upload received. Finalising in background.'}`;
+                            MyZkToast.success('File received! Finalising in the background.');
+                            setButtonState('completed');
+                            if (result.data?.currentCredits !== undefined) {
+                                $('#current-myCredits').text(formatNumber(result.data.currentCredits, 2));
+                            }
+                            await loadMyData();
+                            scheduleAutoReset();
+                        } catch (error) {
+                            elements.progressText.textContent = `❌ Error: ${error.message}`;
+                            MyZkToast.error(error.message || 'Server error while scheduling merge.');
+                            setButtonState('error');
+                            scheduleAutoReset();
+                        }
+                    };
+
+                    // After finishing, reset the UI back to idle after a short delay.
+                    const scheduleAutoReset = () => {
+                        setTimeout(() => {
+                            resetState();
+                            resetUI();
+                            setButtonState('idle');
+                        }, config.autoResetDelay);
+                    };
+
+                    // Validate prerequisites and kick off the chunk upload loop.
+                    const startUpload = () => {
+                        if (!state.file) {
+                            MyZkToast.warning('Please select a file first!');
+                            return;
+                        }
+
+                        // Show loading state on start button while checking credits
+                        setButtonState('loading');
+
+                        // Check user credits before proceeding
+                        checkUserCredits().then(res => {
+                            // Restore ready state if user has credits
+                            setButtonState('ready');
+                            $('#current-myCredits').text(formatNumber(res.currentCredits, 2));
+
+                            // Show confirmation modal before starting upload
+                            ZkPopAlert.show({
+                                message: `${res.hasCredits ? `This upload will cost ${res.requiredCredits} credit points for processing imagery. Do you want to proceed?` : `Insufficient credit points for processing. You need ${res.requiredCredits} credits. You can still upload the file, but processing will be skipped. Please purchase more credits to continue processing.`}`,
+                                icon: '<i class="ri-upload-cloud-2-line text-2xl text-primary"></i>',
+                                confirmClass: "focus:ring-primary/80 rounded-md text-sm px-2.5 py-1.5 bg-primary text-primary-foreground border border-primary hover:bg-primary/80 focus:outline-none focus:ring-primary",
+                                confirmText: "Yes, Upload",
+                                cancelText: "Cancel",
+                                onConfirm: () => {
+                                    state.uploadId = generateUploadId();
+                                    state.totalChunks = Math.ceil(state.file.size / config.chunkSize);
+                                    state.currentChunk = 0;
+                                    state.uploadedBytes = 0;
+                                    state.paused = false;
+                                    state.uploading = true;
+                                    state.startTime = performance.now();
+
+                                    MyZkToast.info('🚀 Upload started...');
+                                    elements.progressText.textContent = `🚀 Uploading ${state.file.name}...`;
+                                    setButtonState('uploading');
+                                    uploadNextChunk();
+                                }
+                            });
+                        }).catch(error => {
+                            // Restore ready state on error
+                            setButtonState('ready');
+                            MyZkToast.error('Failed to check credit balance: ' + error.message);
+                        });
+                    };
+
+                    // Suspend ongoing uploads without losing progress state.
+                    const pauseUpload = () => {
+                        if (!state.uploading) {
+                            return;
+                        }
+                        state.paused = true;
+                        state.uploading = false;
+                        elements.progressText.textContent = '⏸️ Upload paused.';
+                        MyZkToast.warning('Upload paused.');
+                        setButtonState('paused');
+                    };
+
+                    // Resume uploads after a pause by continuing from the current chunk.
+                    const resumeUpload = () => {
+                        if (!state.file) {
+                            return;
+                        }
+                        state.paused = false;
+                        state.uploading = true;
+                        elements.progressText.textContent = '▶️ Upload resumed...';
+                        MyZkToast.info('Upload resumed...');
+                        setButtonState('uploading');
+                        uploadNextChunk();
+                    };
+
+                    // Create a DOM fragment describing a single imagery record.
+                    const renderImageryCard = (item) => {
+                        const template = elements.cardTemplate;
+                        if (!template?.content) {
+                            return null;
+                        }
+
+                        const fragment = template.content.cloneNode(true);
+                        const card = fragment.querySelector('.imagery-card');
+                        if (!card) {
+                            return null;
+                        }
+
+                        const formatLabel = (item.format || '').slice(0, 3).toUpperCase() || 'N/A';
+                        card.querySelector('.imagery-format').textContent = formatLabel;
+                        const displayName = item.stored_name || item.original_name || 'Imagery File';
+                        card.querySelector('.imagery-name').textContent = shortenFilename(displayName, 26);
+
+                        const sizeValue = Number(item.size) || 0;
+                        const sizeMb = (sizeValue / 1024 / 1024).toFixed(2);
+                        const uploadDate = item.uploaded_at ? new Date(item.uploaded_at).toLocaleString() : '—';
+
+                        const uploadStatusKey = (item.upload_status || 'unknown').toLowerCase();
+                        const processingStatusKey = (item.processing_status || 'unknown').toLowerCase();
+
+                        const uploadStatusMap = {
+                            done: {
+                                label: 'Uploaded',
+                                className: 'text-success'
+                            },
+                            merging: {
+                                label: 'Finalising Upload',
+                                className: 'text-warning'
+                            },
+                            pending: {
+                                label: 'Awaiting Merge',
+                                className: 'text-warning'
+                            },
+                            failed: {
+                                label: 'Upload Failed',
+                                className: 'text-red-500'
+                            },
+                        };
+
+                        const processingStatusMap = {
+                            completed: {
+                                label: 'Processing Complete',
+                                className: 'text-success'
+                            },
+                            processing: {
+                                label: 'Processing',
+                                className: 'text-warning'
+                            },
+                            waiting: {
+                                label: 'Queued for Processing',
+                                className: 'text-warning'
+                            },
+                            queued: {
+                                label: 'Queued',
+                                className: 'text-warning'
+                            },
+                            skip: {
+                                label: 'Processing Skipped',
+                                className: 'text-foreground/60'
+                            },
+                            error: {
+                                label: 'Processing Failed',
+                                className: 'text-red-500'
+                            },
+                        };
+
+                        const uploadStatusInfo = uploadStatusMap[uploadStatusKey] || {
+                            label: uploadStatusKey.charAt(0).toUpperCase() + uploadStatusKey.slice(1),
+                            className: 'text-foreground/60',
+                        };
+
+                        const processingStatusInfo = processingStatusMap[processingStatusKey] || {
+                            label: processingStatusKey.charAt(0).toUpperCase() + processingStatusKey.slice(1),
+                            className: 'text-foreground/60',
+                        };
+
+                        const meta = `${sizeMb} MB • ${uploadDate} • <span class="imagery-status font-semibold ${uploadStatusInfo.className}">${uploadStatusInfo.label}</span> • <span class="imagery-status font-semibold ${processingStatusInfo.className}">${processingStatusInfo.label}</span>`;
+                        card.querySelector('.imagery-meta').innerHTML = meta;
+
+                        const viewBtn = card.querySelector('.view-btn');
+                        viewBtn?.addEventListener('click', () => viewImagery(item));
+
+                        return fragment;
+                    };
+
+                    // Retrieve the user's imagery list and render it into the panel.
+                    const loadMyData = async () => {
+                        const container = elements.myDataContainer;
+                        container.innerHTML = `
+                        <div class="flex justify-center py-4">
+                            <p class="text-sm text-foreground/60 animate-pulse">Loading your imagery list...</p>
+                        </div>
+                        `;
+
+                        try {
+                            const response = await fetch(endpoints.list);
+                            const payload = await response.json();
+                            if (!response.ok || !payload.success) {
+                                throw new Error(payload.message || 'Failed to fetch imagery data.');
+                            }
+
+                            const data = payload.data || [];
+                            container.innerHTML = '';
+
+                            if (data.length === 0) {
+                                container.innerHTML = '<p class="text-sm text-gray-400 text-center py-4">No imagery uploaded yet.</p>';
+                                return;
+                            }
+
+                            data.forEach((item) => {
+                                const fragment = renderImageryCard(item);
+                                if (fragment) {
+                                    container.appendChild(fragment);
+                                }
+                            });
+                        } catch (error) {
+                            container.innerHTML = `
+                            <div class="text-sm text-red-500 bg-red-50 border border-red-200 rounded p-3">
+                                ❌ ${error.message}
+                            </div>
+                            `;
+                        }
+                    };
+
+                    // Attach DOM event listeners for file and control buttons.
+                    const bindEventListeners = () => {
+                        elements.fileInput.addEventListener('change', handleFileChange);
+                        elements.startBtn.addEventListener('click', startUpload);
+                        elements.pauseBtn.addEventListener('click', pauseUpload);
+                        elements.resumeBtn.addEventListener('click', resumeUpload);
+                    };
+
+                    // Bootstrap the uploader module and fetch initial server data.
+                    const initialise = () => {
+                        ensureAppNamespace();
+                        window.setButtonState = setButtonState;
+                        window.AppMap.uploader.reload = loadMyData;
+
+                        resetState();
+                        resetUI();
+                        setButtonState('idle');
+                        bindEventListeners();
+                        loadMyData();
+                    };
+
+                    if (document.readyState === 'loading') {
+                        document.addEventListener('DOMContentLoaded', initialise, {
+                            once: true
+                        });
+                    } else {
+                        initialise();
+                    }
+                })
+                ();
+            </script>
+        @endauth
+    @endpush
     @push('javascript')
         <script>
             (() => {
-                const statusEl = document.getElementById('sentinelCollectionStatus');
-                const listEl = document.getElementById('sentinelCollectionList');
-                const templateEl = document.getElementById('sentinelCollectionTemplate');
-                const lastUpdatedEl = document.getElementById('sentinelLastUpdated');
-                const formEl = document.getElementById('sentinelFilterForm');
-                const resetButtonEl = document.getElementById('sentinelFilterResetButton');
-                const cloudInputEl = document.getElementById('sentinelCloudFilter');
-                const startDateInputEl = document.getElementById('sentinelStartDate');
-                const endDateInputEl = document.getElementById('sentinelEndDate');
-                const latInputEl = document.getElementById('sentinelLatFilter');
-                const lonInputEl = document.getElementById('sentinelLonFilter');
-                const levelInputEl = document.getElementById('sentinelProductLevel');
-                const panelEl = document.getElementById('sentinel-panel');
-
-                const previewPanelEl = document.getElementById('sentinelPreviewPanel');
-                const previewElements = {
-                    panel: previewPanelEl,
-                    title: previewPanelEl?.querySelector('[data-sentinel-preview-title]') ?? null,
-                    acquired: previewPanelEl?.querySelector('[data-sentinel-preview-acquired]') ?? null,
-                    details: previewPanelEl?.querySelector('[data-sentinel-preview-details]') ?? null,
-                    status: previewPanelEl?.querySelector('[data-sentinel-preview-status]') ?? null,
-                    clearButton: document.getElementById('sentinelPreviewClearBtn'),
-                    downloadButton: document.getElementById('sentinelPreviewDownloadBtn'),
-                    imageryButton: document.getElementById('sentinelPreviewImageryBtn'),
-                    imageryLabel: previewPanelEl?.querySelector('[data-sentinel-preview-imagery-label]') ?? null,
-                    imageryIcon: previewPanelEl?.querySelector('[data-sentinel-preview-imagery-icon]') ?? null
-                };
-
-                if (!statusEl || !listEl || !templateEl) {
+                // Abort if the Sentinel panel is not present in the DOM.
+                const panel = document.getElementById('sentinel-panel');
+                if (!panel) {
                     return;
                 }
 
+                // Cache frequently accessed DOM nodes for the Sentinel module.
+                const previewPanelEl = document.getElementById('sentinelPreviewPanel');
+                const previewDownloadBtnEl = document.getElementById('sentinelPreviewDownloadBtn');
+                const previewImageryBtnEl = document.getElementById('sentinelPreviewImageryBtn');
+                const previewClearBtnEl = document.getElementById('sentinelPreviewClearBtn');
+
+                const elements = {
+                    filterForm: document.getElementById('sentinelFilterForm'),
+                    resetButton: document.getElementById('sentinelFilterResetButton'),
+                    cloudInput: document.getElementById('sentinelCloudFilter'),
+                    productInput: document.getElementById('sentinelProductLevel'),
+                    startInput: document.getElementById('sentinelStartDate'),
+                    endInput: document.getElementById('sentinelEndDate'),
+                    latInput: document.getElementById('sentinelLatFilter'),
+                    lonInput: document.getElementById('sentinelLonFilter'),
+                    status: document.getElementById('sentinelCollectionStatus'),
+                    list: document.getElementById('sentinelCollectionList'),
+                    template: document.getElementById('sentinelCollectionTemplate'),
+                    previewPanel: previewPanelEl,
+                    previewTitle: previewPanelEl?.querySelector('[data-sentinel-preview-title]'),
+                    previewAcquired: previewPanelEl?.querySelector('[data-sentinel-preview-acquired]'),
+                    previewDetails: previewPanelEl?.querySelector('[data-sentinel-preview-details]'),
+                    previewStatus: previewPanelEl?.querySelector('[data-sentinel-preview-status]'),
+                    previewDownloadBtn: previewDownloadBtnEl,
+                    previewImageryBtn: previewImageryBtnEl,
+                    previewImageryIcon: previewPanelEl?.querySelector('[data-sentinel-preview-imagery-icon]'),
+                    previewImageryLabel: previewPanelEl?.querySelector('[data-sentinel-preview-imagery-label]'),
+                    previewClearBtn: previewClearBtnEl,
+                };
+
+                if (!elements.template || !elements.list || !elements.status) {
+                    console.warn('Sentinel collection template or container missing. Skipping Sentinel module bootstrap.');
+                    return;
+                }
+
+                // Normalise access to the global namespace so other modules can reuse this logic.
+                window.AppMap = window.AppMap || {};
+
                 const config = {
                     endpoint: 'https://catalogue.dataspace.copernicus.eu/resto/api/collections/Sentinel2/search.json',
-                    defaultMonthsBack: 1,
-                    defaultCloudCover: 40,
-                    defaultLatitude: -1.24536,
-                    defaultLongitude: 114.54535,
-                    defaultProductType: 'S2MSI2A'
+                    defaultMaxRecords: 10,
+                    filteredMaxRecords: 20,
+                    defaultDateRangeDays: 30,
+                    token: (panel.dataset.sentinelToken || '').trim(),
+                    processUrl: (panel.dataset.sentinelProcessUrl || '').trim(),
+                    clipProcessUrl: (panel.dataset.sentinelClipProcessUrl || '').trim(),
+                    processingCost: Number.parseFloat(panel.dataset.sentinelProcessingCost ?? '') || 0,
+                    // Fallback Copernicus WMS endpoint & layer when the catalogue response omits one.
+                    defaultWmsEndpoint: 'https://sh.dataspace.copernicus.eu/ogc/wms/1bd0fec1-0e52-427a-8e83-6e0dcd29a03a',
+                    defaultWmsLayer: 'NATURAL-COLOR',
+                    // Layer stacking order: keep WMS below the highlighted footprint polygons.
+                    previewWmsZIndex: 10,
+                    previewFootprintZIndex: 50,
+                    // Copernicus WMS enforces a ~200 m/px ceiling; clamp tiles below this threshold.
+                    previewMaxMetersPerPixel: 190,
+                    // Ensure enough zoom levels for over-zooming while keeping tile math predictable.
+                    previewTileZoomLevels: 22,
+                    previewTileSize: 256,
                 };
 
+                window.AppMap.constants = window.AppMap.constants || {};
+                if (!Number.isFinite(window.AppMap.constants.imageryProcessingCost) || window.AppMap.constants.imageryProcessingCost <= 0) {
+                    window.AppMap.constants.imageryProcessingCost = config.processingCost;
+                }
+
+                const clipModule = document.getElementById('sentinelClipModule');
+                const clipElements = {
+                    container: clipModule,
+                    processBtn: document.getElementById('clipProcessImageryBtn'),
+                    status: document.getElementById('clipProcessStatus'),
+                    fieldName: document.getElementById('clipFieldName'),
+                };
+                const clipConfig = {
+                    processUrl: (clipModule?.dataset.clipProcessUrl || config.clipProcessUrl || '').trim(),
+                    creditRate: Number.parseFloat(clipModule?.dataset.creditRate ?? '') || 0,
+                    processingCost: Number.parseFloat(clipModule?.dataset.processingCost ?? '') || 0,
+                };
+                const clipStatusToneClasses = ['text-success', 'text-warning', 'text-error', 'text-foreground/60'];
+
+                const updateClipStatus = (message, tone = 'muted') => {
+                    if (!clipElements.status) {
+                        return;
+                    }
+                    clipElements.status.textContent = message;
+                    clipStatusToneClasses.forEach((className) => {
+                        clipElements.status.classList.remove(className);
+                    });
+                    const toneClass = tone === 'success' ?
+                        'text-success' :
+                        tone === 'error' ?
+                        'text-error' :
+                        tone === 'warning' ?
+                        'text-warning' :
+                        'text-foreground/60';
+                    clipElements.status.classList.add(toneClass);
+                };
+
+                const computeClipCredits = (areaHa) => {
+                    if (!Number.isFinite(areaHa) || areaHa <= 0 || !Number.isFinite(clipConfig.creditRate) || clipConfig.creditRate <= 0) {
+                        return 0;
+                    }
+                    return Number((areaHa * clipConfig.creditRate).toFixed(2));
+                };
+
+                const buildFeatureCollection = (feature) => {
+                    if (!feature) {
+                        return null;
+                    }
+                    const properties = typeof feature.properties === 'object' && feature.properties !== null ?
+                        feature.properties : {};
+                    return {
+                        type: 'FeatureCollection',
+                        features: [{
+                            type: 'Feature',
+                            properties,
+                            geometry: feature.geometry,
+                        }],
+                    };
+                };
+
+                const enqueueClipProcessing = async (payload) => {
+                    if (!clipElements.processBtn || !clipConfig.processUrl) {
+                        return;
+                    }
+
+                    const originalHtml = clipElements.processBtn.innerHTML;
+                    const setButtonState = (html, disabled) => {
+                        if (typeof html === 'string') {
+                            clipElements.processBtn.innerHTML = html;
+                        }
+                        if (typeof disabled === 'boolean') {
+                            clipElements.processBtn.disabled = disabled;
+                        }
+                    };
+
+                    setButtonState('<i class="ri-loader-4-line animate-spin"></i><span>Submitting...</span>', true);
+                    updateClipStatus('Submitting clipped imagery request...', 'warning');
+
+                    try {
+                        const response = await fetch(clipConfig.processUrl, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/json',
+                                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}',
+                            },
+                            body: JSON.stringify(payload),
+                        });
+
+                        const result = await response.json().catch(() => ({}));
+
+                        if (response.ok && result?.success) {
+                            const message = result?.message || 'Sentinel clip queued for processing.';
+                            updateClipStatus(message, 'success');
+                            if (result?.data?.current_credits !== undefined) {
+                                $('#current-myCredits')?.text(formatNumber(result.data.current_credits, 2));
+                            }
+                            MyZkToast?.success?.(message);
+                        } else {
+                            const errorMessage = result?.message || 'Failed to queue clipped imagery processing. Please try again later.';
+                            updateClipStatus(errorMessage, 'error');
+                            MyZkToast?.error?.(errorMessage);
+                        }
+                    } catch (error) {
+                        console.error('Failed to queue Sentinel clip processing', error);
+                        updateClipStatus(error?.message || 'Unable to queue clipped imagery at this time.', 'error');
+                        MyZkToast?.error?.('Unable to queue clipped imagery at this time.');
+                    } finally {
+                        setButtonState(originalHtml, false);
+                        if (typeof window.AppMap?.uploader?.reload === 'function') {
+                            window.AppMap.uploader.reload();
+                        }
+                    }
+                };
+
+                const handleClipProcessingClick = async () => {
+                    if (!clipElements.processBtn) {
+                        return;
+                    }
+                    if (!clipConfig.processUrl) {
+                        MyZkToast?.warning?.('Please sign in to process Sentinel-2 clips.');
+                        return;
+                    }
+
+                    const feature = window.geojsonFeature;
+                    if (!feature || !feature.geometry) {
+                        updateClipStatus('Please draw an area of interest on the map before processing.', 'warning');
+                        MyZkToast?.warning?.('Draw a polygon on the map to define your area of interest.');
+                        return;
+                    }
+
+                    const areaSquareMeters = Number(window.geojsonArea);
+                    const areaHa = Number.isFinite(areaSquareMeters) ? areaSquareMeters / 10000 : NaN;
+                    if (!Number.isFinite(areaHa) || areaHa <= 0) {
+                        updateClipStatus('Unable to determine the area of interest. Draw the polygon again.', 'error');
+                        MyZkToast?.error?.('Unable to determine the selected area. Please redraw the polygon.');
+                        return;
+                    }
+
+                    const fieldName = (clipElements.fieldName?.value || '').trim();
+                    if (fieldName === '') {
+                        updateClipStatus('Enter a field name before processing the clipped imagery.', 'warning');
+                        MyZkToast?.warning?.('Please provide a field name for this area.');
+                        clipElements.fieldName?.focus();
+                        return;
+                    }
+
+                    const featureCollection = buildFeatureCollection(feature);
+                    if (!featureCollection?.features?.length) {
+                        updateClipStatus('Invalid geometry detected. Please redraw your area of interest.', 'error');
+                        MyZkToast?.error?.('Invalid geometry detected. Please redraw the area.');
+                        return;
+                    }
+
+                    const estimatedCredits = computeClipCredits(areaHa);
+                    const payload = {
+                        field_name: fieldName,
+                        area_hectares: areaHa,
+                        geojson: featureCollection,
+                        geometry: feature.geometry,
+                        estimated_credits: estimatedCredits,
+                    };
+
+                    try {
+                        const creditsInfo = await checkUserCredits(estimatedCredits);
+                        const currentCredits = Number.parseFloat(creditsInfo?.currentCredits ?? creditsInfo?.credits ?? 0) || 0;
+                        const requiredCredits = Number.isFinite(estimatedCredits) ? estimatedCredits : creditsInfo?.requiredCredits;
+                        const hasCredits = Number.isFinite(requiredCredits) ? currentCredits >= requiredCredits : creditsInfo?.hasCredits;
+                        const formattedRequired = Number.isFinite(requiredCredits) ? formatNumber(requiredCredits, 2) : formatNumber(creditsInfo?.requiredCredits ?? 0, 2);
+                        const formattedCurrent = formatNumber(currentCredits, 2);
+
+                        const proceed = () => {
+                            if (!hasCredits && Number.isFinite(requiredCredits) && requiredCredits > 0) {
+                                MyZkToast?.warning?.(`Insufficient credit points. You need ${formattedRequired} credits but only have ${formattedCurrent}.`);
+                                updateClipStatus('Insufficient credit points to process this imagery.', 'warning');
+                                return;
+                            }
+                            enqueueClipProcessing(payload);
+                        };
+
+                        const confirmationMessage = hasCredits || !Number.isFinite(requiredCredits) || requiredCredits <= 0 ?
+                            `This action will cost approximately ${formattedRequired} credit points. Do you want to continue?` :
+                            `You need ${formattedRequired} credit points but currently have ${formattedCurrent}. Please purchase more credits.`;
+
+                        if (typeof ZkPopAlert?.show === 'function') {
+                            ZkPopAlert.show({
+                                message: confirmationMessage,
+                                icon: '<i class="ri-cpu-line text-2xl text-primary"></i>',
+                                confirmClass: "focus:ring-primary/80 rounded-md text-sm px-2.5 py-1.5 bg-primary text-primary-foreground border border-primary hover:bg-primary/80 focus:outline-none focus:ring-primary",
+                                confirmText: hasCredits ? 'Yes, Process' : 'Close',
+                                cancelText: hasCredits ? 'Cancel' : null,
+                                onConfirm: () => {
+                                    if (hasCredits) {
+                                        proceed();
+                                    }
+                                },
+                            });
+                        } else if (hasCredits) {
+                            const confirmed = window.confirm(confirmationMessage);
+                            if (confirmed) {
+                                proceed();
+                            }
+                        } else {
+                            MyZkToast?.warning?.(`Insufficient credit points. You need ${formattedRequired} credits but only have ${formattedCurrent}.`);
+                            updateClipStatus('Insufficient credit points to process this imagery.', 'warning');
+                        }
+                    } catch (error) {
+                        console.error('Failed to verify credit balance', error);
+                        updateClipStatus('Unable to verify your credit balance. Please try again.', 'error');
+                        MyZkToast?.error?.('Unable to verify your credit balance.');
+                    }
+                };
+
+                if (clipElements.processBtn) {
+                    clipElements.processBtn.addEventListener('click', handleClipProcessingClick);
+                }
+
+                // Track loaded scenes, pending requests, and map preview state.
                 const state = {
+                    scenes: [],
                     loadedOnce: false,
-                    defaultStartIso: '',
-                    defaultEndIso: '',
-                    token: sanitizeToken(panelEl?.dataset?.sentinelToken ?? ''),
-                    tokenConfigured: (panelEl?.dataset?.sentinelCredentials ?? '').toLowerCase() === 'true'
+                    requestController: null,
+                    lastQueryString: null,
+                    preview: {
+                        map: window.map || null,
+                        footprintLayer: null,
+                        wmsLayer: null,
+                        activeSceneIndex: null,
+                        wmsActive: false,
+                    },
                 };
 
-                const ignoredDownloadKeywords = ['quicklook', 'thumbnail', 'thumb', 'overview', 'browse', 'preview', 'allorigins'];
-
-                // Ensure sentinel helpers are available under the shared AppMap namespace.
-                const ensureAppNamespace = () => {
-                    window.AppMap = window.AppMap || {};
-                    window.AppMap.sentinel = window.AppMap.sentinel || {};
-                };
-
-                // Safely convert incoming values into Date objects when possible.
-                const parseDate = (value) => {
-                    if (typeof window.parseDateInput === 'function') {
-                        return window.parseDateInput(value);
+                /**
+                 * Resolve the underlying OpenLayers map instance from various potential wrappers.
+                 */
+                const resolveMapInstance = (candidate) => {
+                    if (candidate && typeof candidate.addLayer === 'function' && typeof candidate.getView === 'function') {
+                        return candidate;
                     }
-                    if (value instanceof Date) {
-                        return new Date(value);
+                    if (candidate?.map && typeof candidate.map.addLayer === 'function') {
+                        return candidate.map;
                     }
-                    if (typeof value === 'string' && value.trim()) {
-                        const parsed = new Date(value);
-                        return Number.isNaN(parsed.getTime()) ? null : parsed;
+                    if (candidate?.detail) {
+                        return resolveMapInstance(candidate.detail);
                     }
                     return null;
                 };
 
-                // Determine the default date window used for catalogue searches.
-                const getDefaultDateRange = (monthsBack = config.defaultMonthsBack) => {
-                    const months = Number.isFinite(monthsBack) && monthsBack > 0 ? monthsBack : config.defaultMonthsBack;
+                /**
+                 * Persist and return the active OpenLayers map instance.
+                 */
+                const assignMapInstance = (candidate) => {
+                    const resolved = resolveMapInstance(candidate);
+                    if (resolved) {
+                        state.preview.map = resolved;
+                    }
+                    return resolved;
+                };
+
+                /**
+                 * Retrieve the OpenLayers map, refreshing the cached instance when necessary.
+                 */
+                const getMapInstance = () => {
+                    const resolved =
+                        resolveMapInstance(state.preview.map) ||
+                        assignMapInstance(window.map);
+                    if (resolved && state.preview.map !== resolved) {
+                        state.preview.map = resolved;
+                    }
+                    return resolved;
+                };
+
+                // Cache any immediately available map reference.
+                assignMapInstance(window.map);
+
+                // Lazily capture the OpenLayers map instance when it becomes available.
+                if (!state.preview.map) {
+                    window.addEventListener('map:ready', (event) => {
+                        assignMapInstance(event.detail);
+                    }, {
+                        once: true
+                    });
+                }
+
+                /**
+                 * Format a Date object into the YYYY-MM-DD pattern expected by date inputs.
+                 */
+                const formatDateForInput = (date) => {
+                    const year = date.getFullYear();
+                    const month = String(date.getMonth() + 1).padStart(2, '0');
+                    const day = String(date.getDate()).padStart(2, '0');
+                    return `${year}-${month}-${day}`;
+                };
+
+                /**
+                 * Provide a default 30-day date range ending today so the initial query stays manageable.
+                 */
+                const ensureDefaultDates = () => {
+                    if (!elements.startInput || !elements.endInput) {
+                        return;
+                    }
+
                     const end = new Date();
-                    end.setHours(23, 59, 59, 999);
-                    const start = new Date(end.getTime());
-                    start.setMonth(start.getMonth() - months);
-                    start.setHours(0, 0, 0, 0);
-                    return {
-                        start,
-                        end
-                    };
+                    const start = new Date();
+                    start.setDate(end.getDate() - config.defaultDateRangeDays);
+
+                    if (!elements.startInput.value) {
+                        elements.startInput.value = formatDateForInput(start);
+                    }
+                    if (!elements.endInput.value) {
+                        elements.endInput.value = formatDateForInput(end);
+                    }
                 };
 
-                // Normalize a Date into a YYYY-MM-DD formatted string.
-                const ensureIsoDateString = (date) => {
-                    if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
-                        return '';
-                    }
-                    if (typeof window.formatISODate === 'function') {
-                        return window.formatISODate(date);
-                    }
-                    return date.toISOString().split('T')[0];
+                /**
+                 * Replace characters that are invalid for filenames so download names stay portable.
+                 */
+                const sanitizeFileName = (value, fallback = 'sentinel-scene') => {
+                    const base = (value || '').toString().trim();
+                    const normalized = base
+                        .normalize('NFKD')
+                        .replace(/[\u0300-\u036f]/g, '')
+                        .replace(/[^a-zA-Z0-9-_.]+/g, '-')
+                        .replace(/-{2,}/g, '-')
+                        .replace(/^-+|-+$/g, '');
+                    return (normalized || fallback).substring(0, 120);
                 };
 
-                // Keep start and end date fields within mutually valid ranges.
-                const syncDateConstraints = () => {
-                    if (!startDateInputEl || !endDateInputEl) return;
-                    endDateInputEl.min = startDateInputEl.value || '';
-                    startDateInputEl.max = endDateInputEl.value || '';
-                };
-
-                // Populate filters with default dates when empty or forced.
-                const applyDefaultDates = (force = false) => {
-                    const range = getDefaultDateRange(config.defaultMonthsBack);
-                    const start = parseDate(range.start) ?? new Date();
-                    start.setHours(0, 0, 0, 0);
-                    const end = parseDate(range.end) ?? new Date();
-                    end.setHours(23, 59, 59, 999);
-
-                    state.defaultStartIso = ensureIsoDateString(start);
-                    state.defaultEndIso = ensureIsoDateString(end);
-
-                    if (startDateInputEl && (force || !startDateInputEl.value)) {
-                        startDateInputEl.value = state.defaultStartIso;
-                    }
-                    if (endDateInputEl && (force || !endDateInputEl.value)) {
-                        endDateInputEl.value = state.defaultEndIso;
+                /**
+                 * Append the Copernicus access token to download URLs so the ZIP service authorises the request.
+                 */
+                const withAccessToken = (url) => {
+                    if (!url || !config.token) {
+                        return url;
                     }
 
-                    syncDateConstraints();
-                };
-
-                // Retry until the global formatter exists before running the callback.
-                const waitForFormatIso = (callback, attempts = 10, delayMs = 50) => {
-                    if (typeof window.formatISODate === 'function' || attempts <= 0) {
-                        callback();
-                        return;
-                    }
-                    setTimeout(() => waitForFormatIso(callback, attempts - 1, delayMs), delayMs);
-                };
-
-                // Present cloud cover percentages with graceful fallbacks.
-                const formatCloudCover = (value) => {
-                    if (typeof value === 'number' && !Number.isNaN(value)) {
-                        return `${value.toFixed(1)}%`;
-                    }
-                    return 'N/A';
-                };
-
-                // Clamp numeric inputs and return null when value is invalid.
-                const clampNumber = (value, min, max) => {
-                    if (typeof value !== 'number' || Number.isNaN(value)) return null;
-                    return Math.min(Math.max(value, min), max);
-                };
-
-                function sanitizeToken(value) {
-                    return typeof value === 'string' ? value.trim() : '';
-                }
-
-                const hasToken = () => sanitizeToken(state.token).length > 0;
-
-                // Craft a status message that explains token requirements when missing.
-                const buildStatusMessage = (message) => {
-                    const parts = [];
-                    if (message) parts.push(message);
-                    if (!hasToken()) {
-                        parts.push(state.tokenConfigured ?
-                            'Download unavailable: Copernicus access token could not be issued.' :
-                            'Configure Copernicus credentials on the server to enable downloads.');
-                    }
-                    return parts.join(' ');
-                };
-
-                // Add the Copernicus token query parameter to download URLs when possible.
-                const applyTokenToUrl = (url) => {
-                    if (!url) return null;
-                    const token = sanitizeToken(state.token);
-                    if (!token) return null;
-                    const queryPattern = /([?&])token=[^&#]*/i;
-                    if (queryPattern.test(url)) {
-                        return url.replace(queryPattern, `$1token=${encodeURIComponent(token)}`);
-                    }
-                    const separator = url.includes('?') ? '&' : '?';
-                    return `${url}${separator}token=${encodeURIComponent(token)}`;
-                };
-
-                // Validate that a URL appears to be a downloadable resource link.
-                const isValidDownloadUrl = (url) => {
-                    if (typeof url !== 'string') return false;
-                    const trimmed = url.trim();
-                    if (!trimmed) return false;
-                    if (!/^https?:\/\//i.test(trimmed)) return false;
-                    const lowered = trimmed.toLowerCase();
-                    return !ignoredDownloadKeywords.some((keyword) => lowered.includes(keyword));
-                };
-
-                // Recursively gather URLs from the various service response formats.
-                const extractServiceUrls = (service) => {
-                    const results = [];
-                    if (!service) return results;
-                    if (typeof service === 'string') {
-                        results.push(service);
-                        return results;
-                    }
-                    if (Array.isArray(service)) {
-                        service.forEach((item) => {
-                            results.push(...extractServiceUrls(item));
-                        });
-                        return results;
-                    }
-                    if (typeof service === 'object') {
-                        ['url', 'href', 'https', 'http'].forEach((key) => {
-                            const value = service[key];
-                            if (typeof value === 'string') {
-                                results.push(value);
-                            }
-                        });
-                    }
-                    return results;
-                };
-
-                // Determine the best download URL candidate from a feature payload.
-                const resolveDownloadUrl = (feature) => {
-                    if (!feature) return null;
-
-                    const props = feature.properties ?? {};
-                    const links = Array.isArray(feature.links) ? feature.links : [];
-                    const assets = feature.assets ?? {};
-
-                    const candidateScores = new Map();
-                    const registerCandidate = (url, score = 0) => {
-                        if (!isValidDownloadUrl(url)) return;
-                        const existing = candidateScores.get(url);
-                        if (existing === undefined || score > existing) {
-                            candidateScores.set(url, score);
-                        }
-                    };
-
-                    const registerFromService = (service, score = 0) => {
-                        extractServiceUrls(service).forEach((url) => registerCandidate(url, score));
-                    };
-
-                    const linkScoreByRel = {
-                        enclosure: 100,
-                        download: 95,
-                        data: 90,
-                        alternate: 75,
-                        source: 70,
-                        self: 65
-                    };
-
-                    links.forEach((link) => {
-                        const href = typeof link?.href === 'string' ? link.href : null;
-                        if (!href) return;
-                        const rel = typeof link?.rel === 'string' ? link.rel.toLowerCase() : '';
-                        const type = typeof link?.type === 'string' ? link.type.toLowerCase() : '';
-                        let score = linkScoreByRel[rel] ?? 60;
-                        if (type.includes('zip') || type.includes('safe') || type.includes('application/octet-stream')) {
-                            score += 15;
-                        }
-                        registerCandidate(href, score);
-                    });
-
-                    ['downloadUrl', 'productDownloadUrl', 'productUrl', 'dataUrl', 'url', 'servicesDownloadUrl', 'resourceUrl'].forEach((key) => {
-                        const value = props[key];
-                        if (typeof value === 'string') {
-                            registerCandidate(value, 92);
-                        }
-                    });
-
-                    const services = props.services;
-                    if (services && typeof services === 'object' && !Array.isArray(services)) {
-                        Object.entries(services).forEach(([key, serviceValue]) => {
-                            const lowerKey = String(key).toLowerCase();
-                            let score = 70;
-                            if (lowerKey.includes('download')) score = 95;
-                            else if (lowerKey.includes('data')) score = 88;
-                            else if (lowerKey.includes('s3') || lowerKey.includes('aws')) score = 82;
-                            registerFromService(serviceValue, score);
-                        });
-                    } else {
-                        registerFromService(services, 80);
-                    }
-
-                    Object.entries(assets).forEach(([key, assetValue]) => {
-                        const lowerKey = String(key).toLowerCase();
-                        if (ignoredDownloadKeywords.some((keyword) => lowerKey.includes(keyword))) {
-                            return;
-                        }
-                        const href = typeof assetValue === 'string' ?
-                            assetValue :
-                            (typeof assetValue?.href === 'string' ?
-                                assetValue.href :
-                                (typeof assetValue?.url === 'string' ? assetValue.url : null));
-                        if (!href) return;
-                        let score = 68;
-                        if (Array.isArray(assetValue?.roles)) {
-                            const roleScore = assetValue.roles.some((role) => ['data', 'download', 'product', 'analytic'].includes(String(role).toLowerCase()));
-                            if (roleScore) score += 20;
-                        }
-                        const type = typeof assetValue?.type === 'string' ? assetValue.type.toLowerCase() : '';
-                        if (type.includes('zip') || type.includes('safe') || type.includes('geotiff') || type.includes('jp2')) {
-                            score += 12;
-                        }
-                        if (/(data|product|tile|granule|image|scene)/.test(lowerKey)) {
-                            score += 6;
-                        }
-                        registerCandidate(href, score);
-                    });
-
-                    const propsAssets = props.assets;
-                    if (propsAssets && typeof propsAssets === 'object' && !Array.isArray(propsAssets)) {
-                        Object.entries(propsAssets).forEach(([key, assetValue]) => {
-                            const lowerKey = String(key).toLowerCase();
-                            if (ignoredDownloadKeywords.some((keyword) => lowerKey.includes(keyword))) {
-                                return;
-                            }
-                            if (typeof assetValue === 'string') {
-                                registerCandidate(assetValue, 66);
-                            } else if (assetValue && typeof assetValue === 'object') {
-                                if (typeof assetValue.href === 'string') {
-                                    registerCandidate(assetValue.href, 66);
-                                }
-                                if (typeof assetValue.url === 'string') {
-                                    registerCandidate(assetValue.url, 66);
-                                }
-                            }
-                        });
-                    }
-
-                    let bestUrl = null;
-                    let bestScore = -Infinity;
-                    candidateScores.forEach((score, url) => {
-                        if (score > bestScore) {
-                            bestScore = score;
-                            bestUrl = url;
-                        }
-                    });
-
-                    return bestUrl ?? null;
-                };
-
-                // Generate a filesystem-friendly filename for Sentinel downloads.
-                const buildDownloadName = (primary, fallback) => {
-                    const base = String(primary ?? fallback ?? 'sentinel-2-scene').trim();
-                    const normalized = base.replace(/[\s]+/g, '_').replace(/[^A-Za-z0-9._-]+/g, '_');
-                    return normalized || 'sentinel-2-scene';
-                };
-
-                // Encapsulate preview map rendering, metadata display, and downloads.
-                const createPreviewModule = () => {
-                    const defaultContent = {
-                        title: previewElements.title?.textContent ?? '–',
-                        acquired: previewElements.acquired?.textContent ?? '',
-                        details: previewElements.details?.textContent ?? '',
-                        status: previewElements.status?.textContent ?? ''
-                    };
-
-                    const cloneDefaultContent = () => ({
-                        ...defaultContent
-                    });
-
-                    const dataProjection = 'EPSG:4326';
-                    const wmsDefaults = {
-                        baseUrl: 'https://sh.dataspace.copernicus.eu/ogc/wms/1bd0fec1-0e52-427a-8e83-6e0dcd29a03a',
-                        layerName: 'NATURAL-COLOR',
-                        baseParams: {
-                            FORMAT: 'image/png',
-                            TRANSPARENT: true,
-                            SHOWLOGO: false,
-                            VERSION: '1.3.0'
-                        },
-                        attribution: 'Sentinel Hub / Copernicus Data Space Ecosystem'
-                    };
-
-                    const MAX_METERS_PER_PIXEL = 200;
-                    const MAX_WMS_DIMENSION = 4096;
-                    const MAX_WMS_PIXELS = MAX_WMS_DIMENSION * MAX_WMS_DIMENSION;
-                    const IMAGE_LOAD_DEBOUNCE_MS = 300;
-
-                    const buildWmsParams = (overrides = {}) => ({
-                        ...wmsDefaults.baseParams,
-                        ...overrides
-                    });
-
-                    const getDataProjectionOrientation = () => {
-                        if (typeof ol?.proj?.get !== 'function') return 'ne';
-                        try {
-                            return ol.proj.get(dataProjection)?.getAxisOrientation?.() ?? 'ne';
-                        } catch (error) {
-                            console.warn('Failed to read projection axis orientation', error);
-                            return 'ne';
-                        }
-                    };
-
-                    const reorderExtentForAxisOrientation = (extent, orientation) => {
-                        if (!Array.isArray(extent) || extent.length !== 4) return extent;
-                        if (typeof orientation !== 'string' || orientation.length < 2) return extent;
-                        const firstAxis = orientation[0]?.toLowerCase?.();
-                        const secondAxis = orientation[1]?.toLowerCase?.();
-                        if (firstAxis === 'n' && secondAxis === 'e') {
-                            return [extent[1], extent[0], extent[3], extent[2]];
-                        }
-                        return extent;
-                    };
-
-                    const restoreExtentFromAxisOrientation = (extent, orientation) => {
-                        if (!Array.isArray(extent) || extent.length !== 4) return extent;
-                        if (typeof orientation !== 'string' || orientation.length < 2) return extent;
-                        const firstAxis = orientation[0]?.toLowerCase?.();
-                        const secondAxis = orientation[1]?.toLowerCase?.();
-                        if (firstAxis === 'n' && secondAxis === 'e') {
-                            return [extent[1], extent[0], extent[3], extent[2]];
-                        }
-                        return extent;
-                    };
-
-                    const enforceMetersPerPixelLimit = (width, height, url, orientation) => {
-                        if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
-                            return [width, height];
-                        }
-                        if (!Number.isFinite(MAX_METERS_PER_PIXEL) || MAX_METERS_PER_PIXEL <= 0) {
-                            return [width, height];
-                        }
-                        if (typeof ol?.proj?.transformExtent !== 'function') {
-                            return [width, height];
-                        }
-                        const bboxParam = url.searchParams.get('BBOX');
-                        if (typeof bboxParam !== 'string' || bboxParam.trim().length === 0) {
-                            return [width, height];
-                        }
-                        const values = bboxParam.split(',').map((value) => Number(value));
-                        if (values.length !== 4 || values.some((value) => !Number.isFinite(value))) {
-                            return [width, height];
-                        }
-                        try {
-                            const lonLatExtent = restoreExtentFromAxisOrientation(values, orientation);
-                            const metricExtent = ol.proj.transformExtent(lonLatExtent, dataProjection, 'EPSG:3857');
-                            if (!Array.isArray(metricExtent) || metricExtent.length !== 4) {
-                                return [width, height];
-                            }
-                            const widthMeters = Math.abs(metricExtent[2] - metricExtent[0]);
-                            const heightMeters = Math.abs(metricExtent[3] - metricExtent[1]);
-                            if (widthMeters <= 0 && heightMeters <= 0) {
-                                return [width, height];
-                            }
-                            const widthFactor = widthMeters > 0 ?
-                                widthMeters / (MAX_METERS_PER_PIXEL * width) :
-                                0;
-                            const heightFactor = heightMeters > 0 ?
-                                heightMeters / (MAX_METERS_PER_PIXEL * height) :
-                                0;
-                            const scale = Math.max(1, widthFactor, heightFactor);
-                            if (scale <= 1) {
-                                return [width, height];
-                            }
-                            const nextWidth = Math.max(width, Math.ceil(width * scale));
-                            const nextHeight = Math.max(height, Math.ceil(height * scale));
-                            return [nextWidth, nextHeight];
-                        } catch (error) {
-                            console.warn('Failed to enforce WMS meters-per-pixel limit', error);
-                            return [width, height];
-                        }
-                    };
-
-                    const normalizeWmsUrl = (src, context) => {
-                        if (typeof src !== 'string' || !src) return src;
-                        try {
-                            const url = new URL(src, window.location.href);
-                            const projection = context?.projection;
-                            const orientation = getDataProjectionOrientation();
-                            const projectionCode = typeof projection?.getCode === 'function' ?
-                                projection.getCode() :
-                                (typeof projection === 'string' ? projection : null);
-                            const bboxParam = url.searchParams.get('BBOX');
-
-                            if (bboxParam && projectionCode && projectionCode !== dataProjection && typeof ol?.proj?.transformExtent === 'function') {
-                                const values = bboxParam.split(',').map((value) => Number(value));
-                                if (values.length === 4 && values.every((value) => Number.isFinite(value))) {
-                                    try {
-                                        const transformed = ol.proj.transformExtent(values, projectionCode, dataProjection);
-                                        if (Array.isArray(transformed)) {
-                                            const oriented = reorderExtentForAxisOrientation(transformed, orientation);
-                                            const formatted = oriented.map((value) => value.toFixed(8));
-                                            url.searchParams.set('BBOX', formatted.join(','));
-                                        }
-                                    } catch (error) {
-                                        console.warn('Failed to transform WMS BBOX to EPSG:4326', error);
-                                    }
-                                }
-                            }
-
-                            url.searchParams.set('CRS', dataProjection);
-                            url.searchParams.set('SRS', dataProjection);
-                            if (!url.searchParams.has('VERSION') && wmsDefaults.baseParams?.VERSION) {
-                                url.searchParams.set('VERSION', wmsDefaults.baseParams.VERSION);
-                            }
-
-                            const width = Number(url.searchParams.get('WIDTH'));
-                            const height = Number(url.searchParams.get('HEIGHT'));
-                            if (Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0) {
-                                let adjustedWidth = width;
-                                let adjustedHeight = height;
-
-                                [adjustedWidth, adjustedHeight] = enforceMetersPerPixelLimit(
-                                    adjustedWidth,
-                                    adjustedHeight,
-                                    url,
-                                    orientation
-                                );
-
-                                if (Number.isFinite(MAX_WMS_DIMENSION) && MAX_WMS_DIMENSION > 0) {
-                                    const largestDimension = Math.max(adjustedWidth, adjustedHeight);
-                                    if (largestDimension > MAX_WMS_DIMENSION) {
-                                        const scale = MAX_WMS_DIMENSION / largestDimension;
-                                        adjustedWidth = Math.max(1, Math.floor(adjustedWidth * scale));
-                                        adjustedHeight = Math.max(1, Math.floor(adjustedHeight * scale));
-                                    }
-                                }
-
-                                const limitPixels = (w, h) => {
-                                    if (!Number.isFinite(MAX_WMS_PIXELS) || MAX_WMS_PIXELS <= 0) {
-                                        return [w, h];
-                                    }
-                                    const currentPixels = w * h;
-                                    if (currentPixels <= MAX_WMS_PIXELS) {
-                                        return [w, h];
-                                    }
-                                    const scale = Math.sqrt(MAX_WMS_PIXELS / currentPixels);
-                                    let nextWidth = Math.max(1, Math.floor(w * scale));
-                                    let nextHeight = Math.max(1, Math.floor(h * scale));
-                                    while (nextWidth * nextHeight > MAX_WMS_PIXELS && (nextWidth > 1 || nextHeight > 1)) {
-                                        if (nextWidth >= nextHeight && nextWidth > 1) {
-                                            nextWidth -= 1;
-                                        } else if (nextHeight > 1) {
-                                            nextHeight -= 1;
-                                        } else {
-                                            break;
-                                        }
-                                    }
-                                    return [nextWidth, nextHeight];
-                                };
-
-                                [adjustedWidth, adjustedHeight] = limitPixels(adjustedWidth, adjustedHeight);
-
-                                if (adjustedWidth !== width) {
-                                    url.searchParams.set('WIDTH', String(adjustedWidth));
-                                }
-                                if (adjustedHeight !== height) {
-                                    url.searchParams.set('HEIGHT', String(adjustedHeight));
-                                }
-                            }
-
-                            return url.toString();
-                        } catch (error) {
-                            console.warn('Unable to normalize WMS request URL', error);
-                            return src;
-                        }
-                    };
-
-                    const createImageLoadFunction = (context) => {
-                        const fallbackLoader = typeof ol?.source?.Image?.defaultImageLoadFunction === 'function' ?
-                            ol.source.Image.defaultImageLoadFunction :
-                            ((image, source) => {
-                                if (image?.getImage) {
-                                    image.getImage().src = source;
-                                }
-                            });
-
-                        const scheduleLoad = (imageInstance, source) => {
-                            const normalizedSrc = normalizeWmsUrl(source, context);
-                            fallbackLoader(imageInstance, normalizedSrc);
-                        };
-
-                        return (image, src) => {
-                            const delay = Number.isFinite(context?.imageLoadDelay) ?
-                                context.imageLoadDelay :
-                                IMAGE_LOAD_DEBOUNCE_MS;
-
-                            if (!delay || delay <= 0) {
-                                scheduleLoad(image, src);
-                                return;
-                            }
-
-                            if (context.imageLoadTimer) {
-                                clearTimeout(context.imageLoadTimer);
-                                context.imageLoadTimer = null;
-                            }
-
-                            context.imageLoadPending = {
-                                image,
-                                src
-                            };
-                            context.imageLoadTimer = setTimeout(() => {
-                                const pending = context.imageLoadPending;
-                                context.imageLoadTimer = null;
-                                context.imageLoadPending = null;
-                                if (!pending) return;
-                                scheduleLoad(pending.image, pending.src);
-                            }, delay);
-                        };
-                    };
-
-                    const localState = {
-                        map: null,
-                        projection: null,
-                        layer: null,
-                        source: null,
-                        geoJson: null,
-                        selection: null,
-                        imageryLayer: null,
-                        imagerySource: null,
-                        imageLoadTimer: null,
-                        imageLoadPending: null,
-                        imageLoadDelay: IMAGE_LOAD_DEBOUNCE_MS,
-                        previewContent: cloneDefaultContent(),
-                        hasFootprint: false,
-                        imageryPayload: null,
-                        imageryExtent: null,
-                        imageryAvailable: false,
-                        imageryShown: false
-                    };
-
-                    const cancelPendingImageryLoad = () => {
-                        if (localState.imageLoadTimer) {
-                            clearTimeout(localState.imageLoadTimer);
-                            localState.imageLoadTimer = null;
-                        }
-                        localState.imageLoadPending = null;
-                    };
-
-                    const imageLoadFunction = createImageLoadFunction(localState);
-
-                    const createImageSource = (url, params) => new ol.source.ImageWMS({
-                        url,
-                        params,
-                        ratio: 1,
-                        crossOrigin: 'anonymous',
-                        attributions: wmsDefaults.attribution,
-                        imageLoadFunction
-                    });
-
-                    // Lazily initialize OpenLayers resources used to draw footprints.
-                    const ensureContext = () => {
-                        if (typeof window === 'undefined' || typeof ol === 'undefined') return null;
-                        const mapInstance = window.map;
-                        const projection = mapInstance?.getView?.()?.getProjection?.();
-                        if (!mapInstance || !projection) return null;
-
-                        localState.map = mapInstance;
-                        localState.projection = projection;
-
-                        if (!localState.imageryLayer) {
-                            const imageLayerSupported = Boolean(ol?.source?.ImageWMS) && typeof ol?.layer?.Image === 'function';
-                            if (imageLayerSupported) {
-                                const params = buildWmsParams({
-                                    LAYERS: wmsDefaults.layerName
-                                });
-                                localState.imagerySource = createImageSource(wmsDefaults.baseUrl, params);
-                                localState.imageryLayer = new ol.layer.Image({
-                                    source: localState.imagerySource,
-                                    visible: false,
-                                    opacity: 0.95,
-                                    zIndex: 100
-                                });
-                                mapInstance.addLayer(localState.imageryLayer);
-                            }
-                        }
-
-                        if (!localState.layer) {
-                            localState.source = new ol.source.Vector();
-                            localState.layer = new ol.layer.Vector({
-                                source: localState.source,
-                                style: new ol.style.Style({
-                                    stroke: new ol.style.Stroke({
-                                        color: 'rgba(59,130,246,0.9)',
-                                        width: 2,
-                                        lineDash: [6, 6]
-                                    }),
-                                    fill: new ol.style.Fill({
-                                        color: 'rgba(59,130,246,0.05)'
-                                    })
-                                }),
-                                visible: false,
-                                zIndex: 100
-                            });
-                            mapInstance.addLayer(localState.layer);
-                        }
-
-                        localState.geoJson = localState.geoJson ?? new ol.format.GeoJSON();
-                        return localState;
-                    };
-
-                    const ensureAbsoluteUrl = (value) => {
-                        if (typeof value !== 'string') return '';
-                        const trimmed = value.trim();
-                        if (!trimmed || !/^https?:\/\//i.test(trimmed)) return '';
-                        return trimmed;
-                    };
-
-                    const toLayerArray = (value) => {
-                        if (Array.isArray(value)) {
-                            return value
-                                .map((item) => (typeof item === 'string' ? item.trim() : ''))
-                                .filter((item) => item.length > 0);
-                        }
-                        if (typeof value === 'string') {
-                            const trimmed = value.trim();
-                            return trimmed ? [trimmed] : [];
-                        }
-                        return [];
-                    };
-
-                    const resolveWmsTimeParam = (payload) => {
-                        const candidates = [
-                            payload?.acquisitionDate,
-                            payload?.featureProperties?.acquisitionDate,
-                            payload?.featureProperties?.completionDate,
-                            payload?.featureProperties?.beginPosition,
-                            payload?.featureProperties?.endPosition,
-                            payload?.featureProperties?.startDate,
-                            payload?.featureProperties?.endDate,
-                            payload?.featureProperties?.startTimeFromAscendingNode,
-                            payload?.featureProperties?.datatakeTime
-                        ];
-                        for (const candidate of candidates) {
-                            const parsed = parseDate(candidate);
-                            if (parsed instanceof Date && !Number.isNaN(parsed.getTime())) {
-                                const iso = parsed.toISOString();
-                                return iso.includes('.') ? `${iso.split('.')[0]}Z` : iso;
-                            }
-                        }
-                        return null;
-                    };
-
-                    const resolveImageryOptions = (payload) => {
-                        const wmsPattern = /wms|ogc/i;
-                        const layerKeys = ['layer', 'layers', 'layerId', 'layerIds', 'layerName', 'defaultLayer'];
-                        const urls = new Set();
-                        const layers = new Set();
-
-                        const pushUrl = (value, force = false) => {
-                            const url = ensureAbsoluteUrl(value);
-                            if (url && (force || wmsPattern.test(url))) {
-                                urls.add(url);
-                            }
-                        };
-
-                        const pushLayers = (value) => {
-                            toLayerArray(value).forEach((layer) => {
-                                if (layer) layers.add(layer);
-                            });
-                        };
-
-                        const inspectEntry = (entry) => {
-                            if (!entry) return;
-                            if (typeof entry === 'string') {
-                                pushUrl(entry);
-                                return;
-                            }
-                            if (Array.isArray(entry)) {
-                                entry.forEach(inspectEntry);
-                                return;
-                            }
-                            if (typeof entry !== 'object') return;
-
-                            Object.entries(entry).forEach(([key, value]) => {
-                                if (layerKeys.includes(key)) {
-                                    pushLayers(value);
-                                }
-                                if (typeof value === 'string') {
-                                    const isUrlKey = key === 'href' || key === 'url';
-                                    const isWmsKey = wmsPattern.test(key);
-                                    if (isUrlKey || isWmsKey) {
-                                        pushUrl(value, isWmsKey);
-                                    } else if (layerKeys.includes(key)) {
-                                        pushLayers(value);
-                                    } else if (wmsPattern.test(value)) {
-                                        pushUrl(value);
-                                    }
-                                } else {
-                                    inspectEntry(value);
-                                }
-                            });
-                        };
-
-                        if (payload?.services) {
-                            inspectEntry(payload.services);
-                        }
-
-                        if (Array.isArray(payload?.links)) {
-                            payload.links.forEach((link) => {
-                                const meta = `${link?.rel ?? ''} ${link?.type ?? ''} ${link?.title ?? ''}`;
-                                if (wmsPattern.test(meta)) {
-                                    pushUrl(link?.href, true);
-                                }
-                                inspectEntry(link);
-                            });
-                        }
-
-                        if (payload?.assets && typeof payload.assets === 'object') {
-                            Object.values(payload.assets).forEach(inspectEntry);
-                        }
-
-                        const sortedUrls = Array.from(urls);
-                        const url = sortedUrls.find((value) => /\/wms\//i.test(value)) || sortedUrls[0] || wmsDefaults.baseUrl;
-                        const resolvedLayers = layers.size ? Array.from(layers) : [wmsDefaults.layerName];
-
-                        return {
-                            url,
-                            layers: resolvedLayers,
-                            time: resolveWmsTimeParam(payload)
-                        };
-                    };
-
-                    const buildLayerExtent = (payload, geometryExtent) => {
-                        if (geometryExtent && Array.isArray(geometryExtent) && geometryExtent.length === 4) {
-                            return geometryExtent;
-                        }
-                        if (!Array.isArray(payload?.bbox) || payload.bbox.length !== 4) {
-                            return null;
-                        }
-                        if (!localState.projection || !ol?.proj?.transformExtent) {
-                            return null;
-                        }
-                        try {
-                            return ol.proj.transformExtent(payload.bbox, dataProjection, localState.projection);
-                        } catch (error) {
-                            console.warn('Unable to transform bbox extent for imagery preview.', error);
-                            return null;
-                        }
-                    };
-
-                    const applyImageryPreview = (payload, geometryExtent) => {
-                        if (!localState.imageryLayer || !ol?.source?.ImageWMS) {
-                            return false;
-                        }
-                        const options = resolveImageryOptions(payload);
-                        const url = ensureAbsoluteUrl(options?.url) || wmsDefaults.baseUrl;
-                        const layerName = Array.isArray(options?.layers) && options.layers.length > 0 ? options.layers.join(',') : wmsDefaults.layerName;
-
-                        if (!url || !layerName) {
-                            localState.imageryLayer.setVisible(false);
-                            return false;
-                        }
-
-                        const params = buildWmsParams({
-                            LAYERS: layerName
-                        });
-
-                        if (options?.time) {
-                            params.TIME = options.time;
-                        }
-
-                        const token = sanitizeToken(state.token);
-                        if (token) {
-                            params.token = token;
-                        }
-
-                        const source = createImageSource(url, params);
-                        localState.imagerySource = source;
-                        localState.imageryLayer.setSource(source);
-
-                        const extent = buildLayerExtent(payload, geometryExtent);
-                        if (extent) {
-                            localState.imageryLayer.setExtent(extent);
-                        } else {
-                            localState.imageryLayer.setExtent(undefined);
-                        }
-
-                        localState.imageryLayer.setVisible(true);
-                        return true;
-                    };
-
-                    // Show or hide the preview panel container.
-                    const setPanelVisible = (visible) => {
-                        if (!previewElements.panel) return;
-                        previewElements.panel.classList.toggle('hidden', !visible);
-                        previewElements.panel.setAttribute('aria-hidden', visible ? 'false' : 'true');
-                    };
-
-                    // Replace preview title and metadata labels with provided values.
-                    const setPanelContent = (content = {}) => {
-                        const next = {
-                            ...defaultContent,
-                            ...content
-                        };
-                        if (previewElements.title) previewElements.title.textContent = next.title;
-                        if (previewElements.acquired) previewElements.acquired.textContent = next.acquired;
-                        if (previewElements.details) {
-                            previewElements.details.textContent = next.details;
-                            previewElements.details.classList.toggle('hidden', !next.details);
-                        }
-                        if (previewElements.status) previewElements.status.textContent = next.status;
-                    };
-
-                    const resetPreviewContent = () => {
-                        localState.previewContent = cloneDefaultContent();
-                        setPanelContent(localState.previewContent);
-                    };
-
-                    const applyPreviewContent = (content = {}) => {
-                        localState.previewContent = {
-                            ...cloneDefaultContent(),
-                            ...content
-                        };
-                        setPanelContent(localState.previewContent);
-                    };
-
-                    const updateStatus = (message) => {
-                        localState.previewContent = {
-                            ...localState.previewContent,
-                            status: buildStatusMessage(message)
-                        };
-                        setPanelContent(localState.previewContent);
-                    };
-
-                    const getFootprintStatus = () => {
-                        if (!localState.hasFootprint) {
-                            return 'Coverage area unavailable for this product.';
-                        }
-                        if (localState.imageryAvailable) {
-                            return 'Coverage footprint displayed on the map. Use the "Preview Imagery" button to display the Sentinel scene.';
-                        }
-                        return 'Coverage footprint displayed on the map. Imagery preview unavailable.';
-                    };
-
-                    // Animate the main map to zoom onto the preview geometry.
-                    const focusExtent = (extent) => {
-                        if (!extent || !localState.map) return;
-                        const view = localState.map.getView?.();
-                        if (!view?.fit) return;
-                        view.fit(extent, {
-                            padding: [32, 32, 32, 32],
-                            duration: 400,
-                            maxZoom: 14
-                        });
-                    };
-
-                    // Convert footprint/geometry payloads into OpenLayers features.
-                    const buildFeature = (payload) => {
-                        if (!localState.geoJson || !localState.projection || !payload) return null;
-                        const {
-                            footprint,
-                            geometry,
-                            bbox
-                        } = payload;
-                        try {
-                            if (footprint) {
-                                return localState.geoJson.readFeature(footprint, {
-                                    featureProjection: localState.projection,
-                                    dataProjection
-                                });
-                            }
-                            if (geometry) {
-                                return localState.geoJson.readFeature({
-                                    type: 'Feature',
-                                    geometry
-                                }, {
-                                    featureProjection: localState.projection,
-                                    dataProjection
-                                });
-                            }
-                            if (Array.isArray(bbox) && bbox.length === 4) {
-                                const transformed = ol.proj.transformExtent(bbox, dataProjection, localState.projection);
-                                return new ol.Feature({
-                                    geometry: ol.geom.Polygon.fromExtent(transformed)
-                                });
-                            }
-                        } catch (error) {
-                            console.error('Unable to construct Sentinel footprint', error);
-                        }
-                        return null;
-                    };
-
-                    // Sync button states (clear/download) with the current selection.
-                    const updateActions = () => {
-                        const hasSelection = Boolean(localState.selection);
-                        if (previewElements.clearButton) {
-                            previewElements.clearButton.disabled = !hasSelection;
-                            previewElements.clearButton.setAttribute('aria-disabled', hasSelection ? 'false' : 'true');
-                        }
-                        if (previewElements.imageryButton) {
-                            const canShowImagery = hasSelection && localState.imageryAvailable;
-                            previewElements.imageryButton.classList.toggle('hidden', !canShowImagery);
-                            previewElements.imageryButton.disabled = !canShowImagery;
-                            previewElements.imageryButton.setAttribute('aria-disabled', canShowImagery ? 'false' : 'true');
-                            previewElements.imageryButton.setAttribute('aria-pressed', localState.imageryShown ? 'true' : 'false');
-                            if (canShowImagery) {
-                                previewElements.imageryButton.title = localState.imageryShown ? 'Hide Sentinel imagery from the map' : 'Display Sentinel imagery on the map';
-                            } else {
-                                previewElements.imageryButton.removeAttribute('title');
-                            }
-                            if (previewElements.imageryLabel) {
-                                previewElements.imageryLabel.textContent = localState.imageryShown ? 'Hide Imagery' : 'Preview Imagery';
-                            }
-                            if (previewElements.imageryIcon) {
-                                previewElements.imageryIcon.classList.toggle('ri-eye-line', !localState.imageryShown);
-                                previewElements.imageryIcon.classList.toggle('ri-eye-off-line', localState.imageryShown);
-                            }
-                        }
-                        if (previewElements.downloadButton) {
-                            if (hasSelection && localState.selection.downloadUrl && hasToken()) {
-                                previewElements.downloadButton.classList.remove('hidden');
-                                previewElements.downloadButton.setAttribute('href', localState.selection.downloadUrl);
-                                previewElements.downloadButton.setAttribute('aria-disabled', 'false');
-                                previewElements.downloadButton.setAttribute('title', `Download full scene for ${localState.selection.label}`);
-                                previewElements.downloadButton.setAttribute('download', localState.selection.downloadFilename);
-                                previewElements.downloadButton.dataset.downloadBase = localState.selection.downloadBase ?? '';
-                                previewElements.downloadButton.tabIndex = 0;
-                            } else {
-                                previewElements.downloadButton.classList.add('hidden');
-                                previewElements.downloadButton.removeAttribute('href');
-                                previewElements.downloadButton.removeAttribute('download');
-                                previewElements.downloadButton.removeAttribute('title');
-                                previewElements.downloadButton.setAttribute('aria-disabled', 'true');
-                                delete previewElements.downloadButton.dataset.downloadBase;
-                                previewElements.downloadButton.tabIndex = -1;
-                            }
-                        }
-                    };
-
-                    // Render preview metadata and geometry for the chosen catalogue entry.
-                    const show = (payload) => {
-                        const context = ensureContext();
-                        if (!context) return;
-                        cancelPendingImageryLoad();
-                        context.source?.clear();
-                        context.layer?.setVisible(false);
-                        if (localState.imageryLayer) {
-                            localState.imageryLayer.setVisible(false);
-                            localState.imageryLayer.setExtent(undefined);
-                        }
-                        localState.imagerySource = null;
-                        localState.selection = null;
-                        localState.imageryPayload = null;
-                        localState.imageryExtent = null;
-                        localState.imageryAvailable = false;
-                        localState.imageryShown = false;
-                        localState.hasFootprint = false;
-                        resetPreviewContent();
-                        updateActions();
-                        if (!payload) {
-                            setPanelVisible(false);
-                            if (localState.imageryLayer) {
-                                localState.imageryLayer.setVisible(false);
-                                localState.imageryLayer.setExtent(undefined);
-                            }
-                            localState.imagerySource = null;
-                            return;
-                        }
-                        const title = payload.title || payload.productId || 'Sentinel-2 Preview';
-                        const acquiredText = payload.acquiredText ?? (payload.acquisitionDate ? `Acquired: ${formatReadableDate(payload.acquisitionDate)}` : 'Acquisition date unavailable.');
-                        const detailParts = [];
-                        if (payload.detailText) detailParts.push(payload.detailText);
-                        if (payload.tileText || payload.tileId) detailParts.push(payload.tileText || payload.tileId);
-                        if (typeof payload.cloudCover === 'number' && !Number.isNaN(payload.cloudCover)) {
-                            detailParts.push(`Cloud cover: ${formatCloudCover(Number(payload.cloudCover))}`);
-                        }
-                        if (payload.collection) detailParts.push(`Collection: ${payload.collection}`);
-                        const details = detailParts.join(' • ');
-                        const feature = buildFeature(payload);
-                        let featureExtent = null;
-                        if (feature) {
-                            context.source.addFeature(feature);
-                            context.layer.setVisible(true);
-                            featureExtent = feature.getGeometry()?.getExtent?.() ?? null;
-                            if (featureExtent) {
-                                focusExtent(featureExtent);
-                            }
-                            localState.hasFootprint = true;
-                        }
-                        if (localState.imageryLayer && localState.hasFootprint) {
-                            localState.imageryPayload = payload;
-                            localState.imageryExtent = featureExtent;
-                            localState.imageryAvailable = true;
-                        }
-                        const downloadBase = payload.downloadUrlBase || payload.downloadUrl || null;
-                        const downloadUrl = applyTokenToUrl(downloadBase);
-                        const downloadFilename = payload.downloadFilename ?? buildDownloadName(payload.productId, title);
-                        const statusMessage = getFootprintStatus();
-                        localState.selection = {
-                            downloadUrl,
-                            downloadBase,
-                            downloadFilename,
-                            label: title
-                        };
-                        applyPreviewContent({
-                            title,
-                            acquired: acquiredText,
-                            details,
-                            status: buildStatusMessage(statusMessage)
-                        });
-                        setPanelVisible(true);
-                        updateActions();
-                    };
-
-                    const showImagery = () => {
-                        const context = ensureContext();
-                        if (!context || !localState.imageryAvailable || !localState.imageryPayload) {
-                            return false;
-                        }
-                        const result = applyImageryPreview(localState.imageryPayload, localState.imageryExtent);
-                        if (result) {
-                            localState.imageryShown = true;
-                            updateStatus('Coverage footprint and true color scene displayed on the map.');
-                        } else {
-                            localState.imageryAvailable = false;
-                            localState.imageryShown = false;
-                            if (localState.imageryLayer) {
-                                localState.imageryLayer.setVisible(false);
-                                localState.imageryLayer.setExtent(undefined);
-                            }
-                            updateStatus(getFootprintStatus());
-                        }
-                        updateActions();
-                        return result;
-                    };
-
-                    const hideImagery = () => {
-                        cancelPendingImageryLoad();
-                        if (localState.imageryLayer) {
-                            localState.imageryLayer.setVisible(false);
-                            localState.imageryLayer.setExtent(undefined);
-                        }
-                        localState.imagerySource = null;
-                        localState.imageryShown = false;
-                        updateStatus(getFootprintStatus());
-                        updateActions();
-                        return true;
-                    };
-
-                    const toggleImagery = () => {
-                        if (localState.imageryShown) {
-                            return hideImagery();
-                        }
-                        return showImagery();
-                    };
-
-                    // Remove any preview selection and restore default messaging.
-                    const clear = () => {
-                        localState.selection = null;
-                        cancelPendingImageryLoad();
-                        localState.source?.clear();
-                        localState.layer?.setVisible(false);
-                        if (localState.imageryLayer) {
-                            localState.imageryLayer.setVisible(false);
-                            localState.imageryLayer.setExtent(undefined);
-                        }
-                        localState.imagerySource = null;
-                        localState.imageryPayload = null;
-                        localState.imageryExtent = null;
-                        localState.imageryAvailable = false;
-                        localState.imageryShown = false;
-                        localState.hasFootprint = false;
-                        resetPreviewContent();
-                        setPanelVisible(false);
-                        updateActions();
-                    };
-
-                    resetPreviewContent();
-                    setPanelVisible(false);
-                    updateActions();
-
-                    return {
-                        ensure: ensureContext,
-                        show,
-                        clear,
-                        showImagery,
-                        hideImagery,
-                        toggleImagery
-                    };
-                };
-
-                const previewModule = createPreviewModule();
-
-                if (typeof window !== 'undefined') {
-                    if (window.map) {
-                        previewModule.ensure();
-                    } else {
-                        window.addEventListener('map:ready', () => {
-                            previewModule.ensure();
-                        }, {
-                            once: true
-                        });
-                    }
-                }
-
-                if (previewElements.clearButton) {
-                    previewElements.clearButton.addEventListener('click', (event) => {
-                        event.preventDefault();
-                        previewModule.clear();
-                    });
-                }
-
-                if (previewElements.imageryButton) {
-                    previewElements.imageryButton.addEventListener('click', (event) => {
-                        event.preventDefault();
-                        previewModule.toggleImagery();
-                    });
-                }
-
-                window.showSentinelPreviewOnMap = (payload) => {
-                    previewModule.show(payload);
-                };
-
-                // Fetch catalogue data, retrying through AllOrigins if needed.
-                const fetchCatalog = async (url) => {
-                    const attempt = async (targetUrl) => {
-                        const response = await fetch(targetUrl);
-                        if (!response.ok) {
-                            throw new Error(`Status ${response.status}`);
-                        }
-                        return response.json();
-                    };
                     try {
-                        return await attempt(url);
+                        const parsed = new URL(url, window.location.href);
+                        const params = parsed.searchParams;
+
+                        if (!params.has('token') && !params.has('access_token')) {
+                            params.set('token', config.token);
+                        }
+
+                        return parsed.toString();
                     } catch (error) {
-                        const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
-                        return await attempt(proxyUrl);
+                        // Fallback for environments that cannot parse the URL instance (e.g. malformed URLs).
+                        const hasQuery = url.includes('?');
+                        const hasTokenParam = /(?:\?|&)(token|access_token)=/i.test(url);
+                        if (hasTokenParam) {
+                            return url;
+                        }
+                        const separator = hasQuery ? '&' : '?';
+                        return `${url}${separator}token=${encodeURIComponent(config.token)}`;
                     }
                 };
 
-                // Create a UI card summarizing a single Sentinel catalogue feature.
-                const renderCard = (feature) => {
-                    if (!templateEl?.content) return null;
-                    const clone = templateEl.content.cloneNode(true);
+                /**
+                 * Mutate the status label shown above the collection list.
+                 */
+                const setStatus = (message, isLoading = false) => {
+                    if (elements.status) {
+                        if (isLoading) {
+                            elements.status.innerHTML = `
+                                <div class="flex items-center">
+                                    <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-current" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                    <span>${message}</span>
+                                </div>
+                            `;
+                        } else {
+                            elements.status.innerHTML = message;
+                        }
+                    }
+                };
+
+                /**
+                 * Update the preview status text safely.
+                 */
+                const setPreviewStatus = (message) => {
+                    if (elements.previewStatus) {
+                        elements.previewStatus.textContent = message;
+                    }
+                };
+
+                /**
+                 * Toggle a loading appearance while data is being fetched.
+                 */
+                const setLoadingState = (isLoading) => {
+                    if (isLoading) {
+                        // Clear the container content and show only status with spinner
+                        if (elements.list) {
+                            elements.list.innerHTML = '';
+                        }
+                    }
+                };
+
+                /**
+                 * Convert a bounding box array into a simple polygon GeoJSON object.
+                 */
+                const geometryFromBbox = (bbox) => {
+                    if (!Array.isArray(bbox) || bbox.length < 4) {
+                        return null;
+                    }
+                    const [minLon, minLat, maxLon, maxLat] = bbox;
+                    return {
+                        type: 'Polygon',
+                        coordinates: [
+                            [
+                                [minLon, minLat],
+                                [maxLon, minLat],
+                                [maxLon, maxLat],
+                                [minLon, maxLat],
+                                [minLon, minLat],
+                            ]
+                        ],
+                    };
+                };
+
+                /**
+                 * Recursively flatten coordinate arrays so we can derive bounds from arbitrary geometries.
+                 */
+                const collectCoordinatePairs = (input, acc = []) => {
+                    if (!Array.isArray(input)) {
+                        return acc;
+                    }
+                    if (
+                        input.length >= 2 &&
+                        typeof input[0] === 'number' &&
+                        typeof input[1] === 'number'
+                    ) {
+                        acc.push([input[0], input[1]]);
+                        return acc;
+                    }
+                    for (const value of input) {
+                        collectCoordinatePairs(value, acc);
+                    }
+                    return acc;
+                };
+
+                /**
+                 * Derive a geographic bounding box from any supported GeoJSON geometry.
+                 */
+                const bboxFromGeometry = (geometry) => {
+                    if (!geometry) {
+                        return null;
+                    }
+
+                    const geometries =
+                        geometry.type === 'GeometryCollection' ?
+                        geometry.geometries || [] : [geometry];
+
+                    let minLon = Infinity;
+                    let minLat = Infinity;
+                    let maxLon = -Infinity;
+                    let maxLat = -Infinity;
+
+                    for (const geom of geometries) {
+                        const coords = collectCoordinatePairs(geom?.coordinates);
+                        for (const pair of coords) {
+                            const [lon, lat] = pair;
+                            if (!Number.isFinite(lon) || !Number.isFinite(lat)) {
+                                continue;
+                            }
+                            if (lon < minLon) minLon = lon;
+                            if (lat < minLat) minLat = lat;
+                            if (lon > maxLon) maxLon = lon;
+                            if (lat > maxLat) maxLat = lat;
+                        }
+                    }
+
+                    if (
+                        !Number.isFinite(minLon) ||
+                        !Number.isFinite(minLat) ||
+                        !Number.isFinite(maxLon) ||
+                        !Number.isFinite(maxLat)
+                    ) {
+                        return null;
+                    }
+
+                    return [minLon, minLat, maxLon, maxLat];
+                };
+
+                /**
+                 * Transform a geographic bounding box into the map's projection for clipping the WMS layer.
+                 */
+                const projectBboxToMapExtent = (bbox, mapInstance) => {
+                    if (!Array.isArray(bbox) || bbox.length < 4 || !mapInstance) {
+                        return null;
+                    }
+
+                    const view = typeof mapInstance.getView === 'function' ? mapInstance.getView() : null;
+                    const projection = view?.getProjection?.();
+                    if (!projection) {
+                        return null;
+                    }
+
+                    const code = typeof projection.getCode === 'function' ? projection.getCode() : null;
+                    if (code === 'EPSG:4326') {
+                        return bbox;
+                    }
+
+                    if (!window.ol?.proj?.transformExtent) {
+                        return null;
+                    }
+
+                    try {
+                        return window.ol.proj.transformExtent(bbox, 'EPSG:4326', projection);
+                    } catch (error) {
+                        console.warn('Failed to transform Sentinel extent:', error);
+                        return null;
+                    }
+                };
+
+                /**
+                 * Build a tile grid tailored to the scene extent so WMS requests stay within Copernicus limits.
+                 */
+                const createTileGridForExtent = (extent, projection) => {
+                    if (
+                        !extent ||
+                        extent.length < 4 ||
+                        !window.ol?.tilegrid ||
+                        (!window.ol.tilegrid.createXYZ && !window.ol.tilegrid.TileGrid)
+                    ) {
+                        return null;
+                    }
+
+                    const [minX, minY, maxX, maxY] = extent;
+                    if (
+                        !Number.isFinite(minX) ||
+                        !Number.isFinite(minY) ||
+                        !Number.isFinite(maxX) ||
+                        !Number.isFinite(maxY) ||
+                        maxX <= minX ||
+                        maxY <= minY
+                    ) {
+                        return null;
+                    }
+
+                    const units = projection?.getUnits?.();
+                    if (units && units !== 'm') {
+                        // Only clamp resolutions for metre-based projections; degrees don't trigger the Copernicus cap.
+                        return null;
+                    }
+
+                    const tileSize = Number.isFinite(config.previewTileSize) ?
+                        config.previewTileSize :
+                        256;
+                    const spanX = maxX - minX;
+                    const spanY = maxY - minY;
+                    const dominantSpan = Math.max(spanX, spanY);
+                    if (!Number.isFinite(dominantSpan) || dominantSpan <= 0) {
+                        return null;
+                    }
+
+                    const baseResolution = dominantSpan / tileSize;
+                    if (!Number.isFinite(baseResolution) || baseResolution <= 0) {
+                        return null;
+                    }
+
+                    const cap = Number.isFinite(config.previewMaxMetersPerPixel) ?
+                        Math.max(1, config.previewMaxMetersPerPixel) :
+                        190;
+                    const startingResolution = Math.min(baseResolution, cap);
+
+                    const zoomLevels = Number.isFinite(config.previewTileZoomLevels) ?
+                        Math.max(1, Math.floor(config.previewTileZoomLevels)) :
+                        22;
+
+                    // Precompute the resolution pyramid so we can fall back if createXYZ is unavailable.
+                    const resolutions = [];
+                    for (let i = 0; i < zoomLevels; i += 1) {
+                        resolutions.push(startingResolution / Math.pow(2, i));
+                    }
+
+                    try {
+                        if (window.ol.tilegrid.createXYZ) {
+                            return window.ol.tilegrid.createXYZ({
+                                extent,
+                                tileSize,
+                                maxResolution: startingResolution,
+                                maxZoom: zoomLevels - 1,
+                            });
+                        }
+
+                        if (window.ol.tilegrid.TileGrid) {
+                            return new window.ol.tilegrid.TileGrid({
+                                extent,
+                                tileSize,
+                                resolutions,
+                            });
+                        }
+                    } catch (error) {
+                        console.warn('Failed to construct Sentinel tile grid:', error);
+                    }
+
+                    return null;
+                };
+
+                /**
+                 * Extract a numeric cloud cover percentage from a feature if available.
+                 */
+                const resolveCloudCover = (feature) => {
                     const props = feature?.properties ?? {};
-                    const links = feature?.links ?? [];
+                    const candidates = [
+                        props['eo:cloudCover'],
+                        props.cloudCover,
+                        props.cloudcoverpercentage,
+                        props.cloudCoverageAssessment,
+                    ];
+                    for (const candidate of candidates) {
+                        const value = Number(candidate);
+                        if (Number.isFinite(value)) {
+                            return value;
+                        }
+                    }
+                    return null;
+                };
+
+                /**
+                 * Locate the best available download link for a feature.
+                 */
+                const resolveDownloadUrl = (feature) => {
+                    const props = feature?.properties ?? {};
+                    const linkSources = [];
+
+                    if (Array.isArray(props.links)) {
+                        linkSources.push(...props.links);
+                    } else if (props.links && typeof props.links === 'object') {
+                        linkSources.push(...Object.values(props.links));
+                    }
+
+                    const services = props.services || {};
+                    if (services.download) {
+                        linkSources.push(services.download);
+                    }
+                    if (services.s3) {
+                        linkSources.push(services.s3);
+                    }
+
+                    for (const entry of linkSources) {
+                        const href = entry?.href || entry?.url || entry?.URI;
+                        const relation = (entry?.rel || entry?.role || '').toLowerCase();
+                        if (typeof href === 'string' && href.startsWith('http')) {
+                            if (!relation || /enclosure|download|data/.test(relation)) {
+                                return href;
+                            }
+                        }
+                    }
+
+                    if (typeof props.downloadLink === 'string' && props.downloadLink.startsWith('http')) {
+                        return props.downloadLink;
+                    }
+
+                    return null;
+                };
+
+                /**
+                 * Discover a thumbnail or quicklook URL so each card can show a preview image.
+                 */
+                const resolveThumbnailUrl = (feature) => {
+                    const props = feature?.properties ?? {};
                     const assets = feature?.assets ?? {};
+                    const candidates = [
+                        props.thumbnail,
+                        props.quicklook,
+                        props.quicklookUrl,
+                        props.thumbnailUrl,
+                        assets.thumbnail?.href,
+                        assets.quicklook?.href,
+                    ];
+                    return candidates.find((value) => typeof value === 'string' && value.startsWith('http')) || null;
+                };
 
-                    const titleEl = clone.querySelector('[data-sentinel-title]');
-                    const productEl = clone.querySelector('[data-sentinel-product]');
-                    const datetimeEl = clone.querySelector('[data-sentinel-datetime]');
-                    const detailEl = clone.querySelector('[data-sentinel-details]');
-                    const previewButton = clone.querySelector('[data-sentinel-preview]');
-                    const downloadButton = clone.querySelector('[data-sentinel-download]');
-                    const thumbnailImg = clone.querySelector('[data-sentinel-thumbnail]');
-                    const thumbnailPlaceholder = clone.querySelector('[data-sentinel-placeholder]');
+                /**
+                 * Extract WMS configuration (URL & layers) if the API exposes it.
+                 */
+                const resolveWmsConfig = (feature, acquisitionDate) => {
+                    const services = feature?.properties?.services ?? {};
+                    const ogc = services.ogc || services.wms || {};
+                    const wmsCandidates = Array.isArray(ogc?.wms) ? ogc.wms : [ogc.wms || ogc];
 
-                    const shortenText = typeof window?.shortenFilename === 'function' ?
-                        (value, max = 40) => window.shortenFilename(String(value), max) :
-                        (value) => String(value ?? '');
-
-                    const productId = props.productIdentifier || props.title || feature?.id || 'Sentinel-2 Product';
-                    const acquisitionDate = props.completionDate || props.startDate || props.endPosition || props.beginPosition || props.startTimeFromAscendingNode;
-                    const mgrsIdentifier = props.mgrsId || props.tileId || props.MGRS;
-                    const tileText = mgrsIdentifier ? `Tile ${mgrsIdentifier}` : null;
-                    const cloudCover = props.cloudCover ?? props['cloudcoverpercentage'] ?? props['cloudCoverageAssessment'];
-
-                    const titleText = props.title || productId;
-                    const productText = productId;
-
-                    if (titleEl) {
-                        titleEl.textContent = shortenText(titleText, 48);
-                        titleEl.setAttribute('title', titleText);
-                    }
-                    if (productEl) {
-                        productEl.textContent = shortenText(productText, 44);
-                        productEl.setAttribute('title', productText);
-                    }
-                    if (datetimeEl) {
-                        datetimeEl.textContent = `Acquired: ${formatReadableDate(acquisitionDate)}`;
-                    }
-
-                    const detailParts = [];
-                    if (tileText) detailParts.push(tileText);
-                    if (cloudCover !== undefined) detailParts.push(`Cloud cover: ${formatCloudCover(Number(cloudCover))}`);
-                    if (props.collection) detailParts.push(`Collection: ${props.collection}`);
-                    if (detailEl) {
-                        detailEl.textContent = detailParts.length ? detailParts.join(' • ') : 'No additional metadata available';
-                    }
-
-                    const quicklookUrl = props.thumbnail ||
-                        props.quicklook ||
-                        assets?.thumbnail?.href ||
-                        assets?.overview?.href ||
-                        links.find((link) => link.rel === 'preview')?.href;
-
-                    const downloadUrl = resolveDownloadUrl(feature);
-                    const downloadUrlWithToken = applyTokenToUrl(downloadUrl);
-                    const downloadFilename = buildDownloadName(productId, titleText);
-
-                    if (downloadButton) {
-                        if (downloadUrl && downloadUrlWithToken && hasToken()) {
-                            downloadButton.classList.remove('hidden');
-                            downloadButton.setAttribute('href', downloadUrlWithToken);
-                            downloadButton.setAttribute('aria-disabled', 'false');
-                            downloadButton.setAttribute('title', `Download full scene for ${productText}`);
-                            downloadButton.setAttribute('download', downloadFilename);
-                            downloadButton.dataset.downloadBase = downloadUrl;
-                            downloadButton.tabIndex = 0;
-                        } else {
-                            downloadButton.classList.add('hidden');
-                            downloadButton.setAttribute('href', '#');
-                            downloadButton.setAttribute('aria-disabled', 'true');
-                            downloadButton.removeAttribute('download');
-                            delete downloadButton.dataset.downloadBase;
-                            downloadButton.tabIndex = -1;
-                        }
-                    }
-
-                    if (thumbnailImg) {
-                        if (quicklookUrl) {
-                            const handleError = () => {
-                                thumbnailImg.classList.add('hidden');
-                                thumbnailImg.removeAttribute('src');
-                                thumbnailPlaceholder?.classList.remove('hidden');
+                    for (const candidate of wmsCandidates) {
+                        const url = candidate?.url || candidate?.href;
+                        const layers = candidate?.layers || candidate?.layer || candidate?.name;
+                        if (typeof url === 'string' && url.startsWith('http') && layers) {
+                            return {
+                                url,
+                                layers,
+                                time: candidate?.time || candidate?.TIME || formatReadableDate(acquisitionDate),
                             };
-                            const handleLoad = () => {
-                                thumbnailImg.classList.remove('hidden');
-                                thumbnailPlaceholder?.classList.add('hidden');
-                            };
-                            thumbnailImg.classList.add('hidden');
-                            thumbnailPlaceholder?.classList.remove('hidden');
-                            thumbnailImg.addEventListener('error', handleError, {
-                                once: true
-                            });
-                            thumbnailImg.addEventListener('load', handleLoad, {
-                                once: true
-                            });
-                            thumbnailImg.src = quicklookUrl;
-                            thumbnailImg.alt = `Quicklook preview for ${productText}`;
-                        } else {
-                            thumbnailImg.classList.add('hidden');
-                            thumbnailImg.removeAttribute('src');
-                            thumbnailPlaceholder?.classList.remove('hidden');
                         }
                     }
 
-                    const bboxArray = Array.isArray(feature?.bbox) ? feature.bbox : (Array.isArray(props?.bbox) ? props.bbox : null);
-                    const hasCoverage = Boolean(feature?.geometry) || (Array.isArray(bboxArray) && bboxArray.length === 4);
-
-                    if (previewButton) {
-                        if (hasCoverage || quicklookUrl) {
-                            previewButton.disabled = false;
-                            previewButton.title = 'Display preview on the map';
-                            previewButton.addEventListener('click', () => {
-                                window.showSentinelPreviewOnMap?.({
-                                    title: titleText,
-                                    productId,
-                                    quicklookUrl,
-                                    downloadUrl: downloadUrlWithToken,
-                                    downloadUrlBase: downloadUrl,
-                                    downloadFilename,
-                                    geometry: feature?.geometry,
-                                    bbox: bboxArray,
-                                    acquisitionDate,
-                                    tileText,
-                                    cloudCover,
-                                    collection: props.collection || feature?.collection || null,
-                                    services: props?.services ?? null,
-                                    links,
-                                    assets,
-                                    featureProperties: props,
-                                    featureId: feature?.id ?? null
-                                });
-                            });
-                        } else {
-                            previewButton.disabled = true;
-                            previewButton.title = 'Preview not available for this product';
-                        }
+                    if (config.defaultWmsEndpoint && config.defaultWmsLayer) {
+                        // Use the shared Copernicus service when the catalogue does not expose a per-scene WMS link.
+                        return {
+                            url: config.defaultWmsEndpoint,
+                            layers: config.defaultWmsLayer,
+                            time: formatReadableDate(acquisitionDate),
+                        };
                     }
 
-                    return clone;
+                    return null;
                 };
 
-                // Display a loading message while clearing previous catalogue entries.
-                const setLoadingState = () => {
-                    statusEl.classList.remove('hidden');
-                    statusEl.textContent = 'Fetching latest Sentinel-2 collections...';
-                    listEl.innerHTML = '';
-                };
+                /**
+                 * Prepare URL parameters used for the Sentinel search endpoint.
+                 */
+                const buildQueryParams = (maxRecords) => {
+                    const params = new URLSearchParams();
+                    params.set('maxRecords', String(maxRecords));
+                    params.set('productType', (elements.productInput?.value || '').trim() || 'S2MSI2A');
 
-                // Ensure numeric filter inputs stay within sensible limits.
-                const normalizeInputValue = (input, min, max) => {
-                    if (!input) return;
-                    if (input.value === '') {
-                        input.value = '';
-                        return;
-                    }
-                    const parsed = Number(input.value);
-                    if (Number.isNaN(parsed)) {
-                        input.value = '';
-                        return;
-                    }
-                    const normalized = clampNumber(parsed, min, max);
-                    if (normalized !== null) {
-                        input.value = normalized.toString();
-                    }
-                };
-
-                // Stamp the timestamp of the most recent successful fetch.
-                const updateLastUpdated = () => {
-                    if (lastUpdatedEl) {
-                        lastUpdatedEl.textContent = new Date().toLocaleString('id-ID');
-                    }
-                };
-
-                // Reset all filter fields back to their default configuration.
-                const resetFilters = () => {
-                    if (cloudInputEl) cloudInputEl.value = config.defaultCloudCover;
-                    applyDefaultDates(true);
-                    if (latInputEl) latInputEl.value = config.defaultLatitude;
-                    if (lonInputEl) lonInputEl.value = config.defaultLongitude;
-                    if (levelInputEl) levelInputEl.value = config.defaultProductType;
-                };
-
-                // Construct the query string parameters for the Sentinel catalogue API.
-                const buildQueryParams = () => {
-                    const params = new URLSearchParams({
-                        maxRecords: '20',
-                        sortParam: 'startDate',
-                        sortOrder: 'descending'
-                    });
-
-                    const startValue = startDateInputEl?.value?.trim();
-                    const endValue = endDateInputEl?.value?.trim();
-                    const fallbackRange = getDefaultDateRange(config.defaultMonthsBack);
-
-                    let startDate = parseDate(startValue) ?? parseDate(state.defaultStartIso) ?? parseDate(fallbackRange.start) ?? parseDate(new Date());
-                    let endDate = parseDate(endValue) ?? parseDate(state.defaultEndIso) ?? parseDate(fallbackRange.end) ?? parseDate(new Date());
-
-                    if (!startDate || !endDate) {
-                        throw new Error('Please provide a valid start and end date to filter collections.');
+                    const cloudValue = Number(elements.cloudInput?.value ?? '');
+                    if (Number.isFinite(cloudValue)) {
+                        const bounded = Math.min(Math.max(cloudValue, 0), 100);
+                        const rounded = Math.round(bounded);
+                        // Dataspace expects range syntax with inclusive brackets, e.g. "[0,30]".
+                        // Supplying legacy dash-separated ranges triggers a 400 validation error.
+                        const rangeValue = `[0,${rounded}]`;
+                        // Only set the documented "cloudCover" parameter; the API rejects other
+                        // aliases (cloudCoverPercentage/cloudcoverpercentage) with a 400 error.
+                        params.set('cloudCover', rangeValue);
                     }
 
-                    startDate.setHours(0, 0, 0, 0);
-                    endDate.setHours(23, 59, 59, 999);
-
-                    if (startDate > endDate) {
-                        throw new Error('Start date must be earlier than or equal to end date.');
+                    const startValue = (elements.startInput?.value || '').trim();
+                    const endValue = (elements.endInput?.value || '').trim();
+                    if (startValue) {
+                        params.set('startDate', `${startValue}T00:00:00Z`);
+                    }
+                    if (endValue) {
+                        params.set('completionDate', `${endValue}T23:59:59Z`);
                     }
 
-                    const startIso = ensureIsoDateString(startDate);
-                    const endIso = ensureIsoDateString(endDate);
-                    if (!startIso || !endIso) {
-                        throw new Error('Unable to format the selected date range. Please adjust the dates and try again.');
-                    }
-
-                    params.set('startDate', startIso);
-                    params.set('completionDate', endIso);
-
-                    const productTypeRaw = levelInputEl?.value?.trim();
-                    const productType = ['S2MSI2A', 'S2MSI1C'].includes(productTypeRaw) ? productTypeRaw : config.defaultProductType;
-                    params.set('productType', productType);
-
-                    const cloudRaw = cloudInputEl?.value?.trim();
-                    const cloudNumber = cloudRaw === '' || cloudRaw === undefined ? null : Number(cloudRaw);
-                    if (cloudNumber !== null && !Number.isNaN(cloudNumber)) {
-                        const normalized = clampNumber(cloudNumber, 0, 100);
-                        if (normalized !== null) {
-                            params.set('cloudCover', `[0,${Math.round(normalized)}]`);
-                        }
-                    }
-
-                    const latRaw = latInputEl?.value?.trim();
-                    const lonRaw = lonInputEl?.value?.trim();
-                    const hasLat = latRaw !== undefined && latRaw !== '';
-                    const hasLon = lonRaw !== undefined && lonRaw !== '';
-
-                    if ((hasLat && !hasLon) || (!hasLat && hasLon)) {
-                        throw new Error('Please provide both latitude and longitude to filter by location.');
-                    }
-
-                    if (hasLat && hasLon) {
-                        const latNumber = Number(latRaw);
-                        const lonNumber = Number(lonRaw);
-                        const normalizedLat = clampNumber(latNumber, -90, 90);
-                        const normalizedLon = clampNumber(lonNumber, -180, 180);
-                        if (normalizedLat === null || normalizedLon === null) {
-                            throw new Error('Latitude must be between -90 and 90 and longitude between -180 and 180.');
-                        }
-                        params.set('lat', normalizedLat.toFixed(6));
-                        params.set('lon', normalizedLon.toFixed(6));
+                    const latValue = Number(elements.latInput?.value ?? '');
+                    const lonValue = Number(elements.lonInput?.value ?? '');
+                    if (Number.isFinite(latValue) && Number.isFinite(lonValue)) {
+                        params.set('lat', latValue.toFixed(6));
+                        params.set('lon', lonValue.toFixed(6));
                     }
 
                     return params;
                 };
 
-                // Fetch Sentinel collections based on current filters and render them.
-                const loadCollections = async (forceRefresh = false) => {
-                    applyDefaultDates(false);
-                    syncDateConstraints();
+                /**
+                 * Convert the raw API feature into a simplified scene object for rendering.
+                 */
+                const transformFeature = (feature) => {
+                    if (!feature) return null;
 
-                    if (forceRefresh && window.MyZkToast?.info) {
-                        window.MyZkToast.info('Refreshing Sentinel-2 catalogue...');
+                    const props = feature.properties || {};
+                    const title = shortenFilename(props?.title, 30) || props?.productIdentifier || feature?.id || 'Sentinel-2 Scene';
+                    const acquisitionDate = props.completionDate || props.startDate || props.endPosition || props.beginPosition || props.startTimeFromAscendingNode;
+                    const cloudCover = resolveCloudCover(feature);
+                    const mgrs = props.mgrsId || props.tileId || props.MGRS || props.utmc || null;
+                    const downloadUrl = withAccessToken(resolveDownloadUrl(feature));
+                    const thumbnailUrl = resolveThumbnailUrl(feature);
+                    const wms = resolveWmsConfig(feature, acquisitionDate);
+                    const geometry = feature.geometry || geometryFromBbox(feature.bbox || []);
+                    const bbox = Array.isArray(feature.bbox) && feature.bbox.length >= 4 ?
+                        feature.bbox.slice(0, 4) :
+                        bboxFromGeometry(geometry);
+
+                    const details = [];
+                    if (mgrs) {
+                        details.push(`Tile ${mgrs}`);
+                    }
+                    if (Number.isFinite(cloudCover)) {
+                        details.push(`Cloud ${cloudCover.toFixed(1)}%`);
                     }
 
-                    setLoadingState();
+                    return {
+                        id: feature.id || props.id || null,
+                        title,
+                        productId: props.productIdentifier || null,
+                        collection: props.collection || props.collectionName || null,
+                        datetime: formatReadableDate(acquisitionDate) ?? null,
+                        details: details.join(' • '),
+                        cloudCover,
+                        mgrs,
+                        downloadUrl,
+                        downloadName: sanitizeFileName(`${title}.zip`),
+                        thumbnailUrl,
+                        wms,
+                        geometry,
+                        bbox,
+                        raw: feature,
+                    };
+                };
+
+                const buildProcessingPayload = (scene) => ({
+                    title: scene.title || 'Sentinel-2 Scene',
+                    download_url: scene.downloadUrl,
+                    product_id: scene.productId || scene.id || null,
+                    collection: scene.collection || null,
+                    acquisition_date: scene.datetime || null,
+                    download_filename: scene.downloadName || sanitizeFileName(`${scene.title || 'Sentinel-2 Scene'}.zip`),
+                });
+
+                const handleProcessScene = (index, buttonEl) => {
+                    const scene = state.scenes[index];
+                    if (!scene) {
+                        return;
+                    }
+
+                    if (!config.processUrl) {
+                        MyZkToast?.warning?.('Please sign in to process Sentinel-2 imagery.');
+                        return;
+                    }
+
+                    if (!scene.downloadUrl) {
+                        MyZkToast?.warning?.('Selected scene is missing a Copernicus download link.');
+                        return;
+                    }
+
+                    const originalHtml = buttonEl?.innerHTML || '<i class="ri-cpu-line"></i><span>Process Imagery</span>';
+                    const setButtonState = (html, disabled) => {
+                        if (!buttonEl) {
+                            return;
+                        }
+                        if (typeof html === 'string') {
+                            buttonEl.innerHTML = html;
+                        }
+                        if (typeof disabled === 'boolean') {
+                            buttonEl.disabled = disabled;
+                        }
+                    };
+
+                    const payload = buildProcessingPayload(scene);
+
+                    const enqueueProcessing = async () => {
+                        setButtonState('<i class="ri-loader-4-line animate-spin"></i><span>Queuing...</span>', true);
+                        try {
+                            const response = await fetch(config.processUrl, {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'Accept': 'application/json',
+                                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}',
+                                },
+                                body: JSON.stringify(payload)
+                            });
+
+                            const result = await response.json();
+
+                            if (response.ok) {
+                                $('#current-myCredits')?.text(formatNumber(result?.data?.current_credits, 2));
+                                const message = result?.message || 'Sentinel scene queued for processing.';
+                                MyZkToast?.success?.(message);
+                            } else {
+                                const errorMessage = result?.message || 'Failed to queue Sentinel processing. Please try again later.';
+                                MyZkToast?.error?.(errorMessage);
+                            }
+                        } catch (error) {
+                            console.error('Failed to queue Sentinel processing', error);
+                            MyZkToast?.error?.(error?.message || 'Unable to queue Sentinel imagery.');
+                        } finally {
+                            setButtonState(originalHtml, false);
+                            if (typeof window.AppMap?.uploader?.reload === 'function') {
+                                window.AppMap.uploader.reload();
+                            }
+                        }
+                    };
+
+                    setButtonState('<i class="ri-loader-4-line animate-spin"></i><span>Checking credits...</span>', true);
+
+                    // Check user credits before proceeding
+                    checkUserCredits().then(res => {
+                        $('#current-myCredits').text(formatNumber(res.currentCredits, 2));
+                        // Show confirmation modal before starting upload
+                        ZkPopAlert.show({
+                            message: `${res.hasCredits ? `This action will cost ${res.requiredCredits} credit points for processing imagery. Do you want to proceed?` : `Insufficient credit points for processing. You need ${res.requiredCredits} credits. Please purchase more credits to continue processing.`}`,
+                            icon: '<i class="ri-cpu-line text-2xl text-primary"></i>',
+                            confirmClass: "focus:ring-primary/80 rounded-md text-sm px-2.5 py-1.5 bg-primary text-primary-foreground border border-primary hover:bg-primary/80 focus:outline-none focus:ring-primary",
+                            confirmText: "Yes, Continue",
+                            cancelText: "Cancel",
+                            onConfirm: () => {
+                                if (!res.hasCredits) {
+                                    MyZkToast.warning('Insufficient credit points for processing. Please purchase more credits to continue processing.');
+                                } else {
+                                    enqueueProcessing()
+                                }
+                            }
+                        });
+                    }).catch(error => {
+                        // Restore ready state on error
+                        MyZkToast.error('Failed to check credit balance: ' + error.message);
+                    }).finally(() => {
+                        setButtonState(originalHtml, false);
+                    });
+                };
+
+                /**
+                 * Render a single Sentinel scene card using the HTML template fragment.
+                 */
+                const renderSceneCard = (scene, index) => {
+                    const fragment = elements.template.content.cloneNode(true);
+                    const card = fragment.querySelector('.sentinel-card');
+                    if (!card) {
+                        return null;
+                    }
+
+                    const titleEl = fragment.querySelector('[data-sentinel-title]');
+                    const productEl = fragment.querySelector('[data-sentinel-product]');
+                    const datetimeEl = fragment.querySelector('[data-sentinel-datetime]');
+                    const detailsEl = fragment.querySelector('[data-sentinel-details]');
+                    const thumbWrapper = fragment.querySelector('[data-sentinel-thumb]');
+                    const thumbnailEl = fragment.querySelector('[data-sentinel-thumbnail]');
+                    const placeholderEl = fragment.querySelector('[data-sentinel-placeholder]');
+                    const downloadBtn = fragment.querySelector('[data-sentinel-download]');
+                    const processBtn = fragment.querySelector('[data-sentinel-process]');
+                    const previewBtn = fragment.querySelector('[data-sentinel-preview]');
+
+                    if (titleEl) {
+                        titleEl.textContent = scene.title;
+                    }
+                    if (productEl) {
+                        productEl.textContent = scene.productId || scene.id || 'Sentinel-2 Product';
+                    }
+                    if (datetimeEl) {
+                        datetimeEl.textContent = scene.datetime ?
+                            `Acquired: ${formatReadableDate(scene.datetime)}` :
+                            'Acquired: –';
+                    }
+                    if (detailsEl) {
+                        detailsEl.textContent = scene.details || 'Details unavailable';
+                    }
+
+                    if (scene.thumbnailUrl && thumbnailEl) {
+                        thumbnailEl.src = scene.thumbnailUrl;
+                        thumbnailEl.classList.remove('hidden');
+                        placeholderEl?.classList.add('hidden');
+                    } else {
+                        thumbnailEl?.classList.add('hidden');
+                        placeholderEl?.classList.remove('hidden');
+                    }
+
+                    if (downloadBtn) {
+                        if (scene.downloadUrl) {
+                            downloadBtn.href = scene.downloadUrl;
+                            downloadBtn.download = scene.downloadName;
+                            downloadBtn.title = `Download ${scene.title}`;
+                            downloadBtn.setAttribute('aria-disabled', 'false');
+                            downloadBtn.classList.remove('hidden');
+                        } else {
+                            downloadBtn.classList.add('hidden');
+                            downloadBtn.setAttribute('aria-disabled', 'true');
+                        }
+                    }
+
+                    if (processBtn) {
+                        if (config.processUrl && scene.downloadUrl) {
+                            processBtn.classList.remove('hidden');
+                            processBtn.disabled = false;
+                            processBtn.dataset.sceneIndex = String(index);
+                            processBtn.addEventListener('click', () => handleProcessScene(index, processBtn));
+                        } else {
+                            processBtn.classList.add('hidden');
+                            processBtn.disabled = true;
+                        }
+                    }
+
+                    if (previewBtn) {
+                        previewBtn.dataset.sceneIndex = String(index);
+                        previewBtn.addEventListener('click', () => handlePreview(index));
+                    }
+
+                    // Expose the raw scene payload so other actions (process imagery) can reuse it later.
+                    card.dataset.sceneIndex = String(index);
+
+                    return fragment;
+                };
+
+                /**
+                 * Refresh the list container with the latest set of scenes.
+                 */
+                const renderSceneList = () => {
+                    if (!elements.list) return;
+                    elements.list.innerHTML = '';
+                    state.scenes.forEach((scene, index) => {
+                        const cardFragment = renderSceneCard(scene, index);
+                        if (cardFragment) {
+                            elements.list.appendChild(cardFragment);
+                        }
+                    });
+                };
+
+                /**
+                 * Ensure a vector layer exists for drawing Sentinel footprints.
+                 */
+                const ensureFootprintLayer = () => {
+                    if (state.preview.footprintLayer) {
+                        return state.preview.footprintLayer;
+                    }
+                    const mapInstance = getMapInstance();
+                    if (
+                        !mapInstance ||
+                        !window.ol?.layer?.Vector ||
+                        !window.ol?.source?.Vector ||
+                        !window.ol?.style?.Style ||
+                        !window.ol?.style?.Stroke ||
+                        !window.ol?.style?.Fill
+                    ) {
+                        return null;
+                    }
+
+                    if (typeof mapInstance.addLayer !== 'function') {
+                        return null;
+                    }
+
+                    const layer = new ol.layer.Vector({
+                        source: new ol.source.Vector(),
+
+                        style: new ol.style.Style({
+                            stroke: new ol.style.Stroke({
+                                color: 'rgba(37, 99, 235, 0.9)',
+                                width: 2,
+                                lineDash: [4, 4]
+                            }),
+                            fill: new ol.style.Fill({
+                                color: 'rgba(37, 99, 235, 0.06)'
+                            }),
+                        }),
+                        properties: {
+                            name: 'sentinel-footprint'
+                        },
+                        visible: false,
+                    });
+
+                    if (typeof layer.setZIndex === 'function') {
+                        layer.setZIndex(config.previewFootprintZIndex);
+                    }
+
+                    mapInstance.addLayer(layer);
+                    state.preview.footprintLayer = layer;
+                    return layer;
+                };
+
+                /**
+                 * Show the Sentinel footprint geometry on the OpenLayers map.
+                 */
+                const showFootprint = (geometry) => {
+                    const mapInstance = getMapInstance();
+                    if (
+                        !mapInstance ||
+                        typeof mapInstance.getView !== 'function' ||
+                        !geometry ||
+                        !window.ol?.format?.GeoJSON
+                    ) {
+                        return false;
+                    }
+
+                    const layer = ensureFootprintLayer();
+                    if (!layer) {
+                        return false;
+                    }
+
+                    const source = layer.getSource();
+                    source.clear();
+
+                    const reader = new ol.format.GeoJSON();
+                    const feature = reader.readFeature({
+                        type: 'Feature',
+                        geometry
+                    }, {
+                        dataProjection: 'EPSG:4326',
+                        featureProjection: mapInstance.getView().getProjection(),
+                    });
+
+                    source.addFeature(feature);
+                    layer.setVisible(true);
+
+                    const extent = feature.getGeometry().getExtent();
+                    mapInstance.getView().fit(extent, {
+                        duration: 400,
+                        padding: [40, 40, 40, 40],
+                        maxZoom: 13
+                    });
+                    return true;
+                };
+
+                /**
+                 * Tear down the footprint overlay and optionally hide the layer.
+                 */
+                const clearFootprint = () => {
+                    if (!state.preview.footprintLayer) {
+                        return;
+                    }
+                    state.preview.footprintLayer.getSource().clear();
+                    state.preview.footprintLayer.setVisible(false);
+                };
+
+                /**
+                 * Create or update the WMS layer used for Sentinel preview imagery.
+                 */
+                const toggleWmsLayer = (enable) => {
+                    const mapInstance = getMapInstance();
+                    const hasMapSupport =
+                        mapInstance &&
+                        typeof mapInstance.addLayer === 'function' &&
+                        typeof mapInstance.getView === 'function';
+
+                    if (!enable) {
+                        if (state.preview.wmsLayer) {
+                            const currentSource = typeof state.preview.wmsLayer.getSource === 'function' ?
+                                state.preview.wmsLayer.getSource() :
+                                null;
+                            if (currentSource?.updateParams) {
+                                currentSource.updateParams({
+                                    TIME: undefined
+                                });
+                            }
+                            state.preview.wmsLayer.setVisible(false);
+                            state.preview.wmsLayer.setExtent(undefined);
+                        }
+                        state.preview.wmsActive = false;
+                        return true;
+                    }
+
+                    const scene = state.scenes[state.preview.activeSceneIndex ?? -1];
+                    if (!scene?.wms || !hasMapSupport || !window.ol?.layer?.Tile || !window.ol?.source?.TileWMS) {
+                        return false;
+                    }
+
+                    const bboxSource = Array.isArray(scene.bbox) && scene.bbox.length >= 4 ? scene.bbox : null;
+                    const bbox = bboxSource || bboxFromGeometry(scene.geometry || geometryFromBbox(scene.bbox || []));
+                    if (!bbox) {
+                        return false;
+                    }
+
+                    let extent = projectBboxToMapExtent(bbox, mapInstance);
+                    const view = mapInstance.getView();
+                    const projection = typeof view?.getProjection === 'function' ? view.getProjection() : null;
+                    const projectionCode = typeof projection?.getCode === 'function' ? projection.getCode() : 'EPSG:3857';
+
+                    if (!extent) {
+                        try {
+                            if (projection && window.ol?.proj?.transformExtent) {
+                                extent = window.ol.proj.transformExtent(bbox, 'EPSG:4326', projection);
+                            } else {
+                                extent = bbox;
+                            }
+                        } catch (error) {
+                            console.warn('Failed to transform Sentinel preview extent:', error);
+                            extent = bbox;
+                        }
+                    }
+
+                    const params = {
+                        LAYERS: scene.wms.layers,
+                        FORMAT: 'image/png',
+                        TRANSPARENT: 'true',
+                        TILED: 'true',
+                        SHOWLOGO: 'false',
+                        VERSION: '1.3.0',
+                    };
+
+                    if (projectionCode) {
+                        params.CRS = projectionCode;
+                        params.SRS = projectionCode;
+                    }
+
+                    if (scene.wms.time) {
+                        const candidate = new Date(scene.wms.time);
+                        if (!Number.isNaN(candidate.getTime())) {
+                            params.TIME = candidate.toISOString();
+                        } else if (typeof scene.wms.time === 'string') {
+                            params.TIME = scene.wms.time;
+                        }
+                    }
+
+                    const wmsUrl = withAccessToken(scene.wms.url);
+                    const tileGrid = extent ? createTileGridForExtent(extent, projection) : null;
+                    const source = new ol.source.TileWMS({
+                        url: wmsUrl,
+                        params,
+                        crossOrigin: 'anonymous',
+                        wrapX: false,
+                        tileGrid: tileGrid || undefined,
+                    });
+
+                    if (!state.preview.wmsLayer) {
+                        state.preview.wmsLayer = new ol.layer.Tile({
+                            opacity: 1,
+                            visible: false,
+                        });
+                        if (typeof state.preview.wmsLayer.setZIndex === 'function') {
+                            state.preview.wmsLayer.setZIndex(config.previewWmsZIndex);
+                        }
+                        mapInstance.addLayer(state.preview.wmsLayer);
+                    }
+
+                    state.preview.wmsLayer.setSource(source);
+                    if (extent) {
+                        state.preview.wmsLayer.setExtent(extent);
+                    } else {
+                        state.preview.wmsLayer.setExtent(undefined);
+                    }
+                    state.preview.wmsLayer.setVisible(true);
+                    state.preview.wmsActive = true;
+                    return true;
+                };
+
+                /**
+                 * Update the preview panel UI to reflect the selected scene.
+                 */
+                const updatePreviewPanel = (scene) => {
+                    if (!elements.previewPanel) {
+                        return;
+                    }
+
+                    elements.previewPanel.classList.remove('hidden');
+                    if (elements.previewTitle) {
+                        elements.previewTitle.textContent = scene.title;
+                    }
+                    if (elements.previewAcquired) {
+                        elements.previewAcquired.textContent = scene.datetime ?
+                            new Date(scene.datetime).toUTCString() :
+                            'Acquisition time unavailable';
+                    }
+
+                    if (scene.details) {
+                        if (elements.previewDetails) {
+                            elements.previewDetails.textContent = scene.details;
+                            elements.previewDetails.classList.remove('hidden');
+                        }
+                    } else {
+                        if (elements.previewDetails) {
+                            elements.previewDetails.textContent = '';
+                            elements.previewDetails.classList.add('hidden');
+                        }
+                    }
+
+                    if (scene.downloadUrl) {
+                        if (elements.previewDownloadBtn) {
+                            elements.previewDownloadBtn.href = scene.downloadUrl;
+                            elements.previewDownloadBtn.download = scene.downloadName;
+                            elements.previewDownloadBtn.setAttribute('aria-disabled', 'false');
+                            elements.previewDownloadBtn.classList.remove('hidden');
+                        }
+                    } else {
+                        if (elements.previewDownloadBtn) {
+                            elements.previewDownloadBtn.href = '#';
+                            elements.previewDownloadBtn.setAttribute('aria-disabled', 'true');
+                            elements.previewDownloadBtn.classList.add('hidden');
+                        }
+                    }
+
+                    if (elements.previewImageryBtn) {
+                        if (scene.wms) {
+                            elements.previewImageryBtn.classList.remove('hidden');
+                            elements.previewImageryBtn.removeAttribute('disabled');
+                            elements.previewImageryBtn.setAttribute('aria-disabled', 'false');
+                        } else {
+                            elements.previewImageryBtn.classList.add('hidden');
+                            elements.previewImageryBtn.setAttribute('aria-disabled', 'true');
+                        }
+                    }
+
+                    setPreviewStatus('Footprint highlighted on the map.');
+                    if (elements.previewImageryBtn) {
+                        elements.previewImageryBtn.dataset.sceneIndex = String(state.preview.activeSceneIndex ?? -1);
+                        elements.previewImageryBtn.setAttribute('aria-pressed', 'false');
+                    }
+                    if (elements.previewImageryLabel) {
+                        elements.previewImageryLabel.textContent = 'Preview Imagery';
+                    }
+                    if (elements.previewImageryIcon) {
+                        elements.previewImageryIcon.classList.remove('ri-eye-off-line');
+                        elements.previewImageryIcon.classList.add('ri-eye-line');
+                    }
+                };
+
+                /**
+                 * Handle user clicks on "Preview on Map" buttons within the card list.
+                 */
+                const handlePreview = (index) => {
+                    const scene = state.scenes[index];
+                    if (!scene) {
+                        return;
+                    }
+
+                    state.preview.activeSceneIndex = index;
+                    state.preview.wmsActive = false;
+
+                    const footprintDisplayed = showFootprint(scene.geometry);
+                    if (!footprintDisplayed) {
+                        setPreviewStatus('Unable to display footprint on the map.');
+                    }
+
+                    toggleWmsLayer(false);
+                    updatePreviewPanel(scene);
+                };
+
+                /**
+                 * Hide the preview panel and clean up any active map overlays.
+                 */
+                const clearPreviewPanel = () => {
+                    clearFootprint();
+                    toggleWmsLayer(false);
+                    state.preview.activeSceneIndex = null;
+                    state.preview.wmsActive = false;
+                    if (elements.previewPanel) {
+                        elements.previewPanel.classList.add('hidden');
+                    }
+                    setPreviewStatus('Awaiting preview selection.');
+                };
+
+                /**
+                 * Fetch Sentinel scenes using the current filter values.
+                 */
+                const loadCollections = async (options = {}) => {
+                    const triggeredByFilter = options.triggeredByFilter === true;
+                    const maxRecords = options.maxRecords ?
+                        Number(options.maxRecords) :
+                        triggeredByFilter ?
+                        config.filteredMaxRecords :
+                        config.defaultMaxRecords;
+
+                    if (state.requestController) {
+                        state.requestController.abort();
+                    }
+
+                    const controller = new AbortController();
+                    state.requestController = controller;
+
+                    setLoadingState(true);
+                    setStatus('Fetching Sentinel-2 scenes...', true);
+
+                    const params = buildQueryParams(maxRecords);
+                    state.lastQueryString = params.toString();
+                    const requestUrl = `${config.endpoint}?${state.lastQueryString}`;
+
+                    const headers = {
+                        Accept: 'application/json'
+                    };
+                    if (config.token) {
+                        headers.Authorization = `Bearer ${config.token}`;
+                    }
 
                     try {
-                        const params = buildQueryParams();
-                        const requestUrl = `${config.endpoint}?${params.toString()}`;
-                        const response = await fetchCatalog(requestUrl);
-                        const features = Array.isArray(response?.features) ? response.features : [];
-
-                        if (!features.length) {
-                            statusEl.textContent = 'No Sentinel-2 collections found for the selected date range.';
-                        } else {
-                            statusEl.classList.add('hidden');
-                            features.forEach((feature) => {
-                                const card = renderCard(feature);
-                                if (card) {
-                                    listEl.appendChild(card);
-                                }
-                            });
+                        const response = await fetch(requestUrl, {
+                            headers,
+                            signal: controller.signal
+                        });
+                        if (!response.ok) {
+                            throw new Error(`Unable to fetch Sentinel-2 scenes (HTTP ${response.status}).`);
                         }
 
-                        state.loadedOnce = true;
-                        window.AppMap.sentinel.loadedOnce = true;
-                        updateLastUpdated();
+                        const payload = await response.json();
+                        const features = Array.isArray(payload?.features) ? payload.features : [];
+                        const scenes = features
+                            .map(transformFeature)
+                            .filter(Boolean)
+                            .sort((a, b) => {
+                                const aTime = a.acquisitionDate?.getTime() || 0;
+                                const bTime = b.acquisitionDate?.getTime() || 0;
+                                return bTime - aTime;
+                            });
 
-                        if (features.length && forceRefresh && window.MyZkToast?.success) {
-                            window.MyZkToast.success('Sentinel-2 collections updated.');
+                        state.scenes = scenes;
+                        state.loadedOnce = true;
+
+                        renderSceneList();
+
+                        if (scenes.length === 0) {
+                            setStatus('No Sentinel-2 scenes found for the selected filters.');
+                        } else {
+                            const suffix = triggeredByFilter ? 'filters' : 'default filters';
+                            setStatus(`Showing ${scenes.length} scene(s) based on ${suffix}.`);
                         }
                     } catch (error) {
-                        statusEl.classList.remove('hidden');
-                        statusEl.textContent = error?.message || 'Unable to fetch Sentinel-2 collections. Please try again later.';
-                        updateLastUpdated();
-                        if (window.MyZkToast?.error) {
-                            window.MyZkToast.error('Failed to update Sentinel-2 collections.');
+                        if (error.name === 'AbortError') {
+                            return;
                         }
+                        console.error('Sentinel catalogue fetch failed:', error);
+                        state.scenes = [];
+                        renderSceneList();
+                        const fallbackMessage = error?.message || 'Failed to load Sentinel-2 scenes.';
+                        setStatus(fallbackMessage);
+                    } finally {
+                        if (state.requestController === controller) {
+                            state.requestController = null;
+                        }
+                        setLoadingState(false);
                     }
                 };
 
-                // Attach listeners to filter inputs and actions to keep data fresh.
-                const bindEvents = () => {
-                    startDateInputEl?.addEventListener('change', () => {
-                        if (endDateInputEl && startDateInputEl.value && endDateInputEl.value && endDateInputEl.value < startDateInputEl.value) {
-                            endDateInputEl.value = startDateInputEl.value;
-                        }
-                        syncDateConstraints();
-                    });
-
-                    endDateInputEl?.addEventListener('change', () => {
-                        if (startDateInputEl && endDateInputEl.value && startDateInputEl.value && startDateInputEl.value > endDateInputEl.value) {
-                            startDateInputEl.value = endDateInputEl.value;
-                        }
-                        syncDateConstraints();
-                    });
-
-                    cloudInputEl?.addEventListener('blur', () => normalizeInputValue(cloudInputEl, 0, 100));
-                    latInputEl?.addEventListener('blur', () => normalizeInputValue(latInputEl, -90, 90));
-                    lonInputEl?.addEventListener('blur', () => normalizeInputValue(lonInputEl, -180, 180));
-
-                    formEl?.addEventListener('submit', (event) => {
-                        event.preventDefault();
-                        loadCollections(true);
-                    });
-
-                    resetButtonEl?.addEventListener('click', () => {
-                        resetFilters();
-                        loadCollections(true);
-                    });
+                /**
+                 * Reset filter inputs to their default values before refreshing the catalogue.
+                 */
+                const resetFilters = () => {
+                    if (elements.cloudInput) {
+                        elements.cloudInput.value = '40';
+                    }
+                    if (elements.productInput) {
+                        elements.productInput.value = 'S2MSI2A';
+                    }
+                    if (elements.latInput) {
+                        elements.latInput.value = '-1.24536';
+                    }
+                    if (elements.lonInput) {
+                        elements.lonInput.value = '114.54535';
+                    }
+                    if (elements.startInput) {
+                        elements.startInput.value = '';
+                    }
+                    if (elements.endInput) {
+                        elements.endInput.value = '';
+                    }
+                    ensureDefaultDates();
                 };
 
-                // Bootstrap sentinel catalogue helpers and trigger the initial load.
-                const initialise = () => {
-                    ensureAppNamespace();
-                    window.AppMap.sentinel.loadedOnce = state.loadedOnce;
-                    window.AppMap.sentinel.loadCollections = loadCollections;
+                // Wire up event listeners for filter submission, reset, and preview actions.
+                elements.filterForm?.addEventListener('submit', (event) => {
+                    event.preventDefault();
+                    loadCollections({
+                        triggeredByFilter: true
+                    }).catch(() => {
+                        /* handled in loadCollections */
+                    });
+                });
 
-                    if (cloudInputEl && cloudInputEl.value === '') {
-                        cloudInputEl.value = config.defaultCloudCover;
-                    }
-                    if (latInputEl && latInputEl.value === '') {
-                        latInputEl.value = config.defaultLatitude;
-                    }
-                    if (lonInputEl && lonInputEl.value === '') {
-                        lonInputEl.value = config.defaultLongitude;
-                    }
-                    if (levelInputEl && levelInputEl.value === '') {
-                        levelInputEl.value = config.defaultProductType;
-                    }
+                elements.resetButton?.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    resetFilters();
+                    loadCollections({
+                        triggeredByFilter: false
+                    }).catch(() => {
+                        /* handled in loadCollections */
+                    });
+                });
 
-                    waitForFormatIso(() => applyDefaultDates(false));
-                    bindEvents();
-                    loadCollections();
+                elements.previewClearBtn?.addEventListener('click', () => {
+                    clearPreviewPanel();
+                });
 
-                    document.dispatchEvent(new CustomEvent('app:sentinel:ready', {
-                        detail: window.AppMap.sentinel
-                    }));
+                elements.previewImageryBtn?.addEventListener('click', () => {
+                    if (state.preview.activeSceneIndex == null) {
+                        return;
+                    }
+                    const nextState = !state.preview.wmsActive;
+                    const toggled = toggleWmsLayer(nextState);
+                    if (!toggled) {
+                        setPreviewStatus('Imagery preview is unavailable for this scene.');
+                        return;
+                    }
+                    state.preview.wmsActive = nextState;
+                    elements.previewImageryBtn.setAttribute('aria-pressed', String(nextState));
+                    if (nextState) {
+                        setPreviewStatus('Sentinel WMS preview enabled on the map.');
+                        if (elements.previewImageryLabel) {
+                            elements.previewImageryLabel.textContent = 'Hide Imagery';
+                        }
+                        elements.previewImageryIcon?.classList.remove('ri-eye-line');
+                        elements.previewImageryIcon?.classList.add('ri-eye-off-line');
+                    } else {
+                        setPreviewStatus('Imagery preview hidden.');
+                        if (elements.previewImageryLabel) {
+                            elements.previewImageryLabel.textContent = 'Preview Imagery';
+                        }
+                        elements.previewImageryIcon?.classList.remove('ri-eye-off-line');
+                        elements.previewImageryIcon?.classList.add('ri-eye-line');
+                    }
+                });
+
+                const helpers = {
+                    withAccessToken,
+                    sanitizeFileName,
+                    resolveDownloadUrl,
                 };
 
-                if (document.readyState === 'loading') {
-                    document.addEventListener('DOMContentLoaded', initialise, {
-                        once: true
-                    });
-                } else {
-                    initialise();
-                }
+                // Expose the Sentinel module to other parts of the app while keeping internals encapsulated.
+                const sentinelModule = {
+                    get loadedOnce() {
+                        return state.loadedOnce;
+                    },
+                    loadCollections,
+                    clearPreview: clearPreviewPanel,
+                    resetFilters,
+                    helpers,
+                };
+
+                window.AppMap.sentinel = sentinelModule;
+                window.AppMap.sentinelHelpers = helpers;
+                document.dispatchEvent(new CustomEvent('app:sentinel:ready', {
+                    detail: sentinelModule
+                }));
+
+                // Bootstrap defaults and kick off the initial fetch.
+                ensureDefaultDates();
+                loadCollections().catch(() => {
+                    /* handled inside loadCollections */
+                });
             })();
         </script>
     @endpush

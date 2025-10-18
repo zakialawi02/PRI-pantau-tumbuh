@@ -152,7 +152,7 @@ class MergeImageryChunksJob implements ShouldQueue
             $imagery->update($updates);
 
             if (!$this->skipProcessing) {
-                ProcessImageryJob::dispatch($imagery->id);
+                ProcessImageryJob::dispatch($imagery->id)->onQueue('processing');
             }
         } catch (Exception $exception) {
             Log::error('MergeImageryChunksJob failed: ' . $exception->getMessage(), [

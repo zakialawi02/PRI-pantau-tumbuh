@@ -11,6 +11,8 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\FieldAreaController;
 use App\Http\Controllers\ImageryDataController;
 use App\Http\Controllers\UserCreditsController;
+use App\Http\Controllers\SentinelProcessingController;
+use App\Http\Controllers\SentinelClipController;
 use App\Http\Controllers\Socialite\ProviderCallbackController;
 use App\Http\Controllers\Socialite\ProviderRedirectController;
 
@@ -54,6 +56,8 @@ Route::prefix('dashboard')->name('admin.')->group(function () {
         Route::post('/imagery/{imagery}/retry-merge', [ImageryDataController::class, 'retryMerge'])->name('imagery.retry-merge');
         Route::get('/imagery/{imagery}/download-source', [ImageryDataController::class, 'downloadSource'])->name('imagery.download.source');
         Route::get('/imagery/{imagery}/download-result', [ImageryDataController::class, 'downloadResult'])->name('imagery.download.result');
+        Route::post('/sentinel/process', [SentinelProcessingController::class, 'processScene'])->name('sentinel.process');
+        Route::post('/sentinel/process-clip', [SentinelProcessingController::class, 'processClip'])->name('sentinel.clip');
 
         // Credit Purchase
         Route::get('/purchase-credits', [UserCreditsController::class, 'purchase'])->name('purchase-credits');

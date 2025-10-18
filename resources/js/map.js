@@ -895,15 +895,69 @@ function addInteraction(type = "Polygon") {
             featureProjection: "EPSG:3857", // Map's projection (assuming EPSG:3857)
         });
         geojsonFeature = JSON.parse(geojson);
+        window.geojsonFeature = geojsonFeature;
 
         // Display the GeoJSON string in the #drawerGeojson element
-        document.getElementById(
-            "drawerGeojson"
-        ).innerHTML = `<pre>${JSON.stringify(geojsonFeature, null, 1)}</pre>`;
+        const drawerGeojsonEl = document.getElementById("drawerGeojson");
+        if (drawerGeojsonEl) {
+            drawerGeojsonEl.innerHTML = `<pre>${JSON.stringify(
+                geojsonFeature,
+                null,
+                1
+            )}</pre>`;
+        }
+
+        const sentinelClipModule =
+            document.getElementById("sentinelClipModule");
+        if (sentinelClipModule) {
+            const locale = document.documentElement.lang;
+            const areaHa = geojsonArea / 10000;
+
+            const clipAreaOutput = document.getElementById("clipAreaOutput");
+            if (clipAreaOutput) {
+                clipAreaOutput.textContent = `${formatNumber(
+                    areaHa,
+                    2,
+                    locale
+                )} ha`;
+            }
+
+            const clipCreditOutput =
+                document.getElementById("clipCreditOutput");
+            if (clipCreditOutput) {
+                const creditRate = parseFloat(
+                    sentinelClipModule.dataset.creditRate || "0"
+                );
+                if (creditRate > 0) {
+                    const estimatedCost = areaHa * creditRate;
+                    clipCreditOutput.textContent = formatNumber(
+                        estimatedCost,
+                        2,
+                        locale
+                    );
+                } else {
+                    clipCreditOutput.textContent = "–";
+                }
+            }
+
+            const clipGeojsonOutput =
+                document.getElementById("clipGeojsonOutput");
+            if (clipGeojsonOutput) {
+                clipGeojsonOutput.innerHTML = `<pre class="whitespace-pre-wrap">${JSON.stringify(
+                    geojsonFeature,
+                    null,
+                    2
+                )}</pre>`;
+            }
+        }
 
         // Display measurement result in the #measurementOutput div
-        document.getElementById("measurementOutput").innerHTML =
-            formatNumber(geojsonArea / 10000) + " ha"; // Convert m² to hectares;
+        const measurementOutputEl =
+            document.getElementById("measurementOutput");
+        if (measurementOutputEl) {
+            measurementOutputEl.innerHTML =
+                formatNumber(geojsonArea / 10000) + " ha"; // Convert m² to hectares;
+        }
 
         drawingEnd();
 
@@ -1030,27 +1084,19 @@ $("#drawPolygonBtn").click(function (e) {
         drawingEnd();
     } else {
         drawingStart();
-        $("#featurePropertiesForm")[0].reset();
-    }
-});
-$("#cancelFeatureProperties").click(function (e) {
-    $("#featureProperties").addClass("hidden");
-    $("#drawerGeojson").html("");
-    if (vectorLayerDrawing) {
-        map.removeLayer(vectorLayerDrawing);
-        vectorSourceDrawing.clear();
     }
 });
 
-$("#saveFeatureProperties").click(function () {
-    const geojson = geojsonFeature;
-    const area_hectares = geojsonArea;
-
-    if (geojson) {
-        $("#geometryInput").val(JSON.stringify(geojson.geometry));
-        $("#areaInput").val(area_hectares);
-    }
-});
+const clipDrawPolygonBtn = document.getElementById("clipDrawPolygonBtn");
+if (clipDrawPolygonBtn) {
+    clipDrawPolygonBtn.addEventListener("click", function () {
+        if (drawingRunning) {
+            drawingEnd();
+        } else {
+            drawingStart();
+        }
+    });
+}
 
 /**
  * Zoom in function

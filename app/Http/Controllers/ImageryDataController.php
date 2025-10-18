@@ -216,9 +216,6 @@ class ImageryDataController extends Controller
             // Clear cache
             Cache::forget($request->order_id);
 
-            // Dispatch job get imagery data
-            // GetImageryDataJob::dispatch($fieldArea);
-
             try {
                 $bodyMail = [
                     'name' => $user->name,
@@ -330,7 +327,7 @@ class ImageryDataController extends Controller
 
             $uploadId = $validated['upload_id'];
             $chunkIndex = $validated['chunk_index'];
-            $chunkDir = storage_path("app/tmp_uploads/{$uploadId}");
+            $chunkDir = storage_path("app/tmp/uploads/{$uploadId}");
 
             if (!File::exists($chunkDir)) {
                 File::makeDirectory($chunkDir, 0777, true);
@@ -401,7 +398,7 @@ class ImageryDataController extends Controller
             $sourceType = $validated['source_type'];
             $totalChunks = (int) $validated['total_chunks'];
 
-            $chunkDir = storage_path("app/tmp_uploads/{$uploadId}");
+            $chunkDir = storage_path("app/tmp/uploads/{$uploadId}");
             if (!File::isDirectory($chunkDir)) {
                 Log::warning('ImageryDataController@mergeChunks: Chunk directory not found', [
                     'user_id' => Auth::id(),
@@ -554,7 +551,7 @@ class ImageryDataController extends Controller
                 $totalChunks,
                 $skipProcessing,
                 $storedName
-            );
+            )->onQueue('download');
 
             $message = $skipProcessing
                 ? 'Upload received. Processing skipped due to insufficient credits. File will be available after background merging.'
@@ -761,7 +758,7 @@ class ImageryDataController extends Controller
                 Log::info("Retrying processing for imagery {$imagery->id}. Credits deducted: {$requiredCredits}");
 
                 // Dispatch processing job
-                ProcessImageryJob::dispatch($imagery->id);
+                ProcessImageryJob::dispatch($imagery->id)->onQueue('processing');
             });
 
             return response()->json([
@@ -812,7 +809,7 @@ class ImageryDataController extends Controller
                 ], 400);
             }
 
-            $chunkDir = storage_path('app/tmp_uploads/' . $imagery->chunk_id);
+            $chunkDir = storage_path('app/tmp/uploads/' . $imagery->chunk_id);
             if (!File::isDirectory($chunkDir)) {
                 Log::warning('ImageryDataController@retryMerge: Chunk directory not found', [
                     'user_id' => Auth::id(),
@@ -841,7 +838,7 @@ class ImageryDataController extends Controller
                 (int) $imagery->chunk_total,
                 $skipProcessing,
                 $imagery->stored_name
-            );
+            )->onQueue('download');
 
             return response()->json([
                 'success' => true,
