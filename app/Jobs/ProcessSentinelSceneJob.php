@@ -65,7 +65,7 @@ class ProcessSentinelSceneJob implements ShouldQueue
             return;
         }
 
-        $publicStorage = storage_path('app');
+        $publicStorage = storage_path('app/public');
         $imageryDir = $publicStorage . DIRECTORY_SEPARATOR . 'imagery';
         $sourceDir = $this->zipDirectory !== ''
             ? $publicStorage . DIRECTORY_SEPARATOR . $this->zipDirectory
@@ -180,7 +180,7 @@ class ProcessSentinelSceneJob implements ShouldQueue
 
             $outputSize = File::size($outputPath) ?: $downloadedSize;
 
-            $relativePath = 'imagery/' . $this->outputFilename;
+            $relativePath = 'public/imagery/' . $this->outputFilename;
             $geoserverData = null;
 
             try {

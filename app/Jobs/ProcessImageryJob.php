@@ -44,7 +44,7 @@ class ProcessImageryJob implements ShouldQueue
         // Tentukan path python & script
         $scriptsBase = base_path('scripts');
         $scriptPath = "{$scriptsBase}/process_imagery.py";
-        $filePath   = storage_path("app/imagery/{$imagery->stored_name}");
+        $filePath   = storage_path("app/public/imagery/{$imagery->stored_name}");
 
         if (!File::exists($filePath)) {
             Log::error("❌ [Job] Input imagery file not found: {$filePath}");
@@ -53,7 +53,7 @@ class ProcessImageryJob implements ShouldQueue
             return;
         }
 
-        $processedDirectory = storage_path('app/imagery/processed');
+        $processedDirectory = storage_path('app/public/imagery/processed');
         if (!File::isDirectory($processedDirectory)) {
             File::makeDirectory($processedDirectory, 0755, true, true);
         }
@@ -134,7 +134,7 @@ class ProcessImageryJob implements ShouldQueue
         // Cek hasil eksekusi
         if ($process->isSuccessful()) {
             $geoserverService = app(GeoServerService::class);
-            $relativePath = "imagery/processed/{$processedFileName}";
+            $relativePath = "public/imagery/processed/{$processedFileName}";
             $geoserverData = null;
 
             if (File::exists($outputPath)) {

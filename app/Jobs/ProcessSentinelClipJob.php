@@ -44,12 +44,12 @@ class ProcessSentinelClipJob implements ShouldQueue
         $pythonService = new PythonService();
         $creditService = new CreditService();
 
-        $publicStorage = storage_path('app');
+        $publicStorage = storage_path('app/public');
         $imageryDir = $publicStorage . DIRECTORY_SEPARATOR . 'imagery';
 
         $outputFilename = basename($this->payload['output_filename'] ?? $imagery->stored_name);
         $outputPath = $imageryDir . DIRECTORY_SEPARATOR . $outputFilename;
-        $relativeOutput = 'imagery/' . $outputFilename;
+        $relativeOutput = 'public/imagery/' . $outputFilename;
 
         $tilesDir = storage_path('app/tmp/sentinel_clip_' . $this->imageryId);
         if (File::isDirectory($tilesDir)) {

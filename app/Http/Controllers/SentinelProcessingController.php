@@ -73,7 +73,7 @@ class SentinelProcessingController extends Controller
                 'stored_name' => $outputFilename,
                 'size' => 0,
                 'format' => 'zip',
-                'path' => 'storage/' . trim($imageryDirectory, '/') . '/' . $outputFilename,
+                'path' => 'public/' . trim($imageryDirectory, '/') . '/' . $outputFilename,
                 'upload_status' => 'uploading',
                 'processing_status' => 'waiting',
                 'uploaded_at' => now(),

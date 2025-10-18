@@ -534,7 +534,7 @@ class ImageryDataController extends Controller
             $randomStr = Str::upper(Str::random(8));
             $cleanOriginal = Str::slug(pathinfo($filename, PATHINFO_FILENAME));
             $storedName = "{$timestamp}_{$randomStr}_{$cleanOriginal}.{$ext}";
-            $finalPath = storage_path("app/imagery/{$storedName}");
+            $finalPath = storage_path("app/public/imagery/{$storedName}");
 
             $calculatedSize = 0;
             for ($i = 0; $i < $totalChunks; $i++) {
@@ -597,7 +597,7 @@ class ImageryDataController extends Controller
                     'stored_name' => $storedName,
                     'size' => $calculatedSize,
                     'format' => $ext,
-                    'path' => "imagery/{$storedName}",
+                    'path' => "public/imagery/{$storedName}",
                     'chunk_id' => $uploadId,
                     'chunk_total' => $totalChunks,
                     'upload_status' => 'merging',
@@ -634,7 +634,7 @@ class ImageryDataController extends Controller
                         'stored_name' => $storedName,
                         'size' => $calculatedSize,
                         'format' => $ext,
-                        'path' => "imagery/{$storedName}",
+                        'path' => "public/imagery/{$storedName}",
                         'chunk_id' => $uploadId,
                         'chunk_total' => $totalChunks,
                         'upload_status' => 'merging',
@@ -928,7 +928,7 @@ class ImageryDataController extends Controller
                 ], 404);
             }
 
-            $finalPath = storage_path('app/imagery/' . $imagery->stored_name);
+            $finalPath = storage_path('app/public/imagery/' . $imagery->stored_name);
             $skipProcessing = $imagery->processing_status === 'skip';
 
             $imagery->update([
