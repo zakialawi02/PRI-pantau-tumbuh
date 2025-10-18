@@ -114,7 +114,7 @@ class GeoServerService
                     'nativeCRS' => $this->defaultSrs,
                     'requestSRS' => ['string' => [$this->defaultSrs]],
                     'responseSRS' => ['string' => [$this->defaultSrs]],
-                    'projectionPolicy' => 'FORCE_DECLARED',
+                    'projectionPolicy' => 'REPROJECT_TO_DECLARED',
                     'enabled' => true,
                 ],
             ]
