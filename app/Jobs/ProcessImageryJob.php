@@ -3,11 +3,12 @@
 namespace App\Jobs;
 
 use App\Models\ImageryData;
-use Illuminate\Bus\Queueable;
 use App\Services\CreditService;
+use App\Services\GeoServerService;
 use App\Services\PythonService;
-use Illuminate\Support\Facades\Log;
+use Illuminate\Bus\Queueable;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Queue\SerializesModels;
 use Symfony\Component\Process\Process;
 use Illuminate\Queue\InteractsWithQueue;
@@ -132,13 +133,27 @@ class ProcessImageryJob implements ShouldQueue
 
         // Cek hasil eksekusi
         if ($process->isSuccessful()) {
-            $publicPath = "storage/imagery/processed/{$processedFileName}";
+            $geoserverService = app(GeoServerService::class);
+            $relativePath = "storage/imagery/processed/{$processedFileName}";
+            $geoserverData = null;
 
             if (File::exists($outputPath)) {
+                try {
+                    $geoserverData = $geoserverService->publishImageryLayer($imagery, $outputPath, 'processed');
+                } catch (\Throwable $geoserverException) {
+                    Log::warning('ProcessImageryJob: Failed to publish processed imagery to GeoServer.', [
+                        'imagery_id' => $this->imageryId,
+                        'error' => $geoserverException->getMessage(),
+                    ]);
+                }
+
                 $imagery->update([
                     'processing_status' => 'completed',
-                    'processed_path' => $publicPath,
+                    'processed_path' => $relativePath,
                     'processed_at' => now(),
+                    'processed_geoserver_store_name' => $geoserverData['store'] ?? $imagery->processed_geoserver_store_name,
+                    'processed_geoserver_layer_name' => $geoserverData['layer'] ?? $imagery->processed_geoserver_layer_name,
+                    'processed_geoserver_bounds' => $geoserverData['bounds'] ?? $imagery->processed_geoserver_bounds,
                 ]);
 
                 Log::info("✅ [Job] Processing completed successfully. Output file found at: {$outputPath}");
@@ -147,8 +162,11 @@ class ProcessImageryJob implements ShouldQueue
                 // Simpan path-nya tetap, tapi log kalau file gak terdeteksi
                 $imagery->update([
                     'processing_status' => 'completed',
-                    'processed_path' => $publicPath,
+                    'processed_path' => $relativePath,
                     'processed_at' => now(),
+                    'processed_geoserver_store_name' => $geoserverData['store'] ?? $imagery->processed_geoserver_store_name,
+                    'processed_geoserver_layer_name' => $geoserverData['layer'] ?? $imagery->processed_geoserver_layer_name,
+                    'processed_geoserver_bounds' => $geoserverData['bounds'] ?? $imagery->processed_geoserver_bounds,
                 ]);
                 Log::warning("⚠️ [Job] Processing done, but output file not detected in expected location.");
             }
