@@ -1413,6 +1413,143 @@
                         uploadNextChunk();
                     };
 
+                    const imageryPreviewState = {
+                        map: typeof window.map?.addLayer === 'function' ? window.map : null,
+                        layer: null,
+                        activeImageryId: null,
+                        lastTypeByImagery: {},
+                    };
+
+                    const resolvePreviewMap = () => {
+                        if (imageryPreviewState.map && typeof imageryPreviewState.map.addLayer === 'function') {
+                            return imageryPreviewState.map;
+                        }
+                        if (window.map && typeof window.map.addLayer === 'function') {
+                            imageryPreviewState.map = window.map;
+                            return imageryPreviewState.map;
+                        }
+                        return null;
+                    };
+
+                    const fitMapToBbox = (mapInstance, bbox) => {
+                        if (!mapInstance || !Array.isArray(bbox) || bbox.length !== 4) {
+                            return;
+                        }
+                        try {
+                            const view = mapInstance.getView?.();
+                            const projection = view?.getProjection?.();
+                            let extent = bbox;
+                            if (projection && projection.getCode && projection.getCode() !== 'EPSG:4326' && window.ol?.proj?.transformExtent) {
+                                extent = window.ol.proj.transformExtent(extent, 'EPSG:4326', projection);
+                            }
+                            view?.fit?.(extent, {
+                                duration: 600,
+                                padding: [60, 40, 60, 40],
+                                maxZoom: 16,
+                            });
+                        } catch (error) {
+                            console.warn('Failed to fit map to imagery extent', error);
+                        }
+                    };
+
+                    window.addEventListener('map:ready', (event) => {
+                        const candidate = event?.detail;
+                        if (candidate && typeof candidate.addLayer === 'function') {
+                            imageryPreviewState.map = candidate;
+                        }
+                    });
+
+                    function viewImagery(item) {
+                        const entries = [];
+                        if (item?.processed_wms_url && item?.processed_geoserver_layer) {
+                            entries.push({
+                                type: 'processed',
+                                url: item.processed_wms_url,
+                                layer: item.processed_geoserver_layer,
+                                bbox: item.processed_bbox,
+                            });
+                        }
+                        if (item?.source_wms_url && item?.source_geoserver_layer) {
+                            entries.push({
+                                type: 'source',
+                                url: item.source_wms_url,
+                                layer: item.source_geoserver_layer,
+                                bbox: item.source_bbox,
+                            });
+                        }
+
+                        if (!entries.length) {
+                            MyZkToast?.warning?.('Imagery has not been published to GeoServer yet.');
+                            return;
+                        }
+
+                        const mapInstance = resolvePreviewMap();
+                        if (!mapInstance || !window.ol?.source?.TileWMS) {
+                            MyZkToast?.warning?.('Map is not ready yet. Please try again in a moment.');
+                            return;
+                        }
+
+                        const imageryKey = item?.id || entries[0].layer;
+                        if (imageryPreviewState.activeImageryId !== imageryKey) {
+                            imageryPreviewState.activeImageryId = imageryKey;
+                            imageryPreviewState.lastTypeByImagery[imageryKey] = null;
+                        }
+
+                        const previousType = imageryPreviewState.lastTypeByImagery[imageryKey];
+                        const previousIndex = entries.findIndex((entry) => entry.type === previousType);
+                        const targetIndex = previousIndex === -1 ? 0 : (previousIndex + 1) % entries.length;
+                        const target = entries[targetIndex];
+
+                        if (!imageryPreviewState.layer) {
+                            imageryPreviewState.layer = new window.ol.layer.Tile({
+                                opacity: 0.75,
+                            });
+                            imageryPreviewState.layer.set('name', 'user-imagery-preview');
+                            if (typeof imageryPreviewState.layer.setZIndex === 'function') {
+                                imageryPreviewState.layer.setZIndex(60);
+                            }
+                            mapInstance.addLayer(imageryPreviewState.layer);
+                        }
+
+                        const params = {
+                            LAYERS: target.layer,
+                            FORMAT: 'image/png',
+                            TRANSPARENT: 'true',
+                            TILED: 'true',
+                            VERSION: '1.3.0',
+                        };
+
+                        const source = new window.ol.source.TileWMS({
+                            url: target.url,
+                            params,
+                            crossOrigin: 'anonymous',
+                        });
+
+                        imageryPreviewState.layer.setSource(source);
+                        imageryPreviewState.layer.setVisible(true);
+                        imageryPreviewState.lastTypeByImagery[imageryKey] = target.type;
+
+                        fitMapToBbox(mapInstance, target.bbox);
+
+                        if (entries.length > 1) {
+                            const nextType = entries[(targetIndex + 1) % entries.length];
+                            MyZkToast?.info?.(`Displaying ${target.type === 'processed' ? 'processed' : 'source'} imagery. Click again to switch to the ${nextType.type === 'processed' ? 'processed' : 'source'} layer.`);
+                        } else {
+                            MyZkToast?.success?.(`Displaying ${target.type === 'processed' ? 'processed' : 'source'} imagery on the map.`);
+                        }
+                    }
+
+                    window.viewImagery = viewImagery;
+                    window.AppMap = window.AppMap || {};
+                    window.AppMap.imageryPreview = {
+                        show: viewImagery,
+                        hide: () => {
+                            if (imageryPreviewState.layer) {
+                                imageryPreviewState.layer.setVisible(false);
+                            }
+                        },
+                    };
+
                     // Create a DOM fragment describing a single imagery record.
                     const renderImageryCard = (item) => {
                         const template = elements.cardTemplate;
@@ -1494,11 +1631,36 @@
                             className: 'text-foreground/60',
                         };
 
-                        const meta = `${sizeMb} MB • ${uploadDate} • <span class="imagery-status font-semibold ${uploadStatusInfo.className}">${uploadStatusInfo.label}</span> • <span class="imagery-status font-semibold ${processingStatusInfo.className}">${processingStatusInfo.label}</span>`;
+                        const hasProcessedWms = Boolean(item.processed_wms_url && item.processed_geoserver_layer);
+                        const hasSourceWms = Boolean(item.source_wms_url && item.source_geoserver_layer);
+                        const hasWms = hasProcessedWms || hasSourceWms;
+
+                        const wmsStatusInfo = hasWms ? {
+                            label: hasProcessedWms && hasSourceWms ? 'Source & Processed Ready' : hasProcessedWms ? 'Processed Ready' : 'Source Ready',
+                            className: 'text-success'
+                        } : {
+                            label: 'Preview Unavailable',
+                            className: 'text-foreground/60'
+                        };
+
+                        const meta = `${sizeMb} MB • ${uploadDate} • <span class="imagery-status font-semibold ${uploadStatusInfo.className}">${uploadStatusInfo.label}</span> • <span class="imagery-status font-semibold ${processingStatusInfo.className}">${processingStatusInfo.label}</span> • <span class="imagery-status font-semibold ${wmsStatusInfo.className}">${wmsStatusInfo.label}</span>`;
                         card.querySelector('.imagery-meta').innerHTML = meta;
 
                         const viewBtn = card.querySelector('.view-btn');
-                        viewBtn?.addEventListener('click', () => viewImagery(item));
+                        if (viewBtn) {
+                            if (hasWms) {
+                                viewBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                                viewBtn.removeAttribute('disabled');
+                                viewBtn.removeAttribute('aria-disabled');
+                                viewBtn.title = 'Preview imagery on the map';
+                                viewBtn.addEventListener('click', () => viewImagery(item));
+                            } else {
+                                viewBtn.classList.add('opacity-50', 'cursor-not-allowed');
+                                viewBtn.setAttribute('disabled', 'true');
+                                viewBtn.setAttribute('aria-disabled', 'true');
+                                viewBtn.title = 'Preview will be available after publishing to GeoServer';
+                            }
+                        }
 
                         return fragment;
                     };

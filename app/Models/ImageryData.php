@@ -28,7 +28,18 @@ class ImageryData extends Model
         'processing_status',
         'processed_path',
         'processed_at',
-        'scheduled_deletion_at'
+        'scheduled_deletion_at',
+        'geoserver_workspace',
+        'source_geoserver_store',
+        'source_geoserver_layer',
+        'source_wms_url',
+        'source_wmts_url',
+        'source_bbox',
+        'processed_geoserver_store',
+        'processed_geoserver_layer',
+        'processed_wms_url',
+        'processed_wmts_url',
+        'processed_bbox',
     ];
 
     protected $casts = [
@@ -36,7 +47,9 @@ class ImageryData extends Model
         'uploaded_at' => 'datetime',
         'processed_at' => 'datetime',
         'chunk_total' => 'integer',
-        'scheduled_deletion_at' => 'datetime'
+        'scheduled_deletion_at' => 'datetime',
+        'source_bbox' => 'array',
+        'processed_bbox' => 'array',
     ];
 
     public function user()

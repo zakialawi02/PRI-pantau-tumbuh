@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\ImageryData;
 use App\Jobs\ProcessImageryJob;
+use App\Services\GeoServerService;
 use Exception;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -12,6 +13,8 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
+use Throwable;
 
 
 class MergeImageryChunksJob implements ShouldQueue
@@ -151,6 +154,8 @@ class MergeImageryChunksJob implements ShouldQueue
 
             $imagery->update($updates);
 
+            $this->publishSourceImagery($imagery);
+
             if (!$this->skipProcessing) {
                 ProcessImageryJob::dispatch($imagery->id)->onQueue('processing');
             }
@@ -168,5 +173,46 @@ class MergeImageryChunksJob implements ShouldQueue
                 'processing_status' => $imagery->processing_status === 'skip' ? 'skip' : 'waiting',
             ]);
         }
+    }
+
+    protected function publishSourceImagery(ImageryData $imagery): void
+    {
+        if (!$this->isGeoTiff($this->finalPath)) {
+            return;
+        }
+
+        try {
+            /** @var GeoServerService $geoServer */
+            $geoServer = app(GeoServerService::class);
+            $result = $geoServer->publishGeoTiff($this->finalPath, [
+                'store' => sprintf('imagery_%s_source', Str::lower($imagery->id)),
+                'coverage' => sprintf('imagery_%s_source', Str::lower($imagery->id)),
+                'title' => trim(($imagery->original_name ?: 'Imagery') . ' (Source)'),
+            ]);
+
+            $updates = array_filter([
+                'geoserver_workspace' => $result['workspace'] ?? null,
+                'source_geoserver_store' => $result['store'] ?? null,
+                'source_geoserver_layer' => $result['layer'] ?? null,
+                'source_wms_url' => $result['wms']['url'] ?? null,
+                'source_wmts_url' => $result['wmts']['url'] ?? null,
+                'source_bbox' => $result['bbox'] ?? null,
+            ], static fn ($value) => $value !== null);
+
+            if (!empty($updates)) {
+                $imagery->update($updates);
+            }
+        } catch (Throwable $exception) {
+            Log::error('MergeImageryChunksJob: Failed to publish source imagery to GeoServer', [
+                'imagery_id' => $imagery->id,
+                'message' => $exception->getMessage(),
+            ]);
+        }
+    }
+
+    protected function isGeoTiff(string $path): bool
+    {
+        $extension = Str::lower(pathinfo($path, PATHINFO_EXTENSION));
+        return in_array($extension, ['tif', 'tiff'], true);
     }
 }

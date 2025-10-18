@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Models\ImageryData;
 use Illuminate\Bus\Queueable;
 use App\Services\CreditService;
+use App\Services\GeoServerService;
 use App\Services\PythonService;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\File;
@@ -13,6 +14,8 @@ use Symfony\Component\Process\Process;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
+use Illuminate\Support\Str;
+use Throwable;
 
 class ProcessImageryJob implements ShouldQueue
 {
@@ -134,29 +137,65 @@ class ProcessImageryJob implements ShouldQueue
         if ($process->isSuccessful()) {
             $publicPath = "storage/imagery/processed/{$processedFileName}";
 
-            if (File::exists($outputPath)) {
-                $imagery->update([
-                    'processing_status' => 'completed',
-                    'processed_path' => $publicPath,
-                    'processed_at' => now(),
-                ]);
+            $imagery->update([
+                'processing_status' => 'completed',
+                'processed_path' => $publicPath,
+                'processed_at' => now(),
+            ]);
 
+            if (File::exists($outputPath)) {
+                $this->publishProcessedImagery($imagery, $outputPath);
                 Log::info("✅ [Job] Processing completed successfully. Output file found at: {$outputPath}");
                 return;
-            } else {
-                // Simpan path-nya tetap, tapi log kalau file gak terdeteksi
-                $imagery->update([
-                    'processing_status' => 'completed',
-                    'processed_path' => $publicPath,
-                    'processed_at' => now(),
-                ]);
-                Log::warning("⚠️ [Job] Processing done, but output file not detected in expected location.");
             }
+
+            Log::warning("⚠️ [Job] Processing done, but output file not detected in expected location.");
         } else {
             // Refund credits when processing fails
             $creditService->refundCreditsForFailure($imagery, "Job");
             $imagery->update(['processing_status' => 'error']);
             Log::error("❌ [Job] Processing failed for {$imagery->id}");
         }
+    }
+
+    protected function publishProcessedImagery(ImageryData $imagery, string $filePath): void
+    {
+        if (!$this->isGeoTiff($filePath)) {
+            return;
+        }
+
+        try {
+            /** @var GeoServerService $geoServer */
+            $geoServer = app(GeoServerService::class);
+            $result = $geoServer->publishGeoTiff($filePath, [
+                'store' => sprintf('imagery_%s_processed', Str::lower($imagery->id)),
+                'coverage' => sprintf('imagery_%s_processed', Str::lower($imagery->id)),
+                'title' => trim(($imagery->original_name ?: 'Imagery') . ' (Processed)'),
+            ]);
+
+            $updates = array_filter([
+                'geoserver_workspace' => $result['workspace'] ?? null,
+                'processed_geoserver_store' => $result['store'] ?? null,
+                'processed_geoserver_layer' => $result['layer'] ?? null,
+                'processed_wms_url' => $result['wms']['url'] ?? null,
+                'processed_wmts_url' => $result['wmts']['url'] ?? null,
+                'processed_bbox' => $result['bbox'] ?? null,
+            ], static fn ($value) => $value !== null);
+
+            if (!empty($updates)) {
+                $imagery->update($updates);
+            }
+        } catch (Throwable $exception) {
+            Log::error('ProcessImageryJob: Failed to publish processed imagery to GeoServer', [
+                'imagery_id' => $imagery->id,
+                'message' => $exception->getMessage(),
+            ]);
+        }
+    }
+
+    protected function isGeoTiff(string $path): bool
+    {
+        $extension = Str::lower(pathinfo($path, PATHINFO_EXTENSION));
+        return in_array($extension, ['tif', 'tiff'], true);
     }
 }
