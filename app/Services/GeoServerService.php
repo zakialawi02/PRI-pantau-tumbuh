@@ -14,6 +14,7 @@ class GeoServerService
     protected string $password;
     protected string $workspace;
     protected string $wmsUrl;
+    protected string $defaultSrs;
 
     public function __construct()
     {
@@ -22,6 +23,7 @@ class GeoServerService
         $this->username = $config['username'] ?? '';
         $this->password = $config['password'] ?? '';
         $this->workspace = $config['workspace'] ?? 'default';
+        $this->defaultSrs = $config['default_srs'] ?? 'EPSG:4326';
 
         $configuredWms = $config['wms_url'] ?? '';
         if ($configuredWms) {
@@ -97,6 +99,33 @@ class GeoServerService
         }
 
         $qualifiedName = $this->workspace . ':' . $layerName;
+
+        $coverageResponse = $this->client()->put(
+            sprintf(
+                '%s/workspaces/%s/coveragestores/%s/coverages/%s',
+                $this->restUrl,
+                $this->workspace,
+                $storeName,
+                $layerName
+            ),
+            [
+                'coverage' => [
+                    'srs' => $this->defaultSrs,
+                    'nativeCRS' => $this->defaultSrs,
+                    'requestSRS' => ['string' => [$this->defaultSrs]],
+                    'responseSRS' => ['string' => [$this->defaultSrs]],
+                    'enabled' => true,
+                ],
+            ]
+        );
+
+        if ($coverageResponse->failed()) {
+            Log::warning('GeoServerService: Unable to configure coverage SRS.', [
+                'imagery_id' => $imagery->id,
+                'status' => $coverageResponse->status(),
+                'body' => $coverageResponse->body(),
+            ]);
+        }
 
         $layerResponse = $this->client()->put(
             sprintf('%s/layers/%s', $this->restUrl, $qualifiedName),
