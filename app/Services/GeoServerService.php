@@ -6,6 +6,7 @@ use App\Models\ImageryData;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use Symfony\Component\Process\Process;
 
 class GeoServerService
 {
@@ -85,15 +86,29 @@ class GeoServerService
             'coverageName' => $layerName,
         ]);
 
-        $response = $this->client()
-            ->withHeaders(['Content-Type' => 'text/plain'])
-            ->send('PUT', $endpoint . '?' . $query, ['body' => 'file:' . $filePath]);
+        $prepared = $this->prepareFileForPublishing($filePath);
+        $publishPath = $prepared['path'];
+        $temporaryFile = $prepared['temporary'];
+        $targetSrs = $prepared['target_srs'];
+        $requestSrs = $prepared['request_srs'];
 
-        if ($response->failed()) {
+        $response = null;
+
+        try {
+            $response = $this->client()
+                ->withHeaders(['Content-Type' => 'text/plain'])
+                ->send('PUT', $endpoint . '?' . $query, ['body' => 'file:' . $publishPath]);
+        } finally {
+            if ($temporaryFile && is_file($temporaryFile)) {
+                @unlink($temporaryFile);
+            }
+        }
+
+        if (!$response || $response->failed()) {
             Log::error('GeoServerService: Failed to publish GeoTIFF to GeoServer.', [
                 'imagery_id' => $imagery->id,
-                'status' => $response->status(),
-                'body' => $response->body(),
+                'status' => $response?->status(),
+                'body' => $response?->body(),
             ]);
             return null;
         }
@@ -110,10 +125,10 @@ class GeoServerService
             ),
             [
                 'coverage' => [
-                    'srs' => $this->defaultSrs,
-                    'nativeCRS' => $this->defaultSrs,
-                    'requestSRS' => ['string' => [$this->defaultSrs]],
-                    'responseSRS' => ['string' => [$this->defaultSrs]],
+                    'srs' => $targetSrs,
+                    'nativeCRS' => $targetSrs,
+                    'requestSRS' => ['string' => $requestSrs],
+                    'responseSRS' => ['string' => $requestSrs],
                     'projectionPolicy' => 'FORCE_DECLARED',
                     'enabled' => true,
                 ],
@@ -136,7 +151,7 @@ class GeoServerService
                     'advertised' => true,
                     'type' => 'RASTER',
                     'projectionPolicy' => 'FORCE_DECLARED',
-                    'srs' => $this->defaultSrs,
+                    'srs' => $targetSrs,
                 ],
             ]
         );
@@ -316,5 +331,170 @@ class GeoServerService
         $filtered = filter_var($value, FILTER_SANITIZE_NUMBER_FLOAT, FILTER_FLAG_ALLOW_FRACTION | FILTER_FLAG_ALLOW_SCIENTIFIC);
 
         return is_numeric($filtered) ? (float) $filtered : null;
+    }
+
+    protected function prepareFileForPublishing(string $filePath): array
+    {
+        $requestSrs = [$this->defaultSrs];
+
+        if (!is_file($filePath)) {
+            return [
+                'path' => $filePath,
+                'temporary' => null,
+                'target_srs' => $this->defaultSrs,
+                'request_srs' => $requestSrs,
+                'detected_srs' => null,
+                'reprojected' => false,
+            ];
+        }
+
+        $detectedSrs = $this->detectSrsFromFile($filePath);
+
+        if (!$detectedSrs) {
+            return [
+                'path' => $filePath,
+                'temporary' => null,
+                'target_srs' => $this->defaultSrs,
+                'request_srs' => $requestSrs,
+                'detected_srs' => null,
+                'reprojected' => false,
+            ];
+        }
+
+        $requestSrs = array_values(array_unique(array_filter([$this->defaultSrs, $detectedSrs])));
+
+        if (strcasecmp($detectedSrs, $this->defaultSrs) === 0) {
+            return [
+                'path' => $filePath,
+                'temporary' => null,
+                'target_srs' => $this->defaultSrs,
+                'request_srs' => $requestSrs,
+                'detected_srs' => $detectedSrs,
+                'reprojected' => false,
+            ];
+        }
+
+        $reprojectedPath = $this->reprojectToDefaultSrs($filePath, $detectedSrs);
+
+        if (!$reprojectedPath) {
+            return [
+                'path' => $filePath,
+                'temporary' => null,
+                'target_srs' => $detectedSrs,
+                'request_srs' => $requestSrs,
+                'detected_srs' => $detectedSrs,
+                'reprojected' => false,
+            ];
+        }
+
+        return [
+            'path' => $reprojectedPath,
+            'temporary' => $reprojectedPath,
+            'target_srs' => $this->defaultSrs,
+            'request_srs' => array_values(array_unique([$this->defaultSrs])),
+            'detected_srs' => $detectedSrs,
+            'reprojected' => true,
+        ];
+    }
+
+    protected function detectSrsFromFile(string $filePath): ?string
+    {
+        $process = new Process(['gdalinfo', '-json', $filePath]);
+        $process->run();
+
+        if (!$process->isSuccessful()) {
+            Log::warning('GeoServerService: Unable to inspect GeoTIFF SRS.', [
+                'path' => $filePath,
+                'error' => $process->getErrorOutput() ?: $process->getOutput(),
+            ]);
+
+            return null;
+        }
+
+        $info = json_decode($process->getOutput(), true);
+
+        if (!is_array($info)) {
+            return null;
+        }
+
+        $coordinateSystem = $info['coordinateSystem'] ?? null;
+
+        if (is_array($coordinateSystem)) {
+            $identifier = $coordinateSystem['id'] ?? $coordinateSystem['authorityCode'] ?? null;
+
+            if (is_string($identifier) && Str::startsWith($identifier, 'EPSG:')) {
+                return strtoupper($identifier);
+            }
+
+            if (is_array($identifier)) {
+                $authority = $identifier['authority'] ?? null;
+                $code = $identifier['code'] ?? null;
+
+                if (strtoupper((string) $authority) === 'EPSG' && $code !== null) {
+                    return 'EPSG:' . $code;
+                }
+            }
+
+            $code = $coordinateSystem['code'] ?? $coordinateSystem['epsg'] ?? null;
+            if ($code !== null) {
+                return 'EPSG:' . $code;
+            }
+
+            if (isset($coordinateSystem['wkt']) && is_string($coordinateSystem['wkt'])) {
+                if (preg_match('/AUTHORITY\["EPSG","(\d+)"\]/', $coordinateSystem['wkt'], $matches)) {
+                    return 'EPSG:' . $matches[1];
+                }
+            }
+        }
+
+        if (isset($info['wkt']) && is_string($info['wkt'])) {
+            if (preg_match('/AUTHORITY\["EPSG","(\d+)"\]/', $info['wkt'], $matches)) {
+                return 'EPSG:' . $matches[1];
+            }
+        }
+
+        return null;
+    }
+
+    protected function reprojectToDefaultSrs(string $filePath, ?string $sourceSrs): ?string
+    {
+        $temporary = tempnam(sys_get_temp_dir(), 'imagery_');
+
+        if ($temporary === false) {
+            return null;
+        }
+
+        @unlink($temporary);
+
+        $temporaryFile = $temporary . '.tif';
+
+        $command = ['gdalwarp', '-t_srs', $this->defaultSrs, '-overwrite'];
+
+        if ($sourceSrs) {
+            $command[] = '-s_srs';
+            $command[] = $sourceSrs;
+        }
+
+        $command[] = $filePath;
+        $command[] = $temporaryFile;
+
+        $process = new Process($command);
+        $process->run();
+
+        if (!$process->isSuccessful()) {
+            Log::warning('GeoServerService: Failed to reproject imagery to default SRS.', [
+                'source' => $filePath,
+                'temporary' => $temporaryFile,
+                'error' => $process->getErrorOutput() ?: $process->getOutput(),
+            ]);
+
+            if (is_file($temporaryFile)) {
+                @unlink($temporaryFile);
+            }
+
+            return null;
+        }
+
+        return $temporaryFile;
     }
 }
