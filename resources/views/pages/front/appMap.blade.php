@@ -858,22 +858,35 @@
 
                 const createLayer = (item, variant) => {
                     const geoserver = window.AppMap.geoserver || {};
-                    const layerName = resolveLayerName(item, variant);
+                    const normalisedVariant = normaliseVariant(variant);
+                    const layerName = resolveLayerName(item, normalisedVariant);
 
                     if (!geoserver.wmsUrl || !layerName) {
                         return null;
                     }
 
+                    const bbox = resolveBoundingBox(item, normalisedVariant);
+                    const wmsParams = {
+                        LAYERS: layerName,
+                        TILED: true,
+                        FORMAT: 'image/png',
+                        TRANSPARENT: true,
+                        STYLES: '',
+                        VERSION: '1.1.1',
+                    };
+
+                    const declaredCrs = bbox?.crs || bbox?.crsCode || null;
+                    if (declaredCrs) {
+                        wmsParams.CRS = declaredCrs;
+                        wmsParams.SRS = declaredCrs;
+                    }
+
                     const source = new ol.source.TileWMS({
                         url: geoserver.wmsUrl,
-                        params: {
-                            LAYERS: layerName,
-                            TILED: true,
-                            FORMAT: 'image/png',
-                            TRANSPARENT: true,
-                        },
+                        params: wmsParams,
                         serverType: 'geoserver',
                         crossOrigin: 'anonymous',
+                        transition: 0,
                     });
 
                     const layer = new ol.layer.Tile({

@@ -103,8 +103,17 @@ class GeoServerService
             );
         }
 
-        $this->configureCoverage($storeName, $layerName, $options);
-        $this->publishLayer($layerName, $options);
+        $coverage = $this->getCoverage($storeName, $layerName);
+
+        $coverageOptions = $this->buildCoverageOptions($coverage, $options);
+        $this->configureCoverage($storeName, $layerName, $coverageOptions);
+
+        $layerOptions = $options;
+        if (empty($layerOptions['default_style'])) {
+            $layerOptions['default_style'] = 'raster';
+        }
+
+        $this->publishLayer($layerName, $layerOptions);
 
         $coverage = $this->getCoverage($storeName, $layerName);
 
@@ -281,10 +290,29 @@ class GeoServerService
 
         $coveragePayload = [
             'enabled' => $options['enabled'] ?? true,
-            'srs' => $options['srs'] ?? $this->defaultSrs,
-            'nativeCRS' => $options['native_srs'] ?? $options['srs'] ?? $this->defaultSrs,
-            'projectionPolicy' => $projectionPolicy !== '' ? $projectionPolicy : null,
         ];
+
+        $srs = $options['srs'] ?? null;
+        if (is_string($srs)) {
+            $srs = trim($srs);
+        }
+
+        if (!empty($srs)) {
+            $coveragePayload['srs'] = $srs;
+        }
+
+        $nativeSrs = $options['native_srs'] ?? null;
+        if (is_string($nativeSrs)) {
+            $nativeSrs = trim($nativeSrs);
+        }
+
+        if (!empty($nativeSrs)) {
+            $coveragePayload['nativeCRS'] = $nativeSrs;
+        }
+
+        if ($projectionPolicy !== '') {
+            $coveragePayload['projectionPolicy'] = $projectionPolicy;
+        }
 
         if (!empty($options['supported_formats'])) {
             $coveragePayload['supportedFormats'] = array_values((array) $options['supported_formats']);
@@ -365,5 +393,80 @@ class GeoServerService
     protected function getConfigValue(string $key): mixed
     {
         return config('geoserver.' . $key);
+    }
+
+    protected function buildCoverageOptions(?array $coverage, array $options): array
+    {
+        $coverageOptions = $options;
+
+        if (empty($coverageOptions['srs'])) {
+            $detectedSrs = $this->extractCoverageSrs($coverage);
+            if (!empty($detectedSrs)) {
+                $coverageOptions['srs'] = $detectedSrs;
+            } elseif (!empty($this->defaultSrs)) {
+                $coverageOptions['srs'] = $this->defaultSrs;
+            }
+        }
+
+        if (empty($coverageOptions['native_srs'])) {
+            $native = $this->extractCoverageNativeCrs($coverage);
+            if (!empty($native)) {
+                $coverageOptions['native_srs'] = $native;
+            } elseif (!empty($coverageOptions['srs'])) {
+                $coverageOptions['native_srs'] = $coverageOptions['srs'];
+            } elseif (!empty($this->defaultSrs)) {
+                $coverageOptions['native_srs'] = $this->defaultSrs;
+            }
+        }
+
+        if (empty($coverageOptions['projection_policy'])) {
+            $coverageOptions['projection_policy'] = 'FORCE_DECLARED';
+        }
+
+        return $coverageOptions;
+    }
+
+    protected function extractCoverageSrs(?array $coverage): ?string
+    {
+        $coverageData = $coverage['coverage'] ?? [];
+
+        $candidates = [
+            $coverageData['srs'] ?? null,
+            $coverageData['crs'] ?? null,
+        ];
+
+        foreach ($candidates as $candidate) {
+            if (is_string($candidate)) {
+                $candidate = trim($candidate);
+            }
+
+            if (!empty($candidate)) {
+                return $candidate;
+            }
+        }
+
+        return null;
+    }
+
+    protected function extractCoverageNativeCrs(?array $coverage): ?string
+    {
+        $coverageData = $coverage['coverage'] ?? [];
+
+        $candidates = [
+            $coverageData['nativeCRS'] ?? null,
+            $coverageData['nativeCrs'] ?? null,
+        ];
+
+        foreach ($candidates as $candidate) {
+            if (is_string($candidate)) {
+                $candidate = trim($candidate);
+            }
+
+            if (!empty($candidate)) {
+                return $candidate;
+            }
+        }
+
+        return null;
     }
 }
