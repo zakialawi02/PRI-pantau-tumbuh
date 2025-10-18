@@ -21,12 +21,16 @@ class ImageryData extends Model
         'size',
         'format',
         'path',
+        'geoserver_store_name',
+        'geoserver_layer_name',
         'chunk_id',
         'chunk_total',
         'upload_status',
         'uploaded_at',
         'processing_status',
         'processed_path',
+        'processed_geoserver_store_name',
+        'processed_geoserver_layer_name',
         'processed_at',
         'scheduled_deletion_at'
     ];

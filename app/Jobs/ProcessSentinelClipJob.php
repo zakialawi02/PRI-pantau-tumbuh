@@ -4,9 +4,10 @@ namespace App\Jobs;
 
 use Throwable;
 use App\Models\ImageryData;
-use Illuminate\Bus\Queueable;
 use App\Services\CreditService;
+use App\Services\GeoServerService;
 use App\Services\PythonService;
+use Illuminate\Bus\Queueable;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Queue\SerializesModels;
@@ -43,12 +44,12 @@ class ProcessSentinelClipJob implements ShouldQueue
         $pythonService = new PythonService();
         $creditService = new CreditService();
 
-        $publicStorage = storage_path('app/public');
+        $publicStorage = storage_path('app');
         $imageryDir = $publicStorage . DIRECTORY_SEPARATOR . 'imagery';
 
         $outputFilename = basename($this->payload['output_filename'] ?? $imagery->stored_name);
         $outputPath = $imageryDir . DIRECTORY_SEPARATOR . $outputFilename;
-        $relativeOutput = 'storage/imagery/' . $outputFilename;
+        $relativeOutput = 'imagery/' . $outputFilename;
 
         $tilesDir = storage_path('app/tmp/sentinel_clip_' . $this->imageryId);
         if (File::isDirectory($tilesDir)) {
@@ -169,13 +170,31 @@ class ProcessSentinelClipJob implements ShouldQueue
 
             $fileSize = File::size($outputPath) ?: 0;
 
-            $imagery->update([
+            $geoserverData = null;
+
+            try {
+                $geoserverData = app(GeoServerService::class)->publishImageryLayer($imagery, $outputPath, 'source');
+            } catch (Throwable $publishException) {
+                Log::warning('ProcessSentinelClipJob: Failed to publish clipped Sentinel imagery to GeoServer.', [
+                    'imagery_id' => $this->imageryId,
+                    'error' => $publishException->getMessage(),
+                ]);
+            }
+
+            $updatePayload = [
                 'upload_status' => 'done',
                 'processing_status' => 'completed',
                 'format' => pathinfo($outputFilename, PATHINFO_EXTENSION) ?: 'tif',
                 'size' => $fileSize,
                 'path' => $relativeOutput,
-            ]);
+            ];
+
+            if ($geoserverData) {
+                $updatePayload['geoserver_store_name'] = $geoserverData['store'];
+                $updatePayload['geoserver_layer_name'] = $geoserverData['layer'];
+            }
+
+            $imagery->update($updatePayload);
 
             Log::info('ProcessSentinelClipJob completed successfully.', [
                 'imagery_id' => $this->imageryId,

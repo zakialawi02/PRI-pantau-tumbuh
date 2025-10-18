@@ -345,6 +345,157 @@ const vectorLayerEventClick = new VectorLayer({
 });
 map.addLayer(vectorLayerEventClick);
 
+const geoserverLayerRegistry = new Map();
+
+function createGeoserverLayer(options = {}) {
+    if (!options || typeof options !== "object") {
+        return null;
+    }
+
+    const url = options.url;
+    const layerName = options.layer;
+
+    if (!url || !layerName) {
+        return null;
+    }
+
+    const params = {
+        LAYERS: layerName,
+        TILED: true,
+        STYLES: options.style || "",
+        FORMAT: "image/png",
+        TRANSPARENT: true,
+    };
+
+    if (options.parameters && typeof options.parameters === "object") {
+        Object.assign(params, options.parameters);
+    }
+
+    const source = new TileWMS({
+        url,
+        params,
+        transition: 200,
+        crossOrigin: options.crossOrigin || "anonymous",
+    });
+
+    const tileLayer = new TileLayer({
+        source,
+        visible: true,
+        opacity: typeof options.opacity === "number" ? options.opacity : 0.7,
+    });
+
+    const layerId = options.id || layerName;
+    tileLayer.set("id", `geoserver:${layerId}`);
+    tileLayer.setZIndex(typeof options.zIndex === "number" ? options.zIndex : 400);
+
+    map.addLayer(tileLayer);
+
+    return { layer: tileLayer, source };
+}
+
+function toggleGeoserverLayer(options = {}) {
+    const layerId = options.id || options.layer;
+    if (!layerId) {
+        return false;
+    }
+
+    const registryKey = `geoserver:${layerId}`;
+    let entry = geoserverLayerRegistry.get(registryKey);
+
+    if (!entry) {
+        entry = createGeoserverLayer(options);
+        if (!entry) {
+            return false;
+        }
+        geoserverLayerRegistry.set(registryKey, entry);
+        return true;
+    }
+
+    const currentlyVisible = entry.layer.getVisible();
+    if (currentlyVisible) {
+        entry.layer.setVisible(false);
+        return false;
+    }
+
+    if (options.layer && entry.source.getParams().LAYERS !== options.layer) {
+        entry.source.updateParams({
+            LAYERS: options.layer,
+            STYLES: options.style || "",
+        });
+    }
+
+    if (typeof options.opacity === "number") {
+        entry.layer.setOpacity(options.opacity);
+    }
+
+    entry.layer.setVisible(true);
+    entry.layer.changed();
+
+    return true;
+}
+
+function showGeoserverLayer(options = {}) {
+    const layerId = options.id || options.layer;
+    if (!layerId) {
+        return null;
+    }
+
+    const registryKey = `geoserver:${layerId}`;
+    let entry = geoserverLayerRegistry.get(registryKey);
+    if (!entry) {
+        entry = createGeoserverLayer(options);
+        if (!entry) {
+            return null;
+        }
+        geoserverLayerRegistry.set(registryKey, entry);
+    } else {
+        entry.layer.setVisible(true);
+        if (typeof options.opacity === "number") {
+            entry.layer.setOpacity(options.opacity);
+        }
+        if (options.layer) {
+            entry.source.updateParams({
+                LAYERS: options.layer,
+                STYLES: options.style || "",
+            });
+        }
+        entry.layer.changed();
+    }
+
+    return entry.layer;
+}
+
+function hideGeoserverLayer(id) {
+    if (!id) {
+        return false;
+    }
+
+    const registryKey = `geoserver:${id}`;
+    const entry = geoserverLayerRegistry.get(registryKey);
+    if (!entry) {
+        return false;
+    }
+
+    entry.layer.setVisible(false);
+    return true;
+}
+
+function removeGeoserverLayer(id) {
+    if (!id) {
+        return false;
+    }
+
+    const registryKey = `geoserver:${id}`;
+    const entry = geoserverLayerRegistry.get(registryKey);
+    if (!entry) {
+        return false;
+    }
+
+    map.removeLayer(entry.layer);
+    geoserverLayerRegistry.delete(registryKey);
+    return true;
+}
+
 /**
  * Marks a clicked position on the map.
  *
@@ -1205,6 +1356,14 @@ document.addEventListener("DOMContentLoaded", function () {
 
 // Export functions to global scope for access from HTML
 window.map = map;
+window.AppMap = window.AppMap || {};
+window.AppMap.geoserver = Object.assign({}, window.AppMap.geoserver, {
+    toggleLayer: toggleGeoserverLayer,
+    showLayer: showGeoserverLayer,
+    hideLayer: hideGeoserverLayer,
+    removeLayer: removeGeoserverLayer,
+    listLayers: () => Array.from(geoserverLayerRegistry.keys()),
+});
 try {
     window.dispatchEvent(
         new CustomEvent("map:ready", {

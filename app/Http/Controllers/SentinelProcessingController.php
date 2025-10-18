@@ -256,7 +256,7 @@ class SentinelProcessingController extends Controller
                 'stored_name' => $storedName,
                 'size' => 0,
                 'format' => 'tif',
-                'path' => 'storage/imagery/' . $storedName,
+                'path' => 'imagery/' . $storedName,
                 'upload_status' => 'pending',
                 'processing_status' => 'waiting',
                 'uploaded_at' => now(),

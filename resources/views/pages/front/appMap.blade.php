@@ -208,9 +208,14 @@
                                     </div>
                                 </div>
 
-                                <button class="view-btn hover:bg-foreground/10 rounded-lg p-2 transition">
-                                    <i class="ri-eye-line"></i>
-                                </button>
+                                <div class="flex items-center space-x-1">
+                                    <button class="view-btn hover:bg-primary/10 rounded-lg p-2 transition" data-view-variant="processed" title="Toggle processed imagery" type="button" aria-pressed="false">
+                                        <i class="ri-stack-line"></i>
+                                    </button>
+                                    <button class="view-btn hover:bg-foreground/10 rounded-lg p-2 transition" data-view-variant="source" title="Toggle original imagery" type="button" aria-pressed="false">
+                                        <i class="ri-eye-line"></i>
+                                    </button>
+                                </div>
                             </div>
                         </template>
                     </div>
@@ -1413,6 +1418,45 @@
                         uploadNextChunk();
                     };
 
+                    const viewImagery = (item, options = {}) => {
+                        const variant = options.variant === 'source' ? 'source' : 'processed';
+                        const trigger = options.trigger || null;
+                        const geoserverInfo = item?.geoserver || {};
+                        const layerInfo = variant === 'processed' ? geoserverInfo.processed : geoserverInfo.source;
+
+                        if (!layerInfo || !layerInfo.layer || !layerInfo.wms_url) {
+                            MyZkToast?.warning?.('GeoServer layer is not available yet for this imagery.');
+                            return;
+                        }
+
+                        const geoserverModule = window.AppMap?.geoserver;
+                        if (!geoserverModule || typeof geoserverModule.toggleLayer !== 'function') {
+                            MyZkToast?.error?.('GeoServer integration is unavailable. Please reload the page.');
+                            return;
+                        }
+
+                        const toggled = geoserverModule.toggleLayer({
+                            id: `${item.id}:${variant}`,
+                            url: layerInfo.wms_url,
+                            layer: layerInfo.layer,
+                            title: item?.original_name || item?.stored_name || `${item.id}-${variant}`,
+                            opacity: variant === 'processed' ? 0.75 : 0.6,
+                        });
+
+                        if (trigger) {
+                            trigger.setAttribute('aria-pressed', String(Boolean(toggled)));
+                            trigger.classList.toggle('bg-primary/20', Boolean(toggled));
+                            trigger.classList.toggle('text-primary', Boolean(toggled));
+                        }
+
+                        const label = variant === 'processed' ? 'Processed' : 'Original';
+                        if (toggled) {
+                            MyZkToast?.success?.(`${label} imagery layer enabled on the map.`);
+                        } else {
+                            MyZkToast?.info?.(`${label} imagery layer hidden.`);
+                        }
+                    };
+
                     // Create a DOM fragment describing a single imagery record.
                     const renderImageryCard = (item) => {
                         const template = elements.cardTemplate;
@@ -1497,8 +1541,36 @@
                         const meta = `${sizeMb} MB • ${uploadDate} • <span class="imagery-status font-semibold ${uploadStatusInfo.className}">${uploadStatusInfo.label}</span> • <span class="imagery-status font-semibold ${processingStatusInfo.className}">${processingStatusInfo.label}</span>`;
                         card.querySelector('.imagery-meta').innerHTML = meta;
 
-                        const viewBtn = card.querySelector('.view-btn');
-                        viewBtn?.addEventListener('click', () => viewImagery(item));
+                        const processedBtn = card.querySelector('[data-view-variant="processed"]');
+                        const sourceBtn = card.querySelector('[data-view-variant="source"]');
+
+                        const hasProcessedLayer = Boolean(item?.geoserver?.processed?.layer && item?.geoserver?.processed?.wms_url);
+                        if (processedBtn) {
+                            if (hasProcessedLayer) {
+                                processedBtn.classList.remove('hidden');
+                                processedBtn.addEventListener('click', () => viewImagery(item, {
+                                    variant: 'processed',
+                                    trigger: processedBtn,
+                                }));
+                            } else {
+                                processedBtn.classList.add('hidden');
+                                processedBtn.setAttribute('aria-hidden', 'true');
+                            }
+                        }
+
+                        const hasSourceLayer = Boolean(item?.geoserver?.source?.layer && item?.geoserver?.source?.wms_url);
+                        if (sourceBtn) {
+                            if (hasSourceLayer) {
+                                sourceBtn.classList.remove('hidden');
+                                sourceBtn.addEventListener('click', () => viewImagery(item, {
+                                    variant: 'source',
+                                    trigger: sourceBtn,
+                                }));
+                            } else {
+                                sourceBtn.classList.add('hidden');
+                                sourceBtn.setAttribute('aria-hidden', 'true');
+                            }
+                        }
 
                         return fragment;
                     };
@@ -1554,6 +1626,7 @@
                     const initialise = () => {
                         ensureAppNamespace();
                         window.setButtonState = setButtonState;
+                        window.AppMap.viewImagery = viewImagery;
                         window.AppMap.uploader.reload = loadMyData;
 
                         resetState();

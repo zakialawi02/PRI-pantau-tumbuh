@@ -259,6 +259,12 @@ class ImageryDataController extends Controller
                     'size',
                     'format',
                     'path',
+                    'processed_path',
+                    'processed_at',
+                    'geoserver_store_name',
+                    'geoserver_layer_name',
+                    'processed_geoserver_store_name',
+                    'processed_geoserver_layer_name',
                     'chunk_id',
                     'chunk_total',
                     'upload_status',
@@ -266,10 +272,57 @@ class ImageryDataController extends Controller
                     'uploaded_at',
                 ]);
 
+            $workspace = config('geoserver.workspace', '');
+            $wmsUrl = rtrim(config('geoserver.wms_url', ''), '/');
+
+            $data = $uploads->map(function (ImageryData $upload) use ($workspace, $wmsUrl) {
+                $sourceLayer = null;
+                if (!empty($upload->geoserver_layer_name)) {
+                    $sourceLayer = [
+                        'store' => $upload->geoserver_store_name,
+                        'layer' => $workspace ? $workspace . ':' . $upload->geoserver_layer_name : $upload->geoserver_layer_name,
+                        'name' => $upload->geoserver_layer_name,
+                        'wms_url' => $wmsUrl,
+                    ];
+                }
+
+                $processedLayer = null;
+                if (!empty($upload->processed_geoserver_layer_name)) {
+                    $processedLayer = [
+                        'store' => $upload->processed_geoserver_store_name,
+                        'layer' => $workspace ? $workspace . ':' . $upload->processed_geoserver_layer_name : $upload->processed_geoserver_layer_name,
+                        'name' => $upload->processed_geoserver_layer_name,
+                        'wms_url' => $wmsUrl,
+                    ];
+                }
+
+                return [
+                    'id' => $upload->id,
+                    'original_name' => $upload->original_name,
+                    'stored_name' => $upload->stored_name,
+                    'size' => $upload->size,
+                    'format' => $upload->format,
+                    'path' => $upload->path,
+                    'processed_path' => $upload->processed_path,
+                    'processed_at' => optional($upload->processed_at)->toIso8601String(),
+                    'chunk_id' => $upload->chunk_id,
+                    'chunk_total' => $upload->chunk_total,
+                    'upload_status' => $upload->upload_status,
+                    'processing_status' => $upload->processing_status,
+                    'uploaded_at' => optional($upload->uploaded_at)->toIso8601String(),
+                    'geoserver' => [
+                        'workspace' => $workspace,
+                        'wms_url' => $wmsUrl,
+                        'source' => $sourceLayer,
+                        'processed' => $processedLayer,
+                    ],
+                ];
+            });
+
             return response()->json([
                 'success' => true,
                 'message' => 'Imagery data fetched successfully.',
-                'data' => $uploads,
+                'data' => $data,
             ]);
         } catch (\Throwable $e) {
             Log::error('ImageryDataController@listUserImagery: Failed to fetch imagery data', [
@@ -429,7 +482,7 @@ class ImageryDataController extends Controller
             $randomStr = Str::upper(Str::random(8));
             $cleanOriginal = Str::slug(pathinfo($filename, PATHINFO_FILENAME));
             $storedName = "{$timestamp}_{$randomStr}_{$cleanOriginal}.{$ext}";
-            $finalPath = storage_path("app/public/imagery/{$storedName}");
+            $finalPath = storage_path("app/imagery/{$storedName}");
 
             $calculatedSize = 0;
             for ($i = 0; $i < $totalChunks; $i++) {
@@ -492,7 +545,7 @@ class ImageryDataController extends Controller
                     'stored_name' => $storedName,
                     'size' => $calculatedSize,
                     'format' => $ext,
-                    'path' => "storage/imagery/{$storedName}",
+                    'path' => "imagery/{$storedName}",
                     'chunk_id' => $uploadId,
                     'chunk_total' => $totalChunks,
                     'upload_status' => 'merging',
@@ -529,7 +582,7 @@ class ImageryDataController extends Controller
                         'stored_name' => $storedName,
                         'size' => $calculatedSize,
                         'format' => $ext,
-                        'path' => "storage/imagery/{$storedName}",
+                        'path' => "imagery/{$storedName}",
                         'chunk_id' => $uploadId,
                         'chunk_total' => $totalChunks,
                         'upload_status' => 'merging',
@@ -621,7 +674,7 @@ class ImageryDataController extends Controller
             }
 
             // Check if the file exists
-            $filePath = storage_path('app/public/' . str_replace('storage/', '', $imagery->path));
+            $filePath = storage_path('app/' . ltrim($imagery->path, '/'));
             if (!File::exists($filePath)) {
                 Log::warning('ImageryDataController@downloadSource: Source file not found', [
                     'user_id' => Auth::id(),
@@ -673,7 +726,7 @@ class ImageryDataController extends Controller
             }
 
             // Check if the processed file exists
-            $filePath = storage_path('app/public/' . str_replace('storage/', '', $imagery->processed_path));
+            $filePath = storage_path('app/' . ltrim($imagery->processed_path, '/'));
             if (!File::exists($filePath)) {
                 Log::warning('ImageryDataController@downloadResult: Processed file not found', [
                     'user_id' => Auth::id(),
@@ -823,7 +876,7 @@ class ImageryDataController extends Controller
                 ], 404);
             }
 
-            $finalPath = storage_path('app/public/imagery/' . $imagery->stored_name);
+            $finalPath = storage_path('app/imagery/' . $imagery->stored_name);
             $skipProcessing = $imagery->processing_status === 'skip';
 
             $imagery->update([
@@ -860,13 +913,15 @@ class ImageryDataController extends Controller
     {
         try {
             // Delete the original physical file from storage
-            if (file_exists($imagery->path)) {
-                unlink($imagery->path);
+            $sourcePath = $imagery->path ? storage_path('app/' . ltrim($imagery->path, '/')) : null;
+            if ($sourcePath && File::exists($sourcePath)) {
+                File::delete($sourcePath);
             }
 
             // Delete processed imagery files if they exist
-            if (file_exists($imagery->processed_path)) {
-                unlink($imagery->processed_path);
+            $processedPath = $imagery->processed_path ? storage_path('app/' . ltrim($imagery->processed_path, '/')) : null;
+            if ($processedPath && File::exists($processedPath)) {
+                File::delete($processedPath);
             }
 
             // Delete the database record
