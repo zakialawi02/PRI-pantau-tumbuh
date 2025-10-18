@@ -180,7 +180,7 @@ class ProcessSentinelSceneJob implements ShouldQueue
 
             $outputSize = File::size($outputPath) ?: $downloadedSize;
 
-            $relativePath = 'public/imagery/' . $this->outputFilename;
+            $relativePath = 'storage/imagery/' . $this->outputFilename;
             $geoserverData = null;
 
             try {

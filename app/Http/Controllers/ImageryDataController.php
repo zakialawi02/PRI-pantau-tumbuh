@@ -597,7 +597,7 @@ class ImageryDataController extends Controller
                     'stored_name' => $storedName,
                     'size' => $calculatedSize,
                     'format' => $ext,
-                    'path' => "public/imagery/{$storedName}",
+                    'path' => "storage/imagery/{$storedName}",
                     'chunk_id' => $uploadId,
                     'chunk_total' => $totalChunks,
                     'upload_status' => 'merging',
@@ -634,7 +634,7 @@ class ImageryDataController extends Controller
                         'stored_name' => $storedName,
                         'size' => $calculatedSize,
                         'format' => $ext,
-                        'path' => "public/imagery/{$storedName}",
+                        'path' => "storage/imagery/{$storedName}",
                         'chunk_id' => $uploadId,
                         'chunk_total' => $totalChunks,
                         'upload_status' => 'merging',
@@ -726,8 +726,8 @@ class ImageryDataController extends Controller
             }
 
             // Check if the file exists
-            $filePath = storage_path('app/' . ltrim($imagery->path, '/'));
-            if (!File::exists($filePath)) {
+            $filePath = $this->resolveImageryAbsolutePath($imagery->path);
+            if (!$filePath || !File::exists($filePath)) {
                 Log::warning('ImageryDataController@downloadSource: Source file not found', [
                     'user_id' => Auth::id(),
                     'imagery_id' => $imagery->id,
@@ -778,8 +778,8 @@ class ImageryDataController extends Controller
             }
 
             // Check if the processed file exists
-            $filePath = storage_path('app/' . ltrim($imagery->processed_path, '/'));
-            if (!File::exists($filePath)) {
+            $filePath = $this->resolveImageryAbsolutePath($imagery->processed_path);
+            if (!$filePath || !File::exists($filePath)) {
                 Log::warning('ImageryDataController@downloadResult: Processed file not found', [
                     'user_id' => Auth::id(),
                     'imagery_id' => $imagery->id,
@@ -979,13 +979,13 @@ class ImageryDataController extends Controller
             }
 
             // Delete the original physical file from storage
-            $sourcePath = $imagery->path ? storage_path('app/' . ltrim($imagery->path, '/')) : null;
+            $sourcePath = $this->resolveImageryAbsolutePath($imagery->path);
             if ($sourcePath && File::exists($sourcePath)) {
                 File::delete($sourcePath);
             }
 
             // Delete processed imagery files if they exist
-            $processedPath = $imagery->processed_path ? storage_path('app/' . ltrim($imagery->processed_path, '/')) : null;
+            $processedPath = $this->resolveImageryAbsolutePath($imagery->processed_path);
             if ($processedPath && File::exists($processedPath)) {
                 File::delete($processedPath);
             }
@@ -1011,5 +1011,20 @@ class ImageryDataController extends Controller
                 'error' => $e->getMessage(),
             ], 500);
         }
+    }
+
+    private function resolveImageryAbsolutePath(?string $relativePath): ?string
+    {
+        if (empty($relativePath)) {
+            return null;
+        }
+
+        $normalized = ltrim($relativePath, '/');
+
+        if (Str::startsWith($normalized, 'storage/')) {
+            $normalized = 'public/' . Str::after($normalized, 'storage/');
+        }
+
+        return storage_path('app/' . $normalized);
     }
 }

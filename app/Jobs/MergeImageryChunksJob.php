@@ -155,7 +155,7 @@ class MergeImageryChunksJob implements ShouldQueue
             $updates = [
                 'upload_status' => 'done',
                 'processing_status' => $this->skipProcessing ? 'skip' : 'waiting',
-                'path' => 'public/imagery/' . $this->storedName,
+                'path' => 'storage/imagery/' . $this->storedName,
             ];
 
             if ($geoserverData) {

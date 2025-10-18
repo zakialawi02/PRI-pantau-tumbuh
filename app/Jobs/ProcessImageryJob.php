@@ -134,7 +134,7 @@ class ProcessImageryJob implements ShouldQueue
         // Cek hasil eksekusi
         if ($process->isSuccessful()) {
             $geoserverService = app(GeoServerService::class);
-            $relativePath = "public/imagery/processed/{$processedFileName}";
+            $relativePath = "storage/imagery/processed/{$processedFileName}";
             $geoserverData = null;
 
             if (File::exists($outputPath)) {

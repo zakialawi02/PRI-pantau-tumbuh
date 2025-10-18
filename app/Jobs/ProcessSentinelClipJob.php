@@ -49,7 +49,7 @@ class ProcessSentinelClipJob implements ShouldQueue
 
         $outputFilename = basename($this->payload['output_filename'] ?? $imagery->stored_name);
         $outputPath = $imageryDir . DIRECTORY_SEPARATOR . $outputFilename;
-        $relativeOutput = 'public/imagery/' . $outputFilename;
+        $relativeOutput = 'storage/imagery/' . $outputFilename;
 
         $tilesDir = storage_path('app/tmp/sentinel_clip_' . $this->imageryId);
         if (File::isDirectory($tilesDir)) {
