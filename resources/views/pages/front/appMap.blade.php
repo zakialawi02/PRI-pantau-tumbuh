@@ -107,7 +107,7 @@
                 </button>
             </nav>
             <div class="text-foreground/70 mt-auto text-xs">© 2025</div>
-            <div class="text-foreground/70 mt-auto text-xs">v0.1.156</div>
+            <div class="text-foreground/70 mt-auto text-xs">v0.1.210</div>
         </aside>
 
         <!-- MOBILE SIDEBAR HORIZONTAL -->
@@ -320,36 +320,35 @@
                             <div class="bg-background/60 border-foreground/10 space-y-3 rounded-lg border p-3 shadow-sm">
                                 <div class="flex flex-wrap items-center justify-between gap-2">
                                     <div>
-                                        <h4 class="text-foreground text-lg font-semibold">Define Area of Interest</h4>
+                                        <h4 class="text-foreground font-semibold">Define Area of Interest</h4>
                                         <p class="text-foreground/70 text-sm">Draw a polygon on the map to clip Sentinel-2 imagery for your field.</p>
                                     </div>
                                     <div class="flex items-center gap-2">
-                                        <x-button-primary id="drawPolygonBtn" type="button" size="small">
+                                        <x-button-primary id="drawPolygonBtn" type="button" size="xsmall">
                                             <i class="ri-pencil-line"></i>
                                             <span>Draw Polygon</span>
                                         </x-button-primary>
                                     </div>
                                 </div>
 
-                                <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
-                                    <div class="space-y-1">
-                                        <x-input-label class="text-sm font-medium" for="clipAreaOutput">Area (hectares)</x-input-label>
-                                        <div class="border-foreground/20 rounded-lg border border-dashed px-3 py-2 text-sm" id="clipAreaOutput">
-                                            Draw a polygon to calculate the area.
-                                        </div>
-                                    </div>
-                                    <div class="space-y-1">
-                                        <x-input-label class="text-sm font-medium" for="clipCreditOutput">Estimated Credit Cost</x-input-label>
-                                        <div class="border-foreground/20 rounded-lg border px-3 py-2 text-sm" id="clipCreditOutput">
-                                            –
-                                        </div>
-                                        <p class="text-foreground/60 text-xs">{{ Number::format(config('app-constants.imagery_credit_cost_per_hectare'), locale: app()->getLocale()) }} credit points per hectare.</p>
+                                <div class="space-y-1">
+                                    <x-input-label class="text-sm font-medium" for="clipAreaOutput">Area (hectares)</x-input-label>
+                                    <div class="border-foreground/20 rounded-lg border border-dashed px-3 py-2 text-sm" id="clipAreaOutput">
+                                        Draw a polygon to calculate the area.
                                     </div>
                                 </div>
 
                                 <div class="space-y-1">
+                                    <x-input-label class="text-sm font-medium" for="clipCreditOutput">Estimated Credit Cost</x-input-label>
+                                    <div class="border-foreground/20 rounded-lg border px-3 py-2 text-sm" id="clipCreditOutput">
+                                        –
+                                    </div>
+                                    <p class="text-foreground/60 text-xs">{{ Number::format(config('app-constants.imagery_credit_cost_per_hectare'), locale: app()->getLocale()) }} credit points per hectare.</p>
+                                </div>
+
+                                <div class="space-y-1">
                                     <x-input-label class="text-sm font-medium" for="clipGeojsonOutput">AOI GeoJSON</x-input-label>
-                                    <div class="border-foreground/10 bg-foreground/5 max-h-36 overflow-auto rounded-lg border p-2 font-mono text-xs" id="clipGeojsonOutput">
+                                    <div class="border-foreground/10 bg-foreground/5 max-h-14 overflow-auto rounded-lg border p-2 font-mono text-xs" id="clipGeojsonOutput">
                                         <span class="text-foreground/60">Coordinates will appear here after drawing.</span>
                                     </div>
                                 </div>
@@ -360,11 +359,12 @@
                                 </div>
                             </div>
 
-                            <div class="bg-background/60 border-foreground/10 flex flex-col gap-2 rounded-lg border p-3 shadow-sm">
-                                <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                            <div class="bg-background/60 border-foreground/10 flex gap-2 rounded-lg border p-3 shadow-sm">
+                                <div class="flex flex-col gap-2 md:items-center">
                                     <div>
                                         <h5 class="text-foreground text-sm font-semibold uppercase tracking-wide">Process Clipped Imagery</h5>
-                                        <p class="mt-1 text-xs text-foreground/60" id="clipProcessStatus">Draw an area and provide a field name before processing.</p>
+                                        <p class="text-foreground/60 mt-1 text-xs" id="clipProcessStatus">Draw an area and provide a field name before processing.</p>
+                                        <p class="text-foreground/60 mt-1 text-xs" id="clipProcessStatus">The system will analyse the date range and automatically choose the latest Sentinel-2 scene intersecting your polygon.</p>
                                     </div>
                                     @auth
                                         <x-button-primary id="clipProcessImageryBtn" type="button" size="small">
@@ -1671,13 +1671,13 @@
                     clipStatusToneClasses.forEach((className) => {
                         clipElements.status.classList.remove(className);
                     });
-                    const toneClass = tone === 'success'
-                        ? 'text-success'
-                        : tone === 'error'
-                            ? 'text-error'
-                            : tone === 'warning'
-                                ? 'text-warning'
-                                : 'text-foreground/60';
+                    const toneClass = tone === 'success' ?
+                        'text-success' :
+                        tone === 'error' ?
+                        'text-error' :
+                        tone === 'warning' ?
+                        'text-warning' :
+                        'text-foreground/60';
                     clipElements.status.classList.add(toneClass);
                 };
 
@@ -1692,18 +1692,15 @@
                     if (!feature) {
                         return null;
                     }
-                    const properties = typeof feature.properties === 'object' && feature.properties !== null
-                        ? feature.properties
-                        : {};
+                    const properties = typeof feature.properties === 'object' && feature.properties !== null ?
+                        feature.properties : {};
                     return {
                         type: 'FeatureCollection',
-                        features: [
-                            {
-                                type: 'Feature',
-                                properties,
-                                geometry: feature.geometry,
-                            }
-                        ],
+                        features: [{
+                            type: 'Feature',
+                            properties,
+                            geometry: feature.geometry,
+                        }],
                     };
                 };
 
@@ -1827,9 +1824,9 @@
                             enqueueClipProcessing(payload);
                         };
 
-                        const confirmationMessage = hasCredits || !Number.isFinite(requiredCredits) || requiredCredits <= 0
-                            ? `This action will cost approximately ${formattedRequired} credit points. Do you want to continue?`
-                            : `You need ${formattedRequired} credit points but currently have ${formattedCurrent}. Please purchase more credits.`;
+                        const confirmationMessage = hasCredits || !Number.isFinite(requiredCredits) || requiredCredits <= 0 ?
+                            `This action will cost approximately ${formattedRequired} credit points. Do you want to continue?` :
+                            `You need ${formattedRequired} credit points but currently have ${formattedCurrent}. Please purchase more credits.`;
 
                         if (typeof ZkPopAlert?.show === 'function') {
                             ZkPopAlert.show({

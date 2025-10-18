@@ -907,9 +907,8 @@ function addInteraction(type = "Polygon") {
             )}</pre>`;
         }
 
-        const sentinelClipModule = document.getElementById(
-            "sentinelClipModule"
-        );
+        const sentinelClipModule =
+            document.getElementById("sentinelClipModule");
         if (sentinelClipModule) {
             const locale = document.documentElement.lang;
             const areaHa = geojsonArea / 10000;
@@ -923,9 +922,8 @@ function addInteraction(type = "Polygon") {
                 )} ha`;
             }
 
-            const clipCreditOutput = document.getElementById(
-                "clipCreditOutput"
-            );
+            const clipCreditOutput =
+                document.getElementById("clipCreditOutput");
             if (clipCreditOutput) {
                 const creditRate = parseFloat(
                     sentinelClipModule.dataset.creditRate || "0"
@@ -942,9 +940,8 @@ function addInteraction(type = "Polygon") {
                 }
             }
 
-            const clipGeojsonOutput = document.getElementById(
-                "clipGeojsonOutput"
-            );
+            const clipGeojsonOutput =
+                document.getElementById("clipGeojsonOutput");
             if (clipGeojsonOutput) {
                 clipGeojsonOutput.innerHTML = `<pre class="whitespace-pre-wrap">${JSON.stringify(
                     geojsonFeature,
@@ -1087,7 +1084,6 @@ $("#drawPolygonBtn").click(function (e) {
         drawingEnd();
     } else {
         drawingStart();
-        $("#featurePropertiesForm")[0].reset();
     }
 });
 
