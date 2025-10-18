@@ -1413,6 +1413,224 @@
                         uploadNextChunk();
                     };
 
+                    const previewState = {
+                        layer: null,
+                        activeId: null,
+                    };
+
+                    const canPreviewImagery = (item) => {
+                        return Boolean(
+                            item &&
+                            item.processing_status === 'completed' &&
+                            item.geoserver_wms_url &&
+                            item.geoserver_wms_params &&
+                            !item.geoserver_error
+                        );
+                    };
+
+                    const ensureImageryLayer = () => {
+                        const mapInstance = window.map;
+                        if (!mapInstance || !window.ol?.layer?.Tile) {
+                            return null;
+                        }
+
+                        if (previewState.layer) {
+                            return previewState.layer;
+                        }
+
+                        const layer = new window.ol.layer.Tile({
+                            visible: false,
+                        });
+
+                        if (typeof layer.setZIndex === 'function') {
+                            layer.setZIndex(700);
+                        }
+
+                        layer.set('name', 'user-imagery-wms');
+                        mapInstance.addLayer(layer);
+                        previewState.layer = layer;
+
+                        return layer;
+                    };
+
+                    const updateImageryCardVisualState = (activeId = null) => {
+                        const cards = document.querySelectorAll('[data-imagery-card-id]');
+                        cards.forEach((card) => {
+                            const cardId = card.getAttribute('data-imagery-card-id');
+                            const isActive = activeId && cardId === String(activeId);
+                            card.classList.toggle('ring-2', Boolean(isActive));
+                            card.classList.toggle('ring-primary/60', Boolean(isActive));
+                            card.classList.toggle('bg-primary/5', Boolean(isActive));
+
+                            const button = card.querySelector('.view-btn');
+                            const icon = button?.querySelector('i');
+
+                            if (button) {
+                                button.classList.toggle('text-primary', Boolean(isActive));
+                                button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+                            }
+
+                            if (icon) {
+                                icon.classList.toggle('ri-eye-off-line', Boolean(isActive));
+                                icon.classList.toggle('ri-eye-line', !isActive);
+                            }
+                        });
+                    };
+
+                    const fitMapToImagery = (item) => {
+                        const mapInstance = window.map;
+                        if (!mapInstance || !item) {
+                            return;
+                        }
+
+                        const bbox = item.geoserver_latlon_bbox;
+                        if (!bbox) {
+                            return;
+                        }
+
+                        const minx = Number(bbox.minx ?? bbox.minX);
+                        const miny = Number(bbox.miny ?? bbox.minY);
+                        const maxx = Number(bbox.maxx ?? bbox.maxX);
+                        const maxy = Number(bbox.maxy ?? bbox.maxY);
+
+                        if ([minx, miny, maxx, maxy].some((value) => !Number.isFinite(value))) {
+                            return;
+                        }
+
+                        let extent = [minx, miny, maxx, maxy];
+                        const view = typeof mapInstance.getView === 'function' ? mapInstance.getView() : null;
+                        const projection = typeof view?.getProjection === 'function' ? view.getProjection() : null;
+
+                        if (projection && window.ol?.proj?.transformExtent) {
+                            try {
+                                extent = window.ol.proj.transformExtent(extent, 'EPSG:4326', projection);
+                            } catch (error) {
+                                console.warn('Failed to transform imagery extent:', error);
+                            }
+                        }
+
+                        if (typeof view?.fit === 'function') {
+                            view.fit(extent, {
+                                duration: 400,
+                                maxZoom: 16,
+                                padding: [48, 48, 48, 48],
+                            });
+                        }
+                    };
+
+                    const configureViewButton = (button, item, card) => {
+                        if (!button) {
+                            return;
+                        }
+
+                        const canPreview = canPreviewImagery(item);
+                        button.type = 'button';
+                        button.dataset.imageryId = item.id;
+                        button.classList.toggle('opacity-50', !canPreview);
+                        button.classList.toggle('cursor-not-allowed', !canPreview);
+                        button.disabled = !canPreview;
+                        button.setAttribute('aria-disabled', String(!canPreview));
+                        button.setAttribute(
+                            'title',
+                            canPreview
+                                ? 'Toggle processed imagery on the map.'
+                                : (item.geoserver_error
+                                    ? `Map preview unavailable: ${item.geoserver_error}`
+                                    : 'Map preview will be available once processing and publication complete.')
+                        );
+
+                        if (previewState.activeId === item.id) {
+                            card.classList.add('ring-2', 'ring-primary/60', 'bg-primary/5');
+                            button.classList.add('text-primary');
+                            button.setAttribute('aria-pressed', 'true');
+                            const icon = button.querySelector('i');
+                            icon?.classList.remove('ri-eye-line');
+                            icon?.classList.add('ri-eye-off-line');
+                        } else {
+                            button.setAttribute('aria-pressed', 'false');
+                        }
+
+                        button.addEventListener('click', (event) => {
+                            event.preventDefault();
+                            viewImagery(item);
+                        });
+                    };
+
+                    function viewImagery(item) {
+                        if (!item) {
+                            return;
+                        }
+
+                        const canPreview = canPreviewImagery(item);
+
+                        if (!canPreview) {
+                            const message = item.geoserver_error
+                                ? `Map preview unavailable: ${item.geoserver_error}`
+                                : 'Imagery is not ready for map preview yet. Please try again once processing completes.';
+                            MyZkToast?.warning?.(message);
+                            return;
+                        }
+
+                        if (!window.map || !window.ol?.source?.TileWMS) {
+                            MyZkToast?.error?.('Map preview is unavailable in this environment.');
+                            return;
+                        }
+
+                        if (previewState.activeId === item.id) {
+                            if (previewState.layer) {
+                                previewState.layer.setVisible(false);
+                                previewState.layer.setSource(null);
+                            }
+                            previewState.activeId = null;
+                            updateImageryCardVisualState(null);
+                            MyZkToast?.info?.('Imagery layer hidden from the map.');
+                            return;
+                        }
+
+                        const layer = ensureImageryLayer();
+                        if (!layer) {
+                            MyZkToast?.error?.('Unable to create a map layer for the imagery preview.');
+                            return;
+                        }
+
+                        const rawParams = item.geoserver_wms_params || {};
+                        const params = { ...rawParams };
+                        const layerName = item.geoserver_layer || rawParams.LAYERS;
+
+                        if (layerName) {
+                            params.LAYERS = layerName;
+                        }
+
+                        Object.entries(params).forEach(([key, value]) => {
+                            if (typeof value === 'boolean') {
+                                params[key] = value ? 'true' : 'false';
+                            } else if (value === null || typeof value === 'undefined') {
+                                delete params[key];
+                            }
+                        });
+
+                        params.FORMAT = params.FORMAT || 'image/png';
+                        params.TRANSPARENT = params.TRANSPARENT || 'true';
+
+                        const source = new window.ol.source.TileWMS({
+                            url: item.geoserver_wms_url,
+                            params,
+                            crossOrigin: 'anonymous',
+                            transition: 0,
+                        });
+
+                        layer.setSource(source);
+                        layer.setVisible(true);
+                        if (typeof layer.setOpacity === 'function') {
+                            layer.setOpacity(0.85);
+                        }
+
+                        previewState.activeId = item.id;
+                        updateImageryCardVisualState(item.id);
+                        fitMapToImagery(item);
+                        MyZkToast?.success?.('Imagery layer loaded on the map.');
+                    }
+
                     // Create a DOM fragment describing a single imagery record.
                     const renderImageryCard = (item) => {
                         const template = elements.cardTemplate;
@@ -1494,11 +1712,24 @@
                             className: 'text-foreground/60',
                         };
 
-                        const meta = `${sizeMb} MB • ${uploadDate} • <span class="imagery-status font-semibold ${uploadStatusInfo.className}">${uploadStatusInfo.label}</span> • <span class="imagery-status font-semibold ${processingStatusInfo.className}">${processingStatusInfo.label}</span>`;
+                        const canPreview = canPreviewImagery(item);
+                        let mapStatus = '';
+
+                        if (canPreview) {
+                            mapStatus = ' • <span class="imagery-status font-semibold text-primary">Map Ready</span>';
+                        } else if (item.geoserver_error) {
+                            mapStatus = ' • <span class="imagery-status font-semibold text-red-500">Map Error</span>';
+                        } else if (item.processing_status === 'completed') {
+                            mapStatus = ' • <span class="imagery-status font-semibold text-warning">Publishing Map…</span>';
+                        }
+
+                        const meta = `${sizeMb} MB • ${uploadDate} • <span class="imagery-status font-semibold ${uploadStatusInfo.className}">${uploadStatusInfo.label}</span> • <span class="imagery-status font-semibold ${processingStatusInfo.className}">${processingStatusInfo.label}</span>${mapStatus}`;
                         card.querySelector('.imagery-meta').innerHTML = meta;
 
+                        card.setAttribute('data-imagery-card-id', item.id);
+
                         const viewBtn = card.querySelector('.view-btn');
-                        viewBtn?.addEventListener('click', () => viewImagery(item));
+                        configureViewButton(viewBtn, item, card);
 
                         return fragment;
                     };

@@ -28,6 +28,16 @@ class ImageryData extends Model
         'processing_status',
         'processed_path',
         'processed_at',
+        'geoserver_store',
+        'geoserver_layer',
+        'geoserver_wms_url',
+        'geoserver_wms_params',
+        'geoserver_wmts_url',
+        'geoserver_wmts_layer',
+        'geoserver_native_bbox',
+        'geoserver_latlon_bbox',
+        'geoserver_published_at',
+        'geoserver_error',
         'scheduled_deletion_at'
     ];
 
@@ -36,6 +46,10 @@ class ImageryData extends Model
         'uploaded_at' => 'datetime',
         'processed_at' => 'datetime',
         'chunk_total' => 'integer',
+        'geoserver_wms_params' => 'array',
+        'geoserver_native_bbox' => 'array',
+        'geoserver_latlon_bbox' => 'array',
+        'geoserver_published_at' => 'datetime',
         'scheduled_deletion_at' => 'datetime'
     ];
 

@@ -263,6 +263,18 @@ class ImageryDataController extends Controller
                     'chunk_total',
                     'upload_status',
                     'processing_status',
+                    'processed_path',
+                    'processed_at',
+                    'geoserver_store',
+                    'geoserver_layer',
+                    'geoserver_wms_url',
+                    'geoserver_wms_params',
+                    'geoserver_wmts_url',
+                    'geoserver_wmts_layer',
+                    'geoserver_native_bbox',
+                    'geoserver_latlon_bbox',
+                    'geoserver_published_at',
+                    'geoserver_error',
                     'uploaded_at',
                 ]);
 
@@ -294,7 +306,16 @@ class ImageryDataController extends Controller
             // Get all imagery uploads for the user
             $uploads = ImageryData::where('user_id', $user->id)
                 ->orderByDesc('uploaded_at')
-                ->get(['id', 'processing_status', 'processed_path', 'processed_at']);
+                ->get([
+                    'id',
+                    'processing_status',
+                    'processed_path',
+                    'processed_at',
+                    'geoserver_wms_url',
+                    'geoserver_wms_params',
+                    'geoserver_published_at',
+                    'geoserver_error',
+                ]);
 
             return response()->json([
                 'success' => true,

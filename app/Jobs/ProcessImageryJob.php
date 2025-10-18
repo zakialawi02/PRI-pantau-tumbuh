@@ -6,6 +6,7 @@ use App\Models\ImageryData;
 use Illuminate\Bus\Queueable;
 use App\Services\CreditService;
 use App\Services\PythonService;
+use App\Services\GeoServerService;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\File;
 use Illuminate\Queue\SerializesModels;
@@ -13,6 +14,7 @@ use Symfony\Component\Process\Process;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
+use Illuminate\Support\Str;
 
 class ProcessImageryJob implements ShouldQueue
 {
@@ -133,24 +135,79 @@ class ProcessImageryJob implements ShouldQueue
         // Cek hasil eksekusi
         if ($process->isSuccessful()) {
             $publicPath = "storage/imagery/processed/{$processedFileName}";
+            $updatePayload = [
+                'processing_status' => 'completed',
+                'processed_path' => $publicPath,
+                'processed_at' => now(),
+            ];
 
             if (File::exists($outputPath)) {
-                $imagery->update([
-                    'processing_status' => 'completed',
-                    'processed_path' => $publicPath,
-                    'processed_at' => now(),
-                ]);
+                $geoServerConfigured = (bool) config('geoserver.url');
+
+                if ($geoServerConfigured) {
+                    try {
+                        /** @var GeoServerService $geoServer */
+                        $geoServer = app(GeoServerService::class);
+
+                        $identifier = Str::slug('imagery_' . $imagery->id, '_');
+                        $coverageOptions = [
+                            'title' => $imagery->original_name,
+                            'metadata' => [
+                                'entry' => [
+                                    [
+                                        '@key' => 'imagery_id',
+                                        '$' => (string) $imagery->id,
+                                    ],
+                                ],
+                            ],
+                        ];
+
+                        $publication = $geoServer->publishGeoTiff($identifier, $outputPath, $identifier, null, $coverageOptions);
+
+                        $updatePayload = array_merge($updatePayload, [
+                            'geoserver_store' => data_get($publication, 'store'),
+                            'geoserver_layer' => data_get($publication, 'layer'),
+                            'geoserver_wms_url' => data_get($publication, 'wms.base_url'),
+                            'geoserver_wms_params' => data_get($publication, 'wms.params'),
+                            'geoserver_wmts_url' => data_get($publication, 'wmts.base_url'),
+                            'geoserver_wmts_layer' => data_get($publication, 'wmts.layer'),
+                            'geoserver_native_bbox' => data_get($publication, 'bbox.native'),
+                            'geoserver_latlon_bbox' => data_get($publication, 'bbox.latlon'),
+                            'geoserver_published_at' => now(),
+                            'geoserver_error' => null,
+                        ]);
+
+                        Log::info('✅ [Job] GeoServer publication completed.', [
+                            'imagery_id' => $imagery->id,
+                            'store' => data_get($publication, 'store'),
+                            'layer' => data_get($publication, 'layer'),
+                        ]);
+                    } catch (\Throwable $geoServerException) {
+                        $message = $geoServerException->getMessage();
+                        $updatePayload['geoserver_error'] = $message;
+
+                        Log::error('❌ [Job] Failed to publish processed imagery to GeoServer.', [
+                            'imagery_id' => $imagery->id,
+                            'error' => $message,
+                            'trace' => $geoServerException->getTraceAsString(),
+                        ]);
+                    }
+                } else {
+                    Log::warning('⚠️ [Job] GeoServer configuration missing. Skipping publication.', [
+                        'imagery_id' => $imagery->id,
+                    ]);
+                    $updatePayload['geoserver_error'] = 'GeoServer configuration missing.';
+                }
 
                 Log::info("✅ [Job] Processing completed successfully. Output file found at: {$outputPath}");
-                return;
             } else {
-                // Simpan path-nya tetap, tapi log kalau file gak terdeteksi
-                $imagery->update([
-                    'processing_status' => 'completed',
-                    'processed_path' => $publicPath,
-                    'processed_at' => now(),
-                ]);
                 Log::warning("⚠️ [Job] Processing done, but output file not detected in expected location.");
+            }
+
+            $imagery->update($updatePayload);
+
+            if (File::exists($outputPath)) {
+                return;
             }
         } else {
             // Refund credits when processing fails
