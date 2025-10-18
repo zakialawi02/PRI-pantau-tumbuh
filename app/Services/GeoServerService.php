@@ -6,6 +6,7 @@ use App\Models\ImageryData;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use Symfony\Component\Process\Process;
 
 class GeoServerService
 {
@@ -73,6 +74,17 @@ class GeoServerService
             return null;
         }
 
+        $preparation = $this->prepareRasterForPublication($filePath);
+        $fileToPublish = $preparation['path'] ?? $filePath;
+
+        if (!is_file($fileToPublish)) {
+            Log::warning('GeoServerService: Prepared raster file not found for publishing.', [
+                'imagery_id' => $imagery->id,
+                'path' => $fileToPublish,
+            ]);
+            return null;
+        }
+
         $endpoint = sprintf(
             '%s/workspaces/%s/coveragestores/%s/external.geotiff',
             $this->restUrl,
@@ -87,7 +99,7 @@ class GeoServerService
 
         $response = $this->client()
             ->withHeaders(['Content-Type' => 'text/plain'])
-            ->send('PUT', $endpoint . '?' . $query, ['body' => 'file:' . $filePath]);
+            ->send('PUT', $endpoint . '?' . $query, ['body' => 'file:' . $fileToPublish]);
 
         if ($response->failed()) {
             Log::error('GeoServerService: Failed to publish GeoTIFF to GeoServer.', [
@@ -100,6 +112,32 @@ class GeoServerService
 
         $qualifiedName = $this->workspace . ':' . $layerName;
 
+        $outputCrs = $this->normaliseSrs($preparation['output_crs'] ?? null);
+        $inputCrs = $this->normaliseSrs($preparation['input_crs'] ?? null) ?? $outputCrs;
+
+        if (!$outputCrs && $inputCrs) {
+            $outputCrs = $inputCrs;
+        }
+
+        if (!$outputCrs) {
+            $outputCrs = $this->defaultSrs;
+        }
+
+        if (!$inputCrs) {
+            $inputCrs = $outputCrs;
+        }
+
+        $requestCrs = $this->uniqueSrsList([$outputCrs, $inputCrs, $this->defaultSrs]);
+
+        $coveragePayload = [
+            'srs' => $outputCrs,
+            'nativeCRS' => $inputCrs ?: $outputCrs,
+            'requestSRS' => ['string' => $requestCrs ?: [$outputCrs]],
+            'responseSRS' => ['string' => $requestCrs ?: [$outputCrs]],
+            'projectionPolicy' => 'REPROJECT_TO_DECLARED',
+            'enabled' => true,
+        ];
+
         $coverageResponse = $this->client()->put(
             sprintf(
                 '%s/workspaces/%s/coveragestores/%s/coverages/%s',
@@ -109,14 +147,7 @@ class GeoServerService
                 $layerName
             ),
             [
-                'coverage' => [
-                    'srs' => $this->defaultSrs,
-                    'nativeCRS' => $this->defaultSrs,
-                    'requestSRS' => ['string' => [$this->defaultSrs]],
-                    'responseSRS' => ['string' => [$this->defaultSrs]],
-                    'projectionPolicy' => 'FORCE_DECLARED',
-                    'enabled' => true,
-                ],
+                'coverage' => $coveragePayload,
             ]
         );
 
@@ -135,8 +166,8 @@ class GeoServerService
                     'enabled' => true,
                     'advertised' => true,
                     'type' => 'RASTER',
-                    'projectionPolicy' => 'FORCE_DECLARED',
-                    'srs' => $this->defaultSrs,
+                    'projectionPolicy' => 'REPROJECT_TO_DECLARED',
+                    'srs' => $outputCrs,
                 ],
             ]
         );
@@ -151,12 +182,18 @@ class GeoServerService
 
         $bounds = $this->fetchCoverageBounds($storeName, $layerName);
 
+        if (!$bounds && isset($preparation['bounds']) && is_array($preparation['bounds'])) {
+            $bounds = $this->normalisePreparationBounds($preparation['bounds'], $outputCrs);
+        }
+
         return [
             'store' => $storeName,
             'layer' => $layerName,
             'qualified' => $qualifiedName,
             'wms_url' => $this->wmsUrl,
             'bounds' => $bounds,
+            'preparation' => $preparation,
+            'published_path' => $fileToPublish,
         ];
     }
 
@@ -316,5 +353,225 @@ class GeoServerService
         $filtered = filter_var($value, FILTER_SANITIZE_NUMBER_FLOAT, FILTER_FLAG_ALLOW_FRACTION | FILTER_FLAG_ALLOW_SCIENTIFIC);
 
         return is_numeric($filtered) ? (float) $filtered : null;
+    }
+
+    protected function prepareRasterForPublication(string $filePath): array
+    {
+        $result = ['path' => $filePath];
+
+        if (!is_file($filePath)) {
+            return $result;
+        }
+
+        try {
+            $scriptsBase = base_path('scripts');
+            $pythonService = app(PythonService::class);
+            $pythonPath = $pythonService->resolvePythonPath($scriptsBase);
+
+            if (!$pythonPath) {
+                Log::debug('GeoServerService: Python interpreter not available for raster preparation.');
+                return $result;
+            }
+
+            $scriptPath = $scriptsBase . DIRECTORY_SEPARATOR . 'reproject_raster.py';
+
+            if (!is_file($scriptPath)) {
+                Log::debug('GeoServerService: Raster reprojection script not found.', [
+                    'script' => $scriptPath,
+                ]);
+                return $result;
+            }
+
+            $targetPath = $this->buildReprojectedPath($filePath);
+
+            $command = [$pythonPath, $scriptPath, '--input', $filePath, '--target', $this->defaultSrs];
+
+            if ($targetPath !== $filePath) {
+                $command[] = '--output';
+                $command[] = $targetPath;
+            }
+
+            $command[] = '--overwrite';
+
+            $process = new Process(
+                $command,
+                $scriptsBase,
+                $pythonService->buildProcessEnvironment()
+            );
+
+            $process->setTimeout(600);
+            $process->run();
+
+            if ($stderr = trim($process->getErrorOutput())) {
+                Log::debug('GeoServerService: Raster preparation stderr.', [
+                    'stderr' => $stderr,
+                ]);
+            }
+
+            if (!$process->isSuccessful()) {
+                Log::warning('GeoServerService: Raster preparation failed.', [
+                    'exit_code' => $process->getExitCode(),
+                    'output' => trim($process->getOutput()),
+                ]);
+                return $result;
+            }
+
+            $output = trim($process->getOutput());
+            $decoded = json_decode($output, true);
+
+            if (!is_array($decoded)) {
+                Log::warning('GeoServerService: Unable to decode raster preparation response.', [
+                    'output' => $output,
+                ]);
+                return $result;
+            }
+
+            if (!empty($decoded['error'])) {
+                Log::warning('GeoServerService: Raster preparation reported error.', [
+                    'error' => $decoded['error'],
+                ]);
+                return $result;
+            }
+
+            $preparedPath = is_string($decoded['output_path'] ?? null)
+                ? $decoded['output_path']
+                : $filePath;
+
+            $result['path'] = $preparedPath;
+            $result['reprojected'] = (bool) ($decoded['reprojected'] ?? false);
+            $result['input_crs'] = $this->normaliseSrs($decoded['input_crs'] ?? null);
+            $result['output_crs'] = $this->normaliseSrs($decoded['output_crs'] ?? null);
+
+            if (!empty($decoded['bounds']) && is_array($decoded['bounds'])) {
+                $result['bounds'] = $decoded['bounds'];
+            }
+
+            if (!empty($result['reprojected'])) {
+                Log::info('GeoServerService: Raster reprojected prior to publication.', [
+                    'source' => $filePath,
+                    'target' => $preparedPath,
+                    'input_crs' => $result['input_crs'],
+                    'output_crs' => $result['output_crs'],
+                ]);
+            }
+        } catch (\Throwable $exception) {
+            Log::warning('GeoServerService: Exception during raster preparation.', [
+                'error' => $exception->getMessage(),
+            ]);
+        }
+
+        return $result;
+    }
+
+    protected function buildReprojectedPath(string $filePath): string
+    {
+        $directory = dirname($filePath);
+        $extension = pathinfo($filePath, PATHINFO_EXTENSION);
+        $extension = $extension ? '.' . $extension : '.tif';
+        $filename = pathinfo($filePath, PATHINFO_FILENAME);
+
+        if (str_ends_with(strtolower($filename), '_epsg4326')) {
+            return $directory . DIRECTORY_SEPARATOR . $filename . $extension;
+        }
+
+        return $directory . DIRECTORY_SEPARATOR . $filename . '_epsg4326' . $extension;
+    }
+
+    protected function normaliseSrs($srs): ?string
+    {
+        if (!is_string($srs)) {
+            return null;
+        }
+
+        $trimmed = trim($srs);
+        if ($trimmed === '') {
+            return null;
+        }
+
+        if (preg_match('/^EPSG[:\s]?([0-9]+)$/i', $trimmed, $matches)) {
+            return 'EPSG:' . $matches[1];
+        }
+
+        return strtoupper($trimmed);
+    }
+
+    protected function uniqueSrsList(array $values): array
+    {
+        $unique = [];
+
+        foreach ($values as $value) {
+            $normalised = $this->normaliseSrs($value);
+            if ($normalised && !in_array($normalised, $unique, true)) {
+                $unique[] = $normalised;
+            }
+        }
+
+        return $unique;
+    }
+
+    protected function normalisePreparationBounds(array $bounds, ?string $fallbackProjection = null): ?array
+    {
+        $normalised = [];
+
+        if (isset($bounds['native']) && is_array($bounds['native'])) {
+            $native = $this->normalisePreparedExtent($bounds['native'], $fallbackProjection);
+            if ($native) {
+                $normalised['native'] = $native;
+            }
+        }
+
+        if (isset($bounds['target']) && is_array($bounds['target'])) {
+            $target = $this->normalisePreparedExtent($bounds['target'], $fallbackProjection);
+            if ($target) {
+                $normalised['wgs84'] = $target;
+            }
+        }
+
+        return $normalised ?: null;
+    }
+
+    protected function normalisePreparedExtent(array $extent, ?string $projection = null): ?array
+    {
+        if (array_is_list($extent)) {
+            $normalisedExtent = $this->normaliseExtentValues($extent);
+        } else {
+            $normalisedExtent = $this->normaliseExtentValues([
+                $extent['minx'] ?? $extent['minX'] ?? null,
+                $extent['miny'] ?? $extent['minY'] ?? null,
+                $extent['maxx'] ?? $extent['maxX'] ?? null,
+                $extent['maxy'] ?? $extent['maxY'] ?? null,
+            ]);
+        }
+
+        if (!$normalisedExtent) {
+            return null;
+        }
+
+        $projection = $this->normaliseSrs($extent['projection'] ?? $extent['crs'] ?? $projection);
+
+        return array_filter([
+            'extent' => $normalisedExtent,
+            'projection' => $projection,
+            'crs' => $projection,
+        ]);
+    }
+
+    protected function normaliseExtentValues(array $values): ?array
+    {
+        if (count($values) !== 4) {
+            return null;
+        }
+
+        $converted = [];
+
+        foreach ($values as $value) {
+            $converted[] = $this->toFloat($value);
+        }
+
+        if (in_array(null, $converted, true)) {
+            return null;
+        }
+
+        return array_map(static fn ($number) => (float) $number, $converted);
     }
 }
