@@ -100,6 +100,19 @@ class GeoServerService
 
         $qualifiedName = $this->workspace . ':' . $layerName;
 
+        $coverageConfig = $this->fetchCoverageConfig($storeName, $layerName);
+
+        $detectedDeclaredSrs = $coverageConfig['srs'] ?? null;
+        $detectedNativeCrs = $coverageConfig['nativeCRS'] ?? null;
+
+        $declaredSrs = $detectedDeclaredSrs ?: $this->defaultSrs;
+        $nativeCrs = $detectedNativeCrs ?: $declaredSrs;
+
+        $supportedSrs = $this->buildSupportedSrsList($declaredSrs, $nativeCrs);
+        if (empty($supportedSrs)) {
+            $supportedSrs = [$declaredSrs];
+        }
+
         $coverageResponse = $this->client()->put(
             sprintf(
                 '%s/workspaces/%s/coveragestores/%s/coverages/%s',
@@ -110,11 +123,11 @@ class GeoServerService
             ),
             [
                 'coverage' => [
-                    'srs' => $this->defaultSrs,
-                    'nativeCRS' => $this->defaultSrs,
-                    'requestSRS' => ['string' => [$this->defaultSrs]],
-                    'responseSRS' => ['string' => [$this->defaultSrs]],
-                    'projectionPolicy' => 'FORCE_DECLARED',
+                    'srs' => $declaredSrs,
+                    'nativeCRS' => $nativeCrs,
+                    'requestSRS' => ['string' => $supportedSrs],
+                    'responseSRS' => ['string' => $supportedSrs],
+                    'projectionPolicy' => 'NONE',
                     'enabled' => true,
                 ],
             ]
@@ -135,8 +148,8 @@ class GeoServerService
                     'enabled' => true,
                     'advertised' => true,
                     'type' => 'RASTER',
-                    'projectionPolicy' => 'FORCE_DECLARED',
-                    'srs' => $this->defaultSrs,
+                    'projectionPolicy' => 'NONE',
+                    'srs' => $declaredSrs,
                 ],
             ]
         );
@@ -227,7 +240,7 @@ class GeoServerService
         ])->withBasicAuth($this->username, $this->password);
     }
 
-    protected function fetchCoverageBounds(string $storeName, string $layerName): ?array
+    protected function fetchCoverageConfig(string $storeName, string $layerName): ?array
     {
         if (!$this->restUrl || !$this->workspace) {
             return null;
@@ -244,7 +257,7 @@ class GeoServerService
         $response = $this->client()->get($url);
 
         if ($response->failed()) {
-            Log::debug('GeoServerService: Failed to fetch coverage bounds.', [
+            Log::debug('GeoServerService: Failed to fetch coverage configuration.', [
                 'store' => $storeName,
                 'layer' => $layerName,
                 'status' => $response->status(),
@@ -255,7 +268,15 @@ class GeoServerService
         }
 
         $coverage = $response->json('coverage');
-        if (!is_array($coverage)) {
+
+        return is_array($coverage) ? $coverage : null;
+    }
+
+    protected function fetchCoverageBounds(string $storeName, string $layerName): ?array
+    {
+        $coverage = $this->fetchCoverageConfig($storeName, $layerName);
+
+        if (!$coverage) {
             return null;
         }
 
@@ -277,6 +298,45 @@ class GeoServerService
             'native' => $native,
             'wgs84' => $wgs84,
         ]);
+    }
+
+    protected function buildSupportedSrsList(string $declaredSrs, ?string $nativeCrs = null): array
+    {
+        $candidates = [$declaredSrs, $nativeCrs, $this->defaultSrs];
+        $valid = [];
+
+        foreach ($candidates as $candidate) {
+            if (!is_string($candidate)) {
+                continue;
+            }
+
+            $candidate = trim($candidate);
+
+            if ($candidate === '') {
+                continue;
+            }
+
+            if (!$this->isCodeSrs($candidate)) {
+                continue;
+            }
+
+            $valid[] = $candidate;
+        }
+
+        return array_values(array_unique($valid));
+    }
+
+    protected function isCodeSrs(string $candidate): bool
+    {
+        if ($candidate === '') {
+            return false;
+        }
+
+        if (preg_match('/^(?:urn:ogc:def:crs:[^:]+::\d+|[a-z0-9_]+:\d+)$/i', $candidate)) {
+            return true;
+        }
+
+        return str_starts_with(strtoupper($candidate), 'EPSG:');
     }
 
     protected function normaliseBoundingBox($boundingBox, ?string $fallbackCrs = null): ?array
