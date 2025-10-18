@@ -162,6 +162,20 @@ class ProcessImageryJob implements ShouldQueue
                             ],
                         ];
 
+                        $defaultSrs = config('geoserver.default_srs');
+                        $projectionPolicy = config('geoserver.projection_policy');
+
+                        if (! empty($defaultSrs)) {
+                            $coverageOptions['srs'] = $defaultSrs;
+                            $coverageOptions['nativeCRS'] = $defaultSrs;
+                            $coverageOptions['wms_params']['SRS'] = $defaultSrs;
+                            $coverageOptions['wms_params']['CRS'] = $defaultSrs;
+                        }
+
+                        if (! empty($projectionPolicy)) {
+                            $coverageOptions['projectionPolicy'] = $projectionPolicy;
+                        }
+
                         $publication = $geoServer->publishGeoTiff($identifier, $outputPath, $identifier, null, $coverageOptions);
 
                         $updatePayload = array_merge($updatePayload, [

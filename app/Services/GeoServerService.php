@@ -42,8 +42,21 @@ class GeoServerService
             throw new RuntimeException(sprintf('GeoTIFF file not found at path: %s', $filePath));
         }
 
-        $this->createCoverageStoreFromGeoTiff($storeName, $filePath, $workspace);
-        $coverageResponse = $this->publishCoverageLayer($storeName, $layerName, $workspace, $coverageOptions);
+        $coverageOptions = $this->applyCoverageDefaults($coverageOptions);
+
+        $storeExists = $this->coverageStoreExists($storeName, $workspace);
+        $this->uploadGeoTiffToStore($storeName, $filePath, $workspace, $storeExists);
+
+        $coverageExists = $this->coverageExists($storeName, $layerName, $workspace);
+        $coverageResponse = $this->saveCoverageLayer(
+            $storeName,
+            $layerName,
+            $workspace,
+            $coverageOptions,
+            $coverageExists
+        );
+
+        $this->maybeRecalculateCoverageBounds($storeName, $layerName, $workspace);
 
         $coverageDetails = null;
 
@@ -87,30 +100,56 @@ class GeoServerService
         ];
     }
 
-    public function createCoverageStoreFromGeoTiff(string $storeName, string $filePath, ?string $workspace = null): Response
+    protected function uploadGeoTiffToStore(string $storeName, string $filePath, ?string $workspace = null, bool $storeExists = false): Response
     {
         $workspace = $workspace ?: $this->workspace;
 
-        $endpoint = sprintf(
-            '%s/workspaces/%s/coveragestores/%s/file.geotiff?configure=all',
-            $this->restBaseUrl,
-            $workspace,
-            $storeName
-        );
+        $endpoint = sprintf('%s/workspaces/%s/coveragestores/%s/file.geotiff', $this->restBaseUrl, $workspace, $storeName);
+
+        $query = [
+            'configure' => 'none',
+            'filename' => basename($filePath),
+        ];
+
+        if ($storeExists) {
+            $query['update'] = 'overwrite';
+        }
+
+        $endpoint .= '?' . http_build_query($query);
 
         $response = $this->newClient()
             ->withHeaders(['Content-Type' => 'image/tiff'])
             ->withBody(file_get_contents($filePath), 'image/tiff')
             ->put($endpoint);
 
-        $this->throwIfRequestFailed($response, 'Failed to create GeoTIFF coverage store.');
+        $this->throwIfRequestFailed($response, 'Failed to upload GeoTIFF to coverage store.');
 
         return $response;
     }
 
-    public function publishCoverageLayer(string $storeName, string $layerName, ?string $workspace = null, array $options = []): Response
+    protected function saveCoverageLayer(string $storeName, string $layerName, ?string $workspace = null, array $options = [], bool $coverageExists = false): Response
     {
         $workspace = $workspace ?: $this->workspace;
+
+        $payload = ['coverage' => $this->buildCoveragePayload($layerName, $options)];
+
+        if ($coverageExists) {
+            $endpoint = sprintf(
+                '%s/workspaces/%s/coveragestores/%s/coverages/%s',
+                $this->restBaseUrl,
+                $workspace,
+                $storeName,
+                $layerName
+            );
+
+            $response = $this->newClient()
+                ->withHeaders(['Content-Type' => 'application/json'])
+                ->put($endpoint, $payload);
+
+            $this->throwIfRequestFailed($response, 'Failed to update GeoTIFF layer.');
+
+            return $response;
+        }
 
         $endpoint = sprintf(
             '%s/workspaces/%s/coveragestores/%s/coverages',
@@ -118,8 +157,6 @@ class GeoServerService
             $workspace,
             $storeName
         );
-
-        $payload = ['coverage' => $this->buildCoveragePayload($layerName, $options)];
 
         $response = $this->newClient()
             ->withHeaders(['Content-Type' => 'application/json'])
@@ -173,7 +210,7 @@ class GeoServerService
             'enabled' => $options['enabled'] ?? true,
         ];
 
-        foreach (['srs', 'projectionPolicy', 'metadata', 'dimensions'] as $optionalKey) {
+        foreach (['srs', 'projectionPolicy', 'nativeCRS', 'metadata', 'dimensions'] as $optionalKey) {
             if (array_key_exists($optionalKey, $options)) {
                 $coverage[$optionalKey] = $options[$optionalKey];
             }
@@ -214,6 +251,127 @@ class GeoServerService
         $this->throwIfRequestFailed($response, 'Failed to fetch coverage details.');
 
         return Arr::get($response->json(), 'coverage');
+    }
+
+    protected function coverageStoreExists(string $storeName, ?string $workspace = null): bool
+    {
+        $workspace = $workspace ?: $this->workspace;
+
+        $endpoint = sprintf(
+            '%s/workspaces/%s/coveragestores/%s.json',
+            $this->restBaseUrl,
+            $workspace,
+            $storeName
+        );
+
+        $response = $this->newClient()->get($endpoint);
+
+        if ($response->status() === 404) {
+            return false;
+        }
+
+        if ($response->successful()) {
+            return true;
+        }
+
+        $this->throwIfRequestFailed($response, 'Failed to determine coverage store existence.');
+
+        return false;
+    }
+
+    protected function coverageExists(string $storeName, string $layerName, ?string $workspace = null): bool
+    {
+        $workspace = $workspace ?: $this->workspace;
+
+        $endpoint = sprintf(
+            '%s/workspaces/%s/coveragestores/%s/coverages/%s.json',
+            $this->restBaseUrl,
+            $workspace,
+            $storeName,
+            $layerName
+        );
+
+        $response = $this->newClient()->get($endpoint);
+
+        if ($response->status() === 404) {
+            return false;
+        }
+
+        if ($response->successful()) {
+            return true;
+        }
+
+        $this->throwIfRequestFailed($response, 'Failed to determine coverage existence.');
+
+        return false;
+    }
+
+    protected function maybeRecalculateCoverageBounds(string $storeName, string $layerName, ?string $workspace = null): void
+    {
+        if (! config('geoserver.recalculate_bounds', true)) {
+            return;
+        }
+
+        $workspace = $workspace ?: $this->workspace;
+
+        $endpoint = sprintf(
+            '%s/workspaces/%s/coveragestores/%s/coverages/%s.xml?recalculate=nativebbox,latlonbbox',
+            $this->restBaseUrl,
+            $workspace,
+            $storeName,
+            $layerName
+        );
+
+        try {
+            $response = $this->newClient()
+                ->withHeaders(['Content-Type' => 'text/xml'])
+                ->withBody('', 'text/xml')
+                ->post($endpoint);
+
+            if ($response->failed()) {
+                Log::warning('Failed to recalculate GeoServer coverage bounds.', [
+                    'store' => $storeName,
+                    'layer' => $layerName,
+                    'workspace' => $workspace,
+                    'status' => $response->status(),
+                    'body' => $response->body(),
+                ]);
+            }
+        } catch (\Throwable $exception) {
+            Log::warning('Exception thrown while recalculating GeoServer coverage bounds.', [
+                'store' => $storeName,
+                'layer' => $layerName,
+                'workspace' => $workspace,
+                'error' => $exception->getMessage(),
+            ]);
+        }
+    }
+
+    protected function applyCoverageDefaults(array $options): array
+    {
+        $config = config('geoserver');
+
+        if (! Arr::has($options, 'srs') || empty($options['srs'])) {
+            $defaultSrs = Arr::get($config, 'default_srs');
+
+            if (! empty($defaultSrs)) {
+                $options['srs'] = $defaultSrs;
+
+                if (! Arr::has($options, 'nativeCRS')) {
+                    $options['nativeCRS'] = $defaultSrs;
+                }
+            }
+        }
+
+        if (! Arr::has($options, 'projectionPolicy')) {
+            $projectionPolicy = Arr::get($config, 'projection_policy');
+
+            if (! empty($projectionPolicy)) {
+                $options['projectionPolicy'] = $projectionPolicy;
+            }
+        }
+
+        return $options;
     }
 
     protected function generateStoreName(string $layerName): string
