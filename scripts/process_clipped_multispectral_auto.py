@@ -20,8 +20,8 @@ def read_env(name: str, default: str | None = None) -> str | None:
         return value
     return default
 
-SH_CLIENT_ID = read_env("SENTINELHUB_CLIENT_ID", read_env("SH_CLIENT_ID", ""))
-SH_CLIENT_SECRET = read_env("SENTINELHUB_CLIENT_SECRET", read_env("SH_CLIENT_SECRET", ""))
+SH_CLIENT_ID = read_env("SENTINELHUB_CLIENT_ID", "")
+SH_CLIENT_SECRET = read_env("SENTINELHUB_SECRET_ID", "")
 
 if not SH_CLIENT_ID or not SH_CLIENT_SECRET:
     raise SystemExit("Sentinel Hub credentials are not configured.")

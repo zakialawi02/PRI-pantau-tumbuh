@@ -895,6 +895,7 @@ function addInteraction(type = "Polygon") {
             featureProjection: "EPSG:3857", // Map's projection (assuming EPSG:3857)
         });
         geojsonFeature = JSON.parse(geojson);
+        window.geojsonFeature = geojsonFeature;
 
         // Display the GeoJSON string in the #drawerGeojson element
         const drawerGeojsonEl = document.getElementById("drawerGeojson");
