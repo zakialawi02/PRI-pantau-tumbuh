@@ -864,15 +864,65 @@ class ImageryDataController extends Controller
     public function destroy(ImageryData $imagery)
     {
         try {
-            // Delete the original physical file from storage
-            if (file_exists($imagery->path)) {
-                unlink($imagery->path);
+            $geoserverIdentifiers = array_filter([
+                'store' => $imagery->geoserver_store,
+                'layer' => $imagery->geoserver_layer,
+            ]);
+
+            if (!empty($geoserverIdentifiers) && !empty(config('geoserver.url'))) {
+                try {
+                    $geoServer = app(\App\Services\GeoServerService::class);
+
+                    if (!empty($geoserverIdentifiers['layer'])) {
+                        $geoServer->deleteLayer($geoserverIdentifiers['layer'], [
+                            'recurse' => true,
+                        ]);
+                    }
+
+                    if (!empty($geoserverIdentifiers['store'])) {
+                        $geoServer->deleteCoverageStore($geoserverIdentifiers['store'], [
+                            'recurse' => true,
+                        ]);
+                    }
+                } catch (\Throwable $geoserverException) {
+                    Log::warning('ImageryDataController@destroy: Failed to remove GeoServer resources', [
+                        'user_id' => Auth::id(),
+                        'imagery_id' => $imagery->id,
+                        'error' => $geoserverException->getMessage(),
+                    ]);
+                }
             }
 
-            // Delete processed imagery files if they exist
-            if (file_exists($imagery->processed_path)) {
-                unlink($imagery->processed_path);
-            }
+            $deleteFile = static function (?string $path) {
+                if (empty($path) || preg_match('#^https?://#i', $path)) {
+                    return;
+                }
+
+                $relative = ltrim(Str::replaceFirst('storage/', '', $path), '/');
+
+                try {
+                    if ($relative !== '' && Storage::disk('public')->exists($relative)) {
+                        if (Storage::disk('public')->delete($relative)) {
+                            return;
+                        }
+                    }
+                } catch (\Throwable $exception) {
+                    // Fallback to manual deletion below when disk removal fails.
+                }
+
+                $absolutePath = $path;
+
+                if (!Str::startsWith($absolutePath, ['/']) && !preg_match('/^[A-Za-z]:\\/', $absolutePath)) {
+                    $absolutePath = public_path($absolutePath);
+                }
+
+                if (is_file($absolutePath)) {
+                    unlink($absolutePath);
+                }
+            };
+
+            $deleteFile($imagery->path);
+            $deleteFile($imagery->processed_path);
 
             // Delete the database record
             $imagery->delete();

@@ -147,6 +147,78 @@ class GeoServerService
         }
     }
 
+    public function deleteLayer(string $layerName, array $options = []): void
+    {
+        if ($layerName === '') {
+            return;
+        }
+
+        $qualifiedLayer = $this->qualifyLayerName($layerName);
+
+        $query = [];
+        if (!empty($options['recurse']) || !empty($options['cascade'])) {
+            $query['recurse'] = 'true';
+        }
+
+        if (!empty($options['purge'])) {
+            $purge = $options['purge'];
+            $query['purge'] = $purge === true ? 'all' : (string) $purge;
+        }
+
+        $response = $this->http()
+            ->send('DELETE', $this->buildUrl('layers/' . $qualifiedLayer), [
+                'query' => $query,
+            ]);
+
+        if ($response->failed() && $response->status() !== 404) {
+            throw new RuntimeException(
+                sprintf(
+                    'GeoServer layer delete failed (%s): %s',
+                    $response->status(),
+                    $response->body()
+                )
+            );
+        }
+    }
+
+    public function deleteCoverageStore(string $storeName, array $options = []): void
+    {
+        if ($storeName === '') {
+            return;
+        }
+
+        $storeName = $this->sanitizeName($storeName);
+
+        $query = [];
+        if (!empty($options['recurse'])) {
+            $query['recurse'] = 'true';
+        }
+
+        if (!empty($options['purge'])) {
+            $purge = $options['purge'];
+            $query['purge'] = $purge === true ? 'all' : (string) $purge;
+        }
+
+        $response = $this->http()
+            ->send(
+                'DELETE',
+                $this->buildUrl("workspaces/{$this->workspace}/coveragestores/{$storeName}"),
+                [
+                    'query' => $query,
+                ]
+            );
+
+        if ($response->failed() && $response->status() !== 404) {
+            throw new RuntimeException(
+                sprintf(
+                    'GeoServer coverage store delete failed (%s): %s',
+                    $response->status(),
+                    $response->body()
+                )
+            );
+        }
+    }
+
     public function getCoverage(string $storeName, string $coverageName): ?array
     {
         $storeName = $this->sanitizeName($storeName);

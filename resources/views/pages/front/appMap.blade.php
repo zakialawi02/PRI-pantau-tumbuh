@@ -208,9 +208,17 @@
                                     </div>
                                 </div>
 
-                                <button class="view-btn hover:bg-foreground/10 rounded-lg p-2 transition">
-                                    <i class="ri-eye-line"></i>
-                                </button>
+                                <div class="flex items-center gap-2">
+                                    <button class="view-btn view-source-btn hover:bg-foreground/10 rounded-lg p-2 transition"
+                                        type="button" title="Preview source imagery" aria-label="Preview source imagery">
+                                        <i class="ri-image-line"></i>
+                                    </button>
+                                    <button class="view-btn view-processed-btn hover:bg-foreground/10 rounded-lg p-2 transition"
+                                        type="button" title="Preview processed imagery on the map"
+                                        aria-label="Preview processed imagery">
+                                        <i class="ri-eye-line"></i>
+                                    </button>
+                                </div>
                             </div>
                         </template>
                     </div>
@@ -1603,6 +1611,43 @@
                     };
 
                     // Create a DOM fragment describing a single imagery record.
+                    const resolveAssetUrl = (path) => {
+                        if (!path || typeof path !== 'string') {
+                            return null;
+                        }
+
+                        if (/^https?:\/\//i.test(path)) {
+                            return path;
+                        }
+
+                        if (path.startsWith('/')) {
+                            return path;
+                        }
+
+                        return `${window.location.origin}/${path.replace(/^\/+/, '')}`;
+                    };
+
+                    const disablePreviewButton = (button, tooltip) => {
+                        if (!button) {
+                            return;
+                        }
+
+                        button.setAttribute('disabled', 'true');
+                        button.classList.add('opacity-40', 'cursor-not-allowed');
+                        if (tooltip) {
+                            button.setAttribute('title', tooltip);
+                        }
+                    };
+
+                    const setProcessedButtonState = (button, isVisible) => {
+                        if (!button) {
+                            return;
+                        }
+
+                        button.innerHTML = `<i class="ri-${isVisible ? 'eye-off-line' : 'eye-line'}"></i>`;
+                        button.setAttribute('aria-pressed', isVisible ? 'true' : 'false');
+                    };
+
                     const renderImageryCard = (item) => {
                         const template = elements.cardTemplate;
                         if (!template?.content) {
@@ -1692,24 +1737,34 @@
                         const meta = `${sizeMb} MB • ${uploadDate} • <span class="imagery-status font-semibold ${uploadStatusInfo.className}">${uploadStatusInfo.label}</span> • <span class="imagery-status font-semibold ${processingStatusInfo.className}">${processingStatusInfo.label}</span> • <span class="imagery-status font-semibold ${geoserverStatusInfo.className}">${geoserverStatusInfo.label}</span>`;
                         card.querySelector('.imagery-meta').innerHTML = meta;
 
-                        const viewBtn = card.querySelector('.view-btn');
-                        if (viewBtn) {
+                        const sourceButton = card.querySelector('.view-source-btn');
+                        if (sourceButton) {
+                            const sourceUrl = resolveAssetUrl(item.path);
+                            if (!sourceUrl) {
+                                disablePreviewButton(sourceButton, 'Source file is unavailable.');
+                            } else {
+                                sourceButton.addEventListener('click', (event) => {
+                                    event.preventDefault();
+                                    window.open(sourceUrl, '_blank', 'noopener');
+                                });
+                            }
+                        }
+
+                        const processedButton = card.querySelector('.view-processed-btn');
+                        if (processedButton) {
                             const imageryModule = window.AppMap?.imagery;
 
                             if (!item.geoserver_layer || !imageryModule?.toggleLayer) {
-                                viewBtn.setAttribute('disabled', 'true');
-                                viewBtn.classList.add('opacity-40', 'cursor-not-allowed');
-                                viewBtn.setAttribute('title', 'GeoServer layer not published yet.');
+                                disablePreviewButton(processedButton, 'GeoServer layer not published yet.');
                             } else {
-                                viewBtn.addEventListener('click', (event) => {
+                                processedButton.addEventListener('click', (event) => {
                                     event.preventDefault();
                                     imageryModule.toggleLayer(item);
                                 });
 
                                 const isVisible = imageryModule.isLayerVisible?.(item.id) ?? false;
-                                viewBtn.setAttribute('aria-pressed', String(Boolean(isVisible)));
+                                setProcessedButtonState(processedButton, isVisible);
                                 if (isVisible) {
-                                    viewBtn.innerHTML = '<i class="ri-eye-off-line"></i>';
                                     card.classList.add('ring-2', 'ring-primary/60');
                                 }
                             }
@@ -1735,19 +1790,13 @@
                             return;
                         }
 
-                        const button = card.querySelector('.view-btn');
+                        const button = card.querySelector('.view-processed-btn');
                         if (detail.visible) {
                             card.classList.add('ring-2', 'ring-primary/60');
-                            if (button) {
-                                button.innerHTML = '<i class="ri-eye-off-line"></i>';
-                                button.setAttribute('aria-pressed', 'true');
-                            }
+                            setProcessedButtonState(button, true);
                         } else {
                             card.classList.remove('ring-2', 'ring-primary/60');
-                            if (button) {
-                                button.innerHTML = '<i class="ri-eye-line"></i>';
-                                button.setAttribute('aria-pressed', 'false');
-                            }
+                            setProcessedButtonState(button, false);
                         }
                     });
 
