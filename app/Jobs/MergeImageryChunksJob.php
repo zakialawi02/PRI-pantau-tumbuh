@@ -161,6 +161,7 @@ class MergeImageryChunksJob implements ShouldQueue
             if ($geoserverData) {
                 $updates['geoserver_store_name'] = $geoserverData['store'];
                 $updates['geoserver_layer_name'] = $geoserverData['layer'];
+                $updates['geoserver_bounds'] = $geoserverData['bounds'] ?? null;
             }
 
             if ($fileSize !== null) {

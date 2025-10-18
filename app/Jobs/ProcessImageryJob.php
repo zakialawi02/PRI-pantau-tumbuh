@@ -153,6 +153,7 @@ class ProcessImageryJob implements ShouldQueue
                     'processed_at' => now(),
                     'processed_geoserver_store_name' => $geoserverData['store'] ?? $imagery->processed_geoserver_store_name,
                     'processed_geoserver_layer_name' => $geoserverData['layer'] ?? $imagery->processed_geoserver_layer_name,
+                    'processed_geoserver_bounds' => $geoserverData['bounds'] ?? $imagery->processed_geoserver_bounds,
                 ]);
 
                 Log::info("✅ [Job] Processing completed successfully. Output file found at: {$outputPath}");
@@ -165,6 +166,7 @@ class ProcessImageryJob implements ShouldQueue
                     'processed_at' => now(),
                     'processed_geoserver_store_name' => $geoserverData['store'] ?? $imagery->processed_geoserver_store_name,
                     'processed_geoserver_layer_name' => $geoserverData['layer'] ?? $imagery->processed_geoserver_layer_name,
+                    'processed_geoserver_bounds' => $geoserverData['bounds'] ?? $imagery->processed_geoserver_bounds,
                 ]);
                 Log::warning("⚠️ [Job] Processing done, but output file not detected in expected location.");
             }

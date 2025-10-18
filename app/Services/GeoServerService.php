@@ -149,11 +149,14 @@ class GeoServerService
             ]);
         }
 
+        $bounds = $this->fetchCoverageBounds($storeName, $layerName);
+
         return [
             'store' => $storeName,
             'layer' => $layerName,
             'qualified' => $qualifiedName,
             'wms_url' => $this->wmsUrl,
+            'bounds' => $bounds,
         ];
     }
 
@@ -178,6 +181,15 @@ class GeoServerService
                 'error' => $exception->getMessage(),
             ]);
         }
+    }
+
+    public function getCoverageBounds(?string $storeName, ?string $layerName): ?array
+    {
+        if (!$storeName || !$layerName) {
+            return null;
+        }
+
+        return $this->fetchCoverageBounds($storeName, $layerName);
     }
 
     protected function deleteLayer(string $layerName): void
@@ -213,5 +225,96 @@ class GeoServerService
             'http_errors' => false,
             'timeout' => 60,
         ])->withBasicAuth($this->username, $this->password);
+    }
+
+    protected function fetchCoverageBounds(string $storeName, string $layerName): ?array
+    {
+        if (!$this->restUrl || !$this->workspace) {
+            return null;
+        }
+
+        $url = sprintf(
+            '%s/workspaces/%s/coveragestores/%s/coverages/%s.json',
+            $this->restUrl,
+            $this->workspace,
+            $storeName,
+            $layerName
+        );
+
+        $response = $this->client()->get($url);
+
+        if ($response->failed()) {
+            Log::debug('GeoServerService: Failed to fetch coverage bounds.', [
+                'store' => $storeName,
+                'layer' => $layerName,
+                'status' => $response->status(),
+                'body' => $response->body(),
+            ]);
+
+            return null;
+        }
+
+        $coverage = $response->json('coverage');
+        if (!is_array($coverage)) {
+            return null;
+        }
+
+        $native = $this->normaliseBoundingBox(
+            $coverage['nativeBoundingBox'] ?? null,
+            $coverage['srs'] ?? null
+        );
+
+        $wgs84 = $this->normaliseBoundingBox(
+            $coverage['latLonBoundingBox'] ?? null,
+            'EPSG:4326'
+        );
+
+        if (!$native && !$wgs84) {
+            return null;
+        }
+
+        return array_filter([
+            'native' => $native,
+            'wgs84' => $wgs84,
+        ]);
+    }
+
+    protected function normaliseBoundingBox($boundingBox, ?string $fallbackCrs = null): ?array
+    {
+        if (!is_array($boundingBox)) {
+            return null;
+        }
+
+        $minx = $this->toFloat($boundingBox['minx'] ?? $boundingBox['west'] ?? null);
+        $miny = $this->toFloat($boundingBox['miny'] ?? $boundingBox['south'] ?? null);
+        $maxx = $this->toFloat($boundingBox['maxx'] ?? $boundingBox['east'] ?? null);
+        $maxy = $this->toFloat($boundingBox['maxy'] ?? $boundingBox['north'] ?? null);
+
+        if ($minx === null || $miny === null || $maxx === null || $maxy === null) {
+            return null;
+        }
+
+        $projection = $boundingBox['crs'] ?? $boundingBox['srs'] ?? $fallbackCrs;
+
+        return [
+            'extent' => [$minx, $miny, $maxx, $maxy],
+            'crs' => $projection,
+            'projection' => $projection,
+        ];
+    }
+
+    protected function toFloat($value): ?float
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        if (is_numeric($value)) {
+            return (float) $value;
+        }
+
+        $filtered = filter_var($value, FILTER_SANITIZE_NUMBER_FLOAT, FILTER_FLAG_ALLOW_FRACTION | FILTER_FLAG_ALLOW_SCIENTIFIC);
+
+        return is_numeric($filtered) ? (float) $filtered : null;
     }
 }

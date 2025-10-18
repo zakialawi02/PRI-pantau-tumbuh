@@ -1441,6 +1441,7 @@
                             layer: layerInfo.layer,
                             title: item?.original_name || item?.stored_name || `${item.id}-${variant}`,
                             opacity: variant === 'processed' ? 0.75 : 0.6,
+                            bounds: layerInfo.bounds,
                         });
 
                         const isVisible =
@@ -1460,6 +1461,7 @@
                                     id: `${item.id}:${variant}`,
                                     url: layerInfo.wms_url,
                                     layer: layerInfo.layer,
+                                    bounds: layerInfo.bounds,
                                 })
                                 .catch((error) => {
                                     console.warn('Failed to zoom to GeoServer layer', error);

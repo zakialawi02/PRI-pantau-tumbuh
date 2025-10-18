@@ -203,6 +203,7 @@ class ProcessSentinelSceneJob implements ShouldQueue
             if ($geoserverData) {
                 $updatePayload['geoserver_store_name'] = $geoserverData['store'];
                 $updatePayload['geoserver_layer_name'] = $geoserverData['layer'];
+                $updatePayload['geoserver_bounds'] = $geoserverData['bounds'] ?? null;
             }
 
             $imagery->update($updatePayload);

@@ -23,6 +23,7 @@ class ImageryData extends Model
         'path',
         'geoserver_store_name',
         'geoserver_layer_name',
+        'geoserver_bounds',
         'chunk_id',
         'chunk_total',
         'upload_status',
@@ -31,6 +32,7 @@ class ImageryData extends Model
         'processed_path',
         'processed_geoserver_store_name',
         'processed_geoserver_layer_name',
+        'processed_geoserver_bounds',
         'processed_at',
         'scheduled_deletion_at'
     ];
@@ -40,7 +42,9 @@ class ImageryData extends Model
         'uploaded_at' => 'datetime',
         'processed_at' => 'datetime',
         'chunk_total' => 'integer',
-        'scheduled_deletion_at' => 'datetime'
+        'scheduled_deletion_at' => 'datetime',
+        'geoserver_bounds' => 'array',
+        'processed_geoserver_bounds' => 'array'
     ];
 
     public function user()

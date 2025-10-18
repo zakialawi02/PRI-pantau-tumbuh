@@ -283,24 +283,68 @@ class ImageryDataController extends Controller
             $workspace = config('geoserver.workspace', '');
             $wmsUrl = rtrim(config('geoserver.wms_url', ''), '/');
 
-            $data = $uploads->map(function (ImageryData $upload) use ($workspace, $wmsUrl) {
+            $geoServerService = $this->geoServerService;
+
+            $data = $uploads->map(function (ImageryData $upload) use ($workspace, $wmsUrl, $geoServerService) {
                 $sourceLayer = null;
                 if (!empty($upload->geoserver_layer_name)) {
+                    $sourceBounds = $upload->geoserver_bounds;
+
+                    if (!$sourceBounds && $upload->geoserver_store_name) {
+                        try {
+                            $sourceBounds = $geoServerService->getCoverageBounds(
+                                $upload->geoserver_store_name,
+                                $upload->geoserver_layer_name
+                            );
+
+                            if ($sourceBounds) {
+                                $upload->forceFill(['geoserver_bounds' => $sourceBounds])->save();
+                            }
+                        } catch (\Throwable $exception) {
+                            Log::debug('ImageryDataController: Unable to resolve GeoServer bounds for source imagery.', [
+                                'imagery_id' => $upload->id,
+                                'error' => $exception->getMessage(),
+                            ]);
+                        }
+                    }
+
                     $sourceLayer = [
                         'store' => $upload->geoserver_store_name,
                         'layer' => $workspace ? $workspace . ':' . $upload->geoserver_layer_name : $upload->geoserver_layer_name,
                         'name' => $upload->geoserver_layer_name,
                         'wms_url' => $wmsUrl,
+                        'bounds' => $sourceBounds,
                     ];
                 }
 
                 $processedLayer = null;
                 if (!empty($upload->processed_geoserver_layer_name)) {
+                    $processedBounds = $upload->processed_geoserver_bounds;
+
+                    if (!$processedBounds && $upload->processed_geoserver_store_name) {
+                        try {
+                            $processedBounds = $geoServerService->getCoverageBounds(
+                                $upload->processed_geoserver_store_name,
+                                $upload->processed_geoserver_layer_name
+                            );
+
+                            if ($processedBounds) {
+                                $upload->forceFill(['processed_geoserver_bounds' => $processedBounds])->save();
+                            }
+                        } catch (\Throwable $exception) {
+                            Log::debug('ImageryDataController: Unable to resolve GeoServer bounds for processed imagery.', [
+                                'imagery_id' => $upload->id,
+                                'error' => $exception->getMessage(),
+                            ]);
+                        }
+                    }
+
                     $processedLayer = [
                         'store' => $upload->processed_geoserver_store_name,
                         'layer' => $workspace ? $workspace . ':' . $upload->processed_geoserver_layer_name : $upload->processed_geoserver_layer_name,
                         'name' => $upload->processed_geoserver_layer_name,
                         'wms_url' => $wmsUrl,
+                        'bounds' => $processedBounds,
                     ];
                 }
 
