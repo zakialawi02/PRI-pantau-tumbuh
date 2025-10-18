@@ -18,6 +18,8 @@ class GeoServerService
 
     protected string $workspace;
 
+    protected string $defaultSrs;
+
     public function __construct(?array $config = null)
     {
         $config = $config ?? config('geoserver', []);
@@ -28,6 +30,7 @@ class GeoServerService
         $this->username = (string) ($config['username'] ?? '');
         $this->password = (string) ($config['password'] ?? '');
         $this->workspace = (string) ($config['workspace'] ?? '');
+        $this->defaultSrs = (string) ($config['default_srs'] ?? 'EPSG:4326');
     }
 
     public function getWorkspace(): string
@@ -100,6 +103,7 @@ class GeoServerService
             );
         }
 
+        $this->configureCoverage($storeName, $layerName, $options);
         $this->publishLayer($layerName, $options);
 
         $coverage = $this->getCoverage($storeName, $layerName);
@@ -130,7 +134,7 @@ class GeoServerService
 
         $response = $this->http()
             ->withHeaders(['Content-Type' => 'application/json'])
-            ->put($this->buildUrl('layers/' . $qualifiedLayer), $payload);
+            ->put($this->buildUrl('layers/' . $qualifiedLayer . '.json'), $payload);
 
         if ($response->failed() && $response->status() !== 404) {
             throw new RuntimeException(
@@ -194,6 +198,58 @@ class GeoServerService
             'latLon' => $this->normaliseBoundingBox($coverageData['latLonBoundingBox'] ?? null),
             'native' => $this->normaliseBoundingBox($coverageData['nativeBoundingBox'] ?? null),
         ];
+    }
+
+    protected function configureCoverage(string $storeName, string $coverageName, array $options = []): void
+    {
+        $storeName = $this->sanitizeName($storeName);
+        $coverageName = $this->sanitizeName($coverageName);
+
+        $coveragePayload = [
+            'enabled' => $options['enabled'] ?? true,
+            'srs' => $options['srs'] ?? $this->defaultSrs,
+            'nativeCRS' => $options['native_srs'] ?? $options['srs'] ?? $this->defaultSrs,
+        ];
+
+        if (!empty($options['supported_formats'])) {
+            $coveragePayload['supportedFormats'] = array_values((array) $options['supported_formats']);
+        }
+
+        $payload = [
+            'coverage' => array_filter(
+                $coveragePayload,
+                static fn ($value) => $value !== null && $value !== ''
+            ),
+        ];
+
+        $query = [];
+        $recalculate = $options['recalculate'] ?? 'nativebbox,latlonbbox';
+        if (!empty($recalculate)) {
+            $query['recalculate'] = $recalculate;
+        }
+
+        $response = $this->http()
+            ->withHeaders(['Content-Type' => 'application/json'])
+            ->send(
+                'PUT',
+                $this->buildUrl(
+                    "workspaces/{$this->workspace}/coveragestores/{$storeName}/coverages/{$coverageName}.json"
+                ),
+                [
+                    'query' => $query,
+                    'json' => $payload,
+                ]
+            );
+
+        if ($response->failed() && $response->status() !== 404) {
+            throw new RuntimeException(
+                sprintf(
+                    'GeoServer coverage configuration failed (%s): %s',
+                    $response->status(),
+                    $response->body()
+                )
+            );
+        }
     }
 
     protected function normaliseBoundingBox($bbox): ?array
