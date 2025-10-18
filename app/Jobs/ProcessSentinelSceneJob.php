@@ -4,12 +4,13 @@ namespace App\Jobs;
 
 use Throwable;
 use App\Models\ImageryData;
-use Illuminate\Bus\Queueable;
 use App\Services\CreditService;
+use App\Services\GeoServerService;
 use App\Services\PythonService;
-use Illuminate\Support\Facades\Log;
+use Illuminate\Bus\Queueable;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Queue\SerializesModels;
 use Symfony\Component\Process\Process;
 use Illuminate\Queue\InteractsWithQueue;
@@ -179,13 +180,33 @@ class ProcessSentinelSceneJob implements ShouldQueue
 
             $outputSize = File::size($outputPath) ?: $downloadedSize;
 
-            $imagery->update([
+            $relativePath = 'storage/imagery/' . $this->outputFilename;
+            $geoserverData = null;
+
+            try {
+                $geoserverData = app(GeoServerService::class)->publishImageryLayer($imagery, $outputPath, 'source');
+            } catch (Throwable $publishException) {
+                Log::warning('ProcessSentinelSceneJob: Failed to publish Sentinel scene to GeoServer.', [
+                    'imagery_id' => $this->imageryId,
+                    'error' => $publishException->getMessage(),
+                ]);
+            }
+
+            $updatePayload = [
                 'upload_status' => 'done',
                 'format' => pathinfo($this->outputFilename, PATHINFO_EXTENSION) ?: 'tif',
                 'size' => $outputSize,
                 'original_name' => $this->displayName,
-                'path' => 'storage/imagery/' . $this->outputFilename,
-            ]);
+                'path' => $relativePath,
+            ];
+
+            if ($geoserverData) {
+                $updatePayload['geoserver_store_name'] = $geoserverData['store'];
+                $updatePayload['geoserver_layer_name'] = $geoserverData['layer'];
+                $updatePayload['geoserver_bounds'] = $geoserverData['bounds'] ?? null;
+            }
+
+            $imagery->update($updatePayload);
 
             Log::info('ProcessSentinelSceneJob completed successfully.', [
                 'imagery_id' => $this->imageryId,

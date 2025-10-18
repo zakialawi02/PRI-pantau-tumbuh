@@ -16,6 +16,7 @@ let {
     addCoordinateTransforms,
     addProjection,
     transform,
+    transformExtent,
 } = ol.proj;
 let VectorLayer = ol.layer.Vector;
 let VectorSource = ol.source.Vector;
@@ -23,6 +24,7 @@ let LayerGroup = ol.layer.Group;
 let Overlay = ol.Overlay;
 let TileWMS = ol.source.TileWMS;
 let GeoJSON = ol.format.GeoJSON;
+let WMSCapabilities = ol.format.WMSCapabilities;
 let Feature = ol.Feature;
 let { Point, Circle, LineString, Polygon } = ol.geom;
 let {
@@ -344,6 +346,670 @@ const vectorLayerEventClick = new VectorLayer({
     zIndex: 9999,
 });
 map.addLayer(vectorLayerEventClick);
+
+const geoserverLayerRegistry = new Map();
+const wmsCapabilitiesCache = new Map();
+
+function normaliseLayerOptions(options = {}) {
+    if (!options || typeof options !== "object") {
+        return {
+            id: "",
+            layer: "",
+            url: "",
+            style: "",
+        };
+    }
+
+    const layerName =
+        typeof options.layer === "string" ? options.layer.trim() : "";
+    const identifier =
+        typeof options.id === "string" && options.id.trim() !== ""
+            ? options.id.trim()
+            : layerName;
+
+    const bounds = normaliseBoundsOption(options.bounds);
+
+    const normalised = {
+        id: identifier,
+        layer: layerName,
+        url: typeof options.url === "string" ? options.url.trim() : "",
+        style: typeof options.style === "string" ? options.style : "",
+        parameters:
+            options.parameters && typeof options.parameters === "object"
+                ? { ...options.parameters }
+                : undefined,
+        opacity:
+            typeof options.opacity === "number" ? options.opacity : undefined,
+        zIndex:
+            typeof options.zIndex === "number" ? options.zIndex : undefined,
+        crossOrigin:
+            typeof options.crossOrigin === "string" && options.crossOrigin
+                ? options.crossOrigin
+                : "anonymous",
+        title:
+            typeof options.title === "string" ? options.title.trim() : "",
+        padding: Array.isArray(options.padding) ? [...options.padding] : null,
+        maxZoom:
+            typeof options.maxZoom === "number" ? options.maxZoom : undefined,
+        duration:
+            typeof options.duration === "number" ? options.duration : undefined,
+    };
+
+    if (bounds) {
+        normalised.bounds = bounds;
+    }
+
+    return normalised;
+}
+
+function createGeoserverLayer(options = {}) {
+    const normalised = normaliseLayerOptions(options);
+    const { url, layer, id } = normalised;
+
+    if (!url || !layer) {
+        return null;
+    }
+
+    const params = {
+        LAYERS: layer,
+        TILED: true,
+        STYLES: normalised.style || "",
+        FORMAT: "image/png",
+        TRANSPARENT: true,
+    };
+
+    if (normalised.parameters) {
+        Object.assign(params, normalised.parameters);
+    }
+
+    const source = new TileWMS({
+        url,
+        params,
+        transition: 200,
+        crossOrigin: normalised.crossOrigin,
+    });
+
+    const tileLayer = new TileLayer({
+        source,
+        visible: true,
+        opacity:
+            typeof normalised.opacity === "number" ? normalised.opacity : 0.7,
+    });
+
+    const layerId = id || layer;
+    tileLayer.set("id", `geoserver:${layerId}`);
+    tileLayer.setZIndex(
+        typeof normalised.zIndex === "number" ? normalised.zIndex : 400
+    );
+
+    map.addLayer(tileLayer);
+
+    const entry = {
+        id: layerId,
+        layer: tileLayer,
+        source,
+        options: {},
+        visible: true,
+        bounds: null,
+        boundsPromise: null,
+    };
+
+    mergeEntryOptions(entry, normalised);
+
+    return entry;
+}
+
+function normaliseExtent(values) {
+    if (!Array.isArray(values) || values.length !== 4) {
+        return null;
+    }
+
+    const numeric = values.map((value) => Number(value));
+    return numeric.every((value) => Number.isFinite(value)) ? numeric : null;
+}
+
+function normaliseSingleBounds(bounds, fallbackProjection) {
+    if (!bounds || typeof bounds !== "object") {
+        return null;
+    }
+
+    let extent = null;
+
+    if (Array.isArray(bounds.extent)) {
+        extent = normaliseExtent(bounds.extent);
+    } else {
+        const components = [
+            bounds.minx ?? bounds.minX,
+            bounds.miny ?? bounds.minY,
+            bounds.maxx ?? bounds.maxX,
+            bounds.maxy ?? bounds.maxY,
+        ];
+
+        if (components.some((value) => value !== undefined)) {
+            extent = normaliseExtent(components);
+        }
+    }
+
+    if (!extent) {
+        return null;
+    }
+
+    let projection = null;
+
+    if (typeof bounds.projection === "string" && bounds.projection.trim()) {
+        projection = bounds.projection.trim();
+    } else if (typeof bounds.crs === "string" && bounds.crs.trim()) {
+        projection = bounds.crs.trim();
+    } else if (typeof fallbackProjection === "string" && fallbackProjection.trim()) {
+        projection = fallbackProjection.trim();
+    }
+
+    const result = {
+        extent,
+    };
+
+    if (projection) {
+        result.projection = projection;
+    }
+
+    return result;
+}
+
+function normaliseBoundsOption(bounds) {
+    if (!bounds) {
+        return null;
+    }
+
+    if (Array.isArray(bounds)) {
+        const extent = normaliseExtent(bounds);
+        return extent ? { native: { extent } } : null;
+    }
+
+    if (typeof bounds !== "object") {
+        return null;
+    }
+
+    const result = {};
+
+    if (bounds.native || bounds.wgs84) {
+        const native = normaliseSingleBounds(bounds.native);
+        if (native) {
+            result.native = native;
+        }
+
+        const wgs84 = normaliseSingleBounds(bounds.wgs84, "EPSG:4326");
+        if (wgs84) {
+            result.wgs84 = wgs84;
+        }
+    } else {
+        const single = normaliseSingleBounds(bounds);
+        if (single) {
+            result.native = single;
+        }
+    }
+
+    return Object.keys(result).length ? result : null;
+}
+
+function cloneBounds(bounds) {
+    if (!bounds || typeof bounds !== "object") {
+        return null;
+    }
+
+    const extent = normaliseExtent(bounds.extent);
+    if (!extent) {
+        return null;
+    }
+
+    const cloned = {
+        extent,
+    };
+
+    if (typeof bounds.projection === "string" && bounds.projection.trim()) {
+        cloned.projection = bounds.projection.trim();
+    }
+
+    return cloned;
+}
+
+function pickPreferredBounds(bounds) {
+    if (!bounds) {
+        return null;
+    }
+
+    if (bounds.extent) {
+        return cloneBounds(bounds);
+    }
+
+    const native = bounds.native ? cloneBounds(bounds.native) : null;
+    const wgs84 = bounds.wgs84 ? cloneBounds(bounds.wgs84) : null;
+
+    if (native && native.projection) {
+        return native;
+    }
+
+    if (wgs84) {
+        return wgs84;
+    }
+
+    return native || null;
+}
+
+function mergeEntryOptions(entry, normalised) {
+    if (!entry || !normalised) {
+        return;
+    }
+
+    const existingOptions = entry.options || {};
+    const merged = { ...existingOptions, ...normalised };
+
+    if (normalised.bounds) {
+        merged.bounds = normalised.bounds;
+    } else if (existingOptions.bounds && !merged.bounds) {
+        merged.bounds = existingOptions.bounds;
+    }
+
+    entry.options = merged;
+
+    const preferred =
+        pickPreferredBounds(normalised.bounds) ||
+        pickPreferredBounds(merged.bounds) ||
+        null;
+
+    if (preferred) {
+        entry.bounds = preferred;
+    }
+}
+
+function findLayerByName(layers, targetName) {
+    if (!Array.isArray(layers) || !targetName) {
+        return null;
+    }
+
+    for (const layer of layers) {
+        if (!layer) {
+            continue;
+        }
+
+        if (layer.Name === targetName || layer.name === targetName) {
+            return layer;
+        }
+
+        const childLayers = layer.Layer || layer.layers;
+        const found = findLayerByName(childLayers, targetName);
+        if (found) {
+            return found;
+        }
+    }
+
+    return null;
+}
+
+function parseLayerBounds(layer) {
+    if (!layer) {
+        return null;
+    }
+
+    if (
+        Array.isArray(layer.EX_GeographicBoundingBox) &&
+        layer.EX_GeographicBoundingBox.length === 4
+    ) {
+        const extent = normaliseExtent(layer.EX_GeographicBoundingBox);
+        if (extent) {
+            return { extent, projection: "EPSG:4326" };
+        }
+    }
+
+    if (layer.LatLonBoundingBox) {
+        const bbox = layer.LatLonBoundingBox;
+        const extent = normaliseExtent([
+            bbox.minx,
+            bbox.miny,
+            bbox.maxx,
+            bbox.maxy,
+        ]);
+        if (extent) {
+            return { extent, projection: "EPSG:4326" };
+        }
+    }
+
+    if (Array.isArray(layer.BoundingBox)) {
+        for (const bbox of layer.BoundingBox) {
+            if (!bbox) {
+                continue;
+            }
+
+            const extent =
+                normaliseExtent(bbox.extent) ||
+                normaliseExtent([
+                    bbox.minx,
+                    bbox.miny,
+                    bbox.maxx,
+                    bbox.maxy,
+                ]);
+
+            if (extent) {
+                const projection = bbox.crs || bbox.CRS || "EPSG:4326";
+                return { extent, projection };
+            }
+        }
+    }
+
+    return null;
+}
+
+async function loadWmsCapabilities(url) {
+    if (!url) {
+        return null;
+    }
+
+    if (wmsCapabilitiesCache.has(url)) {
+        return wmsCapabilitiesCache.get(url);
+    }
+
+    const fetchPromise = (async () => {
+        const separator = url.includes("?") ? "&" : "?";
+        const requestUrl = `${url}${separator}service=WMS&version=1.3.0&request=GetCapabilities`;
+        const response = await fetch(requestUrl);
+
+        if (!response.ok) {
+            throw new Error(
+                `GeoServer capabilities request failed with status ${response.status}`
+            );
+        }
+
+        const text = await response.text();
+        const parser = new WMSCapabilities();
+        return parser.read(text);
+    })()
+        .then((capabilities) => {
+            wmsCapabilitiesCache.set(url, Promise.resolve(capabilities));
+            return capabilities;
+        })
+        .catch((error) => {
+            console.warn("Failed to load WMS capabilities", error);
+            wmsCapabilitiesCache.delete(url);
+            throw error;
+        });
+
+    wmsCapabilitiesCache.set(url, fetchPromise);
+    return fetchPromise;
+}
+
+async function ensureLayerBounds(entry, options = {}) {
+    if (!entry) {
+        return null;
+    }
+
+    if (entry.bounds && entry.bounds.extent) {
+        return entry.bounds;
+    }
+
+    const providedBounds =
+        pickPreferredBounds(options.bounds) ||
+        pickPreferredBounds(entry.options?.bounds);
+
+    if (providedBounds && providedBounds.extent) {
+        entry.bounds = providedBounds;
+        return entry.bounds;
+    }
+
+    if (entry.boundsPromise) {
+        return entry.boundsPromise;
+    }
+
+    const layerName = options.layer || entry.options?.layer;
+    const wmsUrl = options.url || entry.options?.url;
+
+    if (!layerName || !wmsUrl) {
+        return null;
+    }
+
+    entry.boundsPromise = (async () => {
+        try {
+            const capabilities = await loadWmsCapabilities(wmsUrl);
+            if (!capabilities) {
+                return null;
+            }
+
+            const topLayer = capabilities.Capability?.Layer;
+            if (!topLayer) {
+                return null;
+            }
+
+            const layers = Array.isArray(topLayer.Layer)
+                ? topLayer.Layer
+                : [topLayer];
+            const targetLayer = findLayerByName(layers, layerName);
+
+            if (!targetLayer) {
+                return null;
+            }
+
+            const parsed = parseLayerBounds(targetLayer);
+            if (parsed) {
+                entry.bounds = parsed;
+            }
+
+            return parsed || null;
+        } catch (error) {
+            console.warn(
+                `Failed to resolve WMS bounds for layer ${layerName}`,
+                error
+            );
+            return null;
+        } finally {
+            entry.boundsPromise = null;
+        }
+    })();
+
+    return entry.boundsPromise;
+}
+
+function toggleGeoserverLayer(options = {}) {
+    const normalised = normaliseLayerOptions(options);
+    const layerId = normalised.id || normalised.layer;
+
+    if (!layerId) {
+        return { visible: false };
+    }
+
+    const registryKey = `geoserver:${layerId}`;
+    let entry = geoserverLayerRegistry.get(registryKey);
+
+    if (!entry) {
+        entry = createGeoserverLayer(normalised);
+        if (!entry) {
+            return { visible: false };
+        }
+        geoserverLayerRegistry.set(registryKey, entry);
+        return {
+            visible: true,
+            layer: entry.layer,
+            source: entry.source,
+            options: entry.options,
+        };
+    }
+
+    mergeEntryOptions(entry, normalised);
+
+    if (entry.layer.getVisible()) {
+        entry.layer.setVisible(false);
+        entry.visible = false;
+        return {
+            visible: false,
+            layer: entry.layer,
+            source: entry.source,
+            options: entry.options,
+        };
+    }
+
+    const targetLayerName = entry.options?.layer;
+
+    if (targetLayerName && entry.source.getParams().LAYERS !== targetLayerName) {
+        entry.source.updateParams({
+            LAYERS: targetLayerName,
+            STYLES: entry.options?.style || "",
+        });
+    }
+
+    if (typeof entry.options?.opacity === "number") {
+        entry.layer.setOpacity(entry.options.opacity);
+    }
+
+    entry.layer.setVisible(true);
+    entry.layer.changed();
+    entry.visible = true;
+
+    return {
+        visible: true,
+        layer: entry.layer,
+        source: entry.source,
+        options: entry.options,
+    };
+}
+
+function showGeoserverLayer(options = {}) {
+    const normalised = normaliseLayerOptions(options);
+    const layerId = normalised.id || normalised.layer;
+
+    if (!layerId) {
+        return null;
+    }
+
+    const registryKey = `geoserver:${layerId}`;
+    let entry = geoserverLayerRegistry.get(registryKey);
+    if (!entry) {
+        entry = createGeoserverLayer(normalised);
+        if (!entry) {
+            return null;
+        }
+        geoserverLayerRegistry.set(registryKey, entry);
+    } else {
+        entry.layer.setVisible(true);
+        entry.visible = true;
+        mergeEntryOptions(entry, normalised);
+
+        if (typeof entry.options?.opacity === "number") {
+            entry.layer.setOpacity(entry.options.opacity);
+        }
+
+        if (entry.options?.layer) {
+            entry.source.updateParams({
+                LAYERS: entry.options.layer,
+                STYLES: entry.options?.style || "",
+            });
+        }
+
+        entry.layer.changed();
+    }
+
+    return entry.layer;
+}
+
+function hideGeoserverLayer(id) {
+    if (!id) {
+        return false;
+    }
+
+    const registryKey = `geoserver:${id}`;
+    const entry = geoserverLayerRegistry.get(registryKey);
+    if (!entry) {
+        return false;
+    }
+
+    entry.layer.setVisible(false);
+    entry.visible = false;
+    return true;
+}
+
+function removeGeoserverLayer(id) {
+    if (!id) {
+        return false;
+    }
+
+    const registryKey = `geoserver:${id}`;
+    const entry = geoserverLayerRegistry.get(registryKey);
+    if (!entry) {
+        return false;
+    }
+
+    map.removeLayer(entry.layer);
+    geoserverLayerRegistry.delete(registryKey);
+    return true;
+}
+
+async function zoomToGeoserverLayer(options = {}) {
+    const normalised = normaliseLayerOptions(options);
+    const layerId = normalised.id || normalised.layer;
+
+    if (!layerId) {
+        return false;
+    }
+
+    const registryKey = `geoserver:${layerId}`;
+    let entry = geoserverLayerRegistry.get(registryKey);
+
+    if (!entry) {
+        entry = createGeoserverLayer(normalised);
+        if (!entry) {
+            return false;
+        }
+        geoserverLayerRegistry.set(registryKey, entry);
+    } else {
+        mergeEntryOptions(entry, normalised);
+    }
+
+    const boundsInfo = await ensureLayerBounds(entry, normalised);
+    if (!boundsInfo || !Array.isArray(boundsInfo.extent)) {
+        return false;
+    }
+
+    const view = map.getView();
+    if (!view) {
+        return false;
+    }
+
+    let extentToFit = boundsInfo.extent;
+    const sourceProjection = boundsInfo.projection || "EPSG:4326";
+    const targetProjection = view.getProjection();
+
+    if (
+        targetProjection &&
+        targetProjection.getCode &&
+        sourceProjection &&
+        targetProjection.getCode() !== sourceProjection
+    ) {
+        try {
+            extentToFit = transformExtent(
+                boundsInfo.extent,
+                sourceProjection,
+                targetProjection.getCode()
+            );
+        } catch (error) {
+            console.warn("Failed to transform extent for zooming", error);
+        }
+    }
+
+    if (!extentToFit || !Array.isArray(extentToFit)) {
+        return false;
+    }
+
+    const size = map.getSize();
+    if (!size) {
+        return false;
+    }
+
+    view.fit(extentToFit, {
+        size,
+        duration: normalised.duration || 600,
+        padding: normalised.padding || [80, 80, 80, 80],
+        maxZoom:
+            typeof normalised.maxZoom === "number" ? normalised.maxZoom : 16,
+    });
+
+    return true;
+}
 
 /**
  * Marks a clicked position on the map.
@@ -1205,6 +1871,15 @@ document.addEventListener("DOMContentLoaded", function () {
 
 // Export functions to global scope for access from HTML
 window.map = map;
+window.AppMap = window.AppMap || {};
+window.AppMap.geoserver = Object.assign({}, window.AppMap.geoserver, {
+    toggleLayer: toggleGeoserverLayer,
+    showLayer: showGeoserverLayer,
+    hideLayer: hideGeoserverLayer,
+    removeLayer: removeGeoserverLayer,
+    zoomToLayer: zoomToGeoserverLayer,
+    listLayers: () => Array.from(geoserverLayerRegistry.keys()),
+});
 try {
     window.dispatchEvent(
         new CustomEvent("map:ready", {

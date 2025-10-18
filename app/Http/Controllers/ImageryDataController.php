@@ -17,9 +17,17 @@ use App\Mail\OrderImageryConfirmation;
 use Illuminate\Support\Facades\Storage;
 use Yajra\DataTables\Facades\DataTables;
 use Illuminate\Support\Facades\DB;
+use App\Services\GeoServerService;
 
 class ImageryDataController extends Controller
 {
+    protected GeoServerService $geoServerService;
+
+    public function __construct(GeoServerService $geoServerService)
+    {
+        $this->geoServerService = $geoServerService;
+    }
+
     public function index(Request $request)
     {
         $data = [
@@ -259,6 +267,12 @@ class ImageryDataController extends Controller
                     'size',
                     'format',
                     'path',
+                    'processed_path',
+                    'processed_at',
+                    'geoserver_store_name',
+                    'geoserver_layer_name',
+                    'processed_geoserver_store_name',
+                    'processed_geoserver_layer_name',
                     'chunk_id',
                     'chunk_total',
                     'upload_status',
@@ -266,10 +280,101 @@ class ImageryDataController extends Controller
                     'uploaded_at',
                 ]);
 
+            $workspace = config('geoserver.workspace', '');
+            $wmsUrl = rtrim(config('geoserver.wms_url', ''), '/');
+
+            $geoServerService = $this->geoServerService;
+
+            $data = $uploads->map(function (ImageryData $upload) use ($workspace, $wmsUrl, $geoServerService) {
+                $sourceLayer = null;
+                if (!empty($upload->geoserver_layer_name)) {
+                    $sourceBounds = $upload->geoserver_bounds;
+
+                    if (!$sourceBounds && $upload->geoserver_store_name) {
+                        try {
+                            $sourceBounds = $geoServerService->getCoverageBounds(
+                                $upload->geoserver_store_name,
+                                $upload->geoserver_layer_name
+                            );
+
+                            if ($sourceBounds) {
+                                $upload->forceFill(['geoserver_bounds' => $sourceBounds])->save();
+                            }
+                        } catch (\Throwable $exception) {
+                            Log::debug('ImageryDataController: Unable to resolve GeoServer bounds for source imagery.', [
+                                'imagery_id' => $upload->id,
+                                'error' => $exception->getMessage(),
+                            ]);
+                        }
+                    }
+
+                    $sourceLayer = [
+                        'store' => $upload->geoserver_store_name,
+                        'layer' => $workspace ? $workspace . ':' . $upload->geoserver_layer_name : $upload->geoserver_layer_name,
+                        'name' => $upload->geoserver_layer_name,
+                        'wms_url' => $wmsUrl,
+                        'bounds' => $sourceBounds,
+                    ];
+                }
+
+                $processedLayer = null;
+                if (!empty($upload->processed_geoserver_layer_name)) {
+                    $processedBounds = $upload->processed_geoserver_bounds;
+
+                    if (!$processedBounds && $upload->processed_geoserver_store_name) {
+                        try {
+                            $processedBounds = $geoServerService->getCoverageBounds(
+                                $upload->processed_geoserver_store_name,
+                                $upload->processed_geoserver_layer_name
+                            );
+
+                            if ($processedBounds) {
+                                $upload->forceFill(['processed_geoserver_bounds' => $processedBounds])->save();
+                            }
+                        } catch (\Throwable $exception) {
+                            Log::debug('ImageryDataController: Unable to resolve GeoServer bounds for processed imagery.', [
+                                'imagery_id' => $upload->id,
+                                'error' => $exception->getMessage(),
+                            ]);
+                        }
+                    }
+
+                    $processedLayer = [
+                        'store' => $upload->processed_geoserver_store_name,
+                        'layer' => $workspace ? $workspace . ':' . $upload->processed_geoserver_layer_name : $upload->processed_geoserver_layer_name,
+                        'name' => $upload->processed_geoserver_layer_name,
+                        'wms_url' => $wmsUrl,
+                        'bounds' => $processedBounds,
+                    ];
+                }
+
+                return [
+                    'id' => $upload->id,
+                    'original_name' => $upload->original_name,
+                    'stored_name' => $upload->stored_name,
+                    'size' => $upload->size,
+                    'format' => $upload->format,
+                    'path' => $upload->path,
+                    'processed_path' => $upload->processed_path,
+                    'processed_at' => optional($upload->processed_at)->toIso8601String(),
+                    'chunk_id' => $upload->chunk_id,
+                    'chunk_total' => $upload->chunk_total,
+                    'upload_status' => $upload->upload_status,
+                    'processing_status' => $upload->processing_status,
+                    'uploaded_at' => optional($upload->uploaded_at)->toIso8601String(),
+                    'geoserver' => [
+                        'workspace' => $workspace,
+                        'wms_url' => $wmsUrl,
+                        'source' => $sourceLayer,
+                        'processed' => $processedLayer,
+                    ],
+                ];
+            });
+
             return response()->json([
                 'success' => true,
                 'message' => 'Imagery data fetched successfully.',
-                'data' => $uploads,
+                'data' => $data,
             ]);
         } catch (\Throwable $e) {
             Log::error('ImageryDataController@listUserImagery: Failed to fetch imagery data', [
@@ -621,8 +726,8 @@ class ImageryDataController extends Controller
             }
 
             // Check if the file exists
-            $filePath = storage_path('app/public/' . str_replace('storage/', '', $imagery->path));
-            if (!File::exists($filePath)) {
+            $filePath = $this->resolveImageryAbsolutePath($imagery->path);
+            if (!$filePath || !File::exists($filePath)) {
                 Log::warning('ImageryDataController@downloadSource: Source file not found', [
                     'user_id' => Auth::id(),
                     'imagery_id' => $imagery->id,
@@ -673,8 +778,8 @@ class ImageryDataController extends Controller
             }
 
             // Check if the processed file exists
-            $filePath = storage_path('app/public/' . str_replace('storage/', '', $imagery->processed_path));
-            if (!File::exists($filePath)) {
+            $filePath = $this->resolveImageryAbsolutePath($imagery->processed_path);
+            if (!$filePath || !File::exists($filePath)) {
                 Log::warning('ImageryDataController@downloadResult: Processed file not found', [
                     'user_id' => Auth::id(),
                     'imagery_id' => $imagery->id,
@@ -859,14 +964,30 @@ class ImageryDataController extends Controller
     public function destroy(ImageryData $imagery)
     {
         try {
+            if ($imagery->geoserver_layer_name || $imagery->geoserver_store_name) {
+                $this->geoServerService->removeImageryPublication(
+                    $imagery->geoserver_layer_name,
+                    $imagery->geoserver_store_name
+                );
+            }
+
+            if ($imagery->processed_geoserver_layer_name || $imagery->processed_geoserver_store_name) {
+                $this->geoServerService->removeImageryPublication(
+                    $imagery->processed_geoserver_layer_name,
+                    $imagery->processed_geoserver_store_name
+                );
+            }
+
             // Delete the original physical file from storage
-            if (file_exists($imagery->path)) {
-                unlink($imagery->path);
+            $sourcePath = $this->resolveImageryAbsolutePath($imagery->path);
+            if ($sourcePath && File::exists($sourcePath)) {
+                File::delete($sourcePath);
             }
 
             // Delete processed imagery files if they exist
-            if (file_exists($imagery->processed_path)) {
-                unlink($imagery->processed_path);
+            $processedPath = $this->resolveImageryAbsolutePath($imagery->processed_path);
+            if ($processedPath && File::exists($processedPath)) {
+                File::delete($processedPath);
             }
 
             // Delete the database record
@@ -890,5 +1011,20 @@ class ImageryDataController extends Controller
                 'error' => $e->getMessage(),
             ], 500);
         }
+    }
+
+    private function resolveImageryAbsolutePath(?string $relativePath): ?string
+    {
+        if (empty($relativePath)) {
+            return null;
+        }
+
+        $normalized = ltrim($relativePath, '/');
+
+        if (Str::startsWith($normalized, 'storage/')) {
+            $normalized = 'public/' . Str::after($normalized, 'storage/');
+        }
+
+        return storage_path('app/' . $normalized);
     }
 }
