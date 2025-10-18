@@ -45,14 +45,10 @@ class ProcessSentinelClipJob implements ShouldQueue
 
         $publicStorage = storage_path('app/public');
         $imageryDir = $publicStorage . DIRECTORY_SEPARATOR . 'imagery';
-        $clipDir = $imageryDir . DIRECTORY_SEPARATOR . 'clipped';
-        if (!File::isDirectory($clipDir)) {
-            File::makeDirectory($clipDir, 0755, true, true);
-        }
 
         $outputFilename = basename($this->payload['output_filename'] ?? $imagery->stored_name);
-        $outputPath = $clipDir . DIRECTORY_SEPARATOR . $outputFilename;
-        $relativeOutput = 'storage/imagery/clipped/' . $outputFilename;
+        $outputPath = $imageryDir . DIRECTORY_SEPARATOR . $outputFilename;
+        $relativeOutput = 'storage/imagery/' . $outputFilename;
 
         $tilesDir = storage_path('app/tmp/sentinel_clip_' . $this->imageryId);
         if (File::isDirectory($tilesDir)) {
@@ -120,6 +116,8 @@ class ProcessSentinelClipJob implements ShouldQueue
             $overrides = [
                 'SENTINELHUB_CLIENT_ID' => env('COPERNICUS_CLIENT_ID'),
                 'SENTINELHUB_SECRET_ID' => env('COPERNICUS_CLIENT_SECRET'),
+                'SENTINEL_CLIP_DATE_TO' => $this->payload['date_to'] ?? now()->format('Y-m-d'),
+                'SENTINEL_CLIP_DATE_FROM' => $this->payload['date_from'] ?? now()->subDays(30)->format('Y-m-d'),
                 'SENTINEL_CLIP_TILE_DIR' => $tilesDir,
                 'SENTINEL_CLIP_MERGED_PATH' => $mergedPath,
                 'SENTINEL_CLIP_OUTPUT' => $outputPath,
@@ -146,7 +144,7 @@ class ProcessSentinelClipJob implements ShouldQueue
             $imagery->update([
                 'processing_status' => 'processing',
                 'path' => $relativeOutput,
-                'stored_name' => str_starts_with($imagery->stored_name, 'clipped/') ? $imagery->stored_name : 'clipped/' . $outputFilename,
+                'stored_name' => $outputFilename,
             ]);
 
             $processEnv = $pythonService->buildProcessEnvironment($overrides);

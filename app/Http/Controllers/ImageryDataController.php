@@ -327,7 +327,7 @@ class ImageryDataController extends Controller
 
             $uploadId = $validated['upload_id'];
             $chunkIndex = $validated['chunk_index'];
-            $chunkDir = storage_path("app/tmp_uploads/{$uploadId}");
+            $chunkDir = storage_path("app/tmp/uploads/{$uploadId}");
 
             if (!File::exists($chunkDir)) {
                 File::makeDirectory($chunkDir, 0777, true);
@@ -398,7 +398,7 @@ class ImageryDataController extends Controller
             $sourceType = $validated['source_type'];
             $totalChunks = (int) $validated['total_chunks'];
 
-            $chunkDir = storage_path("app/tmp_uploads/{$uploadId}");
+            $chunkDir = storage_path("app/tmp/uploads/{$uploadId}");
             if (!File::isDirectory($chunkDir)) {
                 Log::warning('ImageryDataController@mergeChunks: Chunk directory not found', [
                     'user_id' => Auth::id(),
@@ -809,7 +809,7 @@ class ImageryDataController extends Controller
                 ], 400);
             }
 
-            $chunkDir = storage_path('app/tmp_uploads/' . $imagery->chunk_id);
+            $chunkDir = storage_path('app/tmp/uploads/' . $imagery->chunk_id);
             if (!File::isDirectory($chunkDir)) {
                 Log::warning('ImageryDataController@retryMerge: Chunk directory not found', [
                     'user_id' => Auth::id(),

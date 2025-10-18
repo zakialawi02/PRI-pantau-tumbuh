@@ -1,6 +1,6 @@
 import os
 import json
-from datetime import timedelta
+from datetime import datetime, timedelta
 from dateutil import parser as dateparser
 import numpy as np
 import rasterio
@@ -45,8 +45,12 @@ if masked_tif:
     os.makedirs(os.path.dirname(os.path.abspath(masked_tif)), exist_ok=True)
 
 # ====== PARAMETER ======
-DATE_FROM = read_env("SENTINEL_CLIP_DATE_FROM", "2025-10-17")
-DATE_TO   = read_env("SENTINEL_CLIP_DATE_TO", "2025-08-31")
+today = datetime.utcnow().date()                 # hari ini (UTC)
+default_from = (today - timedelta(days=30)).isoformat()
+default_to   = today.isoformat()
+
+DATE_FROM = read_env("SENTINEL_CLIP_DATE_FROM", default_from)
+DATE_TO   = read_env("SENTINEL_CLIP_DATE_TO", default_to)
 LIMIT     = int(float(read_env("SENTINEL_CLIP_LIMIT", "100")))
 RES       = int(float(read_env("SENTINEL_CLIP_RESOLUTION", "10")))
 NODATA_VAL = float(read_env("SENTINEL_CLIP_NODATA", "0"))
@@ -167,7 +171,14 @@ if chosen is None:
     chosen = filtered[0]
 
 chosen_time = chosen["properties"]["datetime"]
-print("Scene terpilih:", chosen["id"], "waktu:", chosen_time)
+chosen_id   = chosen["id"]
+platform    = chosen["properties"].get("platform", "Unknown")
+orbit       = chosen["properties"].get("orbit", "Unknown")
+
+print("Scene terpilih:", chosen_id)
+print("  Waktu akuisisi:", chosen_time)
+print("  Platform:", platform)
+print("  Orbit:", orbit)
 
 # ====== Evalscript ======
 evalscript_all_bands = """
@@ -268,5 +279,10 @@ if tile_paths:
 
     with rasterio.open(masked_tif, "w", **out_meta) as dst:
         dst.write(out_img)
-
+        dst.update_tags(
+            SCENE_ID=chosen_id,
+            ACQUISITION_TIME=chosen_time,
+            PLATFORM=platform,
+            ORBIT=str(orbit)
+        )
     print("Merged TIFF masked disimpan:", masked_tif)

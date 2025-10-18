@@ -233,9 +233,9 @@ class SentinelProcessingController extends Controller
 
         $rawFieldName = trim($validated['field_name']);
         $displayBase = $this->sanitizeDisplayName(($rawFieldName !== '' ? $rawFieldName : 'SentinelClip') . '_' . now()->format('YmdHis'));
-        $outputFilename = $this->ensureUniqueFilename('imagery/clipped', $displayBase, 'tif');
-        $storedName = 'clipped/' . $outputFilename;
-        $originalName = ($rawFieldName !== '' ? $rawFieldName : pathinfo($outputFilename, PATHINFO_FILENAME)) . '.tif';
+        $outputFilename = $this->ensureUniqueFilename('imagery', $displayBase, 'tif');
+        $storedName =  $outputFilename;
+        $originalName = str_replace(' ', '_', ($rawFieldName !== '' ? $rawFieldName : pathinfo($outputFilename, PATHINFO_FILENAME))) . '_' . now()->format('YmdHis') . '.tif';
 
         $fieldArea = null;
         $imagery = null;
