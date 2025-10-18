@@ -209,10 +209,10 @@
                                 </div>
 
                                 <div class="flex items-center space-x-1">
-                                    <button class="view-btn hover:bg-primary/10 rounded-lg p-2 transition" data-view-variant="processed" title="Toggle processed imagery" type="button" aria-pressed="false">
+                                    <button class="view-btn hover:bg-primary/10 rounded-lg p-2 transition" data-view-variant="processed" type="button" title="Toggle processed imagery" aria-pressed="false">
                                         <i class="ri-stack-line"></i>
                                     </button>
-                                    <button class="view-btn hover:bg-foreground/10 rounded-lg p-2 transition" data-view-variant="source" title="Toggle original imagery" type="button" aria-pressed="false">
+                                    <button class="view-btn hover:bg-foreground/10 rounded-lg p-2 transition" data-view-variant="source" type="button" title="Toggle original imagery" aria-pressed="false">
                                         <i class="ri-eye-line"></i>
                                     </button>
                                 </div>
@@ -1440,14 +1440,14 @@
                             url: layerInfo.wms_url,
                             layer: layerInfo.layer,
                             title: item?.original_name || item?.stored_name || `${item.id}-${variant}`,
-                            opacity: variant === 'processed' ? 0.75 : 0.6,
+                            opacity: variant === 'processed' ? 1 : 0.9,
                             bounds: layerInfo.bounds,
                         });
 
                         const isVisible =
-                            toggleResult && typeof toggleResult === 'object'
-                                ? Boolean(toggleResult.visible)
-                                : Boolean(toggleResult);
+                            toggleResult && typeof toggleResult === 'object' ?
+                            Boolean(toggleResult.visible) :
+                            Boolean(toggleResult);
 
                         if (trigger) {
                             trigger.setAttribute('aria-pressed', String(isVisible));

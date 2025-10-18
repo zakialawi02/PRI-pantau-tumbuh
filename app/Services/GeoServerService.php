@@ -135,7 +135,7 @@ class GeoServerService
                     'enabled' => true,
                     'advertised' => true,
                     'type' => 'RASTER',
-                    'projectionPolicy' => 'FORCE_DECLARED',
+                    'projectionPolicy' => 'REPROJECT_TO_DECLARED',
                     'srs' => $this->defaultSrs,
                 ],
             ]
