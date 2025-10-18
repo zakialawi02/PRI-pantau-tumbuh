@@ -16,6 +16,7 @@ let {
     addCoordinateTransforms,
     addProjection,
     transform,
+    transformExtent,
 } = ol.proj;
 let VectorLayer = ol.layer.Vector;
 let VectorSource = ol.source.Vector;
@@ -23,6 +24,7 @@ let LayerGroup = ol.layer.Group;
 let Overlay = ol.Overlay;
 let TileWMS = ol.source.TileWMS;
 let GeoJSON = ol.format.GeoJSON;
+let WMSCapabilities = ol.format.WMSCapabilities;
 let Feature = ol.Feature;
 let { Point, Circle, LineString, Polygon } = ol.geom;
 let {
@@ -346,96 +348,355 @@ const vectorLayerEventClick = new VectorLayer({
 map.addLayer(vectorLayerEventClick);
 
 const geoserverLayerRegistry = new Map();
+const wmsCapabilitiesCache = new Map();
 
-function createGeoserverLayer(options = {}) {
+function normaliseLayerOptions(options = {}) {
     if (!options || typeof options !== "object") {
-        return null;
+        return {
+            id: "",
+            layer: "",
+            url: "",
+            style: "",
+        };
     }
 
-    const url = options.url;
-    const layerName = options.layer;
+    const layerName =
+        typeof options.layer === "string" ? options.layer.trim() : "";
+    const identifier =
+        typeof options.id === "string" && options.id.trim() !== ""
+            ? options.id.trim()
+            : layerName;
 
-    if (!url || !layerName) {
+    return {
+        id: identifier,
+        layer: layerName,
+        url: typeof options.url === "string" ? options.url.trim() : "",
+        style: typeof options.style === "string" ? options.style : "",
+        parameters:
+            options.parameters && typeof options.parameters === "object"
+                ? { ...options.parameters }
+                : undefined,
+        opacity:
+            typeof options.opacity === "number" ? options.opacity : undefined,
+        zIndex:
+            typeof options.zIndex === "number" ? options.zIndex : undefined,
+        crossOrigin:
+            typeof options.crossOrigin === "string" && options.crossOrigin
+                ? options.crossOrigin
+                : "anonymous",
+        title:
+            typeof options.title === "string" ? options.title.trim() : "",
+        padding: Array.isArray(options.padding) ? [...options.padding] : null,
+        maxZoom:
+            typeof options.maxZoom === "number" ? options.maxZoom : undefined,
+        duration:
+            typeof options.duration === "number" ? options.duration : undefined,
+    };
+}
+
+function createGeoserverLayer(options = {}) {
+    const normalised = normaliseLayerOptions(options);
+    const { url, layer, id } = normalised;
+
+    if (!url || !layer) {
         return null;
     }
 
     const params = {
-        LAYERS: layerName,
+        LAYERS: layer,
         TILED: true,
-        STYLES: options.style || "",
+        STYLES: normalised.style || "",
         FORMAT: "image/png",
         TRANSPARENT: true,
     };
 
-    if (options.parameters && typeof options.parameters === "object") {
-        Object.assign(params, options.parameters);
+    if (normalised.parameters) {
+        Object.assign(params, normalised.parameters);
     }
 
     const source = new TileWMS({
         url,
         params,
         transition: 200,
-        crossOrigin: options.crossOrigin || "anonymous",
+        crossOrigin: normalised.crossOrigin,
     });
 
     const tileLayer = new TileLayer({
         source,
         visible: true,
-        opacity: typeof options.opacity === "number" ? options.opacity : 0.7,
+        opacity:
+            typeof normalised.opacity === "number" ? normalised.opacity : 0.7,
     });
 
-    const layerId = options.id || layerName;
+    const layerId = id || layer;
     tileLayer.set("id", `geoserver:${layerId}`);
-    tileLayer.setZIndex(typeof options.zIndex === "number" ? options.zIndex : 400);
+    tileLayer.setZIndex(
+        typeof normalised.zIndex === "number" ? normalised.zIndex : 400
+    );
 
     map.addLayer(tileLayer);
 
-    return { layer: tileLayer, source };
+    return {
+        id: layerId,
+        layer: tileLayer,
+        source,
+        options: normalised,
+        visible: true,
+        bounds: null,
+        boundsPromise: null,
+    };
+}
+
+function normaliseExtent(values) {
+    if (!Array.isArray(values) || values.length !== 4) {
+        return null;
+    }
+
+    const numeric = values.map((value) => Number(value));
+    return numeric.every((value) => Number.isFinite(value)) ? numeric : null;
+}
+
+function findLayerByName(layers, targetName) {
+    if (!Array.isArray(layers) || !targetName) {
+        return null;
+    }
+
+    for (const layer of layers) {
+        if (!layer) {
+            continue;
+        }
+
+        if (layer.Name === targetName || layer.name === targetName) {
+            return layer;
+        }
+
+        const childLayers = layer.Layer || layer.layers;
+        const found = findLayerByName(childLayers, targetName);
+        if (found) {
+            return found;
+        }
+    }
+
+    return null;
+}
+
+function parseLayerBounds(layer) {
+    if (!layer) {
+        return null;
+    }
+
+    if (
+        Array.isArray(layer.EX_GeographicBoundingBox) &&
+        layer.EX_GeographicBoundingBox.length === 4
+    ) {
+        const extent = normaliseExtent(layer.EX_GeographicBoundingBox);
+        if (extent) {
+            return { extent, projection: "EPSG:4326" };
+        }
+    }
+
+    if (layer.LatLonBoundingBox) {
+        const bbox = layer.LatLonBoundingBox;
+        const extent = normaliseExtent([
+            bbox.minx,
+            bbox.miny,
+            bbox.maxx,
+            bbox.maxy,
+        ]);
+        if (extent) {
+            return { extent, projection: "EPSG:4326" };
+        }
+    }
+
+    if (Array.isArray(layer.BoundingBox)) {
+        for (const bbox of layer.BoundingBox) {
+            if (!bbox) {
+                continue;
+            }
+
+            const extent =
+                normaliseExtent(bbox.extent) ||
+                normaliseExtent([
+                    bbox.minx,
+                    bbox.miny,
+                    bbox.maxx,
+                    bbox.maxy,
+                ]);
+
+            if (extent) {
+                const projection = bbox.crs || bbox.CRS || "EPSG:4326";
+                return { extent, projection };
+            }
+        }
+    }
+
+    return null;
+}
+
+async function loadWmsCapabilities(url) {
+    if (!url) {
+        return null;
+    }
+
+    if (wmsCapabilitiesCache.has(url)) {
+        return wmsCapabilitiesCache.get(url);
+    }
+
+    const fetchPromise = (async () => {
+        const separator = url.includes("?") ? "&" : "?";
+        const requestUrl = `${url}${separator}service=WMS&version=1.3.0&request=GetCapabilities`;
+        const response = await fetch(requestUrl);
+
+        if (!response.ok) {
+            throw new Error(
+                `GeoServer capabilities request failed with status ${response.status}`
+            );
+        }
+
+        const text = await response.text();
+        const parser = new WMSCapabilities();
+        return parser.read(text);
+    })()
+        .then((capabilities) => {
+            wmsCapabilitiesCache.set(url, Promise.resolve(capabilities));
+            return capabilities;
+        })
+        .catch((error) => {
+            console.warn("Failed to load WMS capabilities", error);
+            wmsCapabilitiesCache.delete(url);
+            throw error;
+        });
+
+    wmsCapabilitiesCache.set(url, fetchPromise);
+    return fetchPromise;
+}
+
+async function ensureLayerBounds(entry, options = {}) {
+    if (!entry) {
+        return null;
+    }
+
+    if (entry.bounds && entry.bounds.extent) {
+        return entry.bounds;
+    }
+
+    if (entry.boundsPromise) {
+        return entry.boundsPromise;
+    }
+
+    const layerName = options.layer || entry.options?.layer;
+    const wmsUrl = options.url || entry.options?.url;
+
+    if (!layerName || !wmsUrl) {
+        return null;
+    }
+
+    entry.boundsPromise = (async () => {
+        try {
+            const capabilities = await loadWmsCapabilities(wmsUrl);
+            if (!capabilities) {
+                return null;
+            }
+
+            const topLayer = capabilities.Capability?.Layer;
+            if (!topLayer) {
+                return null;
+            }
+
+            const layers = Array.isArray(topLayer.Layer)
+                ? topLayer.Layer
+                : [topLayer];
+            const targetLayer = findLayerByName(layers, layerName);
+
+            if (!targetLayer) {
+                return null;
+            }
+
+            const parsed = parseLayerBounds(targetLayer);
+            if (parsed) {
+                entry.bounds = parsed;
+            }
+
+            return parsed || null;
+        } catch (error) {
+            console.warn(
+                `Failed to resolve WMS bounds for layer ${layerName}`,
+                error
+            );
+            return null;
+        } finally {
+            entry.boundsPromise = null;
+        }
+    })();
+
+    return entry.boundsPromise;
 }
 
 function toggleGeoserverLayer(options = {}) {
-    const layerId = options.id || options.layer;
+    const normalised = normaliseLayerOptions(options);
+    const layerId = normalised.id || normalised.layer;
+
     if (!layerId) {
-        return false;
+        return { visible: false };
     }
 
     const registryKey = `geoserver:${layerId}`;
     let entry = geoserverLayerRegistry.get(registryKey);
 
     if (!entry) {
-        entry = createGeoserverLayer(options);
+        entry = createGeoserverLayer(normalised);
         if (!entry) {
-            return false;
+            return { visible: false };
         }
         geoserverLayerRegistry.set(registryKey, entry);
-        return true;
+        return {
+            visible: true,
+            layer: entry.layer,
+            source: entry.source,
+            options: entry.options,
+        };
     }
 
-    const currentlyVisible = entry.layer.getVisible();
-    if (currentlyVisible) {
+    entry.options = { ...entry.options, ...normalised };
+
+    if (entry.layer.getVisible()) {
         entry.layer.setVisible(false);
-        return false;
+        entry.visible = false;
+        return {
+            visible: false,
+            layer: entry.layer,
+            source: entry.source,
+            options: entry.options,
+        };
     }
 
-    if (options.layer && entry.source.getParams().LAYERS !== options.layer) {
+    if (normalised.layer && entry.source.getParams().LAYERS !== normalised.layer) {
         entry.source.updateParams({
-            LAYERS: options.layer,
-            STYLES: options.style || "",
+            LAYERS: normalised.layer,
+            STYLES: normalised.style || "",
         });
     }
 
-    if (typeof options.opacity === "number") {
-        entry.layer.setOpacity(options.opacity);
+    if (typeof normalised.opacity === "number") {
+        entry.layer.setOpacity(normalised.opacity);
     }
 
     entry.layer.setVisible(true);
     entry.layer.changed();
+    entry.visible = true;
 
-    return true;
+    return {
+        visible: true,
+        layer: entry.layer,
+        source: entry.source,
+        options: entry.options,
+    };
 }
 
 function showGeoserverLayer(options = {}) {
-    const layerId = options.id || options.layer;
+    const normalised = normaliseLayerOptions(options);
+    const layerId = normalised.id || normalised.layer;
+
     if (!layerId) {
         return null;
     }
@@ -443,22 +704,27 @@ function showGeoserverLayer(options = {}) {
     const registryKey = `geoserver:${layerId}`;
     let entry = geoserverLayerRegistry.get(registryKey);
     if (!entry) {
-        entry = createGeoserverLayer(options);
+        entry = createGeoserverLayer(normalised);
         if (!entry) {
             return null;
         }
         geoserverLayerRegistry.set(registryKey, entry);
     } else {
         entry.layer.setVisible(true);
-        if (typeof options.opacity === "number") {
-            entry.layer.setOpacity(options.opacity);
+        entry.visible = true;
+        entry.options = { ...entry.options, ...normalised };
+
+        if (typeof normalised.opacity === "number") {
+            entry.layer.setOpacity(normalised.opacity);
         }
-        if (options.layer) {
+
+        if (normalised.layer) {
             entry.source.updateParams({
-                LAYERS: options.layer,
-                STYLES: options.style || "",
+                LAYERS: normalised.layer,
+                STYLES: normalised.style || "",
             });
         }
+
         entry.layer.changed();
     }
 
@@ -477,6 +743,7 @@ function hideGeoserverLayer(id) {
     }
 
     entry.layer.setVisible(false);
+    entry.visible = false;
     return true;
 }
 
@@ -493,6 +760,78 @@ function removeGeoserverLayer(id) {
 
     map.removeLayer(entry.layer);
     geoserverLayerRegistry.delete(registryKey);
+    return true;
+}
+
+async function zoomToGeoserverLayer(options = {}) {
+    const normalised = normaliseLayerOptions(options);
+    const layerId = normalised.id || normalised.layer;
+
+    if (!layerId) {
+        return false;
+    }
+
+    const registryKey = `geoserver:${layerId}`;
+    let entry = geoserverLayerRegistry.get(registryKey);
+
+    if (!entry) {
+        entry = createGeoserverLayer(normalised);
+        if (!entry) {
+            return false;
+        }
+        geoserverLayerRegistry.set(registryKey, entry);
+    } else {
+        entry.options = { ...entry.options, ...normalised };
+    }
+
+    const boundsInfo = await ensureLayerBounds(entry, normalised);
+    if (!boundsInfo || !Array.isArray(boundsInfo.extent)) {
+        return false;
+    }
+
+    const view = map.getView();
+    if (!view) {
+        return false;
+    }
+
+    let extentToFit = boundsInfo.extent;
+    const sourceProjection = boundsInfo.projection || "EPSG:4326";
+    const targetProjection = view.getProjection();
+
+    if (
+        targetProjection &&
+        targetProjection.getCode &&
+        sourceProjection &&
+        targetProjection.getCode() !== sourceProjection
+    ) {
+        try {
+            extentToFit = transformExtent(
+                boundsInfo.extent,
+                sourceProjection,
+                targetProjection.getCode()
+            );
+        } catch (error) {
+            console.warn("Failed to transform extent for zooming", error);
+        }
+    }
+
+    if (!extentToFit || !Array.isArray(extentToFit)) {
+        return false;
+    }
+
+    const size = map.getSize();
+    if (!size) {
+        return false;
+    }
+
+    view.fit(extentToFit, {
+        size,
+        duration: normalised.duration || 600,
+        padding: normalised.padding || [80, 80, 80, 80],
+        maxZoom:
+            typeof normalised.maxZoom === "number" ? normalised.maxZoom : 16,
+    });
+
     return true;
 }
 
@@ -1362,6 +1701,7 @@ window.AppMap.geoserver = Object.assign({}, window.AppMap.geoserver, {
     showLayer: showGeoserverLayer,
     hideLayer: hideGeoserverLayer,
     removeLayer: removeGeoserverLayer,
+    zoomToLayer: zoomToGeoserverLayer,
     listLayers: () => Array.from(geoserverLayerRegistry.keys()),
 });
 try {

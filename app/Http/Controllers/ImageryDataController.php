@@ -17,9 +17,17 @@ use App\Mail\OrderImageryConfirmation;
 use Illuminate\Support\Facades\Storage;
 use Yajra\DataTables\Facades\DataTables;
 use Illuminate\Support\Facades\DB;
+use App\Services\GeoServerService;
 
 class ImageryDataController extends Controller
 {
+    protected GeoServerService $geoServerService;
+
+    public function __construct(GeoServerService $geoServerService)
+    {
+        $this->geoServerService = $geoServerService;
+    }
+
     public function index(Request $request)
     {
         $data = [
@@ -912,6 +920,20 @@ class ImageryDataController extends Controller
     public function destroy(ImageryData $imagery)
     {
         try {
+            if ($imagery->geoserver_layer_name || $imagery->geoserver_store_name) {
+                $this->geoServerService->removeImageryPublication(
+                    $imagery->geoserver_layer_name,
+                    $imagery->geoserver_store_name
+                );
+            }
+
+            if ($imagery->processed_geoserver_layer_name || $imagery->processed_geoserver_store_name) {
+                $this->geoServerService->removeImageryPublication(
+                    $imagery->processed_geoserver_layer_name,
+                    $imagery->processed_geoserver_store_name
+                );
+            }
+
             // Delete the original physical file from storage
             $sourcePath = $imagery->path ? storage_path('app/' . ltrim($imagery->path, '/')) : null;
             if ($sourcePath && File::exists($sourcePath)) {

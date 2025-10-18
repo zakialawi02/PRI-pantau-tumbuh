@@ -157,6 +157,29 @@ class GeoServerService
         ];
     }
 
+    public function removeImageryPublication(?string $layerName, ?string $storeName): void
+    {
+        if (!$layerName && !$storeName) {
+            return;
+        }
+
+        try {
+            if ($layerName) {
+                $this->deleteLayer($layerName);
+            }
+
+            if ($storeName) {
+                $this->deleteCoverageStore($storeName);
+            }
+        } catch (\Throwable $exception) {
+            Log::warning('GeoServerService: Failed to remove imagery publication.', [
+                'layer' => $layerName,
+                'store' => $storeName,
+                'error' => $exception->getMessage(),
+            ]);
+        }
+    }
+
     protected function deleteLayer(string $layerName): void
     {
         if (!$layerName || !$this->restUrl) {

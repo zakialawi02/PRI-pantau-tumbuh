@@ -1435,7 +1435,7 @@
                             return;
                         }
 
-                        const toggled = geoserverModule.toggleLayer({
+                        const toggleResult = geoserverModule.toggleLayer({
                             id: `${item.id}:${variant}`,
                             url: layerInfo.wms_url,
                             layer: layerInfo.layer,
@@ -1443,14 +1443,31 @@
                             opacity: variant === 'processed' ? 0.75 : 0.6,
                         });
 
+                        const isVisible =
+                            toggleResult && typeof toggleResult === 'object'
+                                ? Boolean(toggleResult.visible)
+                                : Boolean(toggleResult);
+
                         if (trigger) {
-                            trigger.setAttribute('aria-pressed', String(Boolean(toggled)));
-                            trigger.classList.toggle('bg-primary/20', Boolean(toggled));
-                            trigger.classList.toggle('text-primary', Boolean(toggled));
+                            trigger.setAttribute('aria-pressed', String(isVisible));
+                            trigger.classList.toggle('bg-primary/20', isVisible);
+                            trigger.classList.toggle('text-primary', isVisible);
+                        }
+
+                        if (isVisible && typeof geoserverModule.zoomToLayer === 'function') {
+                            geoserverModule
+                                .zoomToLayer({
+                                    id: `${item.id}:${variant}`,
+                                    url: layerInfo.wms_url,
+                                    layer: layerInfo.layer,
+                                })
+                                .catch((error) => {
+                                    console.warn('Failed to zoom to GeoServer layer', error);
+                                });
                         }
 
                         const label = variant === 'processed' ? 'Processed' : 'Original';
-                        if (toggled) {
+                        if (isVisible) {
                             MyZkToast?.success?.(`${label} imagery layer enabled on the map.`);
                         } else {
                             MyZkToast?.info?.(`${label} imagery layer hidden.`);
