@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Plan;
 use App\Models\User;
 use App\Models\UserCredit;
+use App\Models\UserCreditHistory;
 use Illuminate\Support\Str;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
@@ -59,9 +60,33 @@ class UserCreditsController extends Controller
         ]);
 
         $userCredit = UserCredit::updateOrCreate(['user_id' => $user->id]);
-        $userCredit->credits = $request->current_credits;
-        $userCredit->credits += $request->credits;
+
+        $previousCredits = (float) ($userCredit->credits ?? 0);
+        $targetCredits = (float) $request->input('current_credits', $previousCredits);
+        $newBalance = $targetCredits + (float) $request->credits;
+
+        $userCredit->credits = $newBalance;
         $userCredit->save();
+
+        $difference = $newBalance - $previousCredits;
+
+        if (abs($difference) > 0) {
+            $type = $difference > 0 ? 'increase' : 'decrease';
+            UserCreditHistory::record(
+                (string) $user->id,
+                $type,
+                abs($difference),
+                $previousCredits,
+                (float) $userCredit->credits,
+                'Manual adjustment by ' . (Auth::user()->name ?? 'system'),
+                [
+                    'performed_by' => Auth::id(),
+                    'adjustment_amount' => (float) $request->credits,
+                    'submitted_current_value' => $targetCredits,
+                    'difference' => $difference,
+                ]
+            );
+        }
 
         return response()->json([
             'success' => true,
@@ -169,5 +194,38 @@ class UserCreditsController extends Controller
                 'error' => $e->getMessage()
             ], 500);
         }
+    }
+
+    public function history(Request $request)
+    {
+        $authUser = Auth::user();
+        $query = UserCreditHistory::with('user')->orderByDesc('created_at');
+
+        $isSuperAdmin = $authUser && $authUser->role === 'superadmin';
+
+        if (!$isSuperAdmin) {
+            $query->where('user_id', $authUser->id);
+        }
+
+        if ($request->ajax()) {
+            return DataTables::of($query)
+                ->addIndexColumn()
+                ->addColumn('user_name', fn($history) => optional($history->user)->name)
+                ->addColumn('user_email', fn($history) => optional($history->user)->email)
+                ->addColumn('change', function ($history) {
+                    $sign = $history->type === 'decrease' ? '-' : '+';
+                    return $sign . number_format((float) $history->amount, 2);
+                })
+                ->addColumn('type_label', fn($history) => ucfirst($history->type))
+                ->editColumn('balance_before', fn($history) => number_format((float) $history->balance_before, 2))
+                ->editColumn('balance_after', fn($history) => number_format((float) $history->balance_after, 2))
+                ->editColumn('description', fn($history) => $history->description ?? '-')
+                ->editColumn('created_at', fn($history) => $history->created_at->format('d M Y H:i'))
+                ->make(true);
+        }
+
+        return view('pages.dashboard.users.creditHistory', [
+            'isSuperAdmin' => $isSuperAdmin,
+        ]);
     }
 }

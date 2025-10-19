@@ -182,7 +182,13 @@ class PaymentController extends Controller
 
         // If payment status is changed to paid, add credits to user
         if ($payment->status === 'paid' && $payment->credit_points > 0) {
-            $this->creditService->addCreditsToUser($payment->user_id, $payment->credit_points);
+            $this->creditService->addCreditsToUser(
+                $payment->user_id,
+                $payment->credit_points,
+                'PaymentStatusUpdate',
+                'Credits from manual payment verification #' . $payment->id,
+                ['payment_id' => $payment->id]
+            );
         }
 
         return response()->json([
@@ -445,7 +451,13 @@ class PaymentController extends Controller
 
                     // If this payment was for credit purchase, add credits to user
                     if ($payment->credit_points > 0) {
-                        $this->creditService->addCreditsToUser($payment->user_id, $payment->credit_points);
+                        $this->creditService->addCreditsToUser(
+                            $payment->user_id,
+                            $payment->credit_points,
+                            'PaymentCallback',
+                            'Credits added from ' . ucfirst($gateway) . ' callback for payment #' . $payment->id,
+                            ['payment_id' => $payment->id, 'gateway' => $gateway]
+                        );
                     }
 
                     // Send payment credit confirmation email for successful payments
@@ -482,7 +494,13 @@ class PaymentController extends Controller
 
                     // If this payment was for credit purchase, add credits to user
                     if ($payment->credit_points > 0) {
-                        $this->creditService->addCreditsToUser($payment->user_id, $payment->credit_points);
+                        $this->creditService->addCreditsToUser(
+                            $payment->user_id,
+                            $payment->credit_points,
+                            'PaymentCallback',
+                            'Credits added from ' . ucfirst($gateway) . ' callback for payment #' . $payment->id,
+                            ['payment_id' => $payment->id, 'gateway' => $gateway]
+                        );
                     }
 
                     // Send payment credit confirmation email for successful payments

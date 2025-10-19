@@ -23,4 +23,9 @@ class UserCredit extends Model
     {
         return $this->belongsTo(User::class);
     }
+
+    public function histories()
+    {
+        return $this->hasMany(UserCreditHistory::class, 'user_id', 'user_id')->latest();
+    }
 }

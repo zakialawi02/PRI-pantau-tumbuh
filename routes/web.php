@@ -59,6 +59,7 @@ Route::prefix('dashboard')->name('admin.')->group(function () {
 
         // Credit Purchase
         Route::get('/purchase-credits', [UserCreditsController::class, 'purchase'])->name('purchase-credits');
+        Route::get('/credit-history', [UserCreditsController::class, 'history'])->name('credit-history');
     });
 
 

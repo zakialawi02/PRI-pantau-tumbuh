@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\User;
+use App\Models\UserCreditHistory;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -17,7 +18,7 @@ class CreditService
      * @param string $logContext Context for logging
      * @return bool True if refund was successful, false otherwise
      */
-    public function refundCreditsForFailure($imagery, ?float $creditCost = null, string $logContext = 'System'): bool
+    public function refundCreditsForFailure($imagery, ?float $creditCost = null, string $logContext = 'System', ?string $description = null, ?array $meta = null): bool
     {
         try {
             // Use default credit cost if not provided
@@ -40,8 +41,19 @@ class CreditService
             }
 
             // Refund the credits
+            $previousCredits = (float) $userCredit->credits;
             $userCredit->credits += $creditCost;
             $userCredit->save();
+
+            UserCreditHistory::record(
+                (string) $user->id,
+                'increase',
+                $creditCost,
+                $previousCredits,
+                (float) $userCredit->credits,
+                $description ?? "Refunded credits due to {$logContext}",
+                array_merge(['imagery_id' => $imagery->id ?? null, 'context' => $logContext], $meta ?? [])
+            );
 
             Log::info("💰 [{$logContext}] Refunded {$creditCost} credits to user {$user->id} for failed imagery processing: {$imagery->id}");
             return true;
@@ -59,11 +71,11 @@ class CreditService
      * @param string $logContext Context for logging
      * @return bool True if deduction was successful, false otherwise
      */
-    public function deductCreditsForProcessing(String $user, float $amount = null, string $logContext = 'System'): bool
+    public function deductCreditsForProcessing(String $user, float $amount = null, string $logContext = 'System', ?string $description = null, ?array $meta = null): bool
     {
         try {
             // Use a database transaction with lock for race condition handling
-            $result = DB::transaction(function () use ($user, $amount, $logContext) {
+            $result = DB::transaction(function () use ($user, $amount, $logContext, $description, $meta) {
                 // Find user and lock the credits row for update
                 $user = User::find($user);
                 if (!$user) {
@@ -90,8 +102,19 @@ class CreditService
                 }
 
                 // Deduct the credits
+                $previousCredits = (float) $userCredit->credits;
                 $userCredit->credits -= $amount;
                 $userCredit->save();
+
+                UserCreditHistory::record(
+                    (string) $user->id,
+                    'decrease',
+                    $amount,
+                    $previousCredits,
+                    (float) $userCredit->credits,
+                    $description ?? "Credits deducted for {$logContext}",
+                    array_merge($meta ?? [], ['context' => $logContext])
+                );
 
                 Log::info("💰 [{$logContext}] Deducted {$amount} credits from user {$user->id}. Remaining: {$userCredit->credits}");
                 return true;
@@ -129,12 +152,12 @@ class CreditService
      * @param string $logContext Context for logging
      * @return bool True if addition was successful, false otherwise
      */
-    public function addCreditsToUser(String $user, float $amount, string $logContext = 'System'): bool
+    public function addCreditsToUser(String $user, float $amount, string $logContext = 'System', ?string $description = null, ?array $meta = null): bool
     {
         try {
             $user = User::find($user);
             // Use a database transaction with lock for race condition handling
-            $result = DB::transaction(function () use ($user, $amount, $logContext) {
+            $result = DB::transaction(function () use ($user, $amount, $logContext, $description, $meta) {
                 // Lock the user's credit record for update to prevent race conditions
                 $userCredit = $user->credits()->lockForUpdate()->first();
                 if (!$userCredit) {
@@ -143,8 +166,19 @@ class CreditService
                 }
 
                 // Add the credits
+                $previousCredits = (float) $userCredit->credits;
                 $userCredit->credits += $amount;
                 $userCredit->save();
+
+                UserCreditHistory::record(
+                    (string) $user->id,
+                    'increase',
+                    $amount,
+                    $previousCredits,
+                    (float) $userCredit->credits,
+                    $description ?? "Credits added via {$logContext}",
+                    array_merge($meta ?? [], ['context' => $logContext])
+                );
 
                 Log::info("💰 [{$logContext}] Added {$amount} credits to user {$user->id}. Total: {$userCredit->credits}");
                 return true;

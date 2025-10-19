@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Throwable;
 use App\Models\FieldArea;
 use App\Models\ImageryData;
+use App\Models\UserCreditHistory;
 use Illuminate\Support\Str;
 use Illuminate\Http\Request;
 use App\Jobs\ProcessImageryJob;
@@ -493,6 +494,7 @@ class ImageryDataController extends Controller
                         throw new \Exception('Insufficient credit points.');
                     }
 
+                    $previousCredits = (float) $userCredit->credits;
                     $userCredit->credits -= $requiredCredits;
                     $userCredit->save();
 
@@ -510,6 +512,20 @@ class ImageryDataController extends Controller
                         'processing_status' => $processingStatus,
                         'uploaded_at' => now(),
                     ]);
+
+                    UserCreditHistory::record(
+                        (string) $user->id,
+                        'decrease',
+                        $requiredCredits,
+                        $previousCredits,
+                        (float) $userCredit->credits,
+                        'Imagery upload processing for ' . $filename,
+                        [
+                            'imagery_id' => $imagery->id,
+                            'chunk_id' => $uploadId,
+                            'source_type' => $sourceType,
+                        ]
+                    );
 
                     $currentCredits = (float) $userCredit->credits;
                 });
@@ -720,6 +736,7 @@ class ImageryDataController extends Controller
                 }
 
                 // Deduct credits
+                $previousCredits = (float) $lockedUserCredit->credits;
                 $lockedUserCredit->credits -= $requiredCredits;
                 $lockedUserCredit->save();
 
@@ -728,6 +745,19 @@ class ImageryDataController extends Controller
                     'processing_status' => 'waiting',
                     'scheduled_deletion_at' => now()->addDays(7)
                 ]);
+
+                UserCreditHistory::record(
+                    (string) $user->id,
+                    'decrease',
+                    $requiredCredits,
+                    $previousCredits,
+                    (float) $lockedUserCredit->credits,
+                    'Retry processing for imagery #' . $imagery->id,
+                    [
+                        'imagery_id' => $imagery->id,
+                        'action' => 'retry_processing'
+                    ]
+                );
 
                 Log::info("Retrying processing for imagery {$imagery->id}. Credits deducted: {$requiredCredits}");
 
@@ -945,7 +975,16 @@ class ImageryDataController extends Controller
             ]);
 
             if ($requiredCredits > 0) {
-                $deductedCredits = $this->creditService->deductCreditsForProcessing($user->id, $requiredCredits);
+                $deductedCredits = $this->creditService->deductCreditsForProcessing(
+                    $user->id,
+                    $requiredCredits,
+                    'SentinelScene',
+                    'Sentinel-2 scene processing for imagery #' . $imagery->id,
+                    [
+                        'imagery_id' => $imagery->id,
+                        'download_url' => $validated['download_url'] ?? null,
+                    ]
+                );
 
                 if (!$deductedCredits) {
                     $currentCredits = $this->creditService->getRemainingCredits($user->id);
@@ -1005,7 +1044,16 @@ class ImageryDataController extends Controller
             }
 
             if ($deductedCredits && $requiredCredits > 0) {
-                $this->creditService->addCreditsToUser($user->id, $requiredCredits, 'ImageryDataController');
+                $this->creditService->addCreditsToUser(
+                    $user->id,
+                    $requiredCredits,
+                    'ImageryProcessingRefund',
+                    'Refund for failed Sentinel-2 processing queue',
+                    [
+                        'imagery_id' => $imagery->id ?? null,
+                        'reason' => 'queue_failed'
+                    ]
+                );
             }
 
             return response()->json([
@@ -1129,7 +1177,17 @@ class ImageryDataController extends Controller
             ]);
 
             if ($requiredCredits > 0) {
-                $deductedCredits = $this->creditService->deductCreditsForProcessing($user->id, $requiredCredits, 'SentinelClip');
+                $deductedCredits = $this->creditService->deductCreditsForProcessing(
+                    $user->id,
+                    $requiredCredits,
+                    'SentinelClip',
+                    'Sentinel-2 clip processing for imagery #' . $imagery->id,
+                    [
+                        'imagery_id' => $imagery->id,
+                        'field_area_id' => $fieldArea->id,
+                        'area_hectares' => $areaHa,
+                    ]
+                );
 
                 if (!$deductedCredits) {
                     $currentCredits = $this->creditService->getRemainingCredits($user->id);
@@ -1187,7 +1245,16 @@ class ImageryDataController extends Controller
             }
 
             if ($deductedCredits && $requiredCredits > 0) {
-                $this->creditService->addCreditsToUser($user->id, $requiredCredits, 'ImageryDataController');
+                $this->creditService->addCreditsToUser(
+                    $user->id,
+                    $requiredCredits,
+                    'ImageryProcessingRefund',
+                    'Refund for failed Sentinel-2 clip queue',
+                    [
+                        'imagery_id' => $imagery->id ?? null,
+                        'reason' => 'clip_queue_failed'
+                    ]
+                );
             }
 
             return response()->json([
