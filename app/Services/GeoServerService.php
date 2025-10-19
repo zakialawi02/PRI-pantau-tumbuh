@@ -15,6 +15,9 @@ class GeoServerService
     protected string $workspace;
     protected string $wmsUrl;
     protected string $defaultSrs;
+    protected string $externalFileMode;
+    protected ?string $externalFilePrefix;
+    protected ?string $externalFileBasePath;
 
     public function __construct()
     {
@@ -33,6 +36,13 @@ class GeoServerService
         } else {
             $this->wmsUrl = '';
         }
+
+        $this->externalFileMode = $config['external_file_mode'] ?? 'absolute';
+        $this->externalFilePrefix = $config['external_file_prefix'] ?? null;
+        $basePath = $config['external_file_base_path'] ?? null;
+        $this->externalFileBasePath = $basePath !== null && $basePath !== ''
+            ? $basePath
+            : storage_path('app/public');
     }
 
     public function getWorkspace(): string
@@ -87,7 +97,7 @@ class GeoServerService
 
         $response = $this->client()
             ->withHeaders(['Content-Type' => 'text/plain'])
-            ->send('PUT', $endpoint . '?' . $query, ['body' => 'file:' . $filePath]);
+            ->send('PUT', $endpoint . '?' . $query, ['body' => $this->buildExternalGeoTiffReference($filePath)]);
 
         if ($response->failed()) {
             Log::error('GeoServerService: Failed to publish GeoTIFF to GeoServer.', [
@@ -190,6 +200,79 @@ class GeoServerService
         }
 
         return $this->fetchCoverageBounds($storeName, $layerName);
+    }
+
+    protected function buildExternalGeoTiffReference(string $filePath): string
+    {
+        $location = $this->resolveExternalFileLocation($filePath);
+
+        if (!Str::startsWith($location, 'file:')) {
+            $location = 'file:' . $location;
+        }
+
+        return $location;
+    }
+
+    protected function resolveExternalFileLocation(string $filePath): string
+    {
+        $normalisedPath = $this->normalisePath($filePath);
+
+        if ($this->externalFileMode === 'relative') {
+            $relative = $this->makeRelativePath($normalisedPath, $this->externalFileBasePath);
+
+            if ($relative !== null) {
+                return $this->joinRelativePath($this->externalFilePrefix, $relative);
+            }
+        }
+
+        return $normalisedPath;
+    }
+
+    protected function makeRelativePath(string $path, ?string $basePath): ?string
+    {
+        if ($basePath === null || $basePath === '') {
+            return null;
+        }
+
+        $normalisedBase = $this->normalisePath($basePath);
+
+        if (!Str::endsWith($normalisedBase, '/')) {
+            $normalisedBase .= '/';
+        }
+
+        if (Str::startsWith($path, $normalisedBase)) {
+            return substr($path, strlen($normalisedBase));
+        }
+
+        return null;
+    }
+
+    protected function joinRelativePath(?string $prefix, string $relativePath): string
+    {
+        $sanitisedRelative = ltrim(str_replace('\\', '/', $relativePath), '/');
+
+        if ($prefix === null || $prefix === '') {
+            return $sanitisedRelative;
+        }
+
+        $sanitisedPrefix = rtrim(str_replace('\\', '/', $prefix), '/');
+
+        if ($sanitisedPrefix === '') {
+            return $sanitisedRelative;
+        }
+
+        return $sanitisedPrefix . '/' . $sanitisedRelative;
+    }
+
+    protected function normalisePath(string $path): string
+    {
+        $resolved = realpath($path);
+
+        if ($resolved !== false) {
+            $path = $resolved;
+        }
+
+        return str_replace('\\', '/', $path);
     }
 
     protected function deleteLayer(string $layerName): void
