@@ -87,7 +87,7 @@ class GeoServerService
 
         $response = $this->client()
             ->withHeaders(['Content-Type' => 'text/plain'])
-            ->send('PUT', $endpoint . '?' . $query, ['body' => 'file:' . $filePath]);
+            ->send('PUT', $endpoint . '?' . $query, ['body' => $this->buildGeoServerFileReference($filePath)]);
 
         if ($response->failed()) {
             Log::error('GeoServerService: Failed to publish GeoTIFF to GeoServer.', [
@@ -316,5 +316,49 @@ class GeoServerService
         $filtered = filter_var($value, FILTER_SANITIZE_NUMBER_FLOAT, FILTER_FLAG_ALLOW_FRACTION | FILTER_FLAG_ALLOW_SCIENTIFIC);
 
         return is_numeric($filtered) ? (float) $filtered : null;
+    }
+
+    protected function buildGeoServerFileReference(string $filePath): string
+    {
+        $resolvedPath = realpath($filePath) ?: $filePath;
+        $resolvedPath = $this->normaliseSystemPath($resolvedPath);
+
+        if (PHP_OS_FAMILY !== 'Windows') {
+            $storagePublicPath = $this->normaliseSystemPath(storage_path('app/public'));
+            if ($storagePublicPath && Str::startsWith($resolvedPath, $storagePublicPath)) {
+                $relativePath = ltrim(substr($resolvedPath, strlen($storagePublicPath)), '/');
+                return 'file:' . $this->ensureLeadingDots('../public/storage/' . $relativePath);
+            }
+
+            $publicPath = $this->normaliseSystemPath(public_path());
+            if ($publicPath && Str::startsWith($resolvedPath, $publicPath)) {
+                $relativePath = ltrim(substr($resolvedPath, strlen($publicPath)), '/');
+                return 'file:' . $this->ensureLeadingDots('../public/' . $relativePath);
+            }
+
+            return 'file:' . '/' . ltrim($resolvedPath, '/');
+        }
+
+        return 'file:' . $resolvedPath;
+    }
+
+    protected function normaliseSystemPath(?string $path): ?string
+    {
+        if (!$path) {
+            return null;
+        }
+
+        return str_replace('\\', '/', $path);
+    }
+
+    protected function ensureLeadingDots(string $path): string
+    {
+        $normalised = str_replace('\\', '/', $path);
+
+        if (Str::startsWith($normalised, '../')) {
+            return $normalised;
+        }
+
+        return '../' . ltrim($normalised, './');
     }
 }
