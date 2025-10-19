@@ -2,10 +2,11 @@
 
 namespace App\Services;
 
+use GuzzleHttp\Psr7\Utils;
 use App\Models\ImageryData;
-use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Http;
 
 class GeoServerService
 {
@@ -74,24 +75,21 @@ class GeoServerService
         }
 
         $endpoint = sprintf(
-            '%s/workspaces/%s/coveragestores/%s/file.geotiff',
+            '%s/workspaces/%s/coveragestores/%s/external.geotiff',
             $this->restUrl,
             $this->workspace,
             $storeName
         );
 
         $query = http_build_query([
-            'configure' => 'first',
+            'configure' => 'all',
             'coverageName' => $layerName,
         ]);
 
         $response = $this->client()
-            ->withHeaders([
-                'Accept' => 'application/json',
-                'Content-Type' => 'image/tiff',
-            ])
-            ->withBody(file_get_contents($filePath), 'image/tiff')
-            ->put($endpoint . '?' . $query);
+            ->withHeaders(['Content-Type' => 'text/plain'])
+            ->send('PUT', $endpoint . '?' . $query, ['body' => $filePath]);
+
 
         if ($response->failed()) {
             Log::error('GeoServerService: Failed to publish GeoTIFF to GeoServer.', [
