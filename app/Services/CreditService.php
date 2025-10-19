@@ -66,63 +66,69 @@ class CreditService
     /**
      * Deduct credits from user for imagery processing
      *
-     * @param string $user The user to deduct credits from
+     * @param \App\Models\User|string|int $user The user or user identifier to deduct credits from
      * @param float $amount The amount of credits to deduct
      * @param string $logContext Context for logging
      * @return bool True if deduction was successful, false otherwise
      */
-    public function deductCreditsForProcessing(String $user, float $amount = null, string $logContext = 'System', ?string $description = null, ?array $meta = null): bool
+    public function deductCreditsForProcessing($user, float $amount = null, string $logContext = 'System', ?string $description = null, ?array $meta = null): bool
     {
         try {
+            $userId = $user instanceof User ? $user->getKey() : $user;
+            if (empty($userId)) {
+                Log::error("❌ [{$logContext}] Missing user identifier for credit deduction.");
+                return false;
+            }
+
+            $deductionAmount = $amount ?? config('app-constants.imagery_processing_cost', 10);
+
             // Use a database transaction with lock for race condition handling
-            $result = DB::transaction(function () use ($user, $amount, $logContext, $description, $meta) {
+            $result = DB::transaction(function () use ($userId, $deductionAmount, $logContext, $description, $meta) {
                 // Find user and lock the credits row for update
-                $user = User::find($user);
-                if (!$user) {
-                    Log::error("❌ [{$logContext}] User not found: {$user}");
+                $creditUser = User::find($userId);
+                if (!$creditUser) {
+                    Log::error("❌ [{$logContext}] User not found: {$userId}");
                     return false;
                 }
 
-                // Get credit cost from config if amount not provided
-                if ($amount === null) {
-                    $amount = config('app-constants.imagery_processing_cost', 10);
-                }
-
                 // Lock the user's credit record for update to prevent race conditions
-                $userCredit = $user->credits()->lockForUpdate()->first();
+                $userCredit = $creditUser->credits()->lockForUpdate()->first();
                 if (!$userCredit) {
-                    Log::error("❌ [{$logContext}] User credit record not found for user: {$user->id}");
+                    Log::error("❌ [{$logContext}] User credit record not found for user: {$creditUser->id}");
                     return false;
                 }
 
                 // Check if user has enough credits
-                if ($userCredit->credits < $amount) {
-                    Log::error("❌ [{$logContext}] Insufficient credits for user {$user->id}. Required: {$amount}, Available: {$userCredit->credits}");
+                if ($userCredit->credits < $deductionAmount) {
+                    Log::error("❌ [{$logContext}] Insufficient credits for user {$creditUser->id}. Required: {$deductionAmount}, Available: {$userCredit->credits}");
                     return false;
                 }
 
                 // Deduct the credits
                 $previousCredits = (float) $userCredit->credits;
-                $userCredit->credits -= $amount;
+                $userCredit->credits -= $deductionAmount;
                 $userCredit->save();
 
                 UserCreditHistory::record(
-                    (string) $user->id,
+                    (string) $creditUser->id,
                     'decrease',
-                    $amount,
+                    $deductionAmount,
                     $previousCredits,
                     (float) $userCredit->credits,
                     $description ?? "Credits deducted for {$logContext}",
                     array_merge($meta ?? [], ['context' => $logContext])
                 );
 
-                Log::info("💰 [{$logContext}] Deducted {$amount} credits from user {$user->id}. Remaining: {$userCredit->credits}");
+                Log::info("💰 [{$logContext}] Deducted {$deductionAmount} credits from user {$creditUser->id}. Remaining: {$userCredit->credits}");
                 return true;
             }, 3); // Retry up to 3 times in case of deadlock
 
             return $result;
-        } catch (\Exception $e) {
-            Log::error("❌ [{$logContext}] Failed to deduct credits for user {$user->id}: " . $e->getMessage());
+        } catch (\Throwable $e) {
+            $userReference = $user instanceof User ? $user->getKey() : $user;
+            Log::error("❌ [{$logContext}] Failed to deduct credits for user {$userReference}: " . $e->getMessage(), [
+                'exception' => $e,
+            ]);
             return false;
         }
     }
