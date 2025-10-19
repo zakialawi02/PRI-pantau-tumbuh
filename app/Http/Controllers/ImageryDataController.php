@@ -498,6 +498,21 @@ class ImageryDataController extends Controller
                     $userCredit->credits = $balanceBefore - $requiredCredits;
                     $userCredit->save();
 
+                    $imagery = ImageryData::create([
+                        'user_id' => $user->id,
+                        'source_type' => $sourceType,
+                        'original_name' => $filename,
+                        'stored_name' => $storedName,
+                        'size' => $calculatedSize,
+                        'format' => $ext,
+                        'path' => "storage/imagery/{$storedName}",
+                        'chunk_id' => $uploadId,
+                        'chunk_total' => $totalChunks,
+                        'upload_status' => 'merging',
+                        'processing_status' => $processingStatus,
+                        'uploaded_at' => now(),
+                    ]);
+
                     $this->creditService->logHistory(
                         $user,
                         'debit',
@@ -513,23 +528,8 @@ class ImageryDataController extends Controller
                         ],
                         Auth::id(),
                         'imagery_upload',
-                        (string) $uploadId
+                        (string) $imagery->id
                     );
-
-                    $imagery = ImageryData::create([
-                        'user_id' => $user->id,
-                        'source_type' => $sourceType,
-                        'original_name' => $filename,
-                        'stored_name' => $storedName,
-                        'size' => $calculatedSize,
-                        'format' => $ext,
-                        'path' => "storage/imagery/{$storedName}",
-                        'chunk_id' => $uploadId,
-                        'chunk_total' => $totalChunks,
-                        'upload_status' => 'merging',
-                        'processing_status' => $processingStatus,
-                        'uploaded_at' => now(),
-                    ]);
 
                     $currentCredits = (float) $userCredit->credits;
                 });
