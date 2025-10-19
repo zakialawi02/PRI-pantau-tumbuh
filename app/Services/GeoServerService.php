@@ -15,6 +15,9 @@ class GeoServerService
     protected string $workspace;
     protected string $wmsUrl;
     protected string $defaultSrs;
+    protected string $filePathMode;
+    protected string $filePathPrefix;
+    protected string $fileRelativeBase;
 
     public function __construct()
     {
@@ -24,6 +27,9 @@ class GeoServerService
         $this->password = $config['password'] ?? '';
         $this->workspace = $config['workspace'] ?? 'default';
         $this->defaultSrs = $config['default_srs'] ?? 'EPSG:4326';
+        $this->filePathMode = $config['file_path_mode'] ?? 'absolute';
+        $this->filePathPrefix = $config['file_path_prefix'] ?? 'file:';
+        $this->fileRelativeBase = $config['file_relative_base'] ?? '../public/storage';
 
         $configuredWms = $config['wms_url'] ?? '';
         if ($configuredWms) {
@@ -85,9 +91,11 @@ class GeoServerService
             'coverageName' => $layerName,
         ]);
 
+        $externalReference = $this->buildExternalFileReference($filePath);
+
         $response = $this->client()
             ->withHeaders(['Content-Type' => 'text/plain'])
-            ->send('PUT', $endpoint . '?' . $query, ['body' => 'file:' . $filePath]);
+            ->send('PUT', $endpoint . '?' . $query, ['body' => $externalReference]);
 
         if ($response->failed()) {
             Log::error('GeoServerService: Failed to publish GeoTIFF to GeoServer.', [
@@ -201,6 +209,31 @@ class GeoServerService
         $qualified = $this->workspace . ':' . $layerName;
         $url = sprintf('%s/layers/%s?recurse=true', $this->restUrl, $qualified);
         $this->client()->delete($url);
+    }
+
+    protected function buildExternalFileReference(string $filePath): string
+    {
+        $normalised = str_replace('\\', '/', $filePath);
+
+        if ($this->filePathMode === 'relative_public_storage') {
+            $storagePublic = str_replace('\\', '/', storage_path('app/public'));
+            $storagePublic = rtrim($storagePublic, '/');
+
+            if (Str::startsWith($normalised, $storagePublic)) {
+                $relative = ltrim(Str::after($normalised, $storagePublic), '/');
+                $base = str_replace('\\', '/', $this->fileRelativeBase);
+                $base = rtrim($base, '/');
+
+                $normalised = $base === '' ? $relative : $base . '/' . $relative;
+            }
+        }
+
+        $prefix = $this->filePathPrefix;
+        if ($prefix !== '' && !Str::endsWith($prefix, ':')) {
+            $prefix .= ':';
+        }
+
+        return $prefix . $normalised;
     }
 
     protected function deleteCoverageStore(string $storeName): void
