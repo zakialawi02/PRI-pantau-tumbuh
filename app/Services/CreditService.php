@@ -88,7 +88,7 @@ class CreditService
         array $meta = [],
         ?string $referenceType = null,
         ?string $referenceId = null,
-        ?int $performedBy = null
+        ?string $performedBy = null
     ): bool
     {
         try {
@@ -183,7 +183,7 @@ class CreditService
         array $meta = [],
         ?string $referenceType = null,
         ?string $referenceId = null,
-        ?int $performedBy = null
+        ?string $performedBy = null
     ): bool
     {
         try {
@@ -240,7 +240,7 @@ class CreditService
         float $balanceAfter,
         ?string $description = null,
         array $meta = [],
-        ?int $performedBy = null,
+        ?string $performedBy = null,
         ?string $referenceType = null,
         ?string $referenceId = null
     ): void {
@@ -248,9 +248,11 @@ class CreditService
             return;
         }
 
+        $actorId = $performedBy ?? Auth::id();
+
         UserCreditHistory::create([
             'user_id' => $user->id,
-            'performed_by' => $performedBy ?? Auth::id(),
+            'performed_by' => $actorId ? (string) $actorId : null,
             'amount' => $amount,
             'balance_before' => $balanceBefore,
             'balance_after' => $balanceAfter,

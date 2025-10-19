@@ -23,7 +23,6 @@ Route::prefix('dashboard')->name('admin.')->group(function () {
         Route::get('user-credits', [UserCreditsController::class, 'index'])->name('user-credits.index');
         Route::get('user-credits/{user}/add-credits', [UserCreditsController::class, 'showAddCreditsForm'])->name('user-credits.showAddCreditsForm');
         Route::post('user-credits/{user}/add-credits', [UserCreditsController::class, 'addCredits'])->name('user-credits.addCredits');
-        Route::get('credit-history/all', [UserCreditsController::class, 'adminHistory'])->name('credit-history.all');
     });
 
     Route::middleware(['auth', 'verified', 'role:superadmin,admin'])->group(function () {

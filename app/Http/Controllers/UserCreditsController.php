@@ -30,8 +30,61 @@ class UserCreditsController extends Controller
     public function history(Request $request)
     {
         $user = $request->user();
+        $isSuperAdmin = $user && $user->role === 'superadmin';
 
         if ($request->ajax()) {
+            if ($isSuperAdmin) {
+                $histories = UserCreditHistory::with(['user', 'performedBy'])
+                    ->orderByDesc('created_at');
+
+                return DataTables::of($histories)
+                    ->addIndexColumn()
+                    ->addColumn('user_name', function (UserCreditHistory $history) {
+                        return optional($history->user)->name ?? '-';
+                    })
+                    ->addColumn('user_email', function (UserCreditHistory $history) {
+                        return optional($history->user)->email ?? '-';
+                    })
+                    ->addColumn('performed_by_name', function (UserCreditHistory $history) {
+                        return optional($history->performedBy)->name ?? __('System');
+                    })
+                    ->addColumn('type_badge', function (UserCreditHistory $history) {
+                        $label = ucfirst($history->type);
+                        $classes = $history->type === 'credit'
+                            ? 'bg-success/10 text-success border border-success/20'
+                            : 'bg-error/10 text-error border border-error/20';
+
+                        return sprintf('<span class="%s inline-flex items-center rounded-full px-2 py-1 text-xs font-semibold">%s</span>', $classes, e($label));
+                    })
+                    ->editColumn('amount', function (UserCreditHistory $history) {
+                        return Number::format($history->amount, 2, locale: app()->getLocale());
+                    })
+                    ->editColumn('balance_before', function (UserCreditHistory $history) {
+                        return Number::format($history->balance_before, 2, locale: app()->getLocale());
+                    })
+                    ->editColumn('balance_after', function (UserCreditHistory $history) {
+                        return Number::format($history->balance_after, 2, locale: app()->getLocale());
+                    })
+                    ->editColumn('created_at', function (UserCreditHistory $history) {
+                        return $history->created_at?->isoFormat('MMM D, YYYY HH:mm');
+                    })
+                    ->addColumn('reference', function (UserCreditHistory $history) {
+                        if ($history->reference_type) {
+                            $type = ucfirst(str_replace('_', ' ', $history->reference_type));
+                            $id = $history->reference_id ?? '-';
+
+                            return sprintf('%s #%s', e($type), e($id));
+                        }
+
+                        return '-';
+                    })
+                    ->editColumn('description', function (UserCreditHistory $history) {
+                        return $history->description ?: '-';
+                    })
+                    ->rawColumns(['type_badge'])
+                    ->make(true);
+            }
+
             $histories = UserCreditHistory::where('user_id', $user->id)
                 ->orderByDesc('created_at');
 
@@ -74,64 +127,7 @@ class UserCreditsController extends Controller
                 ->make(true);
         }
 
-        return view('pages.dashboard.user.credit-history');
-    }
-
-    public function adminHistory(Request $request)
-    {
-        if ($request->ajax()) {
-            $histories = UserCreditHistory::with(['user', 'performedBy'])
-                ->orderByDesc('created_at');
-
-            return DataTables::of($histories)
-                ->addIndexColumn()
-                ->addColumn('user_name', function (UserCreditHistory $history) {
-                    return optional($history->user)->name ?? '-';
-                })
-                ->addColumn('user_email', function (UserCreditHistory $history) {
-                    return optional($history->user)->email ?? '-';
-                })
-                ->addColumn('performed_by_name', function (UserCreditHistory $history) {
-                    return optional($history->performedBy)->name ?? __('System');
-                })
-                ->addColumn('type_badge', function (UserCreditHistory $history) {
-                    $label = ucfirst($history->type);
-                    $classes = $history->type === 'credit'
-                        ? 'bg-success/10 text-success border border-success/20'
-                        : 'bg-error/10 text-error border border-error/20';
-
-                    return sprintf('<span class="%s inline-flex items-center rounded-full px-2 py-1 text-xs font-semibold">%s</span>', $classes, e($label));
-                })
-                ->editColumn('amount', function (UserCreditHistory $history) {
-                    return Number::format($history->amount, 2, locale: app()->getLocale());
-                })
-                ->editColumn('balance_before', function (UserCreditHistory $history) {
-                    return Number::format($history->balance_before, 2, locale: app()->getLocale());
-                })
-                ->editColumn('balance_after', function (UserCreditHistory $history) {
-                    return Number::format($history->balance_after, 2, locale: app()->getLocale());
-                })
-                ->editColumn('created_at', function (UserCreditHistory $history) {
-                    return $history->created_at?->isoFormat('MMM D, YYYY HH:mm');
-                })
-                ->addColumn('reference', function (UserCreditHistory $history) {
-                    if ($history->reference_type) {
-                        $type = ucfirst(str_replace('_', ' ', $history->reference_type));
-                        $id = $history->reference_id ?? '-';
-
-                        return sprintf('%s #%s', e($type), e($id));
-                    }
-
-                    return '-';
-                })
-                ->editColumn('description', function (UserCreditHistory $history) {
-                    return $history->description ?: '-';
-                })
-                ->rawColumns(['type_badge'])
-                ->make(true);
-        }
-
-        return view('pages.dashboard.users.creditHistory');
+        return view($isSuperAdmin ? 'pages.dashboard.users.creditHistory' : 'pages.dashboard.user.credit-history');
     }
 
     /**

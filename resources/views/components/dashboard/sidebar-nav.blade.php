@@ -39,7 +39,6 @@
         <!-- Superadmin Only Section -->
         @if ($isSuperadmin)
             <x-dashboard.nav-item href="admin.user-credits.index" icon="ri-copyleft-line" text="{{ __('User Credits') }}" />
-            <x-dashboard.nav-item href="admin.credit-history.all" icon="ri-time-line" text="{{ __('All Credit History') }}" />
             <x-dashboard.nav-item href="admin.users.index" icon="ri-user-line" text="{{ __('User') }}" />
             <x-dashboard.nav-item href="docs" icon="ri-file-list-3-line" text="{{ __('Route Docs') }}" target="_blank" />
 
