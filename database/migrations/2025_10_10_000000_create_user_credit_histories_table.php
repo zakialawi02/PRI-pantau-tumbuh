@@ -13,8 +13,8 @@ return new class extends Migration
     {
         Schema::create('user_credit_histories', function (Blueprint $table) {
             $table->ulid('id')->primary();
-            $table->foreignUlid('user_id')->constrained()->cascadeOnDelete();
-            $table->foreignUlid('performed_by')->nullable()->references('id')->on('users')->nullOnDelete();
+            $table->foreignUuid('user_id')->constrained()->cascadeOnDelete();
+            $table->foreignUuid('performed_by')->nullable()->references('id')->on('users')->nullOnDelete();
             $table->decimal('amount', 12, 2);
             $table->decimal('balance_before', 12, 2);
             $table->decimal('balance_after', 12, 2);
