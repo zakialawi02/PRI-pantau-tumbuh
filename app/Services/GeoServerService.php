@@ -85,9 +85,20 @@ class GeoServerService
             'coverageName' => $layerName,
         ]);
 
+        $externalReference = $this->prepareExternalFileReference($filePath);
+
+        if ($externalReference === null) {
+            Log::warning('GeoServerService: Unable to resolve file reference for GeoServer publication.', [
+                'imagery_id' => $imagery->id,
+                'path' => $filePath,
+            ]);
+
+            return null;
+        }
+
         $response = $this->client()
             ->withHeaders(['Content-Type' => 'text/plain'])
-            ->send('PUT', $endpoint . '?' . $query, ['body' => 'file:' . $filePath]);
+            ->send('PUT', $endpoint . '?' . $query, ['body' => $externalReference]);
 
         if ($response->failed()) {
             Log::error('GeoServerService: Failed to publish GeoTIFF to GeoServer.', [
@@ -316,5 +327,80 @@ class GeoServerService
         $filtered = filter_var($value, FILTER_SANITIZE_NUMBER_FLOAT, FILTER_FLAG_ALLOW_FRACTION | FILTER_FLAG_ALLOW_SCIENTIFIC);
 
         return is_numeric($filtered) ? (float) $filtered : null;
+    }
+
+    protected function prepareExternalFileReference(string $filePath): ?string
+    {
+        $candidates = [];
+
+        $resolved = realpath($filePath) ?: $filePath;
+        $candidates[] = $resolved;
+
+        if ($publicCandidate = $this->resolvePublicStorageCandidate($resolved)) {
+            $candidates[] = $publicCandidate;
+        }
+
+        foreach ($candidates as $candidate) {
+            $candidatePath = $this->denormalisePath($candidate);
+
+            if (is_file($candidatePath)) {
+                return $this->buildFileUri($candidatePath);
+            }
+        }
+
+        return null;
+    }
+
+    protected function resolvePublicStorageCandidate(string $filePath): ?string
+    {
+        $storagePublicRoot = storage_path('app/public');
+        $storagePublicRoot = realpath($storagePublicRoot) ?: $storagePublicRoot;
+
+        $normalisedPath = $this->normalisePath($filePath);
+        $normalisedStorageRoot = rtrim($this->normalisePath($storagePublicRoot), '/');
+
+        if (!Str::startsWith($normalisedPath, $normalisedStorageRoot)) {
+            return null;
+        }
+
+        $relative = ltrim(Str::replaceFirst($normalisedStorageRoot, '', $normalisedPath), '/');
+        if ($relative === '') {
+            return null;
+        }
+
+        $publicRoot = public_path('storage');
+        $publicRoot = realpath($publicRoot) ?: $publicRoot;
+        $normalisedPublicRoot = rtrim($this->normalisePath($publicRoot), '/');
+
+        return $normalisedPublicRoot . '/' . $relative;
+    }
+
+    protected function buildFileUri(string $path): string
+    {
+        $normalised = $this->normalisePath($path);
+
+        if (preg_match('/^[a-zA-Z]:\//', $normalised)) {
+            return 'file:///' . $normalised;
+        }
+
+        if (Str::startsWith($normalised, '/')) {
+            return 'file://' . $normalised;
+        }
+
+        return 'file://' . $normalised;
+    }
+
+    protected function normalisePath(string $path): string
+    {
+        return str_replace('\\', '/', $path);
+    }
+
+    protected function denormalisePath(string $path): string
+    {
+        if (DIRECTORY_SEPARATOR === '/') {
+            return $path;
+        }
+
+        return str_replace('/', DIRECTORY_SEPARATOR, $path);
     }
 }
