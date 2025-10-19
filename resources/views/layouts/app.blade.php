@@ -91,6 +91,10 @@
 
 
         <script>
+            window.appConfig = {
+                imageryProcessingCost: {{ config('app-constants.imagery_processing_cost') }}
+            };
+
             $(document).on("click", ".zk-delete-data", function(e) {
                 e.preventDefault();
                 var form = $(this).closest('form'); // Get the closest form
@@ -104,6 +108,7 @@
                 });
             });
         </script>
+
 
         @stack('javascript')
         {{ $javascript ?? '' }}

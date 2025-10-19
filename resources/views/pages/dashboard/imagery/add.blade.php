@@ -456,28 +456,6 @@
                     });
                 };
 
-                // Function to check user credits
-                const checkUserCredits = async () => {
-                    const response = await fetch('{{ route('user.credits.check') }}');
-                    const result = await response.json();
-
-                    if (!result.success) {
-                        MyZkToast.error(result.message || 'Failed to check credit balance.');
-                        return false;
-                    }
-
-                    const currentCredits = parseFloat(formatNumber(result.credits, 2));
-                    const requiredCredits = config.imageryProcessingCost || 10; // Default to 10 if not set
-
-                    return new Promise((resolve) => {
-                        resolve(data = {
-                            hasCredits: currentCredits >= requiredCredits,
-                            currentCredits: currentCredits,
-                            requiredCredits: requiredCredits
-                        });
-                    });
-                };
-
                 // Suspend ongoing uploads without losing progress state.
                 const pauseUpload = () => {
                     if (!state.uploading) {

@@ -74,20 +74,24 @@ class GeoServerService
         }
 
         $endpoint = sprintf(
-            '%s/workspaces/%s/coveragestores/%s/external.geotiff',
+            '%s/workspaces/%s/coveragestores/%s/file.geotiff',
             $this->restUrl,
             $this->workspace,
             $storeName
         );
 
         $query = http_build_query([
-            'configure' => 'all',
+            'configure' => 'first',
             'coverageName' => $layerName,
         ]);
 
         $response = $this->client()
-            ->withHeaders(['Content-Type' => 'text/plain'])
-            ->send('PUT', $endpoint . '?' . $query, ['body' => 'file:' . $filePath]);
+            ->withHeaders([
+                'Accept' => 'application/json',
+                'Content-Type' => 'image/tiff',
+            ])
+            ->withBody(file_get_contents($filePath), 'image/tiff')
+            ->put($endpoint . '?' . $query);
 
         if ($response->failed()) {
             Log::error('GeoServerService: Failed to publish GeoTIFF to GeoServer.', [

@@ -257,28 +257,6 @@
                     window.history.replaceState({}, '', newUrl);
                 });
 
-                // Function to check user credits
-                const checkUserCredits = async () => {
-                    const response = await fetch('{{ route('user.credits.check') }}');
-                    const result = await response.json();
-
-                    if (!result.success) {
-                        MyZkToast.error(result.message || 'Failed to check credit balance.');
-                        return false;
-                    }
-
-                    const currentCredits = parseFloat(formatNumber(result.credits, 2));
-                    const requiredCredits = {{ config('app-constants.imagery_processing_cost', 10) }};
-
-                    return new Promise((resolve) => {
-                        resolve(data = {
-                            hasCredits: currentCredits >= requiredCredits,
-                            currentCredits: currentCredits,
-                            requiredCredits: requiredCredits
-                        });
-                    });
-                };
-
                 // Retry imagery processing
                 $('body').on('click', '.btn-retry-imagery', function() {
                     $(this).attr('disabled', true);
