@@ -13,6 +13,7 @@
         <x-dashboard.nav-item href="admin.dashboard" icon="ri-dashboard-line" text="{{ __('Dashboard') }}" />
         <x-dashboard.nav-item href="appMap" icon="ri-side-bar-line" text="{{ __('Apps Map') }}" />
         <x-dashboard.nav-item href="admin.purchase-credits" icon="ri-copyleft-line" text="{{ __('Purchase Credits') }}" />
+        <x-dashboard.nav-item href="admin.credit-history.index" icon="ri-history-line" text="{{ __('Credit History') }}" />
 
         @if ($isAdmin)
             <x-dashboard.nav-accordion id="plans-accordion" icon="ri-currency-line" text="{{ __('Plans') }}">
@@ -38,6 +39,7 @@
         <!-- Superadmin Only Section -->
         @if ($isSuperadmin)
             <x-dashboard.nav-item href="admin.user-credits.index" icon="ri-copyleft-line" text="{{ __('User Credits') }}" />
+            <x-dashboard.nav-item href="admin.credit-history.all" icon="ri-time-line" text="{{ __('All Credit History') }}" />
             <x-dashboard.nav-item href="admin.users.index" icon="ri-user-line" text="{{ __('User') }}" />
             <x-dashboard.nav-item href="docs" icon="ri-file-list-3-line" text="{{ __('Route Docs') }}" target="_blank" />
 

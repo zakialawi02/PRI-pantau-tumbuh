@@ -182,7 +182,19 @@ class PaymentController extends Controller
 
         // If payment status is changed to paid, add credits to user
         if ($payment->status === 'paid' && $payment->credit_points > 0) {
-            $this->creditService->addCreditsToUser($payment->user_id, $payment->credit_points);
+            $this->creditService->addCreditsToUser(
+                $payment->user_id,
+                $payment->credit_points,
+                'PaymentController',
+                __('Credits added from verified payment #:invoice', ['invoice' => $payment->invoice_number ?? $payment->id]),
+                [
+                    'payment_id' => $payment->id,
+                    'trigger' => 'status_update',
+                ],
+                'payment',
+                (string) $payment->id,
+                Auth::id()
+            );
         }
 
         return response()->json([
@@ -445,7 +457,19 @@ class PaymentController extends Controller
 
                     // If this payment was for credit purchase, add credits to user
                     if ($payment->credit_points > 0) {
-                        $this->creditService->addCreditsToUser($payment->user_id, $payment->credit_points);
+                        $this->creditService->addCreditsToUser(
+                            $payment->user_id,
+                            $payment->credit_points,
+                            'PaymentController',
+                            __('Credits added from PayPal payment #:invoice', ['invoice' => $payment->invoice_number ?? $payment->id]),
+                            [
+                                'payment_id' => $payment->id,
+                                'gateway' => 'paypal',
+                                'trigger' => 'gateway_capture',
+                            ],
+                            'payment',
+                            (string) $payment->id
+                        );
                     }
 
                     // Send payment credit confirmation email for successful payments
@@ -482,7 +506,19 @@ class PaymentController extends Controller
 
                     // If this payment was for credit purchase, add credits to user
                     if ($payment->credit_points > 0) {
-                        $this->creditService->addCreditsToUser($payment->user_id, $payment->credit_points);
+                        $this->creditService->addCreditsToUser(
+                            $payment->user_id,
+                            $payment->credit_points,
+                            'PaymentController',
+                            __('Credits added from payment completion #:invoice', ['invoice' => $payment->invoice_number ?? $payment->id]),
+                            [
+                                'payment_id' => $payment->id,
+                                'gateway' => $gateway,
+                                'trigger' => 'gateway_status',
+                            ],
+                            'payment',
+                            (string) $payment->id
+                        );
                     }
 
                     // Send payment credit confirmation email for successful payments

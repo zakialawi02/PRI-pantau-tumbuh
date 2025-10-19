@@ -5,15 +5,135 @@ namespace App\Http\Controllers;
 use App\Models\Plan;
 use App\Models\User;
 use App\Models\UserCredit;
+use App\Models\UserCreditHistory;
+use App\Services\CreditService;
 use Illuminate\Support\Str;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Number;
+use Throwable;
 use Yajra\DataTables\Facades\DataTables;
 
 class UserCreditsController extends Controller
 {
+    protected CreditService $creditService;
+
+    public function __construct(CreditService $creditService)
+    {
+        $this->creditService = $creditService;
+    }
+
+    public function history(Request $request)
+    {
+        $user = $request->user();
+
+        if ($request->ajax()) {
+            $histories = UserCreditHistory::where('user_id', $user->id)
+                ->orderByDesc('created_at');
+
+            return DataTables::of($histories)
+                ->addIndexColumn()
+                ->addColumn('type_badge', function (UserCreditHistory $history) {
+                    $label = ucfirst($history->type);
+                    $classes = $history->type === 'credit'
+                        ? 'bg-success/10 text-success border border-success/20'
+                        : 'bg-error/10 text-error border border-error/20';
+
+                    return sprintf('<span class="%s inline-flex items-center rounded-full px-2 py-1 text-xs font-semibold">%s</span>', $classes, e($label));
+                })
+                ->editColumn('amount', function (UserCreditHistory $history) {
+                    return Number::format($history->amount, 2, locale: app()->getLocale());
+                })
+                ->editColumn('balance_before', function (UserCreditHistory $history) {
+                    return Number::format($history->balance_before, 2, locale: app()->getLocale());
+                })
+                ->editColumn('balance_after', function (UserCreditHistory $history) {
+                    return Number::format($history->balance_after, 2, locale: app()->getLocale());
+                })
+                ->editColumn('created_at', function (UserCreditHistory $history) {
+                    return $history->created_at?->isoFormat('MMM D, YYYY HH:mm');
+                })
+                ->addColumn('reference', function (UserCreditHistory $history) {
+                    if ($history->reference_type) {
+                        $type = ucfirst(str_replace('_', ' ', $history->reference_type));
+                        $id = $history->reference_id ?? '-';
+
+                        return sprintf('%s #%s', e($type), e($id));
+                    }
+
+                    return '-';
+                })
+                ->editColumn('description', function (UserCreditHistory $history) {
+                    return $history->description ?: '-';
+                })
+                ->rawColumns(['type_badge'])
+                ->make(true);
+        }
+
+        return view('pages.dashboard.user.credit-history');
+    }
+
+    public function adminHistory(Request $request)
+    {
+        if ($request->ajax()) {
+            $histories = UserCreditHistory::with(['user', 'performedBy'])
+                ->orderByDesc('created_at');
+
+            return DataTables::of($histories)
+                ->addIndexColumn()
+                ->addColumn('user_name', function (UserCreditHistory $history) {
+                    return optional($history->user)->name ?? '-';
+                })
+                ->addColumn('user_email', function (UserCreditHistory $history) {
+                    return optional($history->user)->email ?? '-';
+                })
+                ->addColumn('performed_by_name', function (UserCreditHistory $history) {
+                    return optional($history->performedBy)->name ?? __('System');
+                })
+                ->addColumn('type_badge', function (UserCreditHistory $history) {
+                    $label = ucfirst($history->type);
+                    $classes = $history->type === 'credit'
+                        ? 'bg-success/10 text-success border border-success/20'
+                        : 'bg-error/10 text-error border border-error/20';
+
+                    return sprintf('<span class="%s inline-flex items-center rounded-full px-2 py-1 text-xs font-semibold">%s</span>', $classes, e($label));
+                })
+                ->editColumn('amount', function (UserCreditHistory $history) {
+                    return Number::format($history->amount, 2, locale: app()->getLocale());
+                })
+                ->editColumn('balance_before', function (UserCreditHistory $history) {
+                    return Number::format($history->balance_before, 2, locale: app()->getLocale());
+                })
+                ->editColumn('balance_after', function (UserCreditHistory $history) {
+                    return Number::format($history->balance_after, 2, locale: app()->getLocale());
+                })
+                ->editColumn('created_at', function (UserCreditHistory $history) {
+                    return $history->created_at?->isoFormat('MMM D, YYYY HH:mm');
+                })
+                ->addColumn('reference', function (UserCreditHistory $history) {
+                    if ($history->reference_type) {
+                        $type = ucfirst(str_replace('_', ' ', $history->reference_type));
+                        $id = $history->reference_id ?? '-';
+
+                        return sprintf('%s #%s', e($type), e($id));
+                    }
+
+                    return '-';
+                })
+                ->editColumn('description', function (UserCreditHistory $history) {
+                    return $history->description ?: '-';
+                })
+                ->rawColumns(['type_badge'])
+                ->make(true);
+        }
+
+        return view('pages.dashboard.users.creditHistory');
+    }
+
     /**
      * Display a listing of user credits.
      */
@@ -55,22 +175,95 @@ class UserCreditsController extends Controller
     public function addCredits(Request $request, User $user): JsonResponse
     {
         $request->validate([
-            'credits' => 'required|integer|min:0',
+            'current_credits' => 'nullable|numeric|min:0',
+            'credits' => 'required|numeric|min:0',
         ]);
 
-        $userCredit = UserCredit::updateOrCreate(['user_id' => $user->id]);
-        $userCredit->credits = $request->current_credits;
-        $userCredit->credits += $request->credits;
-        $userCredit->save();
+        $performedBy = Auth::id();
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Credits added successfully!',
-            'data' => [
-                'user' => $user,
-                'current_credits' => $user->fresh()->current_credits
-            ]
-        ]);
+        try {
+            [$finalBalance, $change] = DB::transaction(function () use ($request, $user, $performedBy) {
+                $userCredit = $user->credits()->lockForUpdate()->first();
+
+                if (!$userCredit) {
+                    $userCredit = $user->credits()->create([
+                        'credits' => 0,
+                    ]);
+                }
+
+                $initialBalance = (float) $userCredit->credits;
+                $submittedBase = $request->filled('current_credits')
+                    ? max(0, (float) $request->input('current_credits'))
+                    : $initialBalance;
+                $additional = max(0, (float) $request->input('credits'));
+
+                $finalBalance = round($submittedBase + $additional, 2);
+                $change = $finalBalance - $initialBalance;
+
+                if ($finalBalance < 0) {
+                    throw new \InvalidArgumentException(__('The resulting credit balance cannot be negative.'));
+                }
+
+                $userCredit->credits = $finalBalance;
+                $userCredit->save();
+
+                if (abs($change) > 0.00001) {
+                    $type = $change >= 0 ? 'credit' : 'debit';
+                    $description = $type === 'credit'
+                        ? __('Manual credit adjustment via dashboard')
+                        : __('Manual credit deduction via dashboard');
+
+                    $this->creditService->logHistory(
+                        $user,
+                        $type,
+                        abs($change),
+                        $initialBalance,
+                        $finalBalance,
+                        $description,
+                        [
+                            'submitted_current_credits' => (float) $request->input('current_credits', $initialBalance),
+                            'submitted_adjustment' => $additional,
+                            'context' => 'admin_manual_adjustment',
+                        ],
+                        $performedBy,
+                        'manual_adjustment',
+                        $performedBy ? (string) $performedBy : null
+                    );
+                }
+
+                return [$finalBalance, $change];
+            });
+
+            $user->refresh();
+
+            $message = __('Credits updated successfully.');
+            if ($change > 0) {
+                $message = __('Credits added successfully!');
+            } elseif ($change < 0) {
+                $message = __('Credits deducted successfully.');
+            } elseif (abs($change) <= 0.00001) {
+                $message = __('No credit changes were made.');
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => $message,
+                'data' => [
+                    'user' => $user,
+                    'current_credits' => $finalBalance,
+                ],
+            ]);
+        } catch (Throwable $e) {
+            Log::error('Failed to adjust user credits', [
+                'user_id' => $user->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => __('Failed to update credits: :message', ['message' => $e->getMessage()]),
+            ], 422);
+        }
     }
 
     /**

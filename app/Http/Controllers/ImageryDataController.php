@@ -484,17 +484,37 @@ class ImageryDataController extends Controller
                         throw new \Exception('User credit record not found.');
                     }
 
-                    if ($userCredit->credits < $requiredCredits) {
+                    $balanceBefore = (float) $userCredit->credits;
+
+                    if ($balanceBefore < $requiredCredits) {
                         Log::warning('ImageryDataController@mergeChunks: Insufficient credit points during transaction', [
                             'user_id' => $user->id,
                             'required_credits' => $requiredCredits,
-                            'available_credits' => $userCredit->credits
+                            'available_credits' => $balanceBefore
                         ]);
                         throw new \Exception('Insufficient credit points.');
                     }
 
-                    $userCredit->credits -= $requiredCredits;
+                    $userCredit->credits = $balanceBefore - $requiredCredits;
                     $userCredit->save();
+
+                    $this->creditService->logHistory(
+                        $user,
+                        'debit',
+                        $requiredCredits,
+                        $balanceBefore,
+                        (float) $userCredit->credits,
+                        __('Credits deducted for imagery upload'),
+                        [
+                            'context' => 'imagery_merge',
+                            'upload_id' => $uploadId,
+                            'source_type' => $sourceType,
+                            'filename' => $filename,
+                        ],
+                        Auth::id(),
+                        'imagery_upload',
+                        (string) $uploadId
+                    );
 
                     $imagery = ImageryData::create([
                         'user_id' => $user->id,
@@ -715,13 +735,31 @@ class ImageryDataController extends Controller
                 }
 
                 // Double-check credits after locking
-                if ($lockedUserCredit->credits < $requiredCredits) {
-                    throw new \Exception('Insufficient credit points. You need ' . $requiredCredits . ' credits but you only have ' . $lockedUserCredit->credits . ' credits.');
+                $balanceBefore = (float) $lockedUserCredit->credits;
+
+                if ($balanceBefore < $requiredCredits) {
+                    throw new \Exception('Insufficient credit points. You need ' . $requiredCredits . ' credits but you only have ' . $balanceBefore . ' credits.');
                 }
 
                 // Deduct credits
-                $lockedUserCredit->credits -= $requiredCredits;
+                $lockedUserCredit->credits = $balanceBefore - $requiredCredits;
                 $lockedUserCredit->save();
+
+                $this->creditService->logHistory(
+                    $user,
+                    'debit',
+                    $requiredCredits,
+                    $balanceBefore,
+                    (float) $lockedUserCredit->credits,
+                    __('Credits deducted to retry imagery processing'),
+                    [
+                        'context' => 'imagery_retry',
+                        'imagery_id' => $imagery->id,
+                    ],
+                    Auth::id(),
+                    'imagery_retry',
+                    (string) $imagery->id
+                );
 
                 // Update imagery status to waiting
                 $imagery->update([
@@ -945,7 +983,19 @@ class ImageryDataController extends Controller
             ]);
 
             if ($requiredCredits > 0) {
-                $deductedCredits = $this->creditService->deductCreditsForProcessing($user->id, $requiredCredits);
+                $deductedCredits = $this->creditService->deductCreditsForProcessing(
+                    $user->id,
+                    $requiredCredits,
+                    'SentinelScene',
+                    __('Credits deducted for Sentinel imagery processing'),
+                    [
+                        'context' => 'sentinel_scene',
+                        'imagery_id' => $imagery->id,
+                    ],
+                    'imagery_processing',
+                    (string) $imagery->id,
+                    $user->id
+                );
 
                 if (!$deductedCredits) {
                     $currentCredits = $this->creditService->getRemainingCredits($user->id);
@@ -1005,7 +1055,19 @@ class ImageryDataController extends Controller
             }
 
             if ($deductedCredits && $requiredCredits > 0) {
-                $this->creditService->addCreditsToUser($user->id, $requiredCredits, 'ImageryDataController');
+                $this->creditService->addCreditsToUser(
+                    $user->id,
+                    $requiredCredits,
+                    'ImageryDataController',
+                    __('Credits refunded after Sentinel scene failure'),
+                    [
+                        'context' => 'sentinel_scene_refund',
+                        'imagery_id' => isset($imagery) ? $imagery->id : null,
+                    ],
+                    'imagery_refund',
+                    isset($imagery) ? (string) $imagery->id : null,
+                    $user->id
+                );
             }
 
             return response()->json([
@@ -1129,7 +1191,20 @@ class ImageryDataController extends Controller
             ]);
 
             if ($requiredCredits > 0) {
-                $deductedCredits = $this->creditService->deductCreditsForProcessing($user->id, $requiredCredits, 'SentinelClip');
+                $deductedCredits = $this->creditService->deductCreditsForProcessing(
+                    $user->id,
+                    $requiredCredits,
+                    'SentinelClip',
+                    __('Credits deducted for Sentinel clip processing'),
+                    [
+                        'context' => 'sentinel_clip',
+                        'imagery_id' => $imagery->id,
+                        'field_area_id' => $fieldArea->id,
+                    ],
+                    'imagery_processing',
+                    (string) $imagery->id,
+                    $user->id
+                );
 
                 if (!$deductedCredits) {
                     $currentCredits = $this->creditService->getRemainingCredits($user->id);
@@ -1187,7 +1262,20 @@ class ImageryDataController extends Controller
             }
 
             if ($deductedCredits && $requiredCredits > 0) {
-                $this->creditService->addCreditsToUser($user->id, $requiredCredits, 'ImageryDataController');
+                $this->creditService->addCreditsToUser(
+                    $user->id,
+                    $requiredCredits,
+                    'ImageryDataController',
+                    __('Credits refunded after Sentinel clip failure'),
+                    [
+                        'context' => 'sentinel_clip_refund',
+                        'imagery_id' => optional($imagery)->id,
+                        'field_area_id' => optional($fieldArea)->id,
+                    ],
+                    'imagery_refund',
+                    optional($imagery)->id ? (string) $imagery->id : null,
+                    $user->id
+                );
             }
 
             return response()->json([

@@ -3,6 +3,8 @@
 namespace App\Services;
 
 use App\Models\User;
+use App\Models\UserCreditHistory;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -35,13 +37,32 @@ class CreditService
             // Get user's credit record
             $userCredit = $user->credits;
             if (!$userCredit) {
-                Log::error("❌ [{$logContext}] User credit record not found for user: {$user->id}");
-                return false;
+                $userCredit = $user->credits()->create([
+                    'credits' => 0,
+                ]);
             }
 
+            $balanceBefore = (float) $userCredit->credits;
+
             // Refund the credits
-            $userCredit->credits += $creditCost;
+            $userCredit->credits = $balanceBefore + $creditCost;
             $userCredit->save();
+
+            $this->logHistory(
+                $user,
+                'credit',
+                $creditCost,
+                $balanceBefore,
+                (float) $userCredit->credits,
+                __('Credits refunded for failed imagery processing #:id', ['id' => $imagery->id]),
+                [
+                    'imagery_id' => $imagery->id,
+                    'reason' => 'processing_failed',
+                ],
+                null,
+                'imagery',
+                (string) $imagery->id
+            );
 
             Log::info("💰 [{$logContext}] Refunded {$creditCost} credits to user {$user->id} for failed imagery processing: {$imagery->id}");
             return true;
@@ -54,20 +75,29 @@ class CreditService
     /**
      * Deduct credits from user for imagery processing
      *
-     * @param string $user The user to deduct credits from
+     * @param string $userId The user to deduct credits from
      * @param float $amount The amount of credits to deduct
      * @param string $logContext Context for logging
      * @return bool True if deduction was successful, false otherwise
      */
-    public function deductCreditsForProcessing(String $user, float $amount = null, string $logContext = 'System'): bool
+    public function deductCreditsForProcessing(
+        string $userId,
+        float $amount = null,
+        string $logContext = 'System',
+        ?string $description = null,
+        array $meta = [],
+        ?string $referenceType = null,
+        ?string $referenceId = null,
+        ?int $performedBy = null
+    ): bool
     {
         try {
             // Use a database transaction with lock for race condition handling
-            $result = DB::transaction(function () use ($user, $amount, $logContext) {
+            $result = DB::transaction(function () use ($userId, $amount, $logContext, $description, $meta, $referenceType, $referenceId, $performedBy) {
                 // Find user and lock the credits row for update
-                $user = User::find($user);
+                $user = User::find($userId);
                 if (!$user) {
-                    Log::error("❌ [{$logContext}] User not found: {$user}");
+                    Log::error("❌ [{$logContext}] User not found: {$userId}");
                     return false;
                 }
 
@@ -79,27 +109,43 @@ class CreditService
                 // Lock the user's credit record for update to prevent race conditions
                 $userCredit = $user->credits()->lockForUpdate()->first();
                 if (!$userCredit) {
-                    Log::error("❌ [{$logContext}] User credit record not found for user: {$user->id}");
-                    return false;
+                    $userCredit = $user->credits()->create([
+                        'credits' => 0,
+                    ]);
                 }
 
+                $balanceBefore = (float) $userCredit->credits;
+
                 // Check if user has enough credits
-                if ($userCredit->credits < $amount) {
-                    Log::error("❌ [{$logContext}] Insufficient credits for user {$user->id}. Required: {$amount}, Available: {$userCredit->credits}");
+                if ($balanceBefore < $amount) {
+                    Log::error("❌ [{$logContext}] Insufficient credits for user {$user->id}. Required: {$amount}, Available: {$balanceBefore}");
                     return false;
                 }
 
                 // Deduct the credits
-                $userCredit->credits -= $amount;
+                $userCredit->credits = $balanceBefore - $amount;
                 $userCredit->save();
+
+                $this->logHistory(
+                    $user,
+                    'debit',
+                    $amount,
+                    $balanceBefore,
+                    (float) $userCredit->credits,
+                    $description ?? __('Credits deducted for processing'),
+                    $meta,
+                    $performedBy,
+                    $referenceType,
+                    $referenceId
+                );
 
                 Log::info("💰 [{$logContext}] Deducted {$amount} credits from user {$user->id}. Remaining: {$userCredit->credits}");
                 return true;
             }, 3); // Retry up to 3 times in case of deadlock
 
-            return $result;
-        } catch (\Exception $e) {
-            Log::error("❌ [{$logContext}] Failed to deduct credits for user {$user->id}: " . $e->getMessage());
+            return (bool) $result;
+        } catch (\Throwable $e) {
+            Log::error("❌ [{$logContext}] Failed to deduct credits for user {$userId}: " . $e->getMessage());
             return false;
         }
     }
@@ -129,31 +175,90 @@ class CreditService
      * @param string $logContext Context for logging
      * @return bool True if addition was successful, false otherwise
      */
-    public function addCreditsToUser(String $user, float $amount, string $logContext = 'System'): bool
+    public function addCreditsToUser(
+        string $userId,
+        float $amount,
+        string $logContext = 'System',
+        ?string $description = null,
+        array $meta = [],
+        ?string $referenceType = null,
+        ?string $referenceId = null,
+        ?int $performedBy = null
+    ): bool
     {
         try {
-            $user = User::find($user);
+            $user = User::find($userId);
+            if (!$user) {
+                Log::error("❌ [{$logContext}] User not found: {$userId}");
+                return false;
+            }
             // Use a database transaction with lock for race condition handling
-            $result = DB::transaction(function () use ($user, $amount, $logContext) {
+            $result = DB::transaction(function () use ($user, $amount, $logContext, $description, $meta, $referenceType, $referenceId, $performedBy) {
                 // Lock the user's credit record for update to prevent race conditions
                 $userCredit = $user->credits()->lockForUpdate()->first();
                 if (!$userCredit) {
-                    Log::error("❌ [{$logContext}] User credit record not found for user: {$user->id}");
-                    return false;
+                    $userCredit = $user->credits()->create([
+                        'credits' => 0,
+                    ]);
                 }
 
+                $balanceBefore = (float) $userCredit->credits;
+
                 // Add the credits
-                $userCredit->credits += $amount;
+                $userCredit->credits = $balanceBefore + $amount;
                 $userCredit->save();
+
+                $this->logHistory(
+                    $user,
+                    'credit',
+                    $amount,
+                    $balanceBefore,
+                    (float) $userCredit->credits,
+                    $description ?? __('Credits added'),
+                    $meta,
+                    $performedBy,
+                    $referenceType,
+                    $referenceId
+                );
 
                 Log::info("💰 [{$logContext}] Added {$amount} credits to user {$user->id}. Total: {$userCredit->credits}");
                 return true;
             }, 3); // Retry up to 3 times in case of deadlock
 
-            return $result;
-        } catch (\Exception $e) {
-            Log::error("❌ [{$logContext}] Failed to add credits for user {$user->id}: " . $e->getMessage());
+            return (bool) $result;
+        } catch (\Throwable $e) {
+            Log::error("❌ [{$logContext}] Failed to add credits for user {$userId}: " . $e->getMessage());
             return false;
         }
+    }
+
+    public function logHistory(
+        User $user,
+        string $type,
+        float $amount,
+        float $balanceBefore,
+        float $balanceAfter,
+        ?string $description = null,
+        array $meta = [],
+        ?int $performedBy = null,
+        ?string $referenceType = null,
+        ?string $referenceId = null
+    ): void {
+        if ($amount <= 0) {
+            return;
+        }
+
+        UserCreditHistory::create([
+            'user_id' => $user->id,
+            'performed_by' => $performedBy ?? Auth::id(),
+            'amount' => $amount,
+            'balance_before' => $balanceBefore,
+            'balance_after' => $balanceAfter,
+            'type' => $type,
+            'description' => $description,
+            'reference_type' => $referenceType,
+            'reference_id' => $referenceId,
+            'meta' => empty($meta) ? null : $meta,
+        ]);
     }
 }
