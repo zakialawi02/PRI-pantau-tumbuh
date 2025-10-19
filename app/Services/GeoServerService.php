@@ -15,6 +15,7 @@ class GeoServerService
     protected string $workspace;
     protected string $wmsUrl;
     protected string $defaultSrs;
+    protected string $uploadMode;
 
     public function __construct()
     {
@@ -24,6 +25,10 @@ class GeoServerService
         $this->password = $config['password'] ?? '';
         $this->workspace = $config['workspace'] ?? 'default';
         $this->defaultSrs = $config['default_srs'] ?? 'EPSG:4326';
+        $configuredMode = strtolower((string) ($config['upload_mode'] ?? 'external'));
+        $this->uploadMode = in_array($configuredMode, ['external', 'direct'], true)
+            ? $configuredMode
+            : 'external';
 
         $configuredWms = $config['wms_url'] ?? '';
         if ($configuredWms) {
@@ -73,21 +78,12 @@ class GeoServerService
             return null;
         }
 
-        $endpoint = sprintf(
-            '%s/workspaces/%s/coveragestores/%s/external.geotiff',
-            $this->restUrl,
-            $this->workspace,
-            $storeName
-        );
-
         $query = http_build_query([
             'configure' => 'all',
             'coverageName' => $layerName,
         ]);
 
-        $response = $this->client()
-            ->withHeaders(['Content-Type' => 'text/plain'])
-            ->send('PUT', $endpoint . '?' . $query, ['body' => 'file:' . $filePath]);
+        $response = $this->uploadCoverageStore($storeName, $query, $filePath);
 
         if ($response->failed()) {
             Log::error('GeoServerService: Failed to publish GeoTIFF to GeoServer.', [
@@ -225,6 +221,38 @@ class GeoServerService
             'http_errors' => false,
             'timeout' => 60,
         ])->withBasicAuth($this->username, $this->password);
+    }
+
+    protected function uploadCoverageStore(string $storeName, string $query, string $filePath)
+    {
+        $baseEndpoint = sprintf(
+            '%s/workspaces/%s/coveragestores/%s',
+            $this->restUrl,
+            $this->workspace,
+            $storeName
+        );
+
+        if ($this->uploadMode === 'direct') {
+            $resource = @fopen($filePath, 'r');
+
+            if ($resource === false) {
+                Log::error('GeoServerService: Unable to read GeoTIFF for upload.', [
+                    'path' => $filePath,
+                ]);
+
+                return $this->client()
+                    ->withHeaders(['Content-Type' => 'text/plain'])
+                    ->send('PUT', $baseEndpoint . '/external.geotiff?' . $query, ['body' => 'file:' . $filePath]);
+            }
+
+            return $this->client()
+                ->withHeaders(['Content-Type' => 'image/tiff'])
+                ->send('PUT', $baseEndpoint . '/file.geotiff?' . $query, ['body' => $resource]);
+        }
+
+        return $this->client()
+            ->withHeaders(['Content-Type' => 'text/plain'])
+            ->send('PUT', $baseEndpoint . '/external.geotiff?' . $query, ['body' => 'file:' . $filePath]);
     }
 
     protected function fetchCoverageBounds(string $storeName, string $layerName): ?array
