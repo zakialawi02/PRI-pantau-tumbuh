@@ -1081,6 +1081,15 @@
                         uploadedBytes: 0
                     };
 
+                    // Beforeunload handler to prevent navigation during upload
+                    const beforeUnloadHandler = (e) => {
+                        if (state.uploading || (state.file && !state.paused)) {
+                            e.preventDefault();
+                            e.returnValue = 'An upload is in progress. Are you sure you want to leave?';
+                            return e.returnValue;
+                        }
+                    };
+
                     // Ensure the uploader exposes hooks on the global AppMap namespace.
                     const ensureAppNamespace = () => {
                         window.AppMap = window.AppMap || {};
@@ -1115,11 +1124,14 @@
                                 startBtn.disabled = true;
                                 pauseBtn.disabled = false;
                                 resumeBtn.disabled = true;
+                                // Add beforeunload listener when upload starts
+                                window.addEventListener('beforeunload', beforeUnloadHandler);
                                 break;
                             case 'paused':
                                 startBtn.disabled = true;
                                 pauseBtn.disabled = true;
                                 resumeBtn.disabled = false;
+                                // Keep beforeunload listener when paused
                                 break;
                             case 'merging':
                             case 'completed':
@@ -1128,6 +1140,8 @@
                                 if (mode === 'error') {
                                     startBtn.disabled = false;
                                 }
+                                // Remove beforeunload listener when upload completes or errors
+                                window.removeEventListener('beforeunload', beforeUnloadHandler);
                                 // Restore original button text if it was changed to loading state
                                 if (startBtn.innerHTML.includes('Checking')) {
                                     startBtn.innerHTML = startBtn.innerHTML.replace(/<i class="ri-loader-4-line animate-spin"><\/i> Checking.../, 'Start Upload');
@@ -1142,6 +1156,8 @@
                             case 'idle':
                             default:
                                 disableAll();
+                                // Remove beforeunload listener when idle
+                                window.removeEventListener('beforeunload', beforeUnloadHandler);
                                 // Restore original button text if it was changed to loading state
                                 if (startBtn.innerHTML.includes('Checking')) {
                                     startBtn.innerHTML = startBtn.innerHTML.replace(/<i class="ri-loader-4-line animate-spin"><\/i> Checking.../, 'Start Upload');
@@ -1160,6 +1176,8 @@
                         state.totalChunks = 0;
                         state.startTime = 0;
                         state.uploadedBytes = 0;
+                        // Remove beforeunload listener when resetting state
+                        window.removeEventListener('beforeunload', beforeUnloadHandler);
                     };
 
                     // Restore the UI to an idle appearance without progress.
