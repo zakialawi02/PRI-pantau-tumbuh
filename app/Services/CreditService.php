@@ -5,7 +5,6 @@ namespace App\Services;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Config;
 
 class CreditService
 {
@@ -14,12 +13,18 @@ class CreditService
      * Refund credits to user when imagery processing fails
      *
      * @param mixed $imagery The imagery object that failed processing
+     * @param float|null $creditCost The amount of credits to refund (null to use default)
      * @param string $logContext Context for logging
      * @return bool True if refund was successful, false otherwise
      */
-    public function refundCreditsForFailure($imagery, string $logContext = 'System'): bool
+    public function refundCreditsForFailure($imagery, ?float $creditCost = null, string $logContext = 'System'): bool
     {
         try {
+            // Use default credit cost if not provided
+            if ($creditCost === null) {
+                $creditCost = config('app-constants.imagery_processing_cost', 10);
+            }
+
             // Get the user who owns this imagery
             $user = $imagery->user;
             if (!$user) {
@@ -33,9 +38,6 @@ class CreditService
                 Log::error("❌ [{$logContext}] User credit record not found for user: {$user->id}");
                 return false;
             }
-
-            // Get the credit cost from config
-            $creditCost = Config::get('app-constants.imagery_processing_cost', 10);
 
             // Refund the credits
             $userCredit->credits += $creditCost;

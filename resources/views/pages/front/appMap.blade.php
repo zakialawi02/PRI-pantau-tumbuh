@@ -195,7 +195,7 @@
 
                         <!-- Hidden template card -->
                         <template id="imageryCardTemplate">
-                            <div class="imagery-card border-foreground/20 bg-background/40 flex items-center justify-between rounded-xl border p-3 shadow-sm transition-all duration-200 hover:shadow-md">
+                            <div class="imagery-card border-foreground/20 bg-background/40 flex flex-col rounded-xl border p-1.5 shadow-sm transition-all duration-200 hover:shadow-md">
                                 <div class="flex items-start space-x-3">
                                     <div class="bg-primary/10 text-primary imagery-format flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg font-semibold uppercase">
                                         JPG
@@ -208,11 +208,11 @@
                                     </div>
                                 </div>
 
-                                <div class="flex items-center space-x-1">
-                                    <button class="view-btn hover:bg-primary/10 rounded-lg p-2 transition" data-view-variant="processed" type="button" title="Toggle processed imagery" aria-pressed="false">
+                                <div class="flex items-center justify-start space-x-1">
+                                    <button class="view-btn hover:bg-primary/10 rounded-lg px-1 py-0.5 transition" data-view-variant="processed" type="button" title="Toggle processed imagery" title="View processed imagery" aria-pressed="false">
                                         <i class="ri-stack-line"></i>
                                     </button>
-                                    <button class="view-btn hover:bg-foreground/10 rounded-lg p-2 transition" data-view-variant="source" type="button" title="Toggle original imagery" aria-pressed="false">
+                                    <button class="view-btn hover:bg-foreground/10 rounded-lg px-1 py-0.5 transition" data-view-variant="source" type="button" title="Toggle original imagery" title="View original imagery" aria-pressed="false">
                                         <i class="ri-eye-line"></i>
                                     </button>
                                 </div>
@@ -321,7 +321,67 @@
 
                     <!-- Clip Tab Content -->
                     <div class="tab-content hidden" id="sentinel-clip-panel" role="tabpanel" aria-labelledby="sentinel-clip-tab">
-                        <div class="space-y-3" id="sentinelClipModule" data-credit-rate="{{ config('app-constants.imagery_credit_cost_per_hectare') }}" data-process-url="{{ auth()->check() ? route('admin.sentinel.process') : '' }}" data-clip-process-url="{{ auth()->check() ? route('admin.sentinel.clip') : '' }}" data-processing-cost="{{ config('app-constants.imagery_processing_cost', 10) }}">
+                        @auth
+                            <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                            </div>
+                            <div class="space-y-3" id="sentinelClipModule" data-credit-rate="{{ config('app-constants.imagery_credit_cost_per_hectare') }}" data-process-url="{{ auth()->check() ? route('admin.sentinel.process') : '' }}" data-clip-process-url="{{ auth()->check() ? route('admin.sentinel.clip') : '' }}" data-processing-cost="{{ config('app-constants.imagery_processing_cost', 10) }}">
+                                <div class="bg-background/60 border-foreground/10 space-y-3 rounded-lg border p-3 shadow-sm">
+                                    <div class="flex flex-wrap items-center justify-between gap-2">
+                                        <div>
+                                            <h4 class="text-foreground font-semibold">Define Area of Interest</h4>
+                                            <p class="text-foreground/70 text-sm">Draw a polygon on the map to clip Sentinel-2 imagery for your field.</p>
+                                        </div>
+                                        <div class="flex items-center gap-2">
+                                            <x-button-primary id="drawPolygonBtn" type="button" size="xsmall">
+                                                <i class="ri-pencil-line"></i>
+                                                <span>Draw Polygon</span>
+                                            </x-button-primary>
+                                        </div>
+                                    </div>
+
+                                    <div class="space-y-1">
+                                        <x-input-label class="text-sm font-medium" for="clipAreaOutput">Area (hectares)</x-input-label>
+                                        <div class="border-foreground/20 rounded-lg border border-dashed px-3 py-2 text-sm" id="clipAreaOutput">
+                                            Draw a polygon to calculate the area.
+                                        </div>
+                                    </div>
+
+                                    <div class="space-y-1">
+                                        <x-input-label class="text-sm font-medium" for="clipCreditOutput">Estimated Credit Cost</x-input-label>
+                                        <div class="border-foreground/20 rounded-lg border px-3 py-2 text-sm" id="clipCreditOutput">
+                                            –
+                                        </div>
+                                        <p class="text-foreground/60 text-xs">{{ Number::format(config('app-constants.imagery_credit_cost_per_hectare'), locale: app()->getLocale()) }} credit points per hectare.</p>
+                                    </div>
+
+                                    <div class="space-y-1">
+                                        <x-input-label class="text-sm font-medium" for="clipGeojsonOutput">AOI GeoJSON</x-input-label>
+                                        <div class="border-foreground/10 bg-foreground/5 max-h-14 overflow-auto rounded-lg border p-2 font-mono text-xs" id="clipGeojsonOutput">
+                                            <span class="text-foreground/60">Coordinates will appear here after drawing.</span>
+                                        </div>
+                                    </div>
+
+                                    <div class="space-y-1">
+                                        <x-input-label class="text-sm font-medium" for="clipFieldName">Field Name</x-input-label>
+                                        <x-text-input class="w-full" id="clipFieldName" name="field_name" size="small" placeholder="e.g. North Farm Block" />
+                                    </div>
+                                </div>
+
+                                <div class="bg-background/60 border-foreground/10 flex gap-2 rounded-lg border p-3 shadow-sm">
+                                    <div class="flex flex-col gap-2 md:items-center">
+                                        <div>
+                                            <h5 class="text-foreground text-sm font-semibold uppercase tracking-wide">Process Clipped Imagery</h5>
+                                            <p class="text-foreground/60 mt-1 text-xs" id="clipProcessStatus">Draw an area and provide a field name before processing.</p>
+                                            <p class="text-foreground/60 mt-1 text-xs" id="clipProcessStatus">The system will analyse the date range and automatically choose the latest Sentinel-2 scene intersecting your polygon.</p>
+                                        </div>
+                                        <x-button-primary id="clipProcessImageryBtn" type="button" size="small">
+                                            <i class="ri-cpu-line"></i>
+                                            <span>Process Imagery</span>
+                                        </x-button-primary>
+                                    </div>
+                                </div>
+                            </div>
+                        @else
                             <div class="bg-background/60 border-foreground/10 space-y-3 rounded-lg border p-3 shadow-sm">
                                 <div class="flex flex-wrap items-center justify-between gap-2">
                                     <div>
@@ -329,63 +389,17 @@
                                         <p class="text-foreground/70 text-sm">Draw a polygon on the map to clip Sentinel-2 imagery for your field.</p>
                                     </div>
                                     <div class="flex items-center gap-2">
-                                        <x-button-primary id="drawPolygonBtn" type="button" size="xsmall">
+                                        <x-button-primary class="hs-tooltip [--placement:auto]" type="button" title="Log in to process imagery" size="xsmall" disabled>
+                                            <span class="hs-tooltip-content hs-tooltip-shown:opacity-100 hs-tooltip-shown:visible shadow-2xs invisible absolute z-10 inline-block rounded-md bg-gray-900 px-2 py-1 text-xs font-medium text-white opacity-0 transition-opacity dark:bg-neutral-700" role="tooltip">
+                                                Log in to process imagery
+                                            </span>
                                             <i class="ri-pencil-line"></i>
                                             <span>Draw Polygon</span>
                                         </x-button-primary>
                                     </div>
                                 </div>
-
-                                <div class="space-y-1">
-                                    <x-input-label class="text-sm font-medium" for="clipAreaOutput">Area (hectares)</x-input-label>
-                                    <div class="border-foreground/20 rounded-lg border border-dashed px-3 py-2 text-sm" id="clipAreaOutput">
-                                        Draw a polygon to calculate the area.
-                                    </div>
-                                </div>
-
-                                <div class="space-y-1">
-                                    <x-input-label class="text-sm font-medium" for="clipCreditOutput">Estimated Credit Cost</x-input-label>
-                                    <div class="border-foreground/20 rounded-lg border px-3 py-2 text-sm" id="clipCreditOutput">
-                                        –
-                                    </div>
-                                    <p class="text-foreground/60 text-xs">{{ Number::format(config('app-constants.imagery_credit_cost_per_hectare'), locale: app()->getLocale()) }} credit points per hectare.</p>
-                                </div>
-
-                                <div class="space-y-1">
-                                    <x-input-label class="text-sm font-medium" for="clipGeojsonOutput">AOI GeoJSON</x-input-label>
-                                    <div class="border-foreground/10 bg-foreground/5 max-h-14 overflow-auto rounded-lg border p-2 font-mono text-xs" id="clipGeojsonOutput">
-                                        <span class="text-foreground/60">Coordinates will appear here after drawing.</span>
-                                    </div>
-                                </div>
-
-                                <div class="space-y-1">
-                                    <x-input-label class="text-sm font-medium" for="clipFieldName">Field Name</x-input-label>
-                                    <x-text-input class="w-full" id="clipFieldName" name="field_name" size="small" placeholder="e.g. North Farm Block" />
-                                </div>
                             </div>
-
-                            <div class="bg-background/60 border-foreground/10 flex gap-2 rounded-lg border p-3 shadow-sm">
-                                <div class="flex flex-col gap-2 md:items-center">
-                                    <div>
-                                        <h5 class="text-foreground text-sm font-semibold uppercase tracking-wide">Process Clipped Imagery</h5>
-                                        <p class="text-foreground/60 mt-1 text-xs" id="clipProcessStatus">Draw an area and provide a field name before processing.</p>
-                                        <p class="text-foreground/60 mt-1 text-xs" id="clipProcessStatus">The system will analyse the date range and automatically choose the latest Sentinel-2 scene intersecting your polygon.</p>
-                                    </div>
-                                    @auth
-                                        <x-button-primary id="clipProcessImageryBtn" type="button" size="small">
-                                            <i class="ri-cpu-line"></i>
-                                            <span>Process Imagery</span>
-                                        </x-button-primary>
-                                    @else
-                                        <button class="bg-success/10 text-success inline-flex items-center space-x-1 rounded-lg px-3 py-2 text-sm font-semibold opacity-60" type="button" title="Log in to process imagery" disabled>
-                                            <i class="ri-cpu-line"></i>
-                                            <span>Process Imagery</span>
-                                        </button>
-                                    @endauth
-                                </div>
-                            </div>
-
-                        </div>
+                        @endauth
                     </div>
                 </div>
 
@@ -500,7 +514,7 @@
                                     <!-- input form -->
                                     <form class="space-y-2">
                                         <x-input-label class="text-sm font-medium" for="source-type">Source Type</x-input-label>
-                                        <x-select-input class="px-2! py-1!" id="sourceType" name="source-type" required>
+                                        <x-select-input class="px-2! py-1!" id="sourceType" name="source-type" required disabled>
                                             <option value="sentinel-2">Sentinel-2</option>
                                             <option value="landsat">Landsat</option>
                                             <option value="quicksat">Quicksat</option>
@@ -728,6 +742,10 @@
     </div>
     @push('javascript')
         <script>
+            window.appConfig = {
+                imageryProcessingCost: {{ config('app-constants.imagery_processing_cost') }}
+            };
+
             (() => {
                 // Centralized DOM references used by the panel controller.
                 const selectors = {
@@ -1492,11 +1510,11 @@
                         const formatLabel = (item.format || '').slice(0, 3).toUpperCase() || 'N/A';
                         card.querySelector('.imagery-format').textContent = formatLabel;
                         const displayName = item.stored_name || item.original_name || 'Imagery File';
-                        card.querySelector('.imagery-name').textContent = shortenFilename(displayName, 26);
+                        card.querySelector('.imagery-name').textContent = shortenFilename(displayName, 35);
 
                         const sizeValue = Number(item.size) || 0;
-                        const sizeMb = (sizeValue / 1024 / 1024).toFixed(2);
-                        const uploadDate = item.uploaded_at ? new Date(item.uploaded_at).toLocaleString() : '—';
+                        const sizeMb = formatNumber((sizeValue / 1024 / 1024), 2);
+                        const uploadDate = item.uploaded_at ? formatCustomDate(item.uploaded_at) : '—';
 
                         const uploadStatusKey = (item.upload_status || 'unknown').toLowerCase();
                         const processingStatusKey = (item.processing_status || 'unknown').toLowerCase();
@@ -1796,12 +1814,54 @@
                     };
                 };
 
-                const enqueueClipProcessing = async (payload) => {
-                    if (!clipElements.processBtn || !clipConfig.processUrl) {
+
+                const handleClipProcessingClick = async () => {
+                    // Early validation
+                    if (!clipElements.processBtn) {
+                        MyZkToast?.error?.('Processing button not found.');
                         return;
                     }
 
-                    const originalHtml = clipElements.processBtn.innerHTML;
+                    if (!clipConfig.processUrl) {
+                        MyZkToast?.warning?.('Please sign in to process Sentinel-2 clips.');
+                        return;
+                    }
+
+                    // Validate geometry
+                    const feature = window.geojsonFeature;
+                    if (!feature || !feature.geometry) {
+                        updateClipStatus('Please draw an area of interest on the map before processing.', 'warning');
+                        MyZkToast?.warning?.('Draw a polygon on the map to define your area of interest.');
+                        return;
+                    }
+
+                    // Calculate area
+                    const areaSquareMeters = Number(window.geojsonArea);
+                    const areaHa = Number.isFinite(areaSquareMeters) ? areaSquareMeters / 10000 : NaN;
+                    if (!Number.isFinite(areaHa) || areaHa <= 0) {
+                        updateClipStatus('Unable to determine the area of interest. Draw the polygon again.', 'error');
+                        MyZkToast?.error?.('Unable to determine the selected area. Please redraw the polygon.');
+                        return;
+                    }
+
+                    // Validate field name
+                    const fieldName = (clipElements.fieldName?.value || '').trim();
+                    if (fieldName === '') {
+                        updateClipStatus('Enter a field name before processing the clipped imagery.', 'warning');
+                        MyZkToast?.warning?.('Please provide a field name for this area.');
+                        clipElements.fieldName?.focus();
+                        return;
+                    }
+
+                    // Validate geometry
+                    const featureCollection = buildFeatureCollection(feature);
+                    if (!featureCollection?.features?.length) {
+                        updateClipStatus('Invalid geometry detected. Please redraw your area of interest.', 'error');
+                        MyZkToast?.error?.('Invalid geometry detected. Please redraw the area.');
+                        return;
+                    }
+
+                    const originalButtonClip = clipElements.processBtn.innerHTML;
                     const setButtonState = (html, disabled) => {
                         if (typeof html === 'string') {
                             clipElements.processBtn.innerHTML = html;
@@ -1811,85 +1871,7 @@
                         }
                     };
 
-                    setButtonState('<i class="ri-loader-4-line animate-spin"></i><span>Submitting...</span>', true);
-                    updateClipStatus('Submitting clipped imagery request...', 'warning');
-
-                    try {
-                        const response = await fetch(clipConfig.processUrl, {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'Accept': 'application/json',
-                                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}',
-                            },
-                            body: JSON.stringify(payload),
-                        });
-
-                        const result = await response.json().catch(() => ({}));
-
-                        if (response.ok && result?.success) {
-                            const message = result?.message || 'Sentinel clip queued for processing.';
-                            updateClipStatus(message, 'success');
-                            if (result?.data?.current_credits !== undefined) {
-                                $('#current-myCredits')?.text(formatNumber(result.data.current_credits, 2));
-                            }
-                            MyZkToast?.success?.(message);
-                        } else {
-                            const errorMessage = result?.message || 'Failed to queue clipped imagery processing. Please try again later.';
-                            updateClipStatus(errorMessage, 'error');
-                            MyZkToast?.error?.(errorMessage);
-                        }
-                    } catch (error) {
-                        console.error('Failed to queue Sentinel clip processing', error);
-                        updateClipStatus(error?.message || 'Unable to queue clipped imagery at this time.', 'error');
-                        MyZkToast?.error?.('Unable to queue clipped imagery at this time.');
-                    } finally {
-                        setButtonState(originalHtml, false);
-                        if (typeof window.AppMap?.uploader?.reload === 'function') {
-                            window.AppMap.uploader.reload();
-                        }
-                    }
-                };
-
-                const handleClipProcessingClick = async () => {
-                    if (!clipElements.processBtn) {
-                        return;
-                    }
-                    if (!clipConfig.processUrl) {
-                        MyZkToast?.warning?.('Please sign in to process Sentinel-2 clips.');
-                        return;
-                    }
-
-                    const feature = window.geojsonFeature;
-                    if (!feature || !feature.geometry) {
-                        updateClipStatus('Please draw an area of interest on the map before processing.', 'warning');
-                        MyZkToast?.warning?.('Draw a polygon on the map to define your area of interest.');
-                        return;
-                    }
-
-                    const areaSquareMeters = Number(window.geojsonArea);
-                    const areaHa = Number.isFinite(areaSquareMeters) ? areaSquareMeters / 10000 : NaN;
-                    if (!Number.isFinite(areaHa) || areaHa <= 0) {
-                        updateClipStatus('Unable to determine the area of interest. Draw the polygon again.', 'error');
-                        MyZkToast?.error?.('Unable to determine the selected area. Please redraw the polygon.');
-                        return;
-                    }
-
-                    const fieldName = (clipElements.fieldName?.value || '').trim();
-                    if (fieldName === '') {
-                        updateClipStatus('Enter a field name before processing the clipped imagery.', 'warning');
-                        MyZkToast?.warning?.('Please provide a field name for this area.');
-                        clipElements.fieldName?.focus();
-                        return;
-                    }
-
-                    const featureCollection = buildFeatureCollection(feature);
-                    if (!featureCollection?.features?.length) {
-                        updateClipStatus('Invalid geometry detected. Please redraw your area of interest.', 'error');
-                        MyZkToast?.error?.('Invalid geometry detected. Please redraw the area.');
-                        return;
-                    }
-
+                    // Prepare payload
                     const estimatedCredits = computeClipCredits(areaHa);
                     const payload = {
                         field_name: fieldName,
@@ -1899,7 +1881,54 @@
                         estimated_credits: estimatedCredits,
                     };
 
+                    const enqueueClipProcessing = async (payload) => {
+                        if (!clipElements.processBtn || !clipConfig.processUrl) {
+                            return;
+                        }
+
+                        setButtonState('<i class="ri-loader-4-line animate-spin"></i><span>Submitting...</span>', true);
+                        updateClipStatus('Submitting clipped imagery request...', 'warning');
+
+                        try {
+                            const response = await fetch(clipConfig.processUrl, {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'Accept': 'application/json',
+                                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}',
+                                },
+                                body: JSON.stringify(payload),
+                            });
+
+                            const result = await response.json().catch(() => ({}));
+
+                            if (response.ok && result?.success) {
+                                const message = result?.message || 'Sentinel clip queued for processing.';
+                                updateClipStatus(message, 'success');
+                                if (result?.data?.current_credits !== undefined) {
+                                    $('#current-myCredits')?.text(formatNumber(result.data.current_credits, 2));
+                                }
+                                MyZkToast?.success?.(message);
+                            } else {
+                                const errorMessage = result?.message || 'Failed to queue clipped imagery processing. Please try again later.';
+                                updateClipStatus(errorMessage, 'error');
+                                MyZkToast?.error?.(errorMessage);
+                            }
+                        } catch (error) {
+                            console.error('Failed to queue Sentinel clip processing', error);
+                            updateClipStatus(error?.message || 'Unable to queue clipped imagery at this time.', 'error');
+                            MyZkToast?.error?.('Unable to queue clipped imagery at this time.');
+                        } finally {
+                            setButtonState(originalButtonClip, false);
+                            if (typeof window.AppMap?.uploader?.reload === 'function') {
+                                window.AppMap.uploader.reload();
+                            }
+                        }
+                    };
+
                     try {
+                        setButtonState('Checking Credit...', true);
+                        // Check user credits
                         const creditsInfo = await checkUserCredits(estimatedCredits);
                         const currentCredits = Number.parseFloat(creditsInfo?.currentCredits ?? creditsInfo?.credits ?? 0) || 0;
                         const requiredCredits = Number.isFinite(estimatedCredits) ? estimatedCredits : creditsInfo?.requiredCredits;
@@ -1907,45 +1936,50 @@
                         const formattedRequired = Number.isFinite(requiredCredits) ? formatNumber(requiredCredits, 2) : formatNumber(creditsInfo?.requiredCredits ?? 0, 2);
                         const formattedCurrent = formatNumber(currentCredits, 2);
 
-                        const proceed = () => {
+                        // Define proceed function
+                        const proceed = async () => {
                             if (!hasCredits && Number.isFinite(requiredCredits) && requiredCredits > 0) {
                                 MyZkToast?.warning?.(`Insufficient credit points. You need ${formattedRequired} credits but only have ${formattedCurrent}.`);
                                 updateClipStatus('Insufficient credit points to process this imagery.', 'warning');
-                                return;
+                                return Promise.reject(new Error('Insufficient credits'));
                             }
-                            enqueueClipProcessing(payload);
+                            return await enqueueClipProcessing(payload);
                         };
 
+                        // Show confirmation dialog
                         const confirmationMessage = hasCredits || !Number.isFinite(requiredCredits) || requiredCredits <= 0 ?
                             `This action will cost approximately ${formattedRequired} credit points. Do you want to continue?` :
                             `You need ${formattedRequired} credit points but currently have ${formattedCurrent}. Please purchase more credits.`;
 
-                        if (typeof ZkPopAlert?.show === 'function') {
-                            ZkPopAlert.show({
-                                message: confirmationMessage,
-                                icon: '<i class="ri-cpu-line text-2xl text-primary"></i>',
-                                confirmClass: "focus:ring-primary/80 rounded-md text-sm px-2.5 py-1.5 bg-primary text-primary-foreground border border-primary hover:bg-primary/80 focus:outline-none focus:ring-primary",
-                                confirmText: hasCredits ? 'Yes, Process' : 'Close',
-                                cancelText: hasCredits ? 'Cancel' : null,
-                                onConfirm: () => {
-                                    if (hasCredits) {
-                                        proceed();
+                        ZkPopAlert.show({
+                            message: confirmationMessage,
+                            icon: '<i class="ri-cpu-line text-2xl text-primary"></i>',
+                            confirmClass: "focus:ring-primary/80 rounded-md text-sm px-2.5 py-1.5 bg-primary text-primary-foreground border border-primary hover:bg-primary/80 focus:outline-none focus:ring-primary",
+                            confirmText: hasCredits ? 'Yes, Process' : 'Buy Credits',
+                            cancelText: hasCredits ? 'Cancel' : 'Close',
+                            onConfirm: async () => {
+                                if (hasCredits) {
+                                    updateClipStatus('Queuing Process...', 'info');
+                                    try {
+                                        await proceed();
+                                    } catch (error) {
+                                        console.error('Processing failed:', error);
+                                        MyZkToast?.error?.('Processing failed. Please try again or Refresh.');
+                                    } finally {
+                                        setButtonState(originalButtonClip, false);
                                     }
-                                },
-                            });
-                        } else if (hasCredits) {
-                            const confirmed = window.confirm(confirmationMessage);
-                            if (confirmed) {
-                                proceed();
-                            }
-                        } else {
-                            MyZkToast?.warning?.(`Insufficient credit points. You need ${formattedRequired} credits but only have ${formattedCurrent}.`);
-                            updateClipStatus('Insufficient credit points to process this imagery.', 'warning');
-                        }
+                                } else {
+                                    // Redirect to credit purchase page
+                                    window.location.href = '{{ route('admin.purchase-credits') }}';
+                                }
+                            },
+                        });
                     } catch (error) {
                         console.error('Failed to verify credit balance', error);
                         updateClipStatus('Unable to verify your credit balance. Please try again.', 'error');
                         MyZkToast?.error?.('Unable to verify your credit balance.');
+                    } finally {
+                        setButtonState(originalButtonClip, false);
                     }
                 };
 
@@ -2096,7 +2130,7 @@
                 /**
                  * Mutate the status label shown above the collection list.
                  */
-                const setStatus = (message, isLoading = false) => {
+                const setStatusFetching = (message, isLoading = false) => {
                     if (elements.status) {
                         if (isLoading) {
                             elements.status.innerHTML = `
@@ -2490,7 +2524,7 @@
                     if (!feature) return null;
 
                     const props = feature.properties || {};
-                    const title = shortenFilename(props?.title, 30) || props?.productIdentifier || feature?.id || 'Sentinel-2 Scene';
+                    const title = shortenFilename(props?.title, 32) || props?.productIdentifier || feature?.id || 'Sentinel-2 Scene';
                     const acquisitionDate = props.completionDate || props.startDate || props.endPosition || props.beginPosition || props.startTimeFromAscendingNode;
                     const cloudCover = resolveCloudCover(feature);
                     const mgrs = props.mgrsId || props.tileId || props.MGRS || props.utmc || null;
@@ -2507,7 +2541,7 @@
                         details.push(`Tile ${mgrs}`);
                     }
                     if (Number.isFinite(cloudCover)) {
-                        details.push(`Cloud ${cloudCover.toFixed(1)}%`);
+                        details.push(`Cloud ${formatNumber(cloudCover, 1)}%`);
                     }
 
                     return {
@@ -2956,7 +2990,7 @@
                     }
                     if (elements.previewAcquired) {
                         elements.previewAcquired.textContent = scene.datetime ?
-                            new Date(scene.datetime).toUTCString() :
+                            formatReadableDate(scene.datetime) :
                             'Acquisition time unavailable';
                     }
 
@@ -3066,7 +3100,7 @@
                     state.requestController = controller;
 
                     setLoadingState(true);
-                    setStatus('Fetching Sentinel-2 scenes...', true);
+                    setStatusFetching('Fetching Sentinel-2 scenes...', true);
 
                     const params = buildQueryParams(maxRecords);
                     state.lastQueryString = params.toString();
@@ -3105,10 +3139,10 @@
                         renderSceneList();
 
                         if (scenes.length === 0) {
-                            setStatus('No Sentinel-2 scenes found for the selected filters.');
+                            setStatusFetching('No Sentinel-2 scenes found for the selected filters.');
                         } else {
                             const suffix = triggeredByFilter ? 'filters' : 'default filters';
-                            setStatus(`Showing ${scenes.length} scene(s) based on ${suffix}.`);
+                            setStatusFetching(`Showing ${scenes.length} scene(s) based on ${suffix}.`);
                         }
                     } catch (error) {
                         if (error.name === 'AbortError') {
@@ -3118,7 +3152,7 @@
                         state.scenes = [];
                         renderSceneList();
                         const fallbackMessage = error?.message || 'Failed to load Sentinel-2 scenes.';
-                        setStatus(fallbackMessage);
+                        setStatusFetching(fallbackMessage);
                     } finally {
                         if (state.requestController === controller) {
                             state.requestController = null;

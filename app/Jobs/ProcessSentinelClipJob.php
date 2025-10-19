@@ -50,6 +50,7 @@ class ProcessSentinelClipJob implements ShouldQueue
         $outputFilename = basename($this->payload['output_filename'] ?? $imagery->stored_name);
         $outputPath = $imageryDir . DIRECTORY_SEPARATOR . $outputFilename;
         $relativeOutput = 'storage/imagery/' . $outputFilename;
+        $creditCost = $this->payload['required_credits'] ?? 0;
 
         $tilesDir = storage_path('app/tmp/sentinel_clip_' . $this->imageryId);
         if (File::isDirectory($tilesDir)) {
@@ -60,51 +61,37 @@ class ProcessSentinelClipJob implements ShouldQueue
 
         $scriptsBase = base_path('scripts');
         $scriptPath = $scriptsBase . DIRECTORY_SEPARATOR . 'process_clipped_multispectral_auto.py';
-        $pythonPath = $pythonService->resolvePythonPath($scriptsBase);
-
-        if (!$pythonPath) {
-            Log::error('ProcessSentinelClipJob: Python executable not found for clipping process.');
-            $creditService->refundCreditsForFailure($imagery, 'ClipJob');
-            $imagery->update([
-                'processing_status' => 'error',
-                'upload_status' => 'failed',
-            ]);
-            return;
-        }
-
-        if (!File::exists($scriptPath)) {
-            Log::error('ProcessSentinelClipJob: Clipping script not found.', [
-                'path' => $scriptPath,
-            ]);
-            $creditService->refundCreditsForFailure($imagery, 'ClipJob');
-            $imagery->update([
-                'processing_status' => 'error',
-                'upload_status' => 'failed',
-            ]);
-            return;
-        }
-
-        $geometry = $this->payload['geometry'] ?? null;
-        if (!$geometry) {
-            Log::error('ProcessSentinelClipJob: Geometry payload missing.', [
-                'imagery_id' => $this->imageryId,
-            ]);
-            $creditService->refundCreditsForFailure($imagery, 'ClipJob');
-            $imagery->update([
-                'processing_status' => 'error',
-                'upload_status' => 'failed',
-            ]);
-            return;
-        }
-
-        if (File::exists($outputPath)) {
-            File::delete($outputPath);
-        }
-        if (File::exists($mergedPath)) {
-            File::delete($mergedPath);
-        }
 
         try {
+            $pythonPath = $pythonService->resolvePythonPath($scriptsBase);
+
+            if (!$pythonPath) {
+                Log::error('ProcessSentinelClipJob: Python executable not found for clipping process.');
+                throw new \RuntimeException('Python executable not found for clipping process.');
+            }
+
+            if (!File::exists($scriptPath)) {
+                Log::error('ProcessSentinelClipJob: Clipping script not found.', [
+                    'path' => $scriptPath,
+                ]);
+                throw new \RuntimeException('Clipping script not found.');
+            }
+
+            $geometry = $this->payload['geometry'] ?? null;
+            if (!$geometry) {
+                Log::error('ProcessSentinelClipJob: Geometry payload missing.', [
+                    'imagery_id' => $this->imageryId,
+                ]);
+                throw new \RuntimeException('Geometry payload missing.');
+            }
+
+            if (File::exists($outputPath)) {
+                File::delete($outputPath);
+            }
+            if (File::exists($mergedPath)) {
+                File::delete($mergedPath);
+            }
+
             $geojson = $this->payload['geojson'] ?? [
                 'type' => 'FeatureCollection',
                 'features' => [[
@@ -203,19 +190,25 @@ class ProcessSentinelClipJob implements ShouldQueue
                 'output' => $relativeOutput,
             ]);
 
-            ProcessImageryJob::dispatch($imagery->id)->onQueue('processing');
+            ProcessImageryJob::dispatch(
+                $imagery->id,
+                [
+                    'required_credits' => $creditCost,
+                ]
+            )->onQueue('processing');
         } catch (Throwable $exception) {
             Log::error('ProcessSentinelClipJob failed.', [
                 'imagery_id' => $this->imageryId,
                 'field_area_id' => $this->fieldAreaId,
                 'error' => $exception->getMessage(),
+                'exception' => $exception,
             ]);
 
             if (File::exists($outputPath)) {
                 File::delete($outputPath);
             }
 
-            $creditService->refundCreditsForFailure($imagery, 'ClipJob');
+            $creditService->refundCreditsForFailure($imagery, $creditCost, 'ClipJob');
             $imagery->update([
                 'processing_status' => 'error',
                 'upload_status' => 'failed',

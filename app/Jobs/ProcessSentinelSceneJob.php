@@ -70,6 +70,7 @@ class ProcessSentinelSceneJob implements ShouldQueue
         $sourceDir = $this->zipDirectory !== ''
             ? $publicStorage . DIRECTORY_SEPARATOR . $this->zipDirectory
             : $imageryDir;
+        $creditCost = $this->metadata['required_credits'] ?? 0;
 
         if (!File::isDirectory($imageryDir)) {
             File::makeDirectory($imageryDir, 0755, true);
@@ -225,7 +226,7 @@ class ProcessSentinelSceneJob implements ShouldQueue
                 File::delete($outputPath);
             }
 
-            $creditService->refundCreditsForFailure($imagery, "Job");
+            $creditService->refundCreditsForFailure($imagery, $creditCost, "Job");
             $imagery->update([
                 'upload_status' => 'failed',
                 'processing_status' => 'error',

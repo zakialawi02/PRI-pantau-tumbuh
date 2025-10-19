@@ -176,7 +176,7 @@ function formatReadableDate(value) {
     const parsed = new Date(value);
     if (Number.isNaN(parsed.getTime())) return value;
     return (
-        parsed.toLocaleString("id-ID", {
+        parsed.toLocaleString(document.documentElement.lang || "en-US", {
             dateStyle: "medium",
             timeStyle: "short",
             timeZone: "UTC",
@@ -240,19 +240,19 @@ window.formatCurrency = formatCurrency;
  * Formats a number into a localized string representation.
  *
  * @param {number|string} amount - The number to format.
- * @param {string} [locale="us-US"] - The locale to use for formatting (e.g., "us-US", "id-ID").
+ * @param {string} [locale="en-US"] - The locale to use for formatting (e.g., "en-US", "id-ID").
  * @param {number} [fractionDigits=3] - The number of digits to appear after the decimal point.
  * @returns {string} A formatted number string or "-" if formatting fails.
  *
  * @example
- * formatNumber(1234567.89) // Returns "1,234,567.890" for locale "us-US" with default 3 fraction digits
+ * formatNumber(1234567.89) // Returns "1,234,567.890" for locale "en-US" with default 3 fraction digits
  * formatNumber(1234567.89, 2, "id-ID") // Returns "1.234.567,89" for locale "id-ID" with 2 fraction digits
  */
 function formatNumber(
     amount,
     fractionDigits = 3,
-    locale = document.documentElement.lang || "us-US"
-    // locale = navigator.language || "us-US"
+    locale = document.documentElement.lang || "en-US"
+    // locale = navigator.language || "en-US"
 ) {
     try {
         // Convert to number if it's a string
@@ -374,8 +374,7 @@ async function checkUserCredits() {
     }
 
     const currentCredits = parseFloat(result.credits) || 0;
-    const requiredCredits =
-        parseFloat("{{ config('app.imagery_processing_cost') }}") || 10; // Default to 10 if not set
+    const requiredCredits = parseFloat(window.appConfig.imageryProcessingCost);
 
     const data = {
         hasCredits: currentCredits >= requiredCredits,

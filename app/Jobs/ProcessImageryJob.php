@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use Throwable;
 use App\Models\ImageryData;
 use App\Services\CreditService;
 use App\Services\GeoServerService;
@@ -20,10 +21,12 @@ class ProcessImageryJob implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     protected $imageryId;
+    protected $payload;
 
-    public function __construct($imageryId)
+    public function __construct($imageryId, array $payload = [])
     {
         $this->imageryId = $imageryId;
+        $this->payload = $payload;
     }
 
     public function handle()
@@ -45,13 +48,7 @@ class ProcessImageryJob implements ShouldQueue
         $scriptsBase = base_path('scripts');
         $scriptPath = "{$scriptsBase}/process_imagery.py";
         $filePath   = storage_path("app/public/imagery/{$imagery->stored_name}");
-
-        if (!File::exists($filePath)) {
-            Log::error("❌ [Job] Input imagery file not found: {$filePath}");
-            $creditService->refundCreditsForFailure($imagery, "Job");
-            $imagery->update(['processing_status' => 'error']);
-            return;
-        }
+        $creditCost = $this->payload['required_credits'] ?? 0;
 
         $processedDirectory = storage_path('app/public/imagery/processed');
         if (!File::isDirectory($processedDirectory)) {
@@ -62,77 +59,81 @@ class ProcessImageryJob implements ShouldQueue
         $processedFileName = pathinfo($imagery->stored_name, PATHINFO_FILENAME) . '_processed.' . $extension;
         $outputPath = $processedDirectory . DIRECTORY_SEPARATOR . $processedFileName;
 
-        $modelPath = $scriptsBase . DIRECTORY_SEPARATOR . 'Data Model' . DIRECTORY_SEPARATOR . 'Best_Model2.h5';
-        $scalerPath = $scriptsBase . DIRECTORY_SEPARATOR . 'Data Model' . DIRECTORY_SEPARATOR . 'Best_Scaler2.pkl';
+        try {
+            if (!File::exists($filePath)) {
+                Log::error("❌ [Job] Input imagery file not found: {$filePath}");
+                throw new \RuntimeException("Input imagery file not found: {$filePath}");
+            }
 
-        if (!File::exists($modelPath)) {
-            Log::error("❌ [Job] Model file not found: {$modelPath}");
-            $creditService->refundCreditsForFailure($imagery, "Job");
-            $imagery->update(['processing_status' => 'error']);
-            return;
-        }
+            $modelPath = $scriptsBase . DIRECTORY_SEPARATOR . 'Data Model' . DIRECTORY_SEPARATOR . 'Best_Model2.h5';
+            $scalerPath = $scriptsBase . DIRECTORY_SEPARATOR . 'Data Model' . DIRECTORY_SEPARATOR . 'Best_Scaler2.pkl';
 
-        if (!File::exists($scalerPath)) {
-            Log::error("❌ [Job] Scaler file not found: {$scalerPath}");
-            $creditService->refundCreditsForFailure($imagery, "Job");
-            $imagery->update(['processing_status' => 'error']);
-            return;
-        }
+            if (!File::exists($modelPath)) {
+                Log::error("❌ [Job] Model file not found: {$modelPath}");
+                throw new \RuntimeException("Model file not found: {$modelPath}");
+            }
 
-        // Path Python di venv
-        $pythonPath = $pythonService->resolvePythonPath($scriptsBase);
+            if (!File::exists($scalerPath)) {
+                Log::error("❌ [Job] Scaler file not found: {$scalerPath}");
+                throw new \RuntimeException("Scaler file not found: {$scalerPath}");
+            }
 
-        if (!file_exists($pythonPath)) {
-            Log::error("❌ [Job] Python venv not found: {$pythonPath}");
-            $creditService->refundCreditsForFailure($imagery, "Job");
-            $imagery->update(['processing_status' => 'error']);
-            return;
-        }
+            // Path Python di venv
+            $pythonPath = $pythonService->resolvePythonPath($scriptsBase);
 
-        if (!file_exists($scriptPath)) {
-            Log::error("❌ [Job] Python script not found: {$scriptPath}");
-            $creditService->refundCreditsForFailure($imagery, "Job");
-            $imagery->update(['processing_status' => 'error']);
-            return;
-        }
+            if (!file_exists($pythonPath)) {
+                Log::error("❌ [Job] Python venv not found: {$pythonPath}");
+                throw new \RuntimeException("Python venv not found: {$pythonPath}");
+            }
 
-        // Konfigurasi tambahan untuk inferensi Python (opsional via .env)
-        $tileSize = env('IMAGERY_TILE_SIZE');
-        $batchSize = env('IMAGERY_BATCH_SIZE');
+            if (!file_exists($scriptPath)) {
+                Log::error("❌ [Job] Python script not found: {$scriptPath}");
+                throw new \RuntimeException("Python script not found: {$scriptPath}");
+            }
 
-        $overrides = [
-            'IMAGERY_INPUT_PATH' => $filePath,
-            'IMAGERY_OUTPUT_PATH' => $outputPath,
-            'IMAGERY_MODEL_PATH' => $modelPath,
-            'IMAGERY_SCALER_PATH' => $scalerPath,
-            'IMAGERY_ID' => (string) $imagery->id,
-        ];
+            // Konfigurasi tambahan untuk inferensi Python (opsional via .env)
+            $tileSize = env('IMAGERY_TILE_SIZE');
+            $batchSize = env('IMAGERY_BATCH_SIZE');
 
-        if (!is_null($tileSize)) {
-            $overrides['IMAGERY_TILE_SIZE'] = (string) $tileSize;
-        }
+            $overrides = [
+                'IMAGERY_INPUT_PATH' => $filePath,
+                'IMAGERY_OUTPUT_PATH' => $outputPath,
+                'IMAGERY_MODEL_PATH' => $modelPath,
+                'IMAGERY_SCALER_PATH' => $scalerPath,
+                'IMAGERY_ID' => (string) $imagery->id,
+            ];
 
-        if (!is_null($batchSize)) {
-            $overrides['IMAGERY_BATCH_SIZE'] = (string) $batchSize;
-        }
+            if (!is_null($tileSize)) {
+                $overrides['IMAGERY_TILE_SIZE'] = (string) $tileSize;
+            }
 
-        // Jalankan proses Python
-        $processEnv = $pythonService->buildProcessEnvironment($overrides);
+            if (!is_null($batchSize)) {
+                $overrides['IMAGERY_BATCH_SIZE'] = (string) $batchSize;
+            }
 
-        $process = new Process([$pythonPath, $scriptPath], $scriptsBase, $processEnv);
-        $process->setTimeout(7200); // max 2 jam
-        $process->run();
+            // Jalankan proses Python
+            $processEnv = $pythonService->buildProcessEnvironment($overrides);
 
-        // Log stdout / stderr ke laravel.log
-        if ($process->getOutput()) {
-            Log::info('[PYTHON OUT] ' . trim($process->getOutput()));
-        }
-        if ($process->getErrorOutput()) {
-            Log::error('[PYTHON ERR] ' . trim($process->getErrorOutput()));
-        }
+            $process = new Process([$pythonPath, $scriptPath], $scriptsBase, $processEnv);
+            $process->setTimeout(7200); // max 2 jam
+            $process->run();
 
-        // Cek hasil eksekusi
-        if ($process->isSuccessful()) {
+            // Log stdout / stderr ke laravel.log
+            $stdout = trim($process->getOutput());
+            if ($stdout !== '') {
+                Log::info('[PYTHON OUT] ' . $stdout);
+            }
+
+            $stderr = trim($process->getErrorOutput());
+            if ($stderr !== '') {
+                Log::error('[PYTHON ERR] ' . $stderr);
+            }
+
+            // Cek hasil eksekusi
+            if (!$process->isSuccessful()) {
+                throw new \RuntimeException("Python processing failed for imagery: {$imagery->id}");
+            }
+
             $geoserverService = app(GeoServerService::class);
             $relativePath = "storage/imagery/processed/{$processedFileName}";
             $geoserverData = null;
@@ -140,7 +141,7 @@ class ProcessImageryJob implements ShouldQueue
             if (File::exists($outputPath)) {
                 try {
                     $geoserverData = $geoserverService->publishImageryLayer($imagery, $outputPath, 'processed');
-                } catch (\Throwable $geoserverException) {
+                } catch (Throwable $geoserverException) {
                     Log::warning('ProcessImageryJob: Failed to publish processed imagery to GeoServer.', [
                         'imagery_id' => $this->imageryId,
                         'error' => $geoserverException->getMessage(),
@@ -157,7 +158,6 @@ class ProcessImageryJob implements ShouldQueue
                 ]);
 
                 Log::info("✅ [Job] Processing completed successfully. Output file found at: {$outputPath}");
-                return;
             } else {
                 // Simpan path-nya tetap, tapi log kalau file gak terdeteksi
                 $imagery->update([
@@ -170,11 +170,15 @@ class ProcessImageryJob implements ShouldQueue
                 ]);
                 Log::warning("⚠️ [Job] Processing done, but output file not detected in expected location.");
             }
-        } else {
+        } catch (Throwable $exception) {
+            Log::error("❌ [Job] Processing failed for {$imagery->id}: " . $exception->getMessage(), [
+                'exception' => $exception,
+                'payload' => $this->payload,
+            ]);
+
             // Refund credits when processing fails
-            $creditService->refundCreditsForFailure($imagery, "Job");
+            $creditService->refundCreditsForFailure($imagery, $creditCost, "Job");
             $imagery->update(['processing_status' => 'error']);
-            Log::error("❌ [Job] Processing failed for {$imagery->id}");
         }
     }
 }
