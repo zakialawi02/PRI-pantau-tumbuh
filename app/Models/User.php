@@ -128,4 +128,14 @@ class User extends Authenticatable implements MustVerifyEmail
     {
         return $this->credits ? $this->credits->credits : 0;
     }
+
+    public function creditHistories()
+    {
+        return $this->hasMany(UserCreditHistory::class);
+    }
+
+    public function performedCreditHistories()
+    {
+        return $this->hasMany(UserCreditHistory::class, 'performed_by');
+    }
 }

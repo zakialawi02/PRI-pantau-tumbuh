@@ -54,11 +54,12 @@ Route::prefix('dashboard')->name('admin.')->group(function () {
         Route::post('/imagery/{imagery}/retry-merge', [ImageryDataController::class, 'retryMerge'])->name('imagery.retry-merge');
         Route::get('/imagery/{imagery}/download-source', [ImageryDataController::class, 'downloadSource'])->name('imagery.download.source');
         Route::get('/imagery/{imagery}/download-result', [ImageryDataController::class, 'downloadResult'])->name('imagery.download.result');
-        Route::post('/sentinel/process', [ImageryDataController::class, 'processSceneSentinel2'])->name('sentinel.process');
-        Route::post('/sentinel/process-clip', [ImageryDataController::class, 'processClipSentinel2'])->name('sentinel.clip');
+        Route::post('/sentinel/process', [ImageryDataController::class, 'processSceneSentinel2'])->name('sentinel.process.scene');
+        Route::post('/sentinel/process-clip', [ImageryDataController::class, 'processClipSentinel2'])->name('sentinel.process.clip');
 
         // Credit Purchase
         Route::get('/purchase-credits', [UserCreditsController::class, 'purchase'])->name('purchase-credits');
+        Route::get('/credit-history', [UserCreditsController::class, 'history'])->name('credit-history.index');
     });
 
 
