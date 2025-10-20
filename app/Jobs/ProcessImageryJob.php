@@ -142,7 +142,7 @@ class ProcessImageryJob implements ShouldQueue
                 try {
                     $geoserverData = $geoserverService->publishImageryLayer($imagery, $outputPath, 'processed');
                 } catch (Throwable $geoserverException) {
-                    Log::warning('ProcessImageryJob: Failed to publish processed imagery to GeoServer.', [
+                    Log::error('ProcessImageryJob: Failed to publish processed imagery to GeoServer.', [
                         'imagery_id' => $this->imageryId,
                         'error' => $geoserverException->getMessage(),
                     ]);

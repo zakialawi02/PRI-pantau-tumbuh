@@ -187,7 +187,7 @@ class ProcessSentinelSceneJob implements ShouldQueue
             try {
                 $geoserverData = app(GeoServerService::class)->publishImageryLayer($imagery, $outputPath, 'source');
             } catch (Throwable $publishException) {
-                Log::warning('ProcessSentinelSceneJob: Failed to publish Sentinel scene to GeoServer.', [
+                Log::error('ProcessSentinelSceneJob: Failed to publish Sentinel scene to GeoServer.', [
                     'imagery_id' => $this->imageryId,
                     'error' => $publishException->getMessage(),
                 ]);
