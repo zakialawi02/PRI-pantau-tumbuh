@@ -162,7 +162,7 @@ class ProcessSentinelClipJob implements ShouldQueue
             try {
                 $geoserverData = app(GeoServerService::class)->publishImageryLayer($imagery, $outputPath, 'source');
             } catch (Throwable $publishException) {
-                Log::warning('ProcessSentinelClipJob: Failed to publish clipped Sentinel imagery to GeoServer.', [
+                Log::error('ProcessSentinelClipJob: Failed to publish clipped Sentinel imagery to GeoServer.', [
                     'imagery_id' => $this->imageryId,
                     'error' => $publishException->getMessage(),
                 ]);

@@ -18,15 +18,19 @@ class TelescopeServiceProvider extends TelescopeApplicationServiceProvider
 
         $this->hideSensitiveRequestDetails();
 
-        $isLocal = $this->app->environment('local');
+        Telescope::filter(function (IncomingEntry $entry) {
+            // Di local → simpan semua
+            if ($this->app->environment('local')) {
+                return true;
+            }
 
-        Telescope::filter(function (IncomingEntry $entry) use ($isLocal) {
-            return $isLocal ||
-                $entry->isReportableException() ||
-                $entry->isFailedRequest() ||
-                $entry->isFailedJob() ||
-                $entry->isScheduledTask() ||
-                $entry->hasMonitoredTag();
+            // Di production → simpan hanya yang penting
+            return $entry->isReportableException()   // Exception
+                || $entry->isFailedRequest()        // Request gagal (status 500, dll.)
+                || $entry->isFailedJob()            // Job gagal
+                || $entry->isScheduledTask()        // Task scheduler
+                // || $entry->type === 'request'       // Semua HTTP request
+                || $entry->type === 'log';          // Log manual (\Log::info, dll.)
         });
     }
 

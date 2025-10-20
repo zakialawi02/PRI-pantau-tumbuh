@@ -146,7 +146,7 @@ class MergeImageryChunksJob implements ShouldQueue
             try {
                 $geoserverData = $geoserverService->publishImageryLayer($imagery, $this->finalPath, 'source');
             } catch (Exception $geoserverException) {
-                Log::warning('MergeImageryChunksJob: Failed to publish source imagery to GeoServer.', [
+                Log::error('MergeImageryChunksJob: Failed to publish source imagery to GeoServer.', [
                     'imagery_id' => $this->imageryId,
                     'error' => $geoserverException->getMessage(),
                 ]);
