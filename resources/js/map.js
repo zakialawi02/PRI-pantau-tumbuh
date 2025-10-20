@@ -136,7 +136,7 @@ const overviewMapControl = new OverviewMap({
     ],
     // Don't use target initially - let OpenLayers handle the positioning
     className: "ol-overviewmap ol-custom-overviewmap",
-    collapsed: false,
+    collapsed: true,
     tipLabel: "Minimap",
     collapseLabel: "\u00BB",
     label: "\u00AB",
@@ -380,14 +380,12 @@ function normaliseLayerOptions(options = {}) {
                 : undefined,
         opacity:
             typeof options.opacity === "number" ? options.opacity : undefined,
-        zIndex:
-            typeof options.zIndex === "number" ? options.zIndex : undefined,
+        zIndex: typeof options.zIndex === "number" ? options.zIndex : undefined,
         crossOrigin:
             typeof options.crossOrigin === "string" && options.crossOrigin
                 ? options.crossOrigin
                 : "anonymous",
-        title:
-            typeof options.title === "string" ? options.title.trim() : "",
+        title: typeof options.title === "string" ? options.title.trim() : "",
         padding: Array.isArray(options.padding) ? [...options.padding] : null,
         maxZoom:
             typeof options.maxZoom === "number" ? options.maxZoom : undefined,
@@ -500,7 +498,10 @@ function normaliseSingleBounds(bounds, fallbackProjection) {
         projection = bounds.projection.trim();
     } else if (typeof bounds.crs === "string" && bounds.crs.trim()) {
         projection = bounds.crs.trim();
-    } else if (typeof fallbackProjection === "string" && fallbackProjection.trim()) {
+    } else if (
+        typeof fallbackProjection === "string" &&
+        fallbackProjection.trim()
+    ) {
         projection = fallbackProjection.trim();
     }
 
@@ -681,12 +682,7 @@ function parseLayerBounds(layer) {
 
             const extent =
                 normaliseExtent(bbox.extent) ||
-                normaliseExtent([
-                    bbox.minx,
-                    bbox.miny,
-                    bbox.maxx,
-                    bbox.maxy,
-                ]);
+                normaliseExtent([bbox.minx, bbox.miny, bbox.maxx, bbox.maxy]);
 
             if (extent) {
                 const projection = bbox.crs || bbox.CRS || "EPSG:4326";
@@ -846,7 +842,10 @@ function toggleGeoserverLayer(options = {}) {
 
     const targetLayerName = entry.options?.layer;
 
-    if (targetLayerName && entry.source.getParams().LAYERS !== targetLayerName) {
+    if (
+        targetLayerName &&
+        entry.source.getParams().LAYERS !== targetLayerName
+    ) {
         entry.source.updateParams({
             LAYERS: targetLayerName,
             STYLES: entry.options?.style || "",
@@ -1330,7 +1329,7 @@ let geojsonFeature;
 let geojsonArea;
 let drawingRunning;
 let drawed;
-let minimapVisible = true;
+let minimapVisible = false;
 let listener;
 
 /**
@@ -1864,8 +1863,9 @@ function hideMinimap() {
 }
 
 document.addEventListener("DOMContentLoaded", function () {
-    if (!minimapVisible) {
-        toggleMinimap();
+    if (overviewMapControl) {
+        overviewMapControl.setCollapsed(true);
+        minimapVisible = false;
     }
 });
 

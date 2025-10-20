@@ -18,7 +18,7 @@
                     </p>
                 </div>
                 <div>
-                    <x-button-primary href="{{ route('admin.purchase-credits') }}" size="small">
+                    <x-button-primary href="{{ route('admin.purchase-credits') }}" size="xsmall">
                         <i class="ri-add-line mr-1"></i> Buy More Credits
                     </x-button-primary>
                 </div>
@@ -32,29 +32,36 @@
 
         <!-- Recent Activity Section -->
         <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <!-- Recent Field Areas -->
+            <!-- Recent Imagery -->
             <x-card class="space-y-4">
-                <h3 class="text-lg font-semibold">Recent Field Areas</h3>
-                @if (isset($data['recentFieldAreas']) && $data['recentFieldAreas']->count() > 0)
+                <h3 class="text-lg font-semibold">Recent Imagery</h3>
+                @if (isset($data['recentImagery']) && $data['recentImagery']->count() > 0)
                     <div class="space-y-3">
-                        @foreach ($data['recentFieldAreas'] as $fieldArea)
+                        @foreach ($data['recentImagery'] as $imagery)
                             <div class="flex items-center justify-between border-b pb-3 last:border-0 last:pb-0">
                                 <div>
-                                    <h4 class="font-medium">{{ $fieldArea->name }}</h4>
-                                    <p class="text-foreground/60 text-sm">{{ Number::format($fieldArea->area_ha, 3, locale: app()->getLocale()) }} ha</p>
+                                    <h4 class="font-medium">{{ $imagery->stored_name ?? $imagery->original_name }}</h4>
+                                    <p class="text-foreground/60 text-sm">
+                                        {{ $imagery->format }} •
+                                        {{ $imagery->uploaded_at ? $imagery->uploaded_at->isoFormat('MMM D, YYYY') : 'N/A' }}
+                                    </p>
                                 </div>
-                                <a class="text-primary text-sm hover:underline" href="{{ route('admin.field-area.index') }}">
-                                    View Details
-                                </a>
+                                <div class="text-right">
+                                    <span class="@if ($imagery->processing_status === 'completed') bg-success/10 text-green-800
+                                        @elseif($imagery->processing_status === 'failed') bg-danger/10 text-red-800
+                                        @else bg-warning/10 text-yellow-800 @endif inline-flex rounded-full px-2 py-1 text-xs font-semibold">
+                                        {{ ucfirst($imagery->processing_status ?? 'unknown') }}
+                                    </span>
+                                </div>
                             </div>
                         @endforeach
                     </div>
                 @else
-                    <p class="text-foreground/50">No field areas added yet.</p>
+                    <p class="text-foreground/50">No imagery uploaded yet.</p>
                 @endif
                 <div>
-                    <x-button-secondary href="{{ route('admin.field-area.index') }}" size="small">
-                        <i class="ri-add-line mr-1"></i> Manage Field Areas
+                    <x-button-secondary href="{{ route('admin.imagery.index') }}" size="xsmall">
+                        <i class="ri-image-line mr-1"></i> View All Imagery
                     </x-button-secondary>
                 </div>
             </x-card>
@@ -85,7 +92,7 @@
                     <p class="text-foreground/50">No payments made yet.</p>
                 @endif
                 <div>
-                    <x-button-secondary href="{{ route('admin.payment.index') }}" size="small">
+                    <x-button-secondary href="{{ route('admin.payment.index') }}" size="xsmall">
                         <i class="ri-history-line mr-1"></i> View All Payments
                     </x-button-secondary>
                 </div>

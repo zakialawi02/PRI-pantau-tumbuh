@@ -206,8 +206,8 @@ class UserCreditsController extends Controller
                 if (abs($change) > 0.00001) {
                     $type = $change >= 0 ? 'credit' : 'debit';
                     $description = $type === 'credit'
-                        ? __('Manual credit adjustment via dashboard')
-                        : __('Manual credit deduction via dashboard');
+                        ? __('Manual credit adjustment with administrator')
+                        : __('Manual credit deduction with administrator');
 
                     $this->creditService->logHistory(
                         $user,

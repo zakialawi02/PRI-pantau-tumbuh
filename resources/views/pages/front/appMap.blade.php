@@ -620,7 +620,7 @@
 
             <!-- Sentinel Preview Panel -->
             <div class="absolute bottom-0 right-0 top-auto z-50 flex w-full justify-end shadow-xl md:bottom-auto md:right-2 md:top-20 md:w-80">
-                <div class="border-foreground/15 bg-background/95 supports-[backdrop-filter]:bg-background/70 pointer-events-auto hidden break-all rounded-xl border p-2 text-xs shadow-xl backdrop-blur" id="sentinelPreviewPanel">
+                <div class="border-foreground/15 bg-background/95 supports-[backdrop-filter]:bg-background/70 pointer-events-auto hidden w-full rounded-xl border p-2 text-xs shadow-2xl backdrop-blur md:w-auto md:max-w-xs" id="sentinelPreviewPanel">
                     <div class="flex items-start justify-between gap-2">
                         <div class="space-y-1">
                             <p class="text-primary text-[10px] font-semibold uppercase tracking-wide">Sentinel-2 Preview</p>
@@ -657,7 +657,7 @@
                     –
                     <span class="sr-only">Zoom Out</span>
                 </button>
-                <button class="bg-neutral hover:bg-muted rotate-180 rounded px-2 py-1 text-xl font-bold transition-colors" id="minimapToggleBtn" title="Toggle Minimap" onclick="toggleMinimap(this)">
+                <button class="bg-neutral hover:bg-muted rounded px-2 py-1 text-xl font-bold transition-colors" id="minimapToggleBtn" title="Toggle Minimap" onclick="toggleMinimap(this)">
                     <i class="ri-arrow-left-double-line"></i>
                     <span class="sr-only">Toggle Minimap</span>
                 </button>
