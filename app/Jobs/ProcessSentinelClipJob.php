@@ -102,8 +102,8 @@ class ProcessSentinelClipJob implements ShouldQueue
             ];
 
             $overrides = [
-                'SENTINELHUB_CLIENT_ID' => env('COPERNICUS_CLIENT_ID'),
-                'SENTINELHUB_SECRET_ID' => env('COPERNICUS_CLIENT_SECRET'),
+                'SENTINELHUB_CLIENT_ID' => env('COPERNICUS_CLIENT_ID', ""),
+                'SENTINELHUB_SECRET_ID' => env('COPERNICUS_CLIENT_SECRET', ""),
                 'SENTINEL_CLIP_DATE_TO' => $this->payload['date_to'] ?? now()->format('Y-m-d'),
                 'SENTINEL_CLIP_DATE_FROM' => $this->payload['date_from'] ?? now()->subDays(30)->format('Y-m-d'),
                 'SENTINEL_CLIP_TILE_DIR' => $tilesDir,

@@ -45,6 +45,12 @@
             <div class="text-base-content-muted border-foreground/30 border-b px-1 pt-3 text-sm font-bold">
                 <p>{{ __('Settings') }}</p>
             </div>
+
+            <div class="text-base-content-muted border-foreground/30 border-b px-1 pt-3 text-sm font-bold">
+                <p>{{ __('Monitoring') }}</p>
+            </div>
+
+            <x-dashboard.nav-item href="/log/telescope" icon="ri-spy-fill" text="{{ __('Telescope') }}" target="_blank" />
         @endif
     </ul>
 </nav>
