@@ -2,9 +2,10 @@
 
 namespace App\Models;
 
+use App\Services\CurrencyService;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Plan extends Model
@@ -30,4 +31,25 @@ class Plan extends Model
         'isShow' => 'boolean',
         'isFeatured' => 'boolean'
     ];
+
+    protected $appends = [
+        'price_in_idr',
+        'price_in_usd',
+    ];
+
+    public function getPriceInIdrAttribute(): float
+    {
+        /** @var CurrencyService $currencyService */
+        $currencyService = app(CurrencyService::class);
+
+        return $currencyService->convert((float) $this->price, $this->currency, 'IDR');
+    }
+
+    public function getPriceInUsdAttribute(): float
+    {
+        /** @var CurrencyService $currencyService */
+        $currencyService = app(CurrencyService::class);
+
+        return $currencyService->convert((float) $this->price, $this->currency, 'USD');
+    }
 }

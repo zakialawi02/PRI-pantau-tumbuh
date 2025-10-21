@@ -2,19 +2,21 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Plan;
+use App\Mail\OrderCreditConfirmation;
+use App\Mail\PaymentCreditConfirmation;
 use App\Models\Payment;
+use App\Models\Plan;
 use App\Models\UserCredit;
+use App\Services\CreditService;
+use App\Services\CurrencyService;
+use App\Services\PaymentGatewayFactory;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Validation\Rule;
 use Yajra\DataTables\Facades\DataTables;
-use App\Mail\OrderCreditConfirmation;
-use App\Mail\PaymentCreditConfirmation;
-use App\Services\CreditService;
-use App\Services\PaymentGatewayFactory;
 use Exception;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Log;
@@ -262,12 +264,23 @@ class PaymentController extends Controller
 
     public function checkoutCredits(Request $request)
     {
+        /** @var CurrencyService $currencyService */
+        $currencyService = app(CurrencyService::class);
+        $supportedCurrencies = $currencyService->supportedCurrencies();
+
+        if ($request->filled('currency')) {
+            $request->merge([
+                'currency' => strtoupper($request->input('currency')),
+            ]);
+        }
+
         $request->validate([
             'order_id' => 'required|string',
             'name' => 'required|string|max:255',
             'email' => 'required|email',
             'phone' => 'required|string|max:20',
             'payment_method' => 'required|string|in:bank_transfer,paypal,stripe,manual',
+            'currency' => ['required', 'string', 'max:10', Rule::in($supportedCurrencies)],
         ]);
 
         $cacheData = Cache::get($request->order_id);
@@ -278,6 +291,14 @@ class PaymentController extends Controller
         $plan = Plan::findOrFail($request->plan_id);
         $user = Auth::user();
 
+        $selectedCurrency = strtoupper($request->currency);
+
+        if (! empty($cacheData['price_options']) && ! array_key_exists($selectedCurrency, $cacheData['price_options'])) {
+            return redirect()->route('admin.purchase-credits')->with('error', 'Selected currency is not available for this order.');
+        }
+
+        $amount = $currencyService->convert((float) $plan->price, $plan->currency, $selectedCurrency);
+
         try {
             // Create a payment record for credit purchase
             $payment = Payment::create([
@@ -285,8 +306,8 @@ class PaymentController extends Controller
                 'name'            => $request->name,
                 'email'           => $request->email,
                 'phone'           => $request->phone,
-                'amount'          => $plan->price,
-                'currency'        => $plan->currency,
+                'amount'          => $amount,
+                'currency'        => $selectedCurrency,
                 'status'          => 'pending',
                 'due_date'        => Carbon::now()->addDays(1), // 1 days from now
                 'payment_method'  => $request->payment_method ?? 'manual',
@@ -314,8 +335,8 @@ class PaymentController extends Controller
                     $gateway = PaymentGatewayFactory::make($gatewayName);
 
                     $paymentData = [
-                        'amount' => $plan->price,
-                        'currency' => $plan->currency,
+                        'amount' => $amount,
+                        'currency' => $selectedCurrency,
                         'description' => 'Credit Purchase: ' . $plan->name . ' for ' . $plan->credit_points . ' Credits',
                         'return_url' => route('admin.payment.callback', ['gateway' => $gatewayName]) . '?paymentId=' . $payment->id,
                         'cancel_url' => route('admin.payment.show', $payment->id),

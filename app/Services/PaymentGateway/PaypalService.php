@@ -32,6 +32,9 @@ class PaypalService implements PaymentGatewayInterface
     public function charge(array $data): array
     {
         try {
+            $currencyCode = strtoupper($data['currency'] ?? config('paypal.currency', 'USD'));
+
+            $this->paypal->setCurrency($currencyCode);
             $this->prepareForApiCall();
 
             // Create the order directly
@@ -41,7 +44,7 @@ class PaypalService implements PaymentGatewayInterface
                     [
                         "amount" => [
                             "value" => number_format($data['amount'], 2, '.', ''),
-                            "currency_code" => config('paypal.currency', 'USD')
+                            "currency_code" => $currencyCode
                         ],
                     ]
                 ],

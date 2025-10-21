@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Models\UserCredit;
 use App\Models\UserCreditHistory;
 use App\Services\CreditService;
+use App\Services\CurrencyService;
 use Illuminate\Support\Str;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
@@ -298,6 +299,21 @@ class UserCreditsController extends Controller
 
         $plan = Plan::findOrFail($request->plan_id);
 
+        /** @var CurrencyService $currencyService */
+        $currencyService = app(CurrencyService::class);
+
+        $priceOptions = [];
+        foreach ($currencyService->supportedCurrencies() as $currencyCode) {
+            $priceOptions[$currencyCode] = $currencyService->convert((float) $plan->price, $plan->currency, $currencyCode);
+        }
+
+        $currencyLabels = [];
+        foreach (array_keys($priceOptions) as $currencyCode) {
+            $currencyLabels[$currencyCode] = $currencyService->label($currencyCode);
+        }
+
+        $selectedCurrency = $currencyService->defaultCurrency();
+
         // Create data array similar to the mapOrder method
         $timestamp = time();
         $data = [
@@ -305,6 +321,10 @@ class UserCreditsController extends Controller
             'plan' => $plan,
             'price_currency' => $plan->currency,
             'price' => $plan->price,
+            'price_options' => $priceOptions,
+            'currency_labels' => $currencyLabels,
+            'default_currency' => $currencyService->defaultCurrency(),
+            'selected_currency' => $selectedCurrency,
         ];
 
         $keyCache = 'Checkout_' . $timestamp . '_' . Str::random(10) . '';
@@ -330,6 +350,32 @@ class UserCreditsController extends Controller
             return redirect()->route('admin.purchase-credits')->with('error', 'Application data not found');
         }
 
+        /** @var CurrencyService $currencyService */
+        $currencyService = app(CurrencyService::class);
+
+        if (empty($data['price_options'] ?? [])) {
+            $planCurrency = $data['price_currency'] ?? $currencyService->defaultCurrency();
+            $planPrice = (float) ($data['price'] ?? 0);
+
+            $priceOptions = [];
+            foreach ($currencyService->supportedCurrencies() as $currencyCode) {
+                $priceOptions[$currencyCode] = $currencyService->convert($planPrice, $planCurrency, $currencyCode);
+            }
+
+            $data['price_options'] = $priceOptions;
+        }
+
+        if (empty($data['currency_labels'] ?? [])) {
+            $labels = [];
+            foreach (array_keys($data['price_options']) as $currencyCode) {
+                $labels[$currencyCode] = $currencyService->label($currencyCode);
+            }
+
+            $data['currency_labels'] = $labels;
+        }
+
+        $data['default_currency'] = $data['default_currency'] ?? $currencyService->defaultCurrency();
+        $data['selected_currency'] = $data['selected_currency'] ?? $data['default_currency'];
         $data['title'] = 'Checkout';
 
         return view('pages.front.order.checkout', compact('data'));

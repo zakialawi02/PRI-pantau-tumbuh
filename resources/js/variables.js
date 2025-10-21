@@ -57,18 +57,18 @@ window.STATUS_CONFIG_BADGE_COLOR = STATUS_CONFIG_BADGE_COLOR;
 
 const CURRENCY_CONFIG = [
     {
-        currencyCode: "USD",
-        currency: "US Dollar",
-        country: "United States",
-        countryCode: "US",
-        locale: "en-US",
-    },
-    {
         currencyCode: "IDR",
         currency: "Indonesian Rupiah",
         country: "Indonesia",
         countryCode: "ID",
         locale: "id-ID",
+    },
+    {
+        currencyCode: "USD",
+        currency: "US Dollar",
+        country: "United States",
+        countryCode: "US",
+        locale: "en-US",
     },
     {
         currencyCode: "EUR",

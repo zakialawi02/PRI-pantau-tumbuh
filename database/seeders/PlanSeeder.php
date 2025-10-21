@@ -2,10 +2,9 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Support\Str;
+use App\Models\Plan;
+use App\Services\CurrencyService;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 
 class PlanSeeder extends Seeder
 {
@@ -14,53 +13,64 @@ class PlanSeeder extends Seeder
      */
     public function run(): void
     {
+        /** @var CurrencyService $currencyService */
+        $currencyService = app(CurrencyService::class);
+
+        $defaultCurrency = $currencyService->defaultCurrency();
+
         $plans = [
             [
-                'id' => (string) Str::uuid(),
                 'name' => 'Starter Pack',
                 'credit_points' => 25,
                 'price' => 3,
                 'currency' => 'USD',
                 'isShow' => true,
                 'isFeatured' => false,
-                'created_at' => now(),
-                'updated_at' => now(),
             ],
             [
-                'id' => (string) Str::uuid(),
                 'name' => 'Standard',
                 'credit_points' => 50,
                 'price' => 5,
                 'currency' => 'USD',
                 'isShow' => true,
                 'isFeatured' => false,
-                'created_at' => now(),
-                'updated_at' => now(),
             ],
             [
-                'id' => (string) Str::uuid(),
                 'name' => 'Professional',
                 'credit_points' => 100,
                 'price' => 9,
                 'currency' => 'USD',
                 'isShow' => true,
                 'isFeatured' => true,
-                'created_at' => now(),
-                'updated_at' => now(),
             ],
             [
-                'id' => (string) Str::uuid(),
                 'name' => 'Enterprise',
                 'credit_points' => 200,
                 'price' => 18,
                 'currency' => 'USD',
                 'isShow' => true,
                 'isFeatured' => false,
-                'created_at' => now(),
-                'updated_at' => now(),
             ],
         ];
 
-        DB::table('plans')->insert($plans);
+        foreach ($plans as $planData) {
+            $priceInDefault = $currencyService->convert(
+                (float) $planData['price'],
+                $planData['currency'],
+                $defaultCurrency,
+                2
+            );
+
+            Plan::updateOrCreate(
+                ['name' => $planData['name']],
+                [
+                    'credit_points' => $planData['credit_points'],
+                    'price' => $priceInDefault,
+                    'currency' => $defaultCurrency,
+                    'isShow' => $planData['isShow'],
+                    'isFeatured' => $planData['isFeatured'],
+                ]
+            );
+        }
     }
 }

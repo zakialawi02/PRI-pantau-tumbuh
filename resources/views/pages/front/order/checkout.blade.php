@@ -1,5 +1,23 @@
 @section('title', $data['title'] ?? '')
 
+@php
+    $priceOptions = collect($data['price_options'] ?? [])
+        ->mapWithKeys(fn ($amount, $currency) => [strtoupper($currency) => (float) $amount]);
+
+    if ($priceOptions->isEmpty() && isset($data['price'], $data['price_currency'])) {
+        $priceOptions[strtoupper($data['price_currency'])] = (float) $data['price'];
+    } elseif (isset($data['price_currency'], $data['price']) && ! $priceOptions->has(strtoupper($data['price_currency']))) {
+        $priceOptions[strtoupper($data['price_currency'])] = (float) $data['price'];
+    }
+
+    $currencyLabels = collect($data['currency_labels'] ?? [])
+        ->mapWithKeys(fn ($label, $currency) => [strtoupper($currency) => $label]);
+
+    $defaultCurrency = strtoupper($data['selected_currency'] ?? $data['default_currency'] ?? $priceOptions->keys()->first());
+    $selectedCurrency = strtoupper(old('currency', $defaultCurrency));
+    $priceOptionsArray = $priceOptions->toArray();
+@endphp
+
 <x-app-front-layout>
     <div class="mx-auto max-w-7xl p-4 md:p-8">
         <!-- Judul -->
@@ -54,13 +72,13 @@
                                         <p class="text-base-content-muted text-sm">{{ $data['plan']['credit_points'] ?? 0 }} Credit Points</p>
                                     </div>
                                     <div class="text-right">
-                                        <p class="text-foreground text-lg">{{ Number::currency($data['price'], $data['price_currency'], app()->getLocale()) }}</p>
+                                        <p class="text-foreground text-lg js-currency-value" data-currency-display="price">{{ Number::currency($priceOptionsArray[$selectedCurrency] ?? 0, $selectedCurrency, app()->getLocale()) }}</p>
                                     </div>
                                 </div>
 
                                 <div class="flex justify-between pt-2">
                                     <h3 class="text-foreground text-lg font-semibold">Total</h3>
-                                    <p class="text-primary text-xl font-bold">{{ Number::currency($data['price'], $data['price_currency'], app()->getLocale()) }}</p>
+                                    <p class="text-primary text-xl font-bold js-currency-value" data-currency-display="total">{{ Number::currency($priceOptionsArray[$selectedCurrency] ?? 0, $selectedCurrency, app()->getLocale()) }}</p>
                                 </div>
                             </div>
                         @else
@@ -90,6 +108,9 @@
                                 <input name="credit_purchase" type="hidden" value="1" />
                                 <input name="plan_id" type="hidden" value="{{ $data['plan']['id'] ?? '' }}" />
                             @endif
+
+                            <input type="hidden" name="currency" id="selectedCurrencyInput" value="{{ $selectedCurrency }}">
+                            <div id="currency-data" class="hidden" data-prices='@json($priceOptionsArray)' data-locale="{{ app()->getLocale() }}" data-default-currency="{{ $selectedCurrency }}"></div>
 
                             <div class="grid grid-cols-1 gap-4">
                                 <!-- Nama -->
@@ -132,9 +153,27 @@
                                             <p class="text-base-content-muted text-sm">{{ $data['plan']['credit_points'] ?? 0 }} Credit Points</p>
                                         </div>
                                         <div class="text-right">
-                                            <p class="text-foreground text-lg">{{ Number::currency($data['price'], $data['price_currency'], app()->getLocale()) }}</p>
+                                            <p class="text-foreground text-lg js-currency-value" data-currency-display="price">{{ Number::currency($priceOptionsArray[$selectedCurrency] ?? 0, $selectedCurrency, app()->getLocale()) }}</p>
                                         </div>
                                     </div>
+
+                                    @if (count($priceOptionsArray) > 1)
+                                        <div class="border-border border-b pb-1">
+                                            <h3 class="text-foreground font-medium">{{ __('Choose Currency') }}</h3>
+                                            <div class="mt-2 flex flex-wrap gap-2" id="currencySelector">
+                                                @foreach ($priceOptionsArray as $currencyCode => $amount)
+                                                    @php $currencyLabel = $currencyLabels[$currencyCode] ?? $currencyCode; @endphp
+                                                    <label class="currency-option-label border-border flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm transition-colors {{ $selectedCurrency === $currencyCode ? 'border-primary bg-primary/10' : 'bg-transparent' }}" data-currency-option="{{ $currencyCode }}">
+                                                        <input class="text-primary focus:ring-primary h-4 w-4 rounded border-gray-300 focus:ring-2" type="radio" name="currency_option" value="{{ $currencyCode }}" @checked($selectedCurrency === $currencyCode)>
+                                                        <span>
+                                                            <span class="font-semibold">{{ $currencyLabel }}</span>
+                                                            <span class="text-foreground/70 block text-xs">{{ Number::currency($amount, $currencyCode, app()->getLocale()) }}</span>
+                                                        </span>
+                                                    </label>
+                                                @endforeach
+                                            </div>
+                                        </div>
+                                    @endif
 
                                     <!-- Tax -->
                                     <div class="border-border flex justify-between border-b pb-1">
@@ -143,14 +182,14 @@
                                             <p class="text-base-content-muted text-sm">0%</p>
                                         </div>
                                         <div class="text-right">
-                                            <p class="text-foreground text-lg">{{ Number::currency(0, $data['price_currency'], app()->getLocale()) }}</p>
+                                            <p class="text-foreground text-lg js-currency-value" data-currency-display="tax">{{ Number::currency(0, $selectedCurrency, app()->getLocale()) }}</p>
                                         </div>
                                     </div>
 
                                     <!-- Total -->
                                     <div class="flex justify-between pt-2">
                                         <h3 class="text-foreground text-lg font-semibold">Total</h3>
-                                        <p class="text-primary text-xl font-bold">{{ Number::currency($data['price'], $data['price_currency'], app()->getLocale()) }}</p>
+                                        <p class="text-primary text-xl font-bold js-currency-value" data-currency-display="total">{{ Number::currency($priceOptionsArray[$selectedCurrency] ?? 0, $selectedCurrency, app()->getLocale()) }}</p>
                                     </div>
                                 </div>
                             </div>
@@ -264,6 +303,100 @@
     @endpush
 
     @push('javascript')
+        <script>
+            document.addEventListener('DOMContentLoaded', function () {
+                const currencyData = document.getElementById('currency-data');
+
+                if (!currencyData) {
+                    return;
+                }
+
+                let prices = {};
+
+                try {
+                    prices = JSON.parse(currencyData.dataset.prices || '{}');
+                } catch (error) {
+                    prices = {};
+                }
+
+                const priceKeys = Object.keys(prices);
+
+                if (!priceKeys.length) {
+                    return;
+                }
+
+                const locale = currencyData.dataset.locale || document.documentElement.lang || 'en-US';
+                const defaultCurrency = currencyData.dataset.defaultCurrency || priceKeys[0];
+                const currencyInput = document.getElementById('selectedCurrencyInput');
+                const displayElements = document.querySelectorAll('.js-currency-value[data-currency-display]');
+                const currencyRadios = document.querySelectorAll('input[name="currency_option"]');
+                const currencyLabels = document.querySelectorAll('.currency-option-label');
+
+                const hasOwnPrice = (currency) => Object.prototype.hasOwnProperty.call(prices, currency);
+
+                const setActiveLabel = (currency) => {
+                    if (!currencyLabels.length) {
+                        return;
+                    }
+
+                    currencyLabels.forEach((label) => {
+                        if (label.dataset.currencyOption === currency) {
+                            label.classList.add('border-primary', 'bg-primary/10');
+                            label.classList.remove('bg-transparent');
+                        } else {
+                            label.classList.remove('border-primary', 'bg-primary/10');
+                            label.classList.add('bg-transparent');
+                        }
+                    });
+                };
+
+                const updateDisplays = (currency) => {
+                    if (!hasOwnPrice(currency)) {
+                        return;
+                    }
+
+                    if (currencyInput) {
+                        currencyInput.value = currency;
+                    }
+
+                    displayElements.forEach((element) => {
+                        const type = element.dataset.currencyDisplay;
+                        let amount = 0;
+
+                        if (type === 'price' || type === 'total') {
+                            amount = prices[currency] ?? 0;
+                        }
+
+                        if (typeof window.formatCurrency === 'function') {
+                            element.textContent = window.formatCurrency(amount, currency, locale);
+                        } else {
+                            element.textContent = amount.toLocaleString(locale, {
+                                style: 'currency',
+                                currency,
+                            });
+                        }
+                    });
+
+                    setActiveLabel(currency);
+                };
+
+                currencyRadios.forEach((radio) => {
+                    radio.addEventListener('change', () => updateDisplays(radio.value));
+                });
+
+                const initialCurrency = defaultCurrency && hasOwnPrice(defaultCurrency)
+                    ? defaultCurrency
+                    : priceKeys[0];
+
+                const initialRadio = Array.from(currencyRadios).find((radio) => radio.value === initialCurrency);
+
+                if (initialRadio) {
+                    initialRadio.checked = true;
+                }
+
+                updateDisplays(initialCurrency);
+            });
+        </script>
         @unless (isset($data['plan']['credit_points']))
             <script src="https://cdn.jsdelivr.net/npm/ol@v10.6.0/dist/ol.js"></script>
 

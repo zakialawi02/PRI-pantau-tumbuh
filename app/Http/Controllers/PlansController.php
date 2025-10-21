@@ -3,12 +3,14 @@
 namespace App\Http\Controllers;
 
 use App\Models\Plan;
-use Illuminate\View\View;
-use Illuminate\Support\Str;
-use Illuminate\Http\Request;
+use App\Services\CurrencyService;
 use Illuminate\Http\JsonResponse;
-use Yajra\DataTables\Facades\DataTables;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
+use Illuminate\View\View;
+use Yajra\DataTables\Facades\DataTables;
 
 class PlansController extends Controller
 {
@@ -50,11 +52,15 @@ class PlansController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
+        /** @var CurrencyService $currencyService */
+        $currencyService = app(CurrencyService::class);
+        $supportedCurrencies = $currencyService->supportedCurrencies();
+
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255|unique:plans,name',
             'credit_points' => 'required|integer|min:1',
             'price' => 'required|numeric|min:0.01',
-            'currency' => 'required|string|max:10',
+            'currency' => ['required', 'string', 'max:10', Rule::in($supportedCurrencies)],
             'isShow' => 'boolean',
             'isFeatured' => 'boolean'
         ]);
@@ -70,7 +76,7 @@ class PlansController extends Controller
             'name' => Str::title($request->name),
             'credit_points' => $request->credit_points,
             'price' => $request->price,
-            'currency' => Str::upper($request->currency),
+            'currency' => Str::upper($request->currency ?? $currencyService->defaultCurrency()),
             'isShow' => $request->boolean('isShow'),
             'isFeatured' => $request->boolean('isFeatured'),
         ]);
@@ -95,11 +101,15 @@ class PlansController extends Controller
      */
     public function update(Request $request, Plan $plan): JsonResponse
     {
+        /** @var CurrencyService $currencyService */
+        $currencyService = app(CurrencyService::class);
+        $supportedCurrencies = $currencyService->supportedCurrencies();
+
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255|unique:plans,name,' . $plan->id,
             'credit_points' => 'required|integer|min:1',
             'price' => 'required|numeric|min:0.01',
-            'currency' => 'required|string|max:10',
+            'currency' => ['required', 'string', 'max:10', Rule::in($supportedCurrencies)],
             'isShow' => 'boolean',
             'isFeatured' => 'boolean'
         ]);
@@ -115,7 +125,7 @@ class PlansController extends Controller
             'name' => Str::title($request->name),
             'credit_points' => $request->credit_points,
             'price' => $request->price,
-            'currency' => Str::upper($request->currency),
+            'currency' => Str::upper($request->currency ?? $currencyService->defaultCurrency()),
             'isShow' => $request->boolean('isShow'),
             'isFeatured' => $request->boolean('isFeatured'),
         ]);

@@ -195,7 +195,7 @@ window.parseDateInput = parseDateInput;
  * Formats a number into a currency string based on the specified locale and currency code.
  *
  * @param {number|string} amount - The amount to format as currency.
- * @param {string} [currencyCode="USD"] - The ISO currency code (e.g., "IDR", "USD").
+ * @param {string} [currencyCode="IDR"] - The ISO currency code (e.g., "IDR", "USD").
  * @param {string} [locale="en-US"] - The locale to use for formatting (e.g., "id-ID", "en-US").
  * @param {Object} [options={}] - Additional options to pass to Intl.NumberFormat.
  * @returns {string} A formatted currency string or "-" if formatting fails.
@@ -207,7 +207,7 @@ window.parseDateInput = parseDateInput;
  */
 function formatCurrency(
     amount,
-    currencyCode = "USD",
+    currencyCode = "IDR",
     locale = document.documentElement.lang || "en-US",
     // locale = navigator.language || "en-US",
     options = {}

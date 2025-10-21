@@ -15,7 +15,7 @@ return new class extends Migration
             $table->uuid('id')->primary();
             $table->string('name'); // e.g. "Standard", "Premium"
             $table->decimal('price_per_hectare', 10, 2); // ex: 100.00
-            $table->string('currency', 10)->default('USD');
+            $table->string('currency', 10)->default('IDR');
             $table->boolean('isShow')->default(false);
             $table->boolean('isFeatured')->default(false);
             $table->timestamps();
