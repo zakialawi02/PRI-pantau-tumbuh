@@ -87,10 +87,15 @@
                             <!-- Currency -->
                             <div>
                                 <x-input-label for="currency" :value="__('Currency')" />
+                                @php($currencies = config('currency.supported', []))
                                 <select class="focus:ring-primary focus:border-primary border-ring bg-input/50 text-foreground block w-full rounded-lg border p-2" id="currency" name="currency">
-                                    <option value="USD">USD - US Dollar</option>
-                                    <option value="IDR">IDR - Indonesian Rupiah</option>
+                                    @foreach ($currencies as $code => $label)
+                                        <option value="{{ $code }}" @selected($code === config('currency.base'))>{{ $code }} - {{ $label }}</option>
+                                    @endforeach
                                 </select>
+                                <p class="text-xs text-foreground/60 mt-1">
+                                    {{ __('Default selling currency: :currency', ['currency' => config('currency.default')]) }}
+                                </p>
                             </div>
 
 

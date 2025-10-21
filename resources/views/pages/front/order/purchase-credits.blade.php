@@ -11,6 +11,9 @@
             <p class="text-foreground/70 mt-4">
                 Buy credit points to access premium features and services. Credits can be used for satellite imagery processing and other advanced features.
             </p>
+            <p class="text-foreground/60 mt-2 text-xs">
+                {{ __('Displayed prices use :currency and are refreshed weekly using the latest exchange rates.', ['currency' => config('currency.default')]) }}
+            </p>
         </div>
 
         @if ($plans->isEmpty())
@@ -31,7 +34,12 @@
 
                             <div class="mt-4">
                                 <p class="text-foreground text-3xl font-bold">
-                                    {{ Number::currency($plan->price, $plan->currency, app()->getLocale()) }}
+                                    {{ Number::currency($plan->display_price, $plan->display_currency, app()->getLocale()) }}
+                                    @if ($plan->currency !== $plan->display_currency)
+                                        <span class="text-foreground/60 block text-xs">
+                                            {{ __('Approx. :amount before conversion', ['amount' => Number::currency($plan->price, $plan->currency, app()->getLocale())]) }}
+                                        </span>
+                                    @endif
                                 </p>
                                 <p class="text-foreground/70 mt-1">
                                     {{ $plan->credit_points }} Credit Points

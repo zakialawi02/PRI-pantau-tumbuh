@@ -55,6 +55,19 @@
                                     </div>
                                     <div class="text-right">
                                         <p class="text-foreground text-lg">{{ Number::currency($data['price'], $data['price_currency'], app()->getLocale()) }}</p>
+                                        @if (($data['base_currency'] ?? $data['price_currency']) !== $data['price_currency'])
+                                            <p class="text-foreground/60 text-xs">
+                                                {{ __('Converted from :amount', ['amount' => Number::currency($data['base_price'] ?? 0, $data['base_currency'] ?? $data['price_currency'], app()->getLocale())]) }}
+                                                @if (!empty($data['exchange_rate']))
+                                                    <br>
+                                                    {{ __('Rate: :rate (:from → :to)', [
+                                                        'rate' => Number::format($data['exchange_rate'], 4, locale: app()->getLocale()),
+                                                        'from' => $data['base_currency'],
+                                                        'to' => $data['price_currency'],
+                                                    ]) }}
+                                                @endif
+                                            </p>
+                                        @endif
                                     </div>
                                 </div>
 
@@ -133,6 +146,19 @@
                                         </div>
                                         <div class="text-right">
                                             <p class="text-foreground text-lg">{{ Number::currency($data['price'], $data['price_currency'], app()->getLocale()) }}</p>
+                                            @if (($data['base_currency'] ?? $data['price_currency']) !== $data['price_currency'])
+                                                <p class="text-foreground/60 text-xs">
+                                                    {{ __('Converted from :amount', ['amount' => Number::currency($data['base_price'] ?? 0, $data['base_currency'] ?? $data['price_currency'], app()->getLocale())]) }}
+                                                    @if (!empty($data['exchange_rate']))
+                                                        <br>
+                                                        {{ __('Rate: :rate (:from → :to)', [
+                                                            'rate' => Number::format($data['exchange_rate'], 4, locale: app()->getLocale()),
+                                                            'from' => $data['base_currency'],
+                                                            'to' => $data['price_currency'],
+                                                        ]) }}
+                                                    @endif
+                                                </p>
+                                            @endif
                                         </div>
                                     </div>
 

@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Models\UserCredit;
 use App\Models\UserCreditHistory;
 use App\Services\CreditService;
+use App\Services\CurrencyService;
 use Illuminate\Support\Str;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
@@ -21,10 +22,12 @@ use Yajra\DataTables\Facades\DataTables;
 class UserCreditsController extends Controller
 {
     protected CreditService $creditService;
+    protected CurrencyService $currencyService;
 
-    public function __construct(CreditService $creditService)
+    public function __construct(CreditService $creditService, CurrencyService $currencyService)
     {
         $this->creditService = $creditService;
+        $this->currencyService = $currencyService;
     }
 
     public function history(Request $request)
@@ -298,13 +301,32 @@ class UserCreditsController extends Controller
 
         $plan = Plan::findOrFail($request->plan_id);
 
+        $pricing = $this->currencyService->getAmountInDefaultCurrency((float) $plan->price, $plan->currency);
+
+        $exchangeRate = null;
+        if ($plan->currency !== $pricing['currency']) {
+            try {
+                $exchangeRate = (float) $this->currencyService->getExchangeRate($plan->currency, $pricing['currency']);
+            } catch (\Throwable $exception) {
+                Log::warning('Failed to retrieve exchange rate for checkout session.', [
+                    'plan_id' => $plan->id,
+                    'from' => $plan->currency,
+                    'to' => $pricing['currency'],
+                    'message' => $exception->getMessage(),
+                ]);
+            }
+        }
+
         // Create data array similar to the mapOrder method
         $timestamp = time();
         $data = [
             'timestamp' => $timestamp,
             'plan' => $plan,
-            'price_currency' => $plan->currency,
-            'price' => $plan->price,
+            'price_currency' => strtoupper((string) $pricing['currency']),
+            'price' => (float) $pricing['amount'],
+            'base_price' => (float) $plan->price,
+            'base_currency' => strtoupper($plan->currency),
+            'exchange_rate' => $exchangeRate,
         ];
 
         $keyCache = 'Checkout_' . $timestamp . '_' . Str::random(10) . '';

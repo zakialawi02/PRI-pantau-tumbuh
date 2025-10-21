@@ -2,19 +2,20 @@
 
 namespace App\Http\Controllers;
 
+use App\Mail\OrderCreditConfirmation;
+use App\Mail\PaymentCreditConfirmation;
 use App\Models\Plan;
 use App\Models\Payment;
 use App\Models\UserCredit;
+use App\Services\CreditService;
+use App\Services\CurrencyService;
+use App\Services\PaymentGatewayFactory;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Mail;
 use Yajra\DataTables\Facades\DataTables;
-use App\Mail\OrderCreditConfirmation;
-use App\Mail\PaymentCreditConfirmation;
-use App\Services\CreditService;
-use App\Services\PaymentGatewayFactory;
 use Exception;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Log;
@@ -22,10 +23,12 @@ use Illuminate\Support\Facades\Log;
 class PaymentController extends Controller
 {
     protected $creditService;
+    protected CurrencyService $currencyService;
 
-    public function __construct(CreditService $creditService)
+    public function __construct(CreditService $creditService, CurrencyService $currencyService)
     {
         $this->creditService = $creditService;
+        $this->currencyService = $currencyService;
     }
 
     public function index()
@@ -278,6 +281,18 @@ class PaymentController extends Controller
         $plan = Plan::findOrFail($request->plan_id);
         $user = Auth::user();
 
+        $amount = data_get($cacheData, 'price');
+        $currency = data_get($cacheData, 'price_currency');
+
+        if (!is_numeric($amount) || empty($currency)) {
+            $pricing = $this->currencyService->getAmountInDefaultCurrency((float) $plan->price, $plan->currency);
+            $amount = $pricing['amount'];
+            $currency = $pricing['currency'];
+        }
+
+        $amount = (float) $amount;
+        $currency = strtoupper((string) $currency);
+
         try {
             // Create a payment record for credit purchase
             $payment = Payment::create([
@@ -285,8 +300,8 @@ class PaymentController extends Controller
                 'name'            => $request->name,
                 'email'           => $request->email,
                 'phone'           => $request->phone,
-                'amount'          => $plan->price,
-                'currency'        => $plan->currency,
+                'amount'          => $amount,
+                'currency'        => $currency,
                 'status'          => 'pending',
                 'due_date'        => Carbon::now()->addDays(1), // 1 days from now
                 'payment_method'  => $request->payment_method ?? 'manual',
@@ -314,8 +329,8 @@ class PaymentController extends Controller
                     $gateway = PaymentGatewayFactory::make($gatewayName);
 
                     $paymentData = [
-                        'amount' => $plan->price,
-                        'currency' => $plan->currency,
+                        'amount' => $amount,
+                        'currency' => $currency,
                         'description' => 'Credit Purchase: ' . $plan->name . ' for ' . $plan->credit_points . ' Credits',
                         'return_url' => route('admin.payment.callback', ['gateway' => $gatewayName]) . '?paymentId=' . $payment->id,
                         'cancel_url' => route('admin.payment.show', $payment->id),

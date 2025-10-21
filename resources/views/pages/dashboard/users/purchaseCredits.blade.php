@@ -30,8 +30,13 @@
 
                                     <div class="mt-4">
                                         <p class="text-foreground text-3xl font-bold">
-                                            {{ Number::currency($plan->price, $plan->currency, app()->getLocale()) }}
+                                            {{ Number::currency($plan->display_price, $plan->display_currency, app()->getLocale()) }}
                                         </p>
+                                        @if ($plan->currency !== $plan->display_currency)
+                                            <p class="text-foreground/60 text-xs">
+                                                {{ __('Approx. :amount before conversion', ['amount' => Number::currency($plan->price, $plan->currency, app()->getLocale())]) }}
+                                            </p>
+                                        @endif
                                         <p class="text-foreground/70 mt-1">
                                             {{ $plan->credit_points }} Credit Points
                                         </p>
@@ -58,6 +63,9 @@
 
                 <div class="mt-8">
                     <h3 class="text-foreground text-lg font-medium">How Credit Points Work</h3>
+                    <p class="text-foreground/60 text-xs">
+                        {{ __('Displayed prices use :currency and are refreshed weekly using the latest exchange rates.', ['currency' => config('currency.default')]) }}
+                    </p>
                     <div class="mt-4 space-y-4">
                         <div class="flex items-start">
                             <div class="flex-shrink-0">

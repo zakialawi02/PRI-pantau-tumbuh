@@ -3,15 +3,25 @@
 namespace App\Http\Controllers;
 
 use App\Models\Plan;
-use Illuminate\View\View;
-use Illuminate\Support\Str;
-use Illuminate\Http\Request;
+use App\Services\CurrencyService;
 use Illuminate\Http\JsonResponse;
-use Yajra\DataTables\Facades\DataTables;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Number;
+use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
+use Illuminate\View\View;
+use Yajra\DataTables\Facades\DataTables;
 
 class PlansController extends Controller
 {
+    protected CurrencyService $currencyService;
+
+    public function __construct(CurrencyService $currencyService)
+    {
+        $this->currencyService = $currencyService;
+    }
+
     /**
      * Display a listing of the plans.
      */
@@ -33,7 +43,11 @@ class PlansController extends Controller
                             </div>';
                 })
                 ->editColumn('price', function ($plan) {
-                    return $plan->price . ' ' . $plan->currency;
+                    return Number::currency(
+                        $plan->display_price,
+                        $plan->display_currency,
+                        app()->getLocale()
+                    );
                 })
                 ->editColumn('credit_points', function ($plan) {
                     return $plan->credit_points . ' credits';
@@ -54,7 +68,12 @@ class PlansController extends Controller
             'name' => 'required|string|max:255|unique:plans,name',
             'credit_points' => 'required|integer|min:1',
             'price' => 'required|numeric|min:0.01',
-            'currency' => 'required|string|max:10',
+            'currency' => [
+                'required',
+                'string',
+                'max:10',
+                Rule::in(array_keys($this->currencyService->getSupportedCurrencies())),
+            ],
             'isShow' => 'boolean',
             'isFeatured' => 'boolean'
         ]);
@@ -99,7 +118,12 @@ class PlansController extends Controller
             'name' => 'required|string|max:255|unique:plans,name,' . $plan->id,
             'credit_points' => 'required|integer|min:1',
             'price' => 'required|numeric|min:0.01',
-            'currency' => 'required|string|max:10',
+            'currency' => [
+                'required',
+                'string',
+                'max:10',
+                Rule::in(array_keys($this->currencyService->getSupportedCurrencies())),
+            ],
             'isShow' => 'boolean',
             'isFeatured' => 'boolean'
         ]);
