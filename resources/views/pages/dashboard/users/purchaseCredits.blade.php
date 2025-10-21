@@ -12,6 +12,14 @@
                     </p>
                 </div>
 
+                @if (isset($pricingContext['currency']))
+                    <div class="bg-info/10 text-info mb-6 rounded-lg p-4">
+                        <p class="font-medium">
+                            Prices are shown in {{ $pricingContext['currency'] }} based on the latest weekly exchange rate update.
+                        </p>
+                    </div>
+                @endif
+
                 @if ($plans->isEmpty())
                     <div class="bg-warning/10 text-warning mb-4 rounded-lg p-4">
                         <p>No credit plans are currently available. Please check back later.</p>
@@ -30,8 +38,13 @@
 
                                     <div class="mt-4">
                                         <p class="text-foreground text-3xl font-bold">
-                                            {{ Number::currency($plan->price, $plan->currency, app()->getLocale()) }}
+                                            {{ Number::currency($plan->display_price ?? $plan->price, $plan->display_currency ?? $plan->currency, app()->getLocale()) }}
                                         </p>
+                                        @if (($plan->display_currency ?? $plan->currency) !== $plan->currency)
+                                            <p class="text-foreground/60 mt-1 text-xs">
+                                                Converted from {{ $plan->currency }} using the latest weekly rate.
+                                            </p>
+                                        @endif
                                         <p class="text-foreground/70 mt-1">
                                             {{ $plan->credit_points }} Credit Points
                                         </p>

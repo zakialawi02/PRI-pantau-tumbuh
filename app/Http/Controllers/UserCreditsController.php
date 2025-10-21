@@ -7,6 +7,8 @@ use App\Models\User;
 use App\Models\UserCredit;
 use App\Models\UserCreditHistory;
 use App\Services\CreditService;
+use App\Services\CurrencyRateService;
+use App\Services\LocationService;
 use Illuminate\Support\Str;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
@@ -21,10 +23,18 @@ use Yajra\DataTables\Facades\DataTables;
 class UserCreditsController extends Controller
 {
     protected CreditService $creditService;
+    protected CurrencyRateService $currencyRateService;
+    protected LocationService $locationService;
 
-    public function __construct(CreditService $creditService)
+    public function __construct(
+        CreditService $creditService,
+        CurrencyRateService $currencyRateService,
+        LocationService $locationService
+    )
     {
         $this->creditService = $creditService;
+        $this->currencyRateService = $currencyRateService;
+        $this->locationService = $locationService;
     }
 
     public function history(Request $request)
@@ -273,7 +283,16 @@ class UserCreditsController extends Controller
             ->orderBy('credit_points', 'asc')
             ->get();
 
-        return view('pages.front.order.purchase-credits', compact('plans'));
+        $prepared = $this->preparePlansForDisplay($plans, request());
+
+        $plans = $prepared['plans'];
+        $pricingContext = [
+            'currency' => $prepared['preferred_currency'],
+            'exchange_rates' => $prepared['exchange_rates'],
+            'is_indonesian' => $prepared['is_indonesian'],
+        ];
+
+        return view('pages.front.order.purchase-credits', compact('plans', 'pricingContext'));
     }
 
     /**
@@ -287,7 +306,16 @@ class UserCreditsController extends Controller
             ->orderBy('credit_points', 'asc')
             ->get();
 
-        return view('pages.dashboard.users.purchaseCredits', compact('plans'));
+        $prepared = $this->preparePlansForDisplay($plans, request());
+
+        $plans = $prepared['plans'];
+        $pricingContext = [
+            'currency' => $prepared['preferred_currency'],
+            'exchange_rates' => $prepared['exchange_rates'],
+            'is_indonesian' => $prepared['is_indonesian'],
+        ];
+
+        return view('pages.dashboard.users.purchaseCredits', compact('plans', 'pricingContext'));
     }
 
     public function orderCredit(Request $request)
@@ -298,19 +326,35 @@ class UserCreditsController extends Controller
 
         $plan = Plan::findOrFail($request->plan_id);
 
-        // Create data array similar to the mapOrder method
+        $preferredCurrency = $this->locationService->getPreferredCurrency($request);
+        $normalizedAmounts = $this->currencyRateService->normalizeAmounts((float) $plan->price, $plan->currency);
+        $exchangeRates = $this->currencyRateService->getIdrUsdPair();
+
         $timestamp = time();
         $data = [
             'timestamp' => $timestamp,
-            'plan' => $plan,
-            'price_currency' => $plan->currency,
-            'price' => $plan->price,
+            'plan' => [
+                'id' => $plan->id,
+                'name' => $plan->name,
+                'credit_points' => $plan->credit_points,
+            ],
+            'price_currency' => $preferredCurrency,
+            'price' => $normalizedAmounts[$preferredCurrency] ?? $normalizedAmounts['USD'],
+            'amount_idr' => $normalizedAmounts['IDR'],
+            'amount_usd' => $normalizedAmounts['USD'],
+            'exchange_rate_idr_to_usd' => $exchangeRates['idr_to_usd'] ?? null,
+            'exchange_rate_usd_to_idr' => $exchangeRates['usd_to_idr'] ?? null,
+            'base_price' => (float) $plan->price,
+            'base_currency' => $plan->currency,
+            'is_indonesian' => $preferredCurrency === 'IDR',
+            'available_payment_methods' => $preferredCurrency === 'IDR'
+                ? ['bank_transfer']
+                : ['paypal'],
         ];
 
-        $keyCache = 'Checkout_' . $timestamp . '_' . Str::random(10) . '';
+        $keyCache = 'Checkout_' . $timestamp . '_' . Str::random(10);
         Cache::put($keyCache, $data, now()->addHours(2));
 
-        // Redirect to checkout with the cache key
         return redirect()->to('/checkout?id=' . $keyCache);
     }
 
@@ -330,9 +374,54 @@ class UserCreditsController extends Controller
             return redirect()->route('admin.purchase-credits')->with('error', 'Application data not found');
         }
 
-        $data['title'] = 'Checkout';
+        $pricingContext = [
+            'currency' => $data['price_currency'] ?? config('currency.default', 'IDR'),
+            'exchange_rates' => [
+                'idr_to_usd' => $data['exchange_rate_idr_to_usd'] ?? null,
+                'usd_to_idr' => $data['exchange_rate_usd_to_idr'] ?? null,
+            ],
+            'is_indonesian' => $data['is_indonesian'] ?? false,
+        ];
 
-        return view('pages.front.order.checkout', compact('data'));
+        $data['title'] = 'Checkout';
+        $data['available_payment_methods'] = $data['available_payment_methods'] ?? [];
+
+        return view('pages.front.order.checkout', compact('data', 'pricingContext'));
+    }
+
+    protected function preparePlansForDisplay($plans, Request $request): array
+    {
+        $preferredCurrency = $this->locationService->getPreferredCurrency($request);
+
+        try {
+            $exchangeRates = $this->currencyRateService->getIdrUsdPair();
+        } catch (\Throwable $exception) {
+            Log::warning('Failed to obtain exchange rates for plan display.', [
+                'message' => $exception->getMessage(),
+            ]);
+            $exchangeRates = [
+                'idr_to_usd' => null,
+                'usd_to_idr' => null,
+            ];
+        }
+
+        $transformedPlans = $plans->map(function (Plan $plan) use ($preferredCurrency) {
+            $normalizedAmounts = $this->currencyRateService->normalizeAmounts((float) $plan->price, $plan->currency);
+
+            $plan->display_currency = $preferredCurrency;
+            $plan->display_price = $normalizedAmounts[$preferredCurrency] ?? $normalizedAmounts['USD'];
+            $plan->amount_idr = $normalizedAmounts['IDR'];
+            $plan->amount_usd = $normalizedAmounts['USD'];
+
+            return $plan;
+        });
+
+        return [
+            'plans' => $transformedPlans,
+            'preferred_currency' => $preferredCurrency,
+            'exchange_rates' => $exchangeRates,
+            'is_indonesian' => $preferredCurrency === 'IDR',
+        ];
     }
 
 

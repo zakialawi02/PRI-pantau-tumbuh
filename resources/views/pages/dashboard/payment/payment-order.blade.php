@@ -163,6 +163,58 @@
                     </div>
                 </div>
 
+                @if ($payment->amount_idr || $payment->amount_usd)
+                    <div class="mb-8">
+                        <h3 class="text-base-content mb-4 text-lg font-semibold">Recorded Currency Details</h3>
+                        <div class="overflow-x-auto">
+                            <table class="border-border w-full border-collapse border">
+                                <thead class="bg-background">
+                                    <tr>
+                                        <th class="border-border text-foreground border px-4 py-3 text-left font-semibold">Currency</th>
+                                        <th class="border-border text-foreground border px-4 py-3 text-right font-semibold">Amount</th>
+                                        <th class="border-border text-foreground border px-4 py-3 text-right font-semibold">Reference</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr class="hover:bg-base-content-muted/20">
+                                        <td class="border-border border px-4 py-3">
+                                            <div class="font-medium flex items-center gap-2">
+                                                IDR
+                                                @if ($payment->currency === 'IDR')
+                                                    <span class="bg-success/10 text-success rounded-full px-2 py-0.5 text-xs">Transaction Currency</span>
+                                                @endif
+                                            </div>
+                                        </td>
+                                        <td class="border-border border px-4 py-3 text-right font-medium">{{ Number::currency($payment->amount_idr ?? 0, 'IDR', app()->getLocale()) }}</td>
+                                        <td class="border-border border px-4 py-3 text-right text-sm text-base-content-muted">
+                                            Base record
+                                        </td>
+                                    </tr>
+                                    <tr class="hover:bg-base-content-muted/20">
+                                        <td class="border-border border px-4 py-3">
+                                            <div class="font-medium flex items-center gap-2">
+                                                USD
+                                                @if ($payment->currency === 'USD')
+                                                    <span class="bg-success/10 text-success rounded-full px-2 py-0.5 text-xs">Transaction Currency</span>
+                                                @endif
+                                            </div>
+                                        </td>
+                                        <td class="border-border border px-4 py-3 text-right font-medium">{{ Number::currency($payment->amount_usd ?? 0, 'USD', app()->getLocale()) }}</td>
+                                        <td class="border-border border px-4 py-3 text-right text-sm text-base-content-muted">
+                                            Converted record
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        @if ($payment->exchange_rate_idr_to_usd)
+                            <p class="text-base-content-muted mt-3 text-sm">
+                                Exchange rate at checkout: 1 IDR ≈ {{ Number::format($payment->exchange_rate_idr_to_usd, 6, locale: app()->getLocale()) }} USD @if($payment->exchange_rate_usd_to_idr) (1 USD ≈ {{ Number::format($payment->exchange_rate_usd_to_idr, 2, locale: app()->getLocale()) }} IDR) @endif.
+                            </p>
+                        @endif
+                    </div>
+                @endif
+
                 <!-- Total Section -->
                 <div class="mb-8 flex justify-end">
                     <div class="w-64">

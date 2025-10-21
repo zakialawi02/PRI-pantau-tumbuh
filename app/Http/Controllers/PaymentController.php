@@ -128,6 +128,10 @@ class PaymentController extends Controller
                     'status' => $payment->checkAndMarkAsExpired,
                     'payment_proof' => $payment->proof_image,
                     'amount' => $payment->amount,
+                    'amount_idr' => $payment->amount_idr,
+                    'amount_usd' => $payment->amount_usd,
+                    'exchange_rate_idr_to_usd' => $payment->exchange_rate_idr_to_usd,
+                    'exchange_rate_usd_to_idr' => $payment->exchange_rate_usd_to_idr,
                     'currency' => $payment->currency,
                     'name' => $payment->name,
                     'email' => $payment->email,
@@ -267,7 +271,7 @@ class PaymentController extends Controller
             'name' => 'required|string|max:255',
             'email' => 'required|email',
             'phone' => 'required|string|max:20',
-            'payment_method' => 'required|string|in:bank_transfer,paypal,stripe,manual',
+            'payment_method' => 'required|string',
         ]);
 
         $cacheData = Cache::get($request->order_id);
@@ -278,6 +282,12 @@ class PaymentController extends Controller
         $plan = Plan::findOrFail($request->plan_id);
         $user = Auth::user();
 
+        $availableMethods = $cacheData['available_payment_methods'] ?? ['bank_transfer', 'paypal', 'manual', 'stripe'];
+
+        if (!in_array($request->payment_method, $availableMethods, true)) {
+            return redirect()->back()->with('error', 'Selected payment method is not available for your region.');
+        }
+
         try {
             // Create a payment record for credit purchase
             $payment = Payment::create([
@@ -285,8 +295,12 @@ class PaymentController extends Controller
                 'name'            => $request->name,
                 'email'           => $request->email,
                 'phone'           => $request->phone,
-                'amount'          => $plan->price,
-                'currency'        => $plan->currency,
+                'amount'          => $cacheData['price'] ?? $plan->price,
+                'amount_idr'      => $cacheData['amount_idr'] ?? null,
+                'amount_usd'      => $cacheData['amount_usd'] ?? null,
+                'exchange_rate_idr_to_usd' => $cacheData['exchange_rate_idr_to_usd'] ?? null,
+                'exchange_rate_usd_to_idr' => $cacheData['exchange_rate_usd_to_idr'] ?? null,
+                'currency'        => $cacheData['price_currency'] ?? $plan->currency,
                 'status'          => 'pending',
                 'due_date'        => Carbon::now()->addDays(1), // 1 days from now
                 'payment_method'  => $request->payment_method ?? 'manual',
@@ -314,8 +328,8 @@ class PaymentController extends Controller
                     $gateway = PaymentGatewayFactory::make($gatewayName);
 
                     $paymentData = [
-                        'amount' => $plan->price,
-                        'currency' => $plan->currency,
+                        'amount' => $cacheData['price'] ?? $plan->price,
+                        'currency' => $cacheData['price_currency'] ?? $plan->currency,
                         'description' => 'Credit Purchase: ' . $plan->name . ' for ' . $plan->credit_points . ' Credits',
                         'return_url' => route('admin.payment.callback', ['gateway' => $gatewayName]) . '?paymentId=' . $payment->id,
                         'cancel_url' => route('admin.payment.show', $payment->id),
