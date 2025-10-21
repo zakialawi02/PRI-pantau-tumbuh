@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Models\UserCredit;
 use App\Models\UserCreditHistory;
 use App\Services\CreditService;
+use App\Services\RegionService;
 use Illuminate\Support\Str;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
@@ -265,29 +266,63 @@ class UserCreditsController extends Controller
     /**
      * Display the credit purchase page for public/guest users.
      */
-    public function purchasePublic()
+    public function purchasePublic(Request $request)
     {
-        // Get all plans that are shown to users and have credit points
         $plans = Plan::where('isShow', true)
             ->where('credit_points', '>', 0)
             ->orderBy('credit_points', 'asc')
             ->get();
 
-        return view('pages.front.order.purchase-credits', compact('plans'));
+        /** @var RegionService $regionService */
+        $regionService = app(RegionService::class);
+        $countryCode = $regionService->resolveCountryCode($request);
+        $preferredCurrency = $regionService->preferredCurrency($countryCode);
+
+        $plans = $plans->map(function (Plan $plan) use ($preferredCurrency) {
+            [$displayPrice, $displayCurrency] = $this->determineDisplayPrice($plan, $preferredCurrency);
+
+            $plan->display_price = $displayPrice;
+            $plan->display_currency = $displayCurrency;
+
+            return $plan;
+        });
+
+        return view('pages.front.order.purchase-credits', [
+            'plans' => $plans,
+            'displayCurrency' => $preferredCurrency,
+            'countryCode' => $countryCode,
+        ]);
     }
 
     /**
      * Display the credit purchase page for users.
      */
-    public function purchase()
+    public function purchase(Request $request)
     {
-        // Get all plans that are shown to users and have credit points
         $plans = Plan::where('isShow', true)
             ->where('credit_points', '>', 0)
             ->orderBy('credit_points', 'asc')
             ->get();
 
-        return view('pages.dashboard.users.purchaseCredits', compact('plans'));
+        /** @var RegionService $regionService */
+        $regionService = app(RegionService::class);
+        $countryCode = $regionService->resolveCountryCode($request);
+        $preferredCurrency = $regionService->preferredCurrency($countryCode);
+
+        $plans = $plans->map(function (Plan $plan) use ($preferredCurrency) {
+            [$displayPrice, $displayCurrency] = $this->determineDisplayPrice($plan, $preferredCurrency);
+
+            $plan->display_price = $displayPrice;
+            $plan->display_currency = $displayCurrency;
+
+            return $plan;
+        });
+
+        return view('pages.dashboard.users.purchaseCredits', [
+            'plans' => $plans,
+            'displayCurrency' => $preferredCurrency,
+            'countryCode' => $countryCode,
+        ]);
     }
 
     public function orderCredit(Request $request)
@@ -298,13 +333,24 @@ class UserCreditsController extends Controller
 
         $plan = Plan::findOrFail($request->plan_id);
 
+        /** @var RegionService $regionService */
+        $regionService = app(RegionService::class);
+        $countryCode = $regionService->resolveCountryCode($request);
+        $preferredCurrency = $regionService->preferredCurrency($countryCode);
+
+        [$displayPrice, $displayCurrency] = $this->determineDisplayPrice($plan, $preferredCurrency);
+
         // Create data array similar to the mapOrder method
         $timestamp = time();
         $data = [
             'timestamp' => $timestamp,
             'plan' => $plan,
-            'price_currency' => $plan->currency,
-            'price' => $plan->price,
+            'price_currency' => $displayCurrency,
+            'price' => $displayPrice,
+            'country_code' => $countryCode,
+            'preferred_currency' => $preferredCurrency,
+            'original_price_currency' => strtoupper($plan->currency),
+            'original_price' => (float) $plan->price,
         ];
 
         $keyCache = 'Checkout_' . $timestamp . '_' . Str::random(10) . '';
@@ -332,7 +378,63 @@ class UserCreditsController extends Controller
 
         $data['title'] = 'Checkout';
 
-        return view('pages.front.order.checkout', compact('data'));
+        /** @var RegionService $regionService */
+        $regionService = app(RegionService::class);
+        $countryCode = $data['country_code'] ?? $regionService->resolveCountryCode($request);
+        $preferredCurrency = $regionService->preferredCurrency($countryCode);
+
+        if (isset($data['plan']) && $data['plan'] instanceof Plan) {
+            [$displayPrice, $displayCurrency] = $this->determineDisplayPrice($data['plan'], $preferredCurrency);
+            $data['price'] = $displayPrice;
+            $data['price_currency'] = $displayCurrency;
+        } else {
+            $data['price'] = isset($data['price']) ? (float) $data['price'] : 0.0;
+            $data['price_currency'] = strtoupper($data['price_currency'] ?? $preferredCurrency);
+        }
+
+        $showBankTransfer = $regionService->supportsBankTransfer($countryCode);
+        $showPaypal = $regionService->supportsPaypal($countryCode);
+        $defaultPaymentMethod = $showBankTransfer ? 'bank_transfer' : ($showPaypal ? 'paypal' : 'manual');
+
+        return view('pages.front.order.checkout', [
+            'data' => $data,
+            'displayCurrency' => $data['price_currency'],
+            'countryCode' => $countryCode,
+            'showBankTransfer' => $showBankTransfer,
+            'showPaypal' => $showPaypal,
+            'defaultPaymentMethod' => $defaultPaymentMethod,
+        ]);
+    }
+
+    /**
+     * Determine the currency and price to display for a plan.
+     *
+     * @return array{0: float, 1: string}
+     */
+    protected function determineDisplayPrice(Plan $plan, string $preferredCurrency): array
+    {
+        $targetCurrency = strtoupper($preferredCurrency);
+        $planCurrency = strtoupper((string) $plan->currency);
+
+        if ($planCurrency === $targetCurrency) {
+            $price = (float) $plan->price;
+        } else {
+            $price = $plan->priceIn($targetCurrency);
+        }
+
+        if ($price === null) {
+            $targetCurrency = 'USD';
+            $price = $planCurrency === 'USD'
+                ? (float) $plan->price
+                : $plan->priceIn('USD');
+        }
+
+        if ($price === null) {
+            $targetCurrency = $planCurrency;
+            $price = (float) $plan->price;
+        }
+
+        return [(float) $price, strtoupper($targetCurrency)];
     }
 
 

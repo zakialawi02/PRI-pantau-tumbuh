@@ -3,26 +3,10 @@
 @php
     use Illuminate\Support\Number;
 
-    $currencyService = app(\App\Services\CurrencyService::class);
-    $defaultCurrency = $currencyService->getDefaultCurrency();
     $locale = app()->getLocale();
-    $priceCurrency = $data['price_currency'] ?? $defaultCurrency;
+    $priceCurrency = strtoupper($data['price_currency'] ?? ($displayCurrency ?? 'USD'));
     $priceValue = (float) ($data['price'] ?? 0);
-
-    $defaultPrice = null;
-    $usdPrice = null;
-
-    try {
-        if ($priceCurrency !== $defaultCurrency) {
-            $defaultPrice = $currencyService->convert($priceValue, $priceCurrency, $defaultCurrency);
-        } else {
-            $defaultPrice = $priceValue;
-        }
-
-        $usdPrice = $currencyService->convert($priceValue, $priceCurrency, 'USD');
-    } catch (\Throwable $conversionError) {
-        $usdPrice = null;
-    }
+    $selectedPaymentMethod = old('payment_method', $defaultPaymentMethod ?? 'manual');
 @endphp
 
 <x-app-front-layout>
@@ -80,12 +64,6 @@
                                     </div>
                                     <div class="text-right">
                                         <p class="text-foreground text-lg">{{ Number::currency($priceValue, $priceCurrency, $locale) }}</p>
-                                        @if ($priceCurrency !== $defaultCurrency && $defaultPrice)
-                                            <p class="text-foreground/60 text-sm">≈ {{ Number::currency($defaultPrice, $defaultCurrency, $locale) }}</p>
-                                        @endif
-                                        @if ($usdPrice && strtoupper($priceCurrency) !== 'USD')
-                                            <p class="text-foreground/60 text-sm">≈ {{ Number::currency($usdPrice, 'USD', $locale) }}</p>
-                                        @endif
                                     </div>
                                 </div>
 
@@ -93,12 +71,6 @@
                                     <h3 class="text-foreground text-lg font-semibold">Total</h3>
                                     <div class="text-right">
                                         <p class="text-primary text-xl font-bold">{{ Number::currency($priceValue, $priceCurrency, $locale) }}</p>
-                                        @if ($priceCurrency !== $defaultCurrency && $defaultPrice)
-                                            <p class="text-foreground/70 text-sm">≈ {{ Number::currency($defaultPrice, $defaultCurrency, $locale) }}</p>
-                                        @endif
-                                        @if ($usdPrice && strtoupper($priceCurrency) !== 'USD')
-                                            <p class="text-foreground/70 text-sm">≈ {{ Number::currency($usdPrice, 'USD', $locale) }}</p>
-                                        @endif
                                     </div>
                                 </div>
                             </div>
@@ -172,12 +144,6 @@
                                         </div>
                                         <div class="text-right">
                                             <p class="text-foreground text-lg">{{ Number::currency($priceValue, $priceCurrency, $locale) }}</p>
-                                            @if ($priceCurrency !== $defaultCurrency && $defaultPrice)
-                                                <p class="text-foreground/60 text-sm">≈ {{ Number::currency($defaultPrice, $defaultCurrency, $locale) }}</p>
-                                            @endif
-                                            @if ($usdPrice && strtoupper($priceCurrency) !== 'USD')
-                                                <p class="text-foreground/60 text-sm">≈ {{ Number::currency($usdPrice, 'USD', $locale) }}</p>
-                                            @endif
                                         </div>
                                     </div>
 
@@ -197,12 +163,6 @@
                                         <h3 class="text-foreground text-lg font-semibold">Total</h3>
                                         <div class="text-right">
                                             <p class="text-primary text-xl font-bold">{{ Number::currency($priceValue, $priceCurrency, $locale) }}</p>
-                                            @if ($priceCurrency !== $defaultCurrency && $defaultPrice)
-                                                <p class="text-foreground/70 text-sm">≈ {{ Number::currency($defaultPrice, $defaultCurrency, $locale) }}</p>
-                                            @endif
-                                            @if ($usdPrice && strtoupper($priceCurrency) !== 'USD')
-                                                <p class="text-foreground/70 text-sm">≈ {{ Number::currency($usdPrice, 'USD', $locale) }}</p>
-                                            @endif
                                         </div>
                                     </div>
                                 </div>
@@ -213,25 +173,29 @@
                                 <h2 class="border-border text-foreground border-b pb-3 text-xl font-semibold">Payment Method</h2>
 
                                 <div class="mt-4 space-y-3">
-                                    <label class="border-border hover:bg-muted/50 flex cursor-pointer items-center rounded-lg border p-4">
-                                        <input class="text-primary focus:ring-primary h-5 w-5 rounded-full border-gray-300 focus:ring-2" name="payment_method" type="radio" value="bank_transfer" checked>
-                                        <div class="ml-4">
-                                            <span class="text-foreground block text-base font-medium">Bank Transfer</span>
-                                            <span class="text-base-content-muted block text-sm">Pay directly from your bank account</span>
-                                        </div>
-                                    </label>
+                                    @if ($showBankTransfer)
+                                        <label class="border-border hover:bg-muted/50 flex cursor-pointer items-center rounded-lg border p-4">
+                                            <input class="text-primary focus:ring-primary h-5 w-5 rounded-full border-gray-300 focus:ring-2" name="payment_method" type="radio" value="bank_transfer" {{ $selectedPaymentMethod === 'bank_transfer' ? 'checked' : '' }}>
+                                            <div class="ml-4">
+                                                <span class="text-foreground block text-base font-medium">Bank Transfer</span>
+                                                <span class="text-base-content-muted block text-sm">Pay directly from your bank account</span>
+                                            </div>
+                                        </label>
+                                    @endif
 
-                                    <label class="border-border hover:bg-muted/50 flex cursor-pointer items-center rounded-lg border p-4">
-                                        <input class="text-primary focus:ring-primary h-5 w-5 rounded-full border-gray-300 focus:ring-2" name="payment_method" type="radio" value="paypal">
-                                        <div class="ml-4">
-                                            <span class="text-foreground block text-base font-medium">PayPal</span>
-                                            <span class="text-base-content-muted block text-sm">Pay with your PayPal account</span>
-                                        </div>
-                                    </label>
+                                    @if ($showPaypal)
+                                        <label class="border-border hover:bg-muted/50 flex cursor-pointer items-center rounded-lg border p-4">
+                                            <input class="text-primary focus:ring-primary h-5 w-5 rounded-full border-gray-300 focus:ring-2" name="payment_method" type="radio" value="paypal" {{ $selectedPaymentMethod === 'paypal' ? 'checked' : '' }}>
+                                            <div class="ml-4">
+                                                <span class="text-foreground block text-base font-medium">PayPal</span>
+                                                <span class="text-base-content-muted block text-sm">Pay with your PayPal account</span>
+                                            </div>
+                                        </label>
+                                    @endif
 
                                     @if (config('services.stripe.key'))
                                         <label class="border-border hover:bg-muted/50 flex cursor-pointer items-center rounded-lg border p-4">
-                                            <input class="text-primary focus:ring-primary h-5 w-5 rounded-full border-gray-300 focus:ring-2" name="payment_method" type="radio" value="stripe">
+                                            <input class="text-primary focus:ring-primary h-5 w-5 rounded-full border-gray-300 focus:ring-2" name="payment_method" type="radio" value="stripe" {{ $selectedPaymentMethod === 'stripe' ? 'checked' : '' }}>
                                             <div class="ml-4">
                                                 <span class="text-foreground block text-base font-medium">Credit Card</span>
                                                 <span class="text-base-content-muted block text-sm">Pay with credit card via Stripe</span>
@@ -249,7 +213,7 @@
                                     @endif
 
                                     <label class="border-border hover:bg-muted/50 flex cursor-pointer items-center rounded-lg border p-4">
-                                        <input class="text-primary focus:ring-primary h-5 w-5 rounded-full border-gray-300 focus:ring-2" name="payment_method" type="radio" value="manual">
+                                        <input class="text-primary focus:ring-primary h-5 w-5 rounded-full border-gray-300 focus:ring-2" name="payment_method" type="radio" value="manual" {{ $selectedPaymentMethod === 'manual' ? 'checked' : '' }}>
                                         <div class="ml-4">
                                             <span class="text-foreground block text-base font-medium">Manual Payment</span>
                                             <span class="text-base-content-muted block text-sm">Pay manually (for testing)</span>
