@@ -3,6 +3,14 @@
 
 @section('title', 'PayPal Sandbox Payment Guide')
 
+@php
+    use Illuminate\Support\Number;
+
+    $currencyService = app(\App\Services\CurrencyService::class);
+    $defaultCurrency = $currencyService->getDefaultCurrency();
+    $locale = app()->getLocale();
+@endphp
+
 <x-app-front-layout>
     <div class="mx-auto max-w-7xl p-4 md:p-8">
 
@@ -30,9 +38,23 @@
                             </div>
 
                             <div class="mt-4">
+                                @php
+                                    $defaultPrice = $plan->currency === $defaultCurrency ? (float) $plan->price : ($plan->priceIn($defaultCurrency) ?? null);
+                                    $usdPrice = $plan->priceIn('USD');
+                                @endphp
                                 <p class="text-foreground text-3xl font-bold">
-                                    {{ Number::currency($plan->price, $plan->currency, app()->getLocale()) }}
+                                    {{ Number::currency($plan->price, $plan->currency, $locale) }}
                                 </p>
+                                @if ($plan->currency !== $defaultCurrency && $defaultPrice)
+                                    <p class="text-foreground/60 mt-1 text-sm">
+                                        ≈ {{ Number::currency($defaultPrice, $defaultCurrency, $locale) }}
+                                    </p>
+                                @endif
+                                @if ($usdPrice)
+                                    <p class="text-foreground/60 mt-1 text-sm">
+                                        ≈ {{ Number::currency($usdPrice, 'USD', $locale) }}
+                                    </p>
+                                @endif
                                 <p class="text-foreground/70 mt-1">
                                     {{ $plan->credit_points }} Credit Points
                                 </p>

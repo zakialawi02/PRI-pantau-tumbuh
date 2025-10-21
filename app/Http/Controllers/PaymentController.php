@@ -14,6 +14,7 @@ use Yajra\DataTables\Facades\DataTables;
 use App\Mail\OrderCreditConfirmation;
 use App\Mail\PaymentCreditConfirmation;
 use App\Services\CreditService;
+use App\Services\CurrencyService;
 use App\Services\PaymentGatewayFactory;
 use Exception;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -23,9 +24,12 @@ class PaymentController extends Controller
 {
     protected $creditService;
 
-    public function __construct(CreditService $creditService)
+    protected CurrencyService $currencyService;
+
+    public function __construct(CreditService $creditService, CurrencyService $currencyService)
     {
         $this->creditService = $creditService;
+        $this->currencyService = $currencyService;
     }
 
     public function index()
@@ -279,21 +283,34 @@ class PaymentController extends Controller
         $user = Auth::user();
 
         try {
+            $defaultCurrency = $this->currencyService->getDefaultCurrency();
+
+            $amountInDefault = $plan->currency === $defaultCurrency
+                ? (float) $plan->price
+                : ($plan->priceIn($defaultCurrency) ?? (float) $plan->price);
+
+            $amountInIdr = $plan->priceIn('IDR');
+            $amountInUsd = $plan->priceIn('USD');
+            $exchangeRate = $this->currencyService->getRate('IDR', 'USD');
+
             // Create a payment record for credit purchase
-            $payment = Payment::create([
+            $payment = Payment::create(array_filter([
                 'user_id'         => $user->id,
                 'name'            => $request->name,
                 'email'           => $request->email,
                 'phone'           => $request->phone,
-                'amount'          => $plan->price,
-                'currency'        => $plan->currency,
+                'amount'          => $amountInDefault,
+                'currency'        => $defaultCurrency,
+                'exchange_rate'   => $exchangeRate,
+                'amount_idr'      => $amountInIdr ?? $amountInDefault,
+                'amount_usd'      => $amountInUsd,
                 'status'          => 'pending',
                 'due_date'        => Carbon::now()->addDays(1), // 1 days from now
                 'payment_method'  => $request->payment_method ?? 'manual',
                 'account_name'    => $request->account_name ?? null,
                 'account_number'  => $request->account_number ?? null,
                 'credit_points'   => $plan->credit_points, // Store the credit points buy by user
-            ]);
+            ], static fn ($value) => $value !== null));
 
             Cache::forget($request->order_id);
 
@@ -313,9 +330,24 @@ class PaymentController extends Controller
                 try {
                     $gateway = PaymentGatewayFactory::make($gatewayName);
 
+                    $gatewayCurrency = config('paypal.currency', 'USD');
+                    try {
+                        $amountForGateway = $this->currencyService->convert($payment->amount, $payment->currency, $gatewayCurrency);
+                    } catch (\Throwable $conversionException) {
+                        Log::warning('Failed to convert payment amount for payment gateway.', [
+                            'payment_id' => $payment->id,
+                            'source_currency' => $payment->currency,
+                            'target_currency' => $gatewayCurrency,
+                            'message' => $conversionException->getMessage(),
+                        ]);
+
+                        $amountForGateway = $payment->amount;
+                        $gatewayCurrency = $payment->currency;
+                    }
+
                     $paymentData = [
-                        'amount' => $plan->price,
-                        'currency' => $plan->currency,
+                        'amount' => $amountForGateway,
+                        'currency' => $gatewayCurrency,
                         'description' => 'Credit Purchase: ' . $plan->name . ' for ' . $plan->credit_points . ' Credits',
                         'return_url' => route('admin.payment.callback', ['gateway' => $gatewayName]) . '?paymentId=' . $payment->id,
                         'cancel_url' => route('admin.payment.show', $payment->id),

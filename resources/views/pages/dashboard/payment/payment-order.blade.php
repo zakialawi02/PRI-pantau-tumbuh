@@ -1,5 +1,43 @@
 @section('title', $data['title'] ?? '')
 
+@php
+    use Illuminate\Support\Number;
+
+    $currencyService = app(\App\Services\CurrencyService::class);
+    $defaultCurrency = $currencyService->getDefaultCurrency();
+    $locale = app()->getLocale();
+
+    $primaryAmount = (float) $payment->amount;
+    $primaryCurrency = $payment->currency;
+
+    $amountDefault = $payment->amount_idr;
+    $amountUsd = $payment->amount_usd;
+
+    if ($amountDefault === null) {
+        if ($primaryCurrency === $defaultCurrency) {
+            $amountDefault = $primaryAmount;
+        } else {
+            try {
+                $amountDefault = $currencyService->convert($primaryAmount, $primaryCurrency, $defaultCurrency);
+            } catch (\Throwable $conversionError) {
+                $amountDefault = null;
+            }
+        }
+    }
+
+    if ($amountUsd === null) {
+        if (strtoupper($primaryCurrency) === 'USD') {
+            $amountUsd = $primaryAmount;
+        } else {
+            try {
+                $amountUsd = $currencyService->convert($primaryAmount, $primaryCurrency, 'USD');
+            } catch (\Throwable $conversionError) {
+                $amountUsd = null;
+            }
+        }
+    }
+@endphp
+
 <x-app-layout>
     <section class="p-1 md:p-4">
         <x-card class="p-0!">
@@ -156,7 +194,15 @@
                                     <td class="border-border border px-4 py-3">
                                         <div class="font-medium">Purchase credit points</div>
                                     </td>
-                                    <td class="border-border border px-4 py-3 text-right font-medium">{{ Number::currency($payment->amount, $payment->currency, app()->getLocale()) }}</td>
+                                    <td class="border-border border px-4 py-3 text-right font-medium">
+                                        {{ Number::currency($primaryAmount, $primaryCurrency, $locale) }}
+                                        @if ($primaryCurrency !== $defaultCurrency && $amountDefault)
+                                            <div class="text-muted text-xs">≈ {{ Number::currency($amountDefault, $defaultCurrency, $locale) }}</div>
+                                        @endif
+                                        @if ($amountUsd && strtoupper($primaryCurrency) !== 'USD')
+                                            <div class="text-muted text-xs">≈ {{ Number::currency($amountUsd, 'USD', $locale) }}</div>
+                                        @endif
+                                    </td>
                                 </tr>
                             </tbody>
                         </table>
@@ -169,7 +215,15 @@
                         <div class="bg-base-content-muted/20 rounded-lg p-4">
                             <div class="border-border flex items-center justify-between border-b py-2">
                                 <span class="text-base-content-muted">Subtotal:</span>
-                                <span class="font-medium">{{ Number::currency($payment->amount, $payment->currency, app()->getLocale()) }}</span>
+                                <div class="text-right">
+                                    <span class="font-medium">{{ Number::currency($primaryAmount, $primaryCurrency, $locale) }}</span>
+                                    @if ($primaryCurrency !== $defaultCurrency && $amountDefault)
+                                        <div class="text-muted text-xs">≈ {{ Number::currency($amountDefault, $defaultCurrency, $locale) }}</div>
+                                    @endif
+                                    @if ($amountUsd && strtoupper($primaryCurrency) !== 'USD')
+                                        <div class="text-muted text-xs">≈ {{ Number::currency($amountUsd, 'USD', $locale) }}</div>
+                                    @endif
+                                </div>
                             </div>
                             <div class="border-border flex items-center justify-between border-b py-2">
                                 <span class="text-base-content-muted">Tax (0%):</span>
@@ -183,7 +237,15 @@
                             @endif
                             <div class="border-border flex items-center justify-between border-t-2 py-3">
                                 <span class="text-base-content text-lg font-semibold">Total:</span>
-                                <span class="text-primary text-lg font-bold">{{ Number::currency($payment->amount, $payment->currency, app()->getLocale()) }}</span>
+                                <div class="text-right">
+                                    <span class="text-primary text-lg font-bold">{{ Number::currency($primaryAmount, $primaryCurrency, $locale) }}</span>
+                                    @if ($primaryCurrency !== $defaultCurrency && $amountDefault)
+                                        <div class="text-muted text-xs">≈ {{ Number::currency($amountDefault, $defaultCurrency, $locale) }}</div>
+                                    @endif
+                                    @if ($amountUsd && strtoupper($primaryCurrency) !== 'USD')
+                                        <div class="text-muted text-xs">≈ {{ Number::currency($amountUsd, 'USD', $locale) }}</div>
+                                    @endif
+                                </div>
                             </div>
                         </div>
                     </div>

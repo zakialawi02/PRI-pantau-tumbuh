@@ -207,7 +207,7 @@ window.parseDateInput = parseDateInput;
  */
 function formatCurrency(
     amount,
-    currencyCode = "USD",
+    currencyCode = "IDR",
     locale = document.documentElement.lang || "en-US",
     // locale = navigator.language || "en-US",
     options = {}

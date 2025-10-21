@@ -26,6 +26,9 @@ class Payment extends Model
         'amount',
         'credit_points',
         'currency',
+        'exchange_rate',
+        'amount_idr',
+        'amount_usd',
         'status',
         'due_date',
         'bank_name',
@@ -47,6 +50,9 @@ class Payment extends Model
         'verified_at' => 'datetime',
         'amount' => 'decimal:2',
         'credit_points' => 'decimal:2',
+        'exchange_rate' => 'decimal:8',
+        'amount_idr' => 'decimal:2',
+        'amount_usd' => 'decimal:2',
     ];
 
     /**

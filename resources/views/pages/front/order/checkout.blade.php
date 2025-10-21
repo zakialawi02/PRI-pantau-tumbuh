@@ -1,5 +1,30 @@
 @section('title', $data['title'] ?? '')
 
+@php
+    use Illuminate\Support\Number;
+
+    $currencyService = app(\App\Services\CurrencyService::class);
+    $defaultCurrency = $currencyService->getDefaultCurrency();
+    $locale = app()->getLocale();
+    $priceCurrency = $data['price_currency'] ?? $defaultCurrency;
+    $priceValue = (float) ($data['price'] ?? 0);
+
+    $defaultPrice = null;
+    $usdPrice = null;
+
+    try {
+        if ($priceCurrency !== $defaultCurrency) {
+            $defaultPrice = $currencyService->convert($priceValue, $priceCurrency, $defaultCurrency);
+        } else {
+            $defaultPrice = $priceValue;
+        }
+
+        $usdPrice = $currencyService->convert($priceValue, $priceCurrency, 'USD');
+    } catch (\Throwable $conversionError) {
+        $usdPrice = null;
+    }
+@endphp
+
 <x-app-front-layout>
     <div class="mx-auto max-w-7xl p-4 md:p-8">
         <!-- Judul -->
@@ -54,13 +79,27 @@
                                         <p class="text-base-content-muted text-sm">{{ $data['plan']['credit_points'] ?? 0 }} Credit Points</p>
                                     </div>
                                     <div class="text-right">
-                                        <p class="text-foreground text-lg">{{ Number::currency($data['price'], $data['price_currency'], app()->getLocale()) }}</p>
+                                        <p class="text-foreground text-lg">{{ Number::currency($priceValue, $priceCurrency, $locale) }}</p>
+                                        @if ($priceCurrency !== $defaultCurrency && $defaultPrice)
+                                            <p class="text-foreground/60 text-sm">≈ {{ Number::currency($defaultPrice, $defaultCurrency, $locale) }}</p>
+                                        @endif
+                                        @if ($usdPrice && strtoupper($priceCurrency) !== 'USD')
+                                            <p class="text-foreground/60 text-sm">≈ {{ Number::currency($usdPrice, 'USD', $locale) }}</p>
+                                        @endif
                                     </div>
                                 </div>
 
                                 <div class="flex justify-between pt-2">
                                     <h3 class="text-foreground text-lg font-semibold">Total</h3>
-                                    <p class="text-primary text-xl font-bold">{{ Number::currency($data['price'], $data['price_currency'], app()->getLocale()) }}</p>
+                                    <div class="text-right">
+                                        <p class="text-primary text-xl font-bold">{{ Number::currency($priceValue, $priceCurrency, $locale) }}</p>
+                                        @if ($priceCurrency !== $defaultCurrency && $defaultPrice)
+                                            <p class="text-foreground/70 text-sm">≈ {{ Number::currency($defaultPrice, $defaultCurrency, $locale) }}</p>
+                                        @endif
+                                        @if ($usdPrice && strtoupper($priceCurrency) !== 'USD')
+                                            <p class="text-foreground/70 text-sm">≈ {{ Number::currency($usdPrice, 'USD', $locale) }}</p>
+                                        @endif
+                                    </div>
                                 </div>
                             </div>
                         @else
@@ -132,7 +171,13 @@
                                             <p class="text-base-content-muted text-sm">{{ $data['plan']['credit_points'] ?? 0 }} Credit Points</p>
                                         </div>
                                         <div class="text-right">
-                                            <p class="text-foreground text-lg">{{ Number::currency($data['price'], $data['price_currency'], app()->getLocale()) }}</p>
+                                            <p class="text-foreground text-lg">{{ Number::currency($priceValue, $priceCurrency, $locale) }}</p>
+                                            @if ($priceCurrency !== $defaultCurrency && $defaultPrice)
+                                                <p class="text-foreground/60 text-sm">≈ {{ Number::currency($defaultPrice, $defaultCurrency, $locale) }}</p>
+                                            @endif
+                                            @if ($usdPrice && strtoupper($priceCurrency) !== 'USD')
+                                                <p class="text-foreground/60 text-sm">≈ {{ Number::currency($usdPrice, 'USD', $locale) }}</p>
+                                            @endif
                                         </div>
                                     </div>
 
@@ -143,14 +188,22 @@
                                             <p class="text-base-content-muted text-sm">0%</p>
                                         </div>
                                         <div class="text-right">
-                                            <p class="text-foreground text-lg">{{ Number::currency(0, $data['price_currency'], app()->getLocale()) }}</p>
+                                            <p class="text-foreground text-lg">{{ Number::currency(0, $priceCurrency, $locale) }}</p>
                                         </div>
                                     </div>
 
                                     <!-- Total -->
                                     <div class="flex justify-between pt-2">
                                         <h3 class="text-foreground text-lg font-semibold">Total</h3>
-                                        <p class="text-primary text-xl font-bold">{{ Number::currency($data['price'], $data['price_currency'], app()->getLocale()) }}</p>
+                                        <div class="text-right">
+                                            <p class="text-primary text-xl font-bold">{{ Number::currency($priceValue, $priceCurrency, $locale) }}</p>
+                                            @if ($priceCurrency !== $defaultCurrency && $defaultPrice)
+                                                <p class="text-foreground/70 text-sm">≈ {{ Number::currency($defaultPrice, $defaultCurrency, $locale) }}</p>
+                                            @endif
+                                            @if ($usdPrice && strtoupper($priceCurrency) !== 'USD')
+                                                <p class="text-foreground/70 text-sm">≈ {{ Number::currency($usdPrice, 'USD', $locale) }}</p>
+                                            @endif
+                                        </div>
                                     </div>
                                 </div>
                             </div>

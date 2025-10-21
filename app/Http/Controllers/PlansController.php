@@ -3,15 +3,21 @@
 namespace App\Http\Controllers;
 
 use App\Models\Plan;
-use Illuminate\View\View;
-use Illuminate\Support\Str;
-use Illuminate\Http\Request;
+use App\Services\CurrencyService;
 use Illuminate\Http\JsonResponse;
-use Yajra\DataTables\Facades\DataTables;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Number;
+use Illuminate\Support\Str;
+use Illuminate\View\View;
+use Yajra\DataTables\Facades\DataTables;
 
 class PlansController extends Controller
 {
+    public function __construct(private readonly CurrencyService $currencyService)
+    {
+    }
+
     /**
      * Display a listing of the plans.
      */
@@ -22,6 +28,8 @@ class PlansController extends Controller
         ];
 
         if ($request->ajax()) {
+            $currencyService = $this->currencyService;
+            $locale = app()->getLocale();
             $plans = Plan::query();
 
             return DataTables::of($plans)
@@ -32,8 +40,35 @@ class PlansController extends Controller
                                 <button type="button" class="delete-plan inline-flex items-center px-2 py-1 bg-error border border-transparent rounded-md font-semibold text-xs text-primary-foreground uppercase tracking-widest hover:bg-error/80 focus:bg-error/80 active:bg-secondary/70 focus:outline-none focus:ring-2 focus:ring-secondary focus:ring-offset-2" data-id="' . $plan->id . '"> <i class="ri-delete-bin-line"></i></button>
                             </div>';
                 })
-                ->editColumn('price', function ($plan) {
-                    return $plan->price . ' ' . $plan->currency;
+                ->editColumn('price', function ($plan) use ($currencyService, $locale) {
+                    $defaultCurrency = $currencyService->getDefaultCurrency();
+                    $formatted = Number::currency($plan->price, $plan->currency, $locale);
+
+                    $approximate = [];
+
+                    if ($plan->currency !== $defaultCurrency) {
+                        $converted = $plan->priceIn($defaultCurrency);
+                        if ($converted !== null) {
+                            $approximate[] = sprintf(
+                                '<span class="text-muted text-xs">≈ %s</span>',
+                                Number::currency($converted, $defaultCurrency, $locale)
+                            );
+                        }
+                    }
+
+                    $usdConversion = $plan->priceIn('USD');
+                    if ($usdConversion !== null && strtoupper($plan->currency) !== 'USD') {
+                        $approximate[] = sprintf(
+                            '<span class="text-muted text-xs">≈ %s</span>',
+                            Number::currency($usdConversion, 'USD', $locale)
+                        );
+                    }
+
+                    if (!empty($approximate)) {
+                        $formatted .= '<br>' . implode('<br>', $approximate);
+                    }
+
+                    return $formatted;
                 })
                 ->editColumn('credit_points', function ($plan) {
                     return $plan->credit_points . ' credits';
@@ -50,11 +85,13 @@ class PlansController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
+        $supportedCurrencies = implode(',', $this->currencyService->getSupportedCurrencies());
+
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255|unique:plans,name',
             'credit_points' => 'required|integer|min:1',
             'price' => 'required|numeric|min:0.01',
-            'currency' => 'required|string|max:10',
+            'currency' => 'required|string|in:' . $supportedCurrencies,
             'isShow' => 'boolean',
             'isFeatured' => 'boolean'
         ]);
@@ -95,11 +132,13 @@ class PlansController extends Controller
      */
     public function update(Request $request, Plan $plan): JsonResponse
     {
+        $supportedCurrencies = implode(',', $this->currencyService->getSupportedCurrencies());
+
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255|unique:plans,name,' . $plan->id,
             'credit_points' => 'required|integer|min:1',
             'price' => 'required|numeric|min:0.01',
-            'currency' => 'required|string|max:10',
+            'currency' => 'required|string|in:' . $supportedCurrencies,
             'isShow' => 'boolean',
             'isFeatured' => 'boolean'
         ]);
