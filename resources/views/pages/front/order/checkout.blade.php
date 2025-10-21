@@ -159,26 +159,45 @@
                             <div class="mt-6">
                                 <h2 class="border-border text-foreground border-b pb-3 text-xl font-semibold">Payment Method</h2>
 
+                                @php
+                                    $defaultPaymentMethod = $paymentPreferences['default_method'] ?? 'bank_transfer';
+                                @endphp
                                 <div class="mt-4 space-y-3">
-                                    <label class="border-border hover:bg-muted/50 flex cursor-pointer items-center rounded-lg border p-4">
-                                        <input class="text-primary focus:ring-primary h-5 w-5 rounded-full border-gray-300 focus:ring-2" name="payment_method" type="radio" value="bank_transfer" checked>
-                                        <div class="ml-4">
-                                            <span class="text-foreground block text-base font-medium">Bank Transfer</span>
-                                            <span class="text-base-content-muted block text-sm">Pay directly from your bank account</span>
-                                        </div>
-                                    </label>
+                                    @if ($paymentPreferences['show_bank_transfer'] ?? false)
+                                        <label class="border-border hover:bg-muted/50 flex cursor-pointer items-center rounded-lg border p-4">
+                                            <input
+                                                class="text-primary focus:ring-primary h-5 w-5 rounded-full border-gray-300 focus:ring-2"
+                                                name="payment_method"
+                                                type="radio"
+                                                value="bank_transfer"
+                                                {{ old('payment_method', $defaultPaymentMethod) === 'bank_transfer' ? 'checked' : '' }}
+                                            >
+                                            <div class="ml-4">
+                                                <span class="text-foreground block text-base font-medium">Bank Transfer</span>
+                                                <span class="text-base-content-muted block text-sm">Pay directly from your bank account</span>
+                                            </div>
+                                        </label>
+                                    @endif
 
-                                    <label class="border-border hover:bg-muted/50 flex cursor-pointer items-center rounded-lg border p-4">
-                                        <input class="text-primary focus:ring-primary h-5 w-5 rounded-full border-gray-300 focus:ring-2" name="payment_method" type="radio" value="paypal">
-                                        <div class="ml-4">
-                                            <span class="text-foreground block text-base font-medium">PayPal</span>
-                                            <span class="text-base-content-muted block text-sm">Pay with your PayPal account</span>
-                                        </div>
-                                    </label>
+                                    @if ($paymentPreferences['show_paypal'] ?? false)
+                                        <label class="border-border hover:bg-muted/50 flex cursor-pointer items-center rounded-lg border p-4">
+                                            <input
+                                                class="text-primary focus:ring-primary h-5 w-5 rounded-full border-gray-300 focus:ring-2"
+                                                name="payment_method"
+                                                type="radio"
+                                                value="paypal"
+                                                {{ old('payment_method', $defaultPaymentMethod) === 'paypal' ? 'checked' : '' }}
+                                            >
+                                            <div class="ml-4">
+                                                <span class="text-foreground block text-base font-medium">PayPal</span>
+                                                <span class="text-base-content-muted block text-sm">Pay with your PayPal account</span>
+                                            </div>
+                                        </label>
+                                    @endif
 
                                     @if (config('services.stripe.key'))
                                         <label class="border-border hover:bg-muted/50 flex cursor-pointer items-center rounded-lg border p-4">
-                                            <input class="text-primary focus:ring-primary h-5 w-5 rounded-full border-gray-300 focus:ring-2" name="payment_method" type="radio" value="stripe">
+                                            <input class="text-primary focus:ring-primary h-5 w-5 rounded-full border-gray-300 focus:ring-2" name="payment_method" type="radio" value="stripe" {{ old('payment_method') === 'stripe' ? 'checked' : '' }}>
                                             <div class="ml-4">
                                                 <span class="text-foreground block text-base font-medium">Credit Card</span>
                                                 <span class="text-base-content-muted block text-sm">Pay with credit card via Stripe</span>
@@ -196,7 +215,7 @@
                                     @endif
 
                                     <label class="border-border hover:bg-muted/50 flex cursor-pointer items-center rounded-lg border p-4">
-                                        <input class="text-primary focus:ring-primary h-5 w-5 rounded-full border-gray-300 focus:ring-2" name="payment_method" type="radio" value="manual">
+                                        <input class="text-primary focus:ring-primary h-5 w-5 rounded-full border-gray-300 focus:ring-2" name="payment_method" type="radio" value="manual" {{ old('payment_method', $defaultPaymentMethod) === 'manual' ? 'checked' : '' }}>
                                         <div class="ml-4">
                                             <span class="text-foreground block text-base font-medium">Manual Payment</span>
                                             <span class="text-base-content-muted block text-sm">Pay manually (for testing)</span>

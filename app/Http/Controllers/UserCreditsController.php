@@ -7,6 +7,8 @@ use App\Models\User;
 use App\Models\UserCredit;
 use App\Models\UserCreditHistory;
 use App\Services\CreditService;
+use App\Services\CurrencyConverter;
+use App\Services\UserRegionService;
 use Illuminate\Support\Str;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
@@ -21,10 +23,17 @@ use Yajra\DataTables\Facades\DataTables;
 class UserCreditsController extends Controller
 {
     protected CreditService $creditService;
+    protected CurrencyConverter $currencyConverter;
+    protected UserRegionService $userRegionService;
 
-    public function __construct(CreditService $creditService)
-    {
+    public function __construct(
+        CreditService $creditService,
+        CurrencyConverter $currencyConverter,
+        UserRegionService $userRegionService
+    ) {
         $this->creditService = $creditService;
+        $this->currencyConverter = $currencyConverter;
+        $this->userRegionService = $userRegionService;
     }
 
     public function history(Request $request)
@@ -265,29 +274,41 @@ class UserCreditsController extends Controller
     /**
      * Display the credit purchase page for public/guest users.
      */
-    public function purchasePublic()
+    public function purchasePublic(Request $request)
     {
-        // Get all plans that are shown to users and have credit points
+        $countryCode = $this->userRegionService->getCountryCode($request);
+        $targetCurrency = $this->determineCurrency($countryCode);
+
         $plans = Plan::where('isShow', true)
             ->where('credit_points', '>', 0)
             ->orderBy('credit_points', 'asc')
-            ->get();
+            ->get()
+            ->map(fn (Plan $plan) => $this->applyCurrencyPreference($plan, $targetCurrency));
 
-        return view('pages.front.order.purchase-credits', compact('plans'));
+        return view('pages.front.order.purchase-credits', [
+            'plans' => $plans,
+            'activeCurrency' => $targetCurrency,
+        ]);
     }
 
     /**
      * Display the credit purchase page for users.
      */
-    public function purchase()
+    public function purchase(Request $request)
     {
-        // Get all plans that are shown to users and have credit points
+        $countryCode = $this->userRegionService->getCountryCode($request);
+        $targetCurrency = $this->determineCurrency($countryCode);
+
         $plans = Plan::where('isShow', true)
             ->where('credit_points', '>', 0)
             ->orderBy('credit_points', 'asc')
-            ->get();
+            ->get()
+            ->map(fn (Plan $plan) => $this->applyCurrencyPreference($plan, $targetCurrency));
 
-        return view('pages.dashboard.users.purchaseCredits', compact('plans'));
+        return view('pages.dashboard.users.purchaseCredits', [
+            'plans' => $plans,
+            'activeCurrency' => $targetCurrency,
+        ]);
     }
 
     public function orderCredit(Request $request)
@@ -298,13 +319,18 @@ class UserCreditsController extends Controller
 
         $plan = Plan::findOrFail($request->plan_id);
 
+        $countryCode = $this->userRegionService->getCountryCode($request);
+        $targetCurrency = $this->determineCurrency($countryCode);
+        $plan = $this->applyCurrencyPreference($plan, $targetCurrency);
+
         // Create data array similar to the mapOrder method
         $timestamp = time();
         $data = [
             'timestamp' => $timestamp,
             'plan' => $plan,
-            'price_currency' => $plan->currency,
-            'price' => $plan->price,
+            'price_currency' => $plan->display_currency ?? $plan->currency,
+            'price' => $plan->display_price ?? $plan->price,
+            'country_code' => $countryCode,
         ];
 
         $keyCache = 'Checkout_' . $timestamp . '_' . Str::random(10) . '';
@@ -330,9 +356,38 @@ class UserCreditsController extends Controller
             return redirect()->route('admin.purchase-credits')->with('error', 'Application data not found');
         }
 
+        $countryCode = $this->userRegionService->getCountryCode($request);
+        $targetCurrency = $this->determineCurrency($countryCode);
+        $isIndonesia = $this->userRegionService->isIndonesia($countryCode);
+
+        if (isset($data['plan']) && $data['plan'] instanceof Plan) {
+            $plan = $this->applyCurrencyPreference($data['plan'], $targetCurrency);
+            $data['plan'] = $plan;
+            $data['price'] = $plan->display_price ?? $plan->price;
+            $data['price_currency'] = $plan->display_currency ?? $plan->currency;
+        } else {
+            [$convertedPrice, $convertedCurrency] = $this->currencyConverter->convert(
+                (float) ($data['price'] ?? 0),
+                $data['price_currency'] ?? $this->currencyConverter->getDefaultCurrency(),
+                $targetCurrency
+            );
+
+            $data['price'] = $convertedPrice;
+            $data['price_currency'] = $convertedCurrency;
+        }
+
         $data['title'] = 'Checkout';
 
-        return view('pages.front.order.checkout', compact('data'));
+        $paymentPreferences = [
+            'show_bank_transfer' => $isIndonesia,
+            'show_paypal' => !$isIndonesia,
+            'default_method' => $isIndonesia ? 'bank_transfer' : 'paypal',
+        ];
+
+        return view('pages.front.order.checkout', [
+            'data' => $data,
+            'paymentPreferences' => $paymentPreferences,
+        ]);
     }
 
 
@@ -358,5 +413,26 @@ class UserCreditsController extends Controller
                 'error' => $e->getMessage()
             ], 500);
         }
+    }
+
+    protected function applyCurrencyPreference(Plan $plan, string $targetCurrency): Plan
+    {
+        [$price, $currency] = $this->currencyConverter->convert(
+            (float) $plan->price,
+            $plan->currency ?? $this->currencyConverter->getDefaultCurrency(),
+            $targetCurrency
+        );
+
+        $plan->display_price = $price;
+        $plan->display_currency = $currency;
+
+        return $plan;
+    }
+
+    protected function determineCurrency(?string $countryCode): string
+    {
+        return $this->userRegionService->isIndonesia($countryCode)
+            ? $this->currencyConverter->getDefaultCurrency()
+            : 'USD';
     }
 }

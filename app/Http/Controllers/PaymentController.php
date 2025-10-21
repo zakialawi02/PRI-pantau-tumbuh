@@ -14,18 +14,28 @@ use Yajra\DataTables\Facades\DataTables;
 use App\Mail\OrderCreditConfirmation;
 use App\Mail\PaymentCreditConfirmation;
 use App\Services\CreditService;
+use App\Services\CurrencyConverter;
+use App\Services\UserRegionService;
 use App\Services\PaymentGatewayFactory;
 use Exception;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\Rule;
 
 class PaymentController extends Controller
 {
     protected $creditService;
+    protected CurrencyConverter $currencyConverter;
+    protected UserRegionService $userRegionService;
 
-    public function __construct(CreditService $creditService)
-    {
+    public function __construct(
+        CreditService $creditService,
+        CurrencyConverter $currencyConverter,
+        UserRegionService $userRegionService
+    ) {
         $this->creditService = $creditService;
+        $this->currencyConverter = $currencyConverter;
+        $this->userRegionService = $userRegionService;
     }
 
     public function index()
@@ -262,40 +272,52 @@ class PaymentController extends Controller
 
     public function checkoutCredits(Request $request)
     {
-        $request->validate([
+        $countryCode = $this->userRegionService->getCountryCode($request);
+        $isIndonesia = $this->userRegionService->isIndonesia($countryCode);
+        $targetCurrency = $this->determineCurrency($countryCode);
+        $allowedMethods = $this->resolveAllowedPaymentMethods($isIndonesia);
+
+        $validated = $request->validate([
             'order_id' => 'required|string',
+            'plan_id' => 'required|exists:plans,id',
             'name' => 'required|string|max:255',
             'email' => 'required|email',
             'phone' => 'required|string|max:20',
-            'payment_method' => 'required|string|in:bank_transfer,paypal,stripe,manual',
+            'payment_method' => ['required', Rule::in($allowedMethods)],
         ]);
 
-        $cacheData = Cache::get($request->order_id);
+        $cacheData = Cache::get($validated['order_id']);
         if (!$cacheData) {
             return redirect()->route('admin.purchase-credits')->with('error', 'Checkout failed, data not found or expired.');
         }
 
-        $plan = Plan::findOrFail($request->plan_id);
+        $plan = Plan::findOrFail($validated['plan_id']);
         $user = Auth::user();
+
+        [$convertedAmount, $convertedCurrency] = $this->currencyConverter->convert(
+            (float) $plan->price,
+            $plan->currency ?? $this->currencyConverter->getDefaultCurrency(),
+            $targetCurrency
+        );
 
         try {
             // Create a payment record for credit purchase
             $payment = Payment::create([
                 'user_id'         => $user->id,
-                'name'            => $request->name,
-                'email'           => $request->email,
-                'phone'           => $request->phone,
-                'amount'          => $plan->price,
-                'currency'        => $plan->currency,
+                'name'            => $validated['name'],
+                'email'           => $validated['email'],
+                'phone'           => $validated['phone'],
+                'amount'          => $convertedAmount,
+                'currency'        => $convertedCurrency,
                 'status'          => 'pending',
                 'due_date'        => Carbon::now()->addDays(1), // 1 days from now
-                'payment_method'  => $request->payment_method ?? 'manual',
+                'payment_method'  => $validated['payment_method'],
                 'account_name'    => $request->account_name ?? null,
                 'account_number'  => $request->account_number ?? null,
                 'credit_points'   => $plan->credit_points, // Store the credit points buy by user
             ]);
 
-            Cache::forget($request->order_id);
+            Cache::forget($validated['order_id']);
 
             // Send order credit confirmation email
             try {
@@ -306,16 +328,16 @@ class PaymentController extends Controller
             }
 
             // Process payment if a gateway is selected
-            $gatewayName = $request->input('payment_method');
+            $gatewayName = $validated['payment_method'];
 
             // Only process through gateway if it's not manual payment
-            if ($gatewayName && $gatewayName !== 'manual' && $gatewayName !== 'bank_transfer') {
+            if ($this->shouldProcessThroughGateway($gatewayName)) {
                 try {
                     $gateway = PaymentGatewayFactory::make($gatewayName);
 
                     $paymentData = [
-                        'amount' => $plan->price,
-                        'currency' => $plan->currency,
+                        'amount' => $convertedAmount,
+                        'currency' => $convertedCurrency,
                         'description' => 'Credit Purchase: ' . $plan->name . ' for ' . $plan->credit_points . ' Credits',
                         'return_url' => route('admin.payment.callback', ['gateway' => $gatewayName]) . '?paymentId=' . $payment->id,
                         'cancel_url' => route('admin.payment.show', $payment->id),
@@ -545,5 +567,34 @@ class PaymentController extends Controller
             Log::error("Payment callback error: " . $e->getMessage());
             return redirect()->route('admin.payment.index')->with('error', 'Payment processing error.');
         }
+    }
+
+    protected function determineCurrency(?string $countryCode): string
+    {
+        return $this->userRegionService->isIndonesia($countryCode)
+            ? $this->currencyConverter->getDefaultCurrency()
+            : 'USD';
+    }
+
+    protected function resolveAllowedPaymentMethods(bool $isIndonesia): array
+    {
+        $methods = ['manual'];
+
+        if ($isIndonesia) {
+            $methods[] = 'bank_transfer';
+        } else {
+            $methods[] = 'paypal';
+        }
+
+        if (config('services.stripe.key')) {
+            $methods[] = 'stripe';
+        }
+
+        return array_values(array_unique($methods));
+    }
+
+    protected function shouldProcessThroughGateway(string $method): bool
+    {
+        return !in_array($method, ['manual', 'bank_transfer'], true);
     }
 }

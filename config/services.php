@@ -58,4 +58,15 @@ return [
         'token_cache_seconds' => env('COPERNICUS_TOKEN_CACHE_SECONDS', 3300),
     ],
 
+    'ipinfo' => [
+        'token' => env('IPINFO_TOKEN'),
+        'default_country' => env('IPINFO_DEFAULT_COUNTRY', 'ID'),
+        'cache_ttl' => env('IPINFO_CACHE_TTL', 60 * 60 * 24),
+    ],
+
+    'currency_api' => [
+        'base_url' => env('EXCHANGE_API_BASE_URL', 'https://cdn.jsdelivr.net/gh/fawazahmed0/exchange-api@latest/v1'),
+        'cache_ttl' => env('EXCHANGE_RATE_CACHE_TTL', 60 * 60 * 24 * 7),
+    ],
+
 ];
