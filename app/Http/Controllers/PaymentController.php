@@ -139,6 +139,10 @@ class PaymentController extends Controller
                     'payment_proof' => $payment->proof_image,
                     'amount' => $payment->amount,
                     'currency' => $payment->currency,
+                    'base_amount' => $payment->base_amount,
+                    'base_currency' => $payment->base_currency,
+                    'exchange_rate' => $payment->exchange_rate,
+                    'currency_details' => $payment->currency_details,
                     'name' => $payment->name,
                     'email' => $payment->email,
                     'phone' => $payment->phone,
@@ -294,11 +298,21 @@ class PaymentController extends Controller
         $plan = Plan::findOrFail($validated['plan_id']);
         $user = Auth::user();
 
-        [$convertedAmount, $convertedCurrency] = $this->currencyConverter->convert(
-            (float) $plan->price,
-            $plan->currency ?? $this->currencyConverter->getDefaultCurrency(),
+        $baseAmount = (float) $plan->price;
+        $baseCurrency = $plan->currency ?? $this->currencyConverter->getDefaultCurrency();
+
+        [$convertedAmount, $convertedCurrency, $exchangeRate] = $this->currencyConverter->convertWithRate(
+            $baseAmount,
+            $baseCurrency,
             $targetCurrency
         );
+
+        $currencySnapshot = $this->currencyConverter->snapshotConversions($baseAmount, $baseCurrency);
+        $currencySnapshot['applied'] = [
+            'currency' => $convertedCurrency,
+            'amount' => $convertedAmount,
+            'rate' => $exchangeRate,
+        ];
 
         try {
             // Create a payment record for credit purchase
@@ -309,6 +323,10 @@ class PaymentController extends Controller
                 'phone'           => $validated['phone'],
                 'amount'          => $convertedAmount,
                 'currency'        => $convertedCurrency,
+                'base_amount'     => $currencySnapshot['base_amount'],
+                'base_currency'   => $currencySnapshot['base_currency'],
+                'exchange_rate'   => $exchangeRate,
+                'currency_details' => $currencySnapshot,
                 'status'          => 'pending',
                 'due_date'        => Carbon::now()->addDays(1), // 1 days from now
                 'payment_method'  => $validated['payment_method'],
