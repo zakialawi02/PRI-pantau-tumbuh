@@ -58,4 +58,27 @@ return [
         'token_cache_seconds' => env('COPERNICUS_TOKEN_CACHE_SECONDS', 3300),
     ],
 
+    'currency' => [
+        'default_currency' => env('CURRENCY_DEFAULT_CURRENCY', 'IDR'),
+        'fallback_currency' => env('CURRENCY_FALLBACK_CURRENCY', 'USD'),
+        'fallback_country' => env('CURRENCY_FALLBACK_COUNTRY', 'US'),
+        'country_currency_map' => [
+            'ID' => 'IDR',
+        ],
+        'rate_api' => env('CURRENCY_RATE_API_URL', 'https://open.er-api.com/v6/latest/{base}'),
+        'default_rates' => [
+            'IDR' => [
+                'USD' => (float) env('CURRENCY_RATE_IDR_TO_USD', 0.000063),
+            ],
+            'USD' => [
+                'IDR' => (float) env('CURRENCY_RATE_USD_TO_IDR', 15800),
+            ],
+        ],
+        'refresh_days' => (int) env('CURRENCY_RATE_REFRESH_DAYS', 7),
+        'ip_cache_seconds' => (int) env('CURRENCY_IP_CACHE_SECONDS', 86400),
+        'request_timeout' => (int) env('CURRENCY_RATE_TIMEOUT', 10),
+        'request_retries' => (int) env('CURRENCY_RATE_RETRIES', 2),
+        'ipinfo_token' => env('IPINFO_TOKEN', env('IPINFO_ACCESS_TOKEN')),
+    ],
+
 ];

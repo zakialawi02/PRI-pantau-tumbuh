@@ -30,7 +30,7 @@
 
                                     <div class="mt-4">
                                         <p class="text-foreground text-3xl font-bold">
-                                            {{ Number::currency($plan->price, $plan->currency, app()->getLocale()) }}
+                                            {{ Number::currency($plan->display_price ?? $plan->price, $plan->display_currency ?? $plan->currency, app()->getLocale()) }}
                                         </p>
                                         <p class="text-foreground/70 mt-1">
                                             {{ $plan->credit_points }} Credit Points

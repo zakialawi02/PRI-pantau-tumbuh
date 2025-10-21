@@ -7,6 +7,8 @@ use App\Models\User;
 use App\Models\UserCredit;
 use App\Models\UserCreditHistory;
 use App\Services\CreditService;
+use App\Services\CurrencyConverterService;
+use App\Services\RegionService;
 use Illuminate\Support\Str;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
@@ -15,16 +17,24 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Number;
+use Illuminate\Support\Collection;
 use Throwable;
 use Yajra\DataTables\Facades\DataTables;
 
 class UserCreditsController extends Controller
 {
     protected CreditService $creditService;
+    protected RegionService $regionService;
+    protected CurrencyConverterService $currencyConverter;
 
-    public function __construct(CreditService $creditService)
-    {
+    public function __construct(
+        CreditService $creditService,
+        RegionService $regionService,
+        CurrencyConverterService $currencyConverter
+    ) {
         $this->creditService = $creditService;
+        $this->regionService = $regionService;
+        $this->currencyConverter = $currencyConverter;
     }
 
     public function history(Request $request)
@@ -265,29 +275,53 @@ class UserCreditsController extends Controller
     /**
      * Display the credit purchase page for public/guest users.
      */
-    public function purchasePublic()
+    public function purchasePublic(Request $request)
     {
-        // Get all plans that are shown to users and have credit points
         $plans = Plan::where('isShow', true)
             ->where('credit_points', '>', 0)
             ->orderBy('credit_points', 'asc')
             ->get();
 
-        return view('pages.front.order.purchase-credits', compact('plans'));
+        $region = $this->regionService->resolve($request);
+        $plans = $this->applyDisplayCurrency($plans, $region);
+
+        return view('pages.front.order.purchase-credits', [
+            'plans' => $plans,
+            'region' => $region,
+        ]);
     }
 
     /**
      * Display the credit purchase page for users.
      */
-    public function purchase()
+    public function purchase(Request $request)
     {
-        // Get all plans that are shown to users and have credit points
         $plans = Plan::where('isShow', true)
             ->where('credit_points', '>', 0)
             ->orderBy('credit_points', 'asc')
             ->get();
 
-        return view('pages.dashboard.users.purchaseCredits', compact('plans'));
+        $region = $this->regionService->resolve($request);
+        $plans = $this->applyDisplayCurrency($plans, $region);
+
+        return view('pages.dashboard.users.purchaseCredits', [
+            'plans' => $plans,
+            'region' => $region,
+        ]);
+    }
+
+    protected function applyDisplayCurrency(Collection $plans, array $region): Collection
+    {
+        $currency = strtoupper($region['currency'] ?? config('services.currency.default_currency', 'IDR'));
+
+        return $plans->map(function (Plan $plan) use ($currency) {
+            $displayPrice = $this->currencyConverter->convert((float) $plan->price, $plan->currency, $currency);
+
+            $plan->setAttribute('display_price', $displayPrice);
+            $plan->setAttribute('display_currency', $currency);
+
+            return $plan;
+        });
     }
 
     public function orderCredit(Request $request)
@@ -300,11 +334,21 @@ class UserCreditsController extends Controller
 
         // Create data array similar to the mapOrder method
         $timestamp = time();
+        $region = $this->regionService->resolve($request);
+        $currency = strtoupper($region['currency'] ?? config('services.currency.default_currency', 'IDR'));
+        $displayPrice = $this->currencyConverter->convert((float) $plan->price, $plan->currency, $currency);
+        $allowedMethods = $this->regionService->paymentMethodsForRegion($region);
+
         $data = [
             'timestamp' => $timestamp,
             'plan' => $plan,
-            'price_currency' => $plan->currency,
-            'price' => $plan->price,
+            'price_currency' => $currency,
+            'price' => $displayPrice,
+            'base_currency' => $plan->currency,
+            'base_price' => $plan->price,
+            'region' => $region,
+            'allowed_payment_methods' => $allowedMethods,
+            'default_payment_method' => $allowedMethods[0] ?? 'manual',
         ];
 
         $keyCache = 'Checkout_' . $timestamp . '_' . Str::random(10) . '';
@@ -329,6 +373,21 @@ class UserCreditsController extends Controller
         } else {
             return redirect()->route('admin.purchase-credits')->with('error', 'Application data not found');
         }
+
+        if (!isset($data['region'])) {
+            $data['region'] = $this->regionService->resolve($request);
+        }
+
+        $currency = strtoupper($data['price_currency'] ?? $data['region']['currency'] ?? config('services.currency.default_currency', 'IDR'));
+
+        if (!isset($data['price']) && isset($data['plan'])) {
+            $data['price'] = $this->currencyConverter->convert((float) $data['plan']->price, $data['plan']->currency, $currency);
+        }
+
+        $availableMethods = $data['allowed_payment_methods'] ?? $this->regionService->paymentMethodsForRegion($data['region']);
+        $data['available_payment_methods'] = $availableMethods;
+        $data['default_payment_method'] = $data['default_payment_method'] ?? ($availableMethods[0] ?? 'manual');
+        $data['price_currency'] = $currency;
 
         $data['title'] = 'Checkout';
 

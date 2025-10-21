@@ -275,8 +275,20 @@ class PaymentController extends Controller
             return redirect()->route('admin.purchase-credits')->with('error', 'Checkout failed, data not found or expired.');
         }
 
+        $allowedMethods = $cacheData['allowed_payment_methods'] ?? null;
+        if (is_array($allowedMethods) && !in_array($request->payment_method, $allowedMethods, true)) {
+            return redirect()->back()
+                ->withInput()
+                ->withErrors([
+                    'payment_method' => __('The selected payment method is not available for your region.'),
+                ]);
+        }
+
         $plan = Plan::findOrFail($request->plan_id);
         $user = Auth::user();
+
+        $amount = round((float) ($cacheData['price'] ?? $plan->price), 2);
+        $currency = strtoupper($cacheData['price_currency'] ?? $cacheData['region']['currency'] ?? $plan->currency);
 
         try {
             // Create a payment record for credit purchase
@@ -285,8 +297,8 @@ class PaymentController extends Controller
                 'name'            => $request->name,
                 'email'           => $request->email,
                 'phone'           => $request->phone,
-                'amount'          => $plan->price,
-                'currency'        => $plan->currency,
+                'amount'          => $amount,
+                'currency'        => $currency,
                 'status'          => 'pending',
                 'due_date'        => Carbon::now()->addDays(1), // 1 days from now
                 'payment_method'  => $request->payment_method ?? 'manual',
@@ -314,8 +326,8 @@ class PaymentController extends Controller
                     $gateway = PaymentGatewayFactory::make($gatewayName);
 
                     $paymentData = [
-                        'amount' => $plan->price,
-                        'currency' => $plan->currency,
+                        'amount' => $amount,
+                        'currency' => $currency,
                         'description' => 'Credit Purchase: ' . $plan->name . ' for ' . $plan->credit_points . ' Credits',
                         'return_url' => route('admin.payment.callback', ['gateway' => $gatewayName]) . '?paymentId=' . $payment->id,
                         'cancel_url' => route('admin.payment.show', $payment->id),
