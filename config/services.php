@@ -51,6 +51,11 @@ return [
         'redirect' => env('FACEBOOK_CALLBACK_URL'),
     ],
 
+    'ipinfo' => [
+        'token' => env('IPINFO_ACCESS_TOKEN'),
+        'fallback_country' => env('IPINFO_FALLBACK_COUNTRY', 'US'),
+    ],
+
     'copernicus' => [
         'client_id' => env('COPERNICUS_CLIENT_ID'),
         'client_secret' => env('COPERNICUS_CLIENT_SECRET'),

@@ -24,6 +24,10 @@ class Payment extends Model
         'email',
         'phone',
         'amount',
+        'amount_idr',
+        'amount_usd',
+        'exchange_rate',
+        'exchange_rate_updated_at',
         'credit_points',
         'currency',
         'status',
@@ -46,6 +50,10 @@ class Payment extends Model
         'paid_at' => 'datetime',
         'verified_at' => 'datetime',
         'amount' => 'decimal:2',
+        'amount_idr' => 'decimal:2',
+        'amount_usd' => 'decimal:2',
+        'exchange_rate' => 'decimal:8',
+        'exchange_rate_updated_at' => 'datetime',
         'credit_points' => 'decimal:2',
     ];
 

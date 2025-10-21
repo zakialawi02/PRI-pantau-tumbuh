@@ -15,17 +15,20 @@ use App\Mail\OrderCreditConfirmation;
 use App\Mail\PaymentCreditConfirmation;
 use App\Services\CreditService;
 use App\Services\PaymentGatewayFactory;
+use App\Services\CurrencyService;
 use Exception;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Log;
 
 class PaymentController extends Controller
 {
-    protected $creditService;
+    protected CreditService $creditService;
+    protected CurrencyService $currencyService;
 
-    public function __construct(CreditService $creditService)
+    public function __construct(CreditService $creditService, CurrencyService $currencyService)
     {
         $this->creditService = $creditService;
+        $this->currencyService = $currencyService;
     }
 
     public function index()
@@ -128,6 +131,10 @@ class PaymentController extends Controller
                     'status' => $payment->checkAndMarkAsExpired,
                     'payment_proof' => $payment->proof_image,
                     'amount' => $payment->amount,
+                    'amount_idr' => $payment->amount_idr,
+                    'amount_usd' => $payment->amount_usd,
+                    'exchange_rate' => $payment->exchange_rate,
+                    'exchange_rate_updated_at' => $payment->exchange_rate_updated_at ? $payment->exchange_rate_updated_at->format('Y-m-d H:i:s') : null,
                     'currency' => $payment->currency,
                     'name' => $payment->name,
                     'email' => $payment->email,
@@ -264,6 +271,7 @@ class PaymentController extends Controller
     {
         $request->validate([
             'order_id' => 'required|string',
+            'plan_id' => 'required|exists:plans,id',
             'name' => 'required|string|max:255',
             'email' => 'required|email',
             'phone' => 'required|string|max:20',
@@ -275,8 +283,35 @@ class PaymentController extends Controller
             return redirect()->route('admin.purchase-credits')->with('error', 'Checkout failed, data not found or expired.');
         }
 
-        $plan = Plan::findOrFail($request->plan_id);
+        $allowedMethods = $cacheData['allowed_payment_methods'] ?? [];
+        if (!in_array($request->payment_method, $allowedMethods, true)) {
+            return back()->withErrors([
+                'payment_method' => __('The selected payment method is not available for your region.'),
+            ]);
+        }
+
+        $planId = $cacheData['plan']['id'] ?? $request->plan_id;
+        $plan = Plan::findOrFail($planId);
         $user = Auth::user();
+
+        $exchangeRate = (float) ($cacheData['exchange_rate'] ?? $this->currencyService->getRate());
+        $rateTimestamp = $cacheData['exchange_rate_updated_at'] ?? now();
+        $amounts = $cacheData['amounts'] ?? [];
+
+        $amountIdr = isset($amounts['IDR'])
+            ? (float) $amounts['IDR']
+            : $this->currencyService->convertAmount((float) $plan->price, $plan->currency, 'IDR', $exchangeRate);
+
+        $amountUsd = isset($amounts['USD'])
+            ? (float) $amounts['USD']
+            : $this->currencyService->convertAmount((float) $plan->price, $plan->currency, 'USD', $exchangeRate);
+
+        $paymentCurrency = strtoupper($cacheData['price_currency'] ?? $plan->currency);
+        if (!in_array($paymentCurrency, CurrencyService::SUPPORTED_CURRENCIES, true)) {
+            $paymentCurrency = 'USD';
+        }
+
+        $paymentAmount = (float) ($cacheData['price'] ?? ($paymentCurrency === 'USD' ? $amountUsd : $amountIdr));
 
         try {
             // Create a payment record for credit purchase
@@ -285,8 +320,12 @@ class PaymentController extends Controller
                 'name'            => $request->name,
                 'email'           => $request->email,
                 'phone'           => $request->phone,
-                'amount'          => $plan->price,
-                'currency'        => $plan->currency,
+                'amount'          => $paymentAmount,
+                'amount_idr'      => $amountIdr,
+                'amount_usd'      => $amountUsd,
+                'exchange_rate'   => $exchangeRate,
+                'exchange_rate_updated_at' => $rateTimestamp,
+                'currency'        => $paymentCurrency,
                 'status'          => 'pending',
                 'due_date'        => Carbon::now()->addDays(1), // 1 days from now
                 'payment_method'  => $request->payment_method ?? 'manual',
@@ -314,9 +353,9 @@ class PaymentController extends Controller
                     $gateway = PaymentGatewayFactory::make($gatewayName);
 
                     $paymentData = [
-                        'amount' => $plan->price,
-                        'currency' => $plan->currency,
-                        'description' => 'Credit Purchase: ' . $plan->name . ' for ' . $plan->credit_points . ' Credits',
+                        'amount' => $paymentAmount,
+                        'currency' => $paymentCurrency,
+                        'description' => 'Credit Purchase: ' . ($cacheData['plan']['name'] ?? $plan->name) . ' for ' . $plan->credit_points . ' Credits',
                         'return_url' => route('admin.payment.callback', ['gateway' => $gatewayName]) . '?paymentId=' . $payment->id,
                         'cancel_url' => route('admin.payment.show', $payment->id),
                         'payment_id' => $payment->id // Pass payment ID for callback

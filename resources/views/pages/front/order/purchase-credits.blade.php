@@ -11,6 +11,11 @@
             <p class="text-foreground/70 mt-4">
                 Buy credit points to access premium features and services. Credits can be used for satellite imagery processing and other advanced features.
             </p>
+            @isset($displayCurrency)
+                <p class="text-foreground/60 mt-2 text-sm">
+                    {{ __('Prices are shown in :currency.', ['currency' => strtoupper($displayCurrency)]) }}
+                </p>
+            @endisset
         </div>
 
         @if ($plans->isEmpty())
@@ -31,7 +36,7 @@
 
                             <div class="mt-4">
                                 <p class="text-foreground text-3xl font-bold">
-                                    {{ Number::currency($plan->price, $plan->currency, app()->getLocale()) }}
+                                    {{ Number::currency($plan->display_price ?? $plan->price, $plan->display_currency ?? $plan->currency, app()->getLocale()) }}
                                 </p>
                                 <p class="text-foreground/70 mt-1">
                                     {{ $plan->credit_points }} Credit Points

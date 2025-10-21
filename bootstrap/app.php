@@ -1,5 +1,6 @@
 <?php
 
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Http\Request;
 use Sentry\Laravel\Integration;
 use Illuminate\Auth\AuthenticationException;
@@ -14,6 +15,12 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__ . '/../routes/console.php',
         health: '/up',
     )
+    ->withCommands([
+        \App\Console\Commands\UpdateExchangeRates::class,
+    ])
+    ->withSchedule(function (Schedule $schedule) {
+        $schedule->command('currency:update')->weekly();
+    })
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->statefulApi();
 

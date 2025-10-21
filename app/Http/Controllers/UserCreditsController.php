@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Models\UserCredit;
 use App\Models\UserCreditHistory;
 use App\Services\CreditService;
+use App\Services\CurrencyService;
 use Illuminate\Support\Str;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
@@ -21,10 +22,12 @@ use Yajra\DataTables\Facades\DataTables;
 class UserCreditsController extends Controller
 {
     protected CreditService $creditService;
+    protected CurrencyService $currencyService;
 
-    public function __construct(CreditService $creditService)
+    public function __construct(CreditService $creditService, CurrencyService $currencyService)
     {
         $this->creditService = $creditService;
+        $this->currencyService = $currencyService;
     }
 
     public function history(Request $request)
@@ -273,7 +276,13 @@ class UserCreditsController extends Controller
             ->orderBy('credit_points', 'asc')
             ->get();
 
-        return view('pages.front.order.purchase-credits', compact('plans'));
+        $currency = $this->currencyService->getUserCurrency();
+        $plans->each(fn ($plan) => $this->currencyService->preparePlanForDisplay($plan, $currency));
+
+        return view('pages.front.order.purchase-credits', [
+            'plans' => $plans,
+            'displayCurrency' => $currency,
+        ]);
     }
 
     /**
@@ -287,7 +296,13 @@ class UserCreditsController extends Controller
             ->orderBy('credit_points', 'asc')
             ->get();
 
-        return view('pages.dashboard.users.purchaseCredits', compact('plans'));
+        $currency = $this->currencyService->getUserCurrency();
+        $plans->each(fn ($plan) => $this->currencyService->preparePlanForDisplay($plan, $currency));
+
+        return view('pages.dashboard.users.purchaseCredits', [
+            'plans' => $plans,
+            'displayCurrency' => $currency,
+        ]);
     }
 
     public function orderCredit(Request $request)
@@ -298,13 +313,27 @@ class UserCreditsController extends Controller
 
         $plan = Plan::findOrFail($request->plan_id);
 
+        $currency = $this->currencyService->getUserCurrency();
+        $pricing = $this->currencyService->getCheckoutPricing((float) $plan->price, $plan->currency, $currency);
+        $isIndonesian = $this->currencyService->isUserFromIndonesia();
+        $allowedMethods = $this->currencyService->getAllowedPaymentMethods($isIndonesian);
+        $defaultMethod = $this->currencyService->getDefaultPaymentMethod($allowedMethods);
+
         // Create data array similar to the mapOrder method
         $timestamp = time();
         $data = [
             'timestamp' => $timestamp,
-            'plan' => $plan,
-            'price_currency' => $plan->currency,
-            'price' => $plan->price,
+            'plan' => $plan->toArray(),
+            'price_currency' => $pricing['price_currency'],
+            'price' => $pricing['price'],
+            'base_price' => (float) $plan->price,
+            'base_currency' => $plan->currency,
+            'amounts' => $pricing['amounts'],
+            'exchange_rate' => $pricing['exchange_rate'],
+            'exchange_rate_updated_at' => now(),
+            'allowed_payment_methods' => $allowedMethods,
+            'default_payment_method' => $defaultMethod,
+            'user_currency' => $currency,
         ];
 
         $keyCache = 'Checkout_' . $timestamp . '_' . Str::random(10) . '';
@@ -330,9 +359,15 @@ class UserCreditsController extends Controller
             return redirect()->route('admin.purchase-credits')->with('error', 'Application data not found');
         }
 
+        $allowedMethods = $data['allowed_payment_methods'] ?? [];
+        $defaultMethod = $data['default_payment_method'] ?? $this->currencyService->getDefaultPaymentMethod($allowedMethods);
         $data['title'] = 'Checkout';
 
-        return view('pages.front.order.checkout', compact('data'));
+        return view('pages.front.order.checkout', [
+            'data' => $data,
+            'allowedPaymentMethods' => $allowedMethods,
+            'defaultPaymentMethod' => $defaultMethod,
+        ]);
     }
 
 
