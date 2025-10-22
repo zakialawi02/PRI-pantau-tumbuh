@@ -58,4 +58,12 @@ return [
         'token_cache_seconds' => env('COPERNICUS_TOKEN_CACHE_SECONDS', 3300),
     ],
 
+    'ipinfo' => [
+        'token' => env('IPINFO_TOKEN'),
+        'cache_ttl' => env('IPINFO_CACHE_TTL', 60 * 60 * 24),
+        'default_country' => env('IPINFO_DEFAULT_COUNTRY', 'ID'),
+        'fallback_country' => env('IPINFO_FALLBACK_COUNTRY', 'US'),
+        'fallback_currency' => env('IPINFO_FALLBACK_CURRENCY', 'USD'),
+    ],
+
 ];

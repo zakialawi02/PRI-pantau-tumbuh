@@ -88,8 +88,8 @@
                             <div>
                                 <x-input-label for="currency" :value="__('Currency')" />
                                 <select class="focus:ring-primary focus:border-primary border-ring bg-input/50 text-foreground block w-full rounded-lg border p-2" id="currency" name="currency">
+                                    <option value="IDR" selected>IDR - Indonesian Rupiah</option>
                                     <option value="USD">USD - US Dollar</option>
-                                    <option value="IDR">IDR - Indonesian Rupiah</option>
                                 </select>
                             </div>
 
@@ -352,8 +352,10 @@
                             $('#_method').val('PUT');
                             $('#name').val(data.name);
                             $('#credit_points').val(data.credit_points);
-                            $('#price').val(data.price);
-                            $('#currency').val(data.currency);
+                            const baseCurrency = data.base_currency ?? data.currency;
+                            const basePrice = baseCurrency === 'USD' ? data.price_usd : data.price_idr;
+                            $('#price').val(basePrice);
+                            $('#currency').val(baseCurrency);
                             $('#isShow').prop('checked', data.isShow);
                             $('#isFeatured').prop('checked', data.isFeatured);
                         })

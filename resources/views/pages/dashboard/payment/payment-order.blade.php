@@ -166,27 +166,45 @@
                 <!-- Total Section -->
                 <div class="mb-8 flex justify-end">
                     <div class="w-64">
-                        <div class="bg-base-content-muted/20 rounded-lg p-4">
-                            <div class="border-border flex items-center justify-between border-b py-2">
-                                <span class="text-base-content-muted">Subtotal:</span>
-                                <span class="font-medium">{{ Number::currency($payment->amount, $payment->currency, app()->getLocale()) }}</span>
-                            </div>
-                            <div class="border-border flex items-center justify-between border-b py-2">
-                                <span class="text-base-content-muted">Tax (0%):</span>
-                                <span class="font-medium">{{ Number::currency(0, $payment->currency, app()->getLocale()) }}</span>
-                            </div>
-                            @if (isset($payment->due_date))
+                            <div class="bg-base-content-muted/20 rounded-lg p-4">
                                 <div class="border-border flex items-center justify-between border-b py-2">
-                                    <span class="text-base-content-muted">Due Date:</span>
-                                    <span class="font-medium">{{ $payment->due_date->isoFormat('DD MMM YYYY, HH:mm') }}</span>
+                                    <span class="text-base-content-muted">Subtotal:</span>
+                                    <span class="font-medium">{{ Number::currency($payment->amount, $payment->currency, app()->getLocale()) }}</span>
                                 </div>
-                            @endif
-                            <div class="border-border flex items-center justify-between border-t-2 py-3">
-                                <span class="text-base-content text-lg font-semibold">Total:</span>
-                                <span class="text-primary text-lg font-bold">{{ Number::currency($payment->amount, $payment->currency, app()->getLocale()) }}</span>
+                                <div class="border-border flex items-center justify-between border-b py-2">
+                                    <span class="text-base-content-muted">Tax (0%):</span>
+                                    <span class="font-medium">{{ Number::currency(0, $payment->currency, app()->getLocale()) }}</span>
+                                </div>
+                                @if ($payment->currency !== 'IDR' && $payment->amount_idr)
+                                    <div class="border-border flex items-center justify-between border-b py-2">
+                                        <span class="text-base-content-muted">Equivalent in IDR:</span>
+                                        <span class="font-medium">{{ Number::currency($payment->amount_idr, 'IDR', app()->getLocale()) }}</span>
+                                    </div>
+                                @endif
+                                @if ($payment->currency !== 'USD' && $payment->amount_usd)
+                                    <div class="border-border flex items-center justify-between border-b py-2">
+                                        <span class="text-base-content-muted">Equivalent in USD:</span>
+                                        <span class="font-medium">{{ Number::currency($payment->amount_usd, 'USD', app()->getLocale()) }}</span>
+                                    </div>
+                                @endif
+                                @if (isset($payment->due_date))
+                                    <div class="border-border flex items-center justify-between border-b py-2">
+                                        <span class="text-base-content-muted">Due Date:</span>
+                                        <span class="font-medium">{{ $payment->due_date->isoFormat('DD MMM YYYY, HH:mm') }}</span>
+                                    </div>
+                                @endif
+                                <div class="border-border flex items-center justify-between border-t-2 py-3">
+                                    <span class="text-base-content text-lg font-semibold">Total:</span>
+                                    <span class="text-primary text-lg font-bold">{{ Number::currency($payment->amount, $payment->currency, app()->getLocale()) }}</span>
+                                </div>
+                                @if ($payment->exchange_rate)
+                                    <div class="flex items-center justify-between pt-2 text-xs text-base-content-muted">
+                                        <span>Exchange Rate</span>
+                                        <span>1 USD = {{ Number::format($payment->exchange_rate, 4, locale: app()->getLocale()) }} IDR</span>
+                                    </div>
+                                @endif
                             </div>
                         </div>
-                    </div>
                 </div>
 
                 <!-- Payment Instructions -->

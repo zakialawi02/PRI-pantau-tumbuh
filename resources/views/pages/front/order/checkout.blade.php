@@ -62,6 +62,14 @@
                                     <h3 class="text-foreground text-lg font-semibold">Total</h3>
                                     <p class="text-primary text-xl font-bold">{{ Number::currency($data['price'], $data['price_currency'], app()->getLocale()) }}</p>
                                 </div>
+                                @if (($data['price_currency'] ?? null) === 'USD' && !empty($data['amount_idr']))
+                                    <p class="text-base-content-muted text-sm">Approx. {{ Number::currency($data['amount_idr'], 'IDR', app()->getLocale()) }}</p>
+                                @elseif (($data['price_currency'] ?? null) === 'IDR' && !empty($data['amount_usd']))
+                                    <p class="text-base-content-muted text-sm">Approx. {{ Number::currency($data['amount_usd'], 'USD', app()->getLocale()) }}</p>
+                                @endif
+                                @if (!empty($data['exchange_rate']))
+                                    <p class="text-base-content-muted text-xs">Exchange Rate: 1 USD = {{ Number::format($data['exchange_rate'], 4, locale: app()->getLocale()) }} IDR</p>
+                                @endif
                             </div>
                         @else
                             <!-- Field Preview for regular orders -->
@@ -159,49 +167,63 @@
                             <div class="mt-6">
                                 <h2 class="border-border text-foreground border-b pb-3 text-xl font-semibold">Payment Method</h2>
 
+                                @php
+                                    $allowedPaymentMethods = $data['allowed_payment_methods'] ?? ['bank_transfer', 'paypal', 'stripe', 'manual'];
+                                    $defaultPaymentMethod = $data['default_payment_method'] ?? ($allowedPaymentMethods[0] ?? 'manual');
+                                    $selectedPaymentMethod = old('payment_method', $defaultPaymentMethod);
+                                @endphp
+
                                 <div class="mt-4 space-y-3">
-                                    <label class="border-border hover:bg-muted/50 flex cursor-pointer items-center rounded-lg border p-4">
-                                        <input class="text-primary focus:ring-primary h-5 w-5 rounded-full border-gray-300 focus:ring-2" name="payment_method" type="radio" value="bank_transfer" checked>
-                                        <div class="ml-4">
-                                            <span class="text-foreground block text-base font-medium">Bank Transfer</span>
-                                            <span class="text-base-content-muted block text-sm">Pay directly from your bank account</span>
-                                        </div>
-                                    </label>
-
-                                    <label class="border-border hover:bg-muted/50 flex cursor-pointer items-center rounded-lg border p-4">
-                                        <input class="text-primary focus:ring-primary h-5 w-5 rounded-full border-gray-300 focus:ring-2" name="payment_method" type="radio" value="paypal">
-                                        <div class="ml-4">
-                                            <span class="text-foreground block text-base font-medium">PayPal</span>
-                                            <span class="text-base-content-muted block text-sm">Pay with your PayPal account</span>
-                                        </div>
-                                    </label>
-
-                                    @if (config('services.stripe.key'))
+                                    @if (in_array('bank_transfer', $allowedPaymentMethods))
                                         <label class="border-border hover:bg-muted/50 flex cursor-pointer items-center rounded-lg border p-4">
-                                            <input class="text-primary focus:ring-primary h-5 w-5 rounded-full border-gray-300 focus:ring-2" name="payment_method" type="radio" value="stripe">
+                                            <input class="text-primary focus:ring-primary h-5 w-5 rounded-full border-gray-300 focus:ring-2" name="payment_method" type="radio" value="bank_transfer" @checked($selectedPaymentMethod === 'bank_transfer')>
                                             <div class="ml-4">
-                                                <span class="text-foreground block text-base font-medium">Credit Card</span>
-                                                <span class="text-base-content-muted block text-sm">Pay with credit card via Stripe</span>
-                                            </div>
-                                        </label>
-                                    @else
-                                        <label class="border-border flex items-center rounded-lg border p-4 opacity-50">
-                                            <input class="text-primary focus:ring-primary h-5 w-5 rounded-full border-gray-300 focus:ring-2" name="payment_method" type="radio" value="stripe" disabled>
-                                            <div class="ml-4">
-                                                <span class="text-foreground block text-base font-medium">Credit Card</span>
-                                                <span class="text-base-content-muted block text-sm">Pay with credit card</span>
-                                                <span class="mt-1 inline-block rounded bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-800">Coming Soon</span>
+                                                <span class="text-foreground block text-base font-medium">Bank Transfer</span>
+                                                <span class="text-base-content-muted block text-sm">Pay directly from your bank account</span>
                                             </div>
                                         </label>
                                     @endif
 
-                                    <label class="border-border hover:bg-muted/50 flex cursor-pointer items-center rounded-lg border p-4">
-                                        <input class="text-primary focus:ring-primary h-5 w-5 rounded-full border-gray-300 focus:ring-2" name="payment_method" type="radio" value="manual">
-                                        <div class="ml-4">
-                                            <span class="text-foreground block text-base font-medium">Manual Payment</span>
-                                            <span class="text-base-content-muted block text-sm">Pay manually (for testing)</span>
-                                        </div>
-                                    </label>
+                                    @if (in_array('paypal', $allowedPaymentMethods))
+                                        <label class="border-border hover:bg-muted/50 flex cursor-pointer items-center rounded-lg border p-4">
+                                            <input class="text-primary focus:ring-primary h-5 w-5 rounded-full border-gray-300 focus:ring-2" name="payment_method" type="radio" value="paypal" @checked($selectedPaymentMethod === 'paypal')>
+                                            <div class="ml-4">
+                                                <span class="text-foreground block text-base font-medium">PayPal</span>
+                                                <span class="text-base-content-muted block text-sm">Pay with your PayPal account</span>
+                                            </div>
+                                        </label>
+                                    @endif
+
+                                    @if (in_array('stripe', $allowedPaymentMethods))
+                                        @if (config('services.stripe.key'))
+                                            <label class="border-border hover:bg-muted/50 flex cursor-pointer items-center rounded-lg border p-4">
+                                                <input class="text-primary focus:ring-primary h-5 w-5 rounded-full border-gray-300 focus:ring-2" name="payment_method" type="radio" value="stripe" @checked($selectedPaymentMethod === 'stripe')>
+                                                <div class="ml-4">
+                                                    <span class="text-foreground block text-base font-medium">Credit Card</span>
+                                                    <span class="text-base-content-muted block text-sm">Pay with credit card via Stripe</span>
+                                                </div>
+                                            </label>
+                                        @else
+                                            <label class="border-border flex items-center rounded-lg border p-4 opacity-50">
+                                                <input class="text-primary focus:ring-primary h-5 w-5 rounded-full border-gray-300 focus:ring-2" name="payment_method" type="radio" value="stripe" disabled>
+                                                <div class="ml-4">
+                                                    <span class="text-foreground block text-base font-medium">Credit Card</span>
+                                                    <span class="text-base-content-muted block text-sm">Pay with credit card</span>
+                                                    <span class="mt-1 inline-block rounded bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-800">Coming Soon</span>
+                                                </div>
+                                            </label>
+                                        @endif
+                                    @endif
+
+                                    @if (in_array('manual', $allowedPaymentMethods))
+                                        <label class="border-border hover:bg-muted/50 flex cursor-pointer items-center rounded-lg border p-4">
+                                            <input class="text-primary focus:ring-primary h-5 w-5 rounded-full border-gray-300 focus:ring-2" name="payment_method" type="radio" value="manual" @checked($selectedPaymentMethod === 'manual')>
+                                            <div class="ml-4">
+                                                <span class="text-foreground block text-base font-medium">Manual Payment</span>
+                                                <span class="text-base-content-muted block text-sm">Pay manually (for testing)</span>
+                                            </div>
+                                        </label>
+                                    @endif
                                 </div>
                                 <x-input-error class="mt-2" :messages="$errors->get('payment_method')" />
                             </div>

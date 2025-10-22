@@ -3,15 +3,21 @@
 namespace App\Http\Controllers;
 
 use App\Models\Plan;
-use Illuminate\View\View;
-use Illuminate\Support\Str;
-use Illuminate\Http\Request;
+use App\Services\ExchangeRateService;
 use Illuminate\Http\JsonResponse;
-use Yajra\DataTables\Facades\DataTables;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Number;
+use Illuminate\Support\Str;
+use Illuminate\View\View;
+use Yajra\DataTables\Facades\DataTables;
 
 class PlansController extends Controller
 {
+    public function __construct(private readonly ExchangeRateService $exchangeRates)
+    {
+    }
+
     /**
      * Display a listing of the plans.
      */
@@ -32,8 +38,12 @@ class PlansController extends Controller
                                 <button type="button" class="delete-plan inline-flex items-center px-2 py-1 bg-error border border-transparent rounded-md font-semibold text-xs text-primary-foreground uppercase tracking-widest hover:bg-error/80 focus:bg-error/80 active:bg-secondary/70 focus:outline-none focus:ring-2 focus:ring-secondary focus:ring-offset-2" data-id="' . $plan->id . '"> <i class="ri-delete-bin-line"></i></button>
                             </div>';
                 })
-                ->editColumn('price', function ($plan) {
-                    return $plan->price . ' ' . $plan->currency;
+                ->editColumn('price', function (Plan $plan) {
+                    $priceIdr = $plan->getPriceForCurrency('IDR') ?? 0;
+                    $priceUsd = $plan->getPriceForCurrency('USD') ?? 0;
+
+                    return Number::currency($priceIdr, 'IDR', app()->getLocale()) . ' / ' .
+                        Number::currency($priceUsd, 'USD', app()->getLocale());
                 })
                 ->editColumn('credit_points', function ($plan) {
                     return $plan->credit_points . ' credits';
@@ -66,11 +76,16 @@ class PlansController extends Controller
             ], 422);
         }
 
+        $pricing = $this->normalizePricing((float) $request->price, (string) $request->currency);
+
         $plan = Plan::create([
             'name' => Str::title($request->name),
             'credit_points' => $request->credit_points,
-            'price' => $request->price,
-            'currency' => Str::upper($request->currency),
+            'price' => $pricing['price'],
+            'currency' => $pricing['currency'],
+            'price_idr' => $pricing['price_idr'],
+            'price_usd' => $pricing['price_usd'],
+            'base_currency' => $pricing['currency'],
             'isShow' => $request->boolean('isShow'),
             'isFeatured' => $request->boolean('isFeatured'),
         ]);
@@ -111,11 +126,16 @@ class PlansController extends Controller
             ], 422);
         }
 
+        $pricing = $this->normalizePricing((float) $request->price, (string) $request->currency);
+
         $plan->update([
             'name' => Str::title($request->name),
             'credit_points' => $request->credit_points,
-            'price' => $request->price,
-            'currency' => Str::upper($request->currency),
+            'price' => $pricing['price'],
+            'currency' => $pricing['currency'],
+            'price_idr' => $pricing['price_idr'],
+            'price_usd' => $pricing['price_usd'],
+            'base_currency' => $pricing['currency'],
             'isShow' => $request->boolean('isShow'),
             'isFeatured' => $request->boolean('isFeatured'),
         ]);
@@ -138,5 +158,35 @@ class PlansController extends Controller
             'success' => true,
             'message' => 'Plan deleted successfully!'
         ]);
+    }
+
+    private function normalizePricing(float $price, string $currency): array
+    {
+        $baseCurrency = strtoupper($currency ?: ExchangeRateService::DEFAULT_BASE_CURRENCY);
+
+        if (!in_array($baseCurrency, ExchangeRateService::SUPPORTED_CURRENCIES, true)) {
+            $baseCurrency = ExchangeRateService::DEFAULT_BASE_CURRENCY;
+        }
+
+        $amountIdr = null;
+        $amountUsd = null;
+
+        if ($baseCurrency === 'USD') {
+            $amountUsd = round($price, 2);
+            $rateUsdToIdr = $this->exchangeRates->getRate('USD', 'IDR');
+            $amountIdr = round($amountUsd * $rateUsdToIdr, 2);
+        } else {
+            $baseCurrency = 'IDR';
+            $amountIdr = round($price, 2);
+            $rateIdrToUsd = $this->exchangeRates->getRate('IDR', 'USD');
+            $amountUsd = round($amountIdr * $rateIdrToUsd, 2);
+        }
+
+        return [
+            'currency' => $baseCurrency,
+            'price' => $baseCurrency === 'USD' ? $amountUsd : $amountIdr,
+            'price_idr' => $amountIdr,
+            'price_usd' => $amountUsd,
+        ];
     }
 }

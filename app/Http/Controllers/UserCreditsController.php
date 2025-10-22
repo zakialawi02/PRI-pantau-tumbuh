@@ -7,6 +7,8 @@ use App\Models\User;
 use App\Models\UserCredit;
 use App\Models\UserCreditHistory;
 use App\Services\CreditService;
+use App\Services\ExchangeRateService;
+use App\Services\UserRegionResolver;
 use Illuminate\Support\Str;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
@@ -21,10 +23,17 @@ use Yajra\DataTables\Facades\DataTables;
 class UserCreditsController extends Controller
 {
     protected CreditService $creditService;
+    protected ExchangeRateService $exchangeRates;
+    protected UserRegionResolver $regionResolver;
 
-    public function __construct(CreditService $creditService)
-    {
+    public function __construct(
+        CreditService $creditService,
+        ExchangeRateService $exchangeRates,
+        UserRegionResolver $regionResolver
+    ) {
         $this->creditService = $creditService;
+        $this->exchangeRates = $exchangeRates;
+        $this->regionResolver = $regionResolver;
     }
 
     public function history(Request $request)
@@ -265,7 +274,7 @@ class UserCreditsController extends Controller
     /**
      * Display the credit purchase page for public/guest users.
      */
-    public function purchasePublic()
+    public function purchasePublic(Request $request)
     {
         // Get all plans that are shown to users and have credit points
         $plans = Plan::where('isShow', true)
@@ -273,13 +282,19 @@ class UserCreditsController extends Controller
             ->orderBy('credit_points', 'asc')
             ->get();
 
-        return view('pages.front.order.purchase-credits', compact('plans'));
+        $preferences = $this->regionResolver->determinePaymentPreferences($request);
+        $displayPlans = $this->preparePlansForDisplay($plans, $preferences['currency']);
+
+        return view('pages.front.order.purchase-credits', [
+            'plans' => $displayPlans,
+            'displayCurrency' => $preferences['currency'],
+        ]);
     }
 
     /**
      * Display the credit purchase page for users.
      */
-    public function purchase()
+    public function purchase(Request $request)
     {
         // Get all plans that are shown to users and have credit points
         $plans = Plan::where('isShow', true)
@@ -287,7 +302,13 @@ class UserCreditsController extends Controller
             ->orderBy('credit_points', 'asc')
             ->get();
 
-        return view('pages.dashboard.users.purchaseCredits', compact('plans'));
+        $preferences = $this->regionResolver->determinePaymentPreferences($request);
+        $displayPlans = $this->preparePlansForDisplay($plans, $preferences['currency']);
+
+        return view('pages.dashboard.users.purchaseCredits', [
+            'plans' => $displayPlans,
+            'displayCurrency' => $preferences['currency'],
+        ]);
     }
 
     public function orderCredit(Request $request)
@@ -297,14 +318,25 @@ class UserCreditsController extends Controller
         ]);
 
         $plan = Plan::findOrFail($request->plan_id);
+        $preferences = $this->regionResolver->determinePaymentPreferences($request);
+        $selectedCurrency = $preferences['currency'];
+        $amountIdr = $this->resolvePlanPrice($plan, 'IDR');
+        $amountUsd = $this->resolvePlanPrice($plan, 'USD');
+        $exchangeRate = $this->exchangeRates->calculateRate($amountIdr, $amountUsd);
 
         // Create data array similar to the mapOrder method
         $timestamp = time();
         $data = [
             'timestamp' => $timestamp,
             'plan' => $plan,
-            'price_currency' => $plan->currency,
-            'price' => $plan->price,
+            'price_currency' => $selectedCurrency,
+            'price' => $selectedCurrency === 'USD' ? $amountUsd : $amountIdr,
+            'amount_idr' => $amountIdr,
+            'amount_usd' => $amountUsd,
+            'exchange_rate' => $exchangeRate,
+            'allowed_payment_methods' => $preferences['methods'],
+            'default_payment_method' => $preferences['default_method'],
+            'country' => $preferences['country'],
         ];
 
         $keyCache = 'Checkout_' . $timestamp . '_' . Str::random(10) . '';
@@ -332,6 +364,18 @@ class UserCreditsController extends Controller
 
         $data['title'] = 'Checkout';
 
+        if (!isset($data['allowed_payment_methods'])) {
+            $preferences = $this->regionResolver->determinePaymentPreferences($request);
+            $data['allowed_payment_methods'] = $preferences['methods'];
+            $data['default_payment_method'] = $preferences['default_method'];
+        }
+
+        if (isset($data['plan']) && $data['plan'] instanceof Plan) {
+            $displayCurrency = $data['price_currency'] ?? $this->regionResolver->preferredCurrency($request->ip());
+            $data['plan']->display_currency = $displayCurrency;
+            $data['plan']->display_price = $data['price'] ?? $this->resolvePlanPrice($data['plan'], $displayCurrency);
+        }
+
         return view('pages.front.order.checkout', compact('data'));
     }
 
@@ -358,5 +402,38 @@ class UserCreditsController extends Controller
                 'error' => $e->getMessage()
             ], 500);
         }
+    }
+
+    private function preparePlansForDisplay($plans, string $currency)
+    {
+        return $plans->map(function (Plan $plan) use ($currency) {
+            $plan->display_currency = $currency;
+            $plan->display_price = $this->resolvePlanPrice($plan, $currency);
+            $plan->amount_idr = $this->resolvePlanPrice($plan, 'IDR');
+            $plan->amount_usd = $this->resolvePlanPrice($plan, 'USD');
+
+            return $plan;
+        });
+    }
+
+    private function resolvePlanPrice(Plan $plan, string $currency): float
+    {
+        $normalizedCurrency = strtoupper($currency);
+        $storedPrice = $plan->getPriceForCurrency($normalizedCurrency);
+
+        if ($storedPrice !== null) {
+            return round((float) $storedPrice, 2);
+        }
+
+        $baseCurrency = strtoupper($plan->base_currency ?? $plan->currency ?? ExchangeRateService::DEFAULT_BASE_CURRENCY);
+        $basePrice = $plan->getPriceForCurrency($baseCurrency) ?? (float) $plan->price;
+
+        if ($baseCurrency === $normalizedCurrency) {
+            return round((float) $basePrice, 2);
+        }
+
+        $rate = $this->exchangeRates->getRate($baseCurrency, $normalizedCurrency);
+
+        return round((float) $basePrice * $rate, 2);
     }
 }

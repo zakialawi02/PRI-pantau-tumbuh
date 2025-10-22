@@ -14,18 +14,22 @@ use Yajra\DataTables\Facades\DataTables;
 use App\Mail\OrderCreditConfirmation;
 use App\Mail\PaymentCreditConfirmation;
 use App\Services\CreditService;
+use App\Services\ExchangeRateService;
 use App\Services\PaymentGatewayFactory;
 use Exception;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\Rule;
 
 class PaymentController extends Controller
 {
-    protected $creditService;
+    protected CreditService $creditService;
+    protected ExchangeRateService $exchangeRates;
 
-    public function __construct(CreditService $creditService)
+    public function __construct(CreditService $creditService, ExchangeRateService $exchangeRates)
     {
         $this->creditService = $creditService;
+        $this->exchangeRates = $exchangeRates;
     }
 
     public function index()
@@ -262,40 +266,72 @@ class PaymentController extends Controller
 
     public function checkoutCredits(Request $request)
     {
-        $request->validate([
-            'order_id' => 'required|string',
-            'name' => 'required|string|max:255',
-            'email' => 'required|email',
-            'phone' => 'required|string|max:20',
-            'payment_method' => 'required|string|in:bank_transfer,paypal,stripe,manual',
-        ]);
+        $orderId = $request->input('order_id');
 
-        $cacheData = Cache::get($request->order_id);
+        if (!$orderId) {
+            return redirect()->route('admin.purchase-credits')->with('error', 'Checkout failed, data not found or expired.');
+        }
+
+        $cacheData = Cache::get($orderId);
         if (!$cacheData) {
             return redirect()->route('admin.purchase-credits')->with('error', 'Checkout failed, data not found or expired.');
         }
 
+        $allowedMethods = $cacheData['allowed_payment_methods'] ?? ['bank_transfer', 'paypal', 'stripe', 'manual'];
+
+        $request->validate([
+            'order_id' => 'required|string',
+            'plan_id' => 'required|exists:plans,id',
+            'name' => 'required|string|max:255',
+            'email' => 'required|email',
+            'phone' => 'required|string|max:20',
+            'payment_method' => ['required', 'string', Rule::in($allowedMethods)],
+        ]);
+
         $plan = Plan::findOrFail($request->plan_id);
         $user = Auth::user();
+
+        $amountIdr = $cacheData['amount_idr'] ?? $plan->getPriceForCurrency('IDR');
+        $amountUsd = $cacheData['amount_usd'] ?? $plan->getPriceForCurrency('USD');
+
+        [$amountIdr, $amountUsd] = $this->resolvePlanAmounts($plan, $amountIdr, $amountUsd);
+
+        $exchangeRate = $cacheData['exchange_rate'] ?? $this->exchangeRates->calculateRate($amountIdr, $amountUsd);
+        if (!$exchangeRate || $exchangeRate <= 0) {
+            $exchangeRate = $this->exchangeRates->getRate('USD', 'IDR');
+        }
+
+        $selectedCurrency = strtoupper($cacheData['price_currency'] ?? $plan->currency ?? 'IDR');
+
+        if ($selectedCurrency === 'USD' && ($amountUsd <= 0) && $amountIdr > 0 && $exchangeRate > 0) {
+            $amountUsd = round($amountIdr / $exchangeRate, 2);
+        } elseif ($selectedCurrency === 'IDR' && ($amountIdr <= 0) && $amountUsd > 0 && $exchangeRate > 0) {
+            $amountIdr = round($amountUsd * $exchangeRate, 2);
+        }
+
+        $amount = $selectedCurrency === 'USD' ? $amountUsd : $amountIdr;
 
         try {
             // Create a payment record for credit purchase
             $payment = Payment::create([
-                'user_id'         => $user->id,
-                'name'            => $request->name,
-                'email'           => $request->email,
-                'phone'           => $request->phone,
-                'amount'          => $plan->price,
-                'currency'        => $plan->currency,
-                'status'          => 'pending',
-                'due_date'        => Carbon::now()->addDays(1), // 1 days from now
-                'payment_method'  => $request->payment_method ?? 'manual',
-                'account_name'    => $request->account_name ?? null,
-                'account_number'  => $request->account_number ?? null,
-                'credit_points'   => $plan->credit_points, // Store the credit points buy by user
+                'user_id' => $user->id,
+                'name' => $request->name,
+                'email' => $request->email,
+                'phone' => $request->phone,
+                'amount' => $amount,
+                'currency' => $selectedCurrency,
+                'exchange_rate' => $exchangeRate,
+                'amount_idr' => $amountIdr,
+                'amount_usd' => $amountUsd,
+                'status' => 'pending',
+                'due_date' => Carbon::now()->addDays(1),
+                'payment_method' => $request->payment_method ?? 'manual',
+                'account_name' => $request->account_name ?? null,
+                'account_number' => $request->account_number ?? null,
+                'credit_points' => $plan->credit_points,
             ]);
 
-            Cache::forget($request->order_id);
+            Cache::forget($orderId);
 
             // Send order credit confirmation email
             try {
@@ -314,8 +350,8 @@ class PaymentController extends Controller
                     $gateway = PaymentGatewayFactory::make($gatewayName);
 
                     $paymentData = [
-                        'amount' => $plan->price,
-                        'currency' => $plan->currency,
+                        'amount' => $amount,
+                        'currency' => $selectedCurrency,
                         'description' => 'Credit Purchase: ' . $plan->name . ' for ' . $plan->credit_points . ' Credits',
                         'return_url' => route('admin.payment.callback', ['gateway' => $gatewayName]) . '?paymentId=' . $payment->id,
                         'cancel_url' => route('admin.payment.show', $payment->id),
@@ -545,5 +581,24 @@ class PaymentController extends Controller
             Log::error("Payment callback error: " . $e->getMessage());
             return redirect()->route('admin.payment.index')->with('error', 'Payment processing error.');
         }
+    }
+
+    private function resolvePlanAmounts(Plan $plan, ?float $cachedIdr, ?float $cachedUsd): array
+    {
+        $amountIdr = $cachedIdr ?? $plan->getPriceForCurrency('IDR');
+        $amountUsd = $cachedUsd ?? $plan->getPriceForCurrency('USD');
+
+        if ($amountIdr === null && $amountUsd !== null) {
+            $amountIdr = round((float) $amountUsd * $this->exchangeRates->getRate('USD', 'IDR'), 2);
+        }
+
+        if ($amountUsd === null && $amountIdr !== null) {
+            $amountUsd = round((float) $amountIdr * $this->exchangeRates->getRate('IDR', 'USD'), 2);
+        }
+
+        return [
+            round((float) ($amountIdr ?? 0), 2),
+            round((float) ($amountUsd ?? 0), 2),
+        ];
     }
 }
