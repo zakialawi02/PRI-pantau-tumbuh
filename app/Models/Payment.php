@@ -24,6 +24,9 @@ class Payment extends Model
         'email',
         'phone',
         'amount',
+        'exchange_rate',
+        'amount_idr',
+        'amount_usd',
         'credit_points',
         'currency',
         'status',
@@ -46,7 +49,14 @@ class Payment extends Model
         'paid_at' => 'datetime',
         'verified_at' => 'datetime',
         'amount' => 'decimal:2',
+        'exchange_rate' => 'decimal:8',
+        'amount_idr' => 'decimal:2',
+        'amount_usd' => 'decimal:2',
         'credit_points' => 'decimal:2',
+    ];
+
+    protected $attributes = [
+        'currency' => 'IDR',
     ];
 
     /**

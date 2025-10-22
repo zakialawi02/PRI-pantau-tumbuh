@@ -277,7 +277,27 @@
                             name: 'amount',
                             className: 'px-3 py-2 whitespace-nowrap text-sm',
                             render: function(data, type, full, meta) {
-                                return formatCurrency(data, full.currency);
+                                let output = formatCurrency(data, full.currency);
+                                let alternateCurrency = null;
+                                let alternateAmount = null;
+
+                                if (full.currency === 'IDR' && full.amount_usd) {
+                                    alternateCurrency = 'USD';
+                                    alternateAmount = full.amount_usd;
+                                } else if (full.currency === 'USD' && full.amount_idr) {
+                                    alternateCurrency = 'IDR';
+                                    alternateAmount = full.amount_idr;
+                                }
+
+                                if (alternateCurrency && alternateAmount) {
+                                    output += `<div class="text-xs text-foreground/60">≈ ${formatCurrency(alternateAmount, alternateCurrency)}</div>`;
+                                }
+
+                                if (full.exchange_rate) {
+                                    output += `<div class="text-xs text-foreground/60">1 USD = ${formatCurrency(full.exchange_rate, 'IDR')}</div>`;
+                                }
+
+                                return output;
                             }
                         },
                         {
@@ -452,7 +472,18 @@
                     $('#modal-customer-name').text(paymentData?.name || '-');
                     $('#modal-email').text(paymentData?.email || '-');
                     $('#modal-phone').text(paymentData?.phone || '-');
-                    $('#modal-amount').text(formatCurrency(paymentData?.amount, paymentData?.currency));
+                    let amountHtml = formatCurrency(paymentData?.amount, paymentData?.currency);
+                    if (paymentData?.currency === 'IDR' && paymentData?.amount_usd) {
+                        amountHtml += `<div class="text-xs text-foreground/60">≈ ${formatCurrency(paymentData?.amount_usd, 'USD')}</div>`;
+                    } else if (paymentData?.currency === 'USD' && paymentData?.amount_idr) {
+                        amountHtml += `<div class="text-xs text-foreground/60">≈ ${formatCurrency(paymentData?.amount_idr, 'IDR')}</div>`;
+                    }
+
+                    if (paymentData?.exchange_rate) {
+                        amountHtml += `<div class="text-xs text-foreground/60">1 USD = ${formatCurrency(paymentData?.exchange_rate, 'IDR')}</div>`;
+                    }
+
+                    $('#modal-amount').html(amountHtml);
                     $('#modal-payment-method').text(paymentData?.payment_method.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()));
                     $('#modal-order-date').text(formatCustomDate(paymentData?.created_at));
                     $('#modal-due-date').text(paymentData?.due_date ? formatCustomDate(paymentData?.due_date) : '-');

@@ -1,0 +1,62 @@
+<?php
+
+namespace App\Services;
+
+use Illuminate\Support\Facades\Log;
+use IPinfo\IPinfo;
+use Throwable;
+
+class UserLocationService
+{
+    private IPinfo $client;
+
+    public function __construct(?IPinfo $client = null)
+    {
+        $this->client = $client ?? new IPinfo(config('services.ipinfo.token'));
+    }
+
+    public function getCountryCode(?string $ip = null): ?string
+    {
+        $ip = $ip ?: request()?->ip();
+
+        if (empty($ip) || $ip === '127.0.0.1' || $ip === '::1') {
+            return null;
+        }
+
+        try {
+            $details = $this->client->getDetails($ip);
+            if (isset($details->country) && $details->country) {
+                return strtoupper($details->country);
+            }
+        } catch (Throwable $exception) {
+            Log::debug('Unable to resolve country from IP', [
+                'ip' => $ip,
+                'message' => $exception->getMessage(),
+            ]);
+        }
+
+        return null;
+    }
+
+    public function resolveCurrency(?string $ip = null): string
+    {
+        $country = $this->getCountryCode($ip);
+
+        if ($country === 'ID') {
+            return 'IDR';
+        }
+
+        return 'USD';
+    }
+
+    public function resolvePaymentMethods(?string $ip = null): array
+    {
+        $currency = $this->resolveCurrency($ip);
+
+        if ($currency === 'IDR') {
+            return ['bank_transfer', 'manual'];
+        }
+
+        return ['paypal', 'manual'];
+    }
+}

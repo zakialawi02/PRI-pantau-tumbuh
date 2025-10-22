@@ -88,8 +88,8 @@
                             <div>
                                 <x-input-label for="currency" :value="__('Currency')" />
                                 <select class="focus:ring-primary focus:border-primary border-ring bg-input/50 text-foreground block w-full rounded-lg border p-2" id="currency" name="currency">
-                                    <option value="USD">USD - US Dollar</option>
                                     <option value="IDR">IDR - Indonesian Rupiah</option>
+                                    <option value="USD">USD - US Dollar</option>
                                 </select>
                             </div>
 
