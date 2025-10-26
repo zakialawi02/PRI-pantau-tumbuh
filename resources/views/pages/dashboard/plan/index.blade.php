@@ -12,6 +12,22 @@
                 </x-button-primary>
             </div>
 
+            <div class="mb-4 rounded-lg bg-blue-50 p-4 dark:bg-blue-900">
+                <div class="flex items-center">
+                    <svg class="mr-2 h-5 w-5 text-blue-700 dark:text-blue-300" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>
+                    </svg>
+                    <span class="text-sm font-medium text-blue-700 dark:text-blue-300">
+                        Current USD to IDR Exchange Rate:
+                        @if (isset($exchangeRate) && $exchangeRate > 0)
+                            1 USD = {{ number_format($exchangeRate, 0, ',', '.') }} IDR
+                        @else
+                            1 USD = 0 IDR
+                        @endif
+                    </span>
+                </div>
+            </div>
+
             <div class="table-container">
                 <table class="display table" id="myTable">
                     <thead>
@@ -204,13 +220,6 @@
 
                                         const usdAmount = alternateCurrency === 'USD' ? alternateAmount : primaryAmount;
                                         const idrAmount = alternateCurrency === 'IDR' ? alternateAmount : primaryAmount;
-
-                                        if (usdAmount && idrAmount && usdAmount !== 0 && !Number.isNaN(parseFloat(usdAmount))) {
-                                            const exchangeRate = parseFloat(idrAmount) / parseFloat(usdAmount);
-                                            if (exchangeRate && exchangeRate !== Infinity && !Number.isNaN(exchangeRate)) {
-                                                output += `<div class="text-xs text-foreground/60">1 USD = ${formatCurrency(exchangeRate, 'IDR')}</div>`;
-                                            }
-                                        }
                                     }
 
                                     return output;

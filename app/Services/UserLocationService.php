@@ -46,7 +46,7 @@ class UserLocationService
             return 'IDR';
         }
 
-        return 'USD';
+        return 'IDR';
     }
 
     public function resolvePaymentMethods(?string $ip = null): array

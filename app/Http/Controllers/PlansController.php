@@ -15,9 +15,8 @@ use Yajra\DataTables\Facades\DataTables;
 
 class PlansController extends Controller
 {
-    public function __construct(private readonly ExchangeRateService $exchangeRateService)
-    {
-    }
+    public function __construct(private readonly ExchangeRateService $exchangeRateService) {}
+
     /**
      * Display a listing of the plans.
      */
@@ -26,6 +25,13 @@ class PlansController extends Controller
         $data = [
             'title' => 'Plans Management',
         ];
+
+        // Get exchange rate for USD to IDR
+        try {
+            $exchangeRate = $this->exchangeRateService->getRate('USD', 'IDR');
+        } catch (\Exception $e) {
+            $exchangeRate = 0;
+        }
 
         if ($request->ajax()) {
             $plans = Plan::query();
@@ -45,7 +51,7 @@ class PlansController extends Controller
                 ->make(true);
         }
 
-        return view('pages.dashboard.plan.index', compact('data'));
+        return view('pages.dashboard.plan.index', compact('data', 'exchangeRate'));
     }
 
     /**
@@ -180,11 +186,11 @@ class PlansController extends Controller
         $currency = Str::upper($currency ?: 'IDR');
 
         if ($currency === 'IDR') {
-            $priceIdr = round($price, 2);
-            $priceUsd = $this->exchangeRateService->convert($price, 'IDR', 'USD');
+            $priceIdr = round($price, 1);
+            $priceUsd = round($this->exchangeRateService->convert($price, 'IDR', 'USD'), 1);
         } else {
-            $priceUsd = round($price, 2);
-            $priceIdr = $this->exchangeRateService->convert($price, 'USD', 'IDR');
+            $priceUsd = round($price, 1);
+            $priceIdr = round($this->exchangeRateService->convert($price, 'USD', 'IDR'), 1);
         }
 
         return [$priceIdr, $priceUsd];

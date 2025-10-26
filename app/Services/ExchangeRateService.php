@@ -14,9 +14,7 @@ class ExchangeRateService
 {
     private const CACHE_PREFIX = 'exchange_rate';
 
-    public function __construct(private readonly CacheRepository $cache)
-    {
-    }
+    public function __construct(private readonly CacheRepository $cache) {}
 
     /**
      * Retrieve the exchange rate for the given currency pair.
@@ -94,7 +92,7 @@ class ExchangeRateService
     {
         $rate = $this->getRate($fromCurrency, $toCurrency);
 
-        return round($amount * $rate, 2);
+        return round($amount * $rate, 1);
     }
 
     protected function storeRate(string $baseCurrency, string $targetCurrency, float $rate, bool $updateFetchedAt = true): void

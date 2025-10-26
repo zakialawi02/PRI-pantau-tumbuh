@@ -318,6 +318,16 @@ class UserCreditsController extends Controller
         $displayPrice = $currency === 'IDR' ? $priceIdr : $priceUsd;
         $allowedPaymentMethods = $this->userLocationService->resolvePaymentMethods($ip);
 
+        try {
+            $exchangeRate = $this->exchangeRateService->getRate('USD', 'IDR');
+        } catch (Throwable $exception) {
+            Log::warning('Falling back to default exchange rate', [
+                'plan_id' => $plan->id,
+                'error' => $exception->getMessage(),
+            ]);
+            $exchangeRate = (float) config('exchange.fallback_rates.USD_IDR', 15500);
+        }
+
         $timestamp = time();
         $data = [
             'timestamp' => $timestamp,
@@ -326,6 +336,7 @@ class UserCreditsController extends Controller
             'price' => $displayPrice,
             'price_idr' => $priceIdr,
             'price_usd' => $priceUsd,
+            'exchange_rate' => $exchangeRate,
             'allowed_payment_methods' => $allowedPaymentMethods,
         ];
 
@@ -342,6 +353,7 @@ class UserCreditsController extends Controller
 
         if ($id) {
             $cacheData = Cache::get($id);
+            dd($cacheData);
             if ($cacheData) {
                 $data = $cacheData;
 
