@@ -130,10 +130,10 @@ class PaymentController extends Controller
                     'invoice_number' => $payment->invoice_number,
                     'status' => $payment->checkAndMarkAsExpired,
                     'payment_proof' => $payment->proof_image,
-                    'amount' => $payment->amount,
+                    'price' => $payment->price,
                     'currency' => $payment->currency,
-                    'amount_idr' => $payment->amount_idr,
-                    'amount_usd' => $payment->amount_usd,
+                    'price_idr' => $payment->price_idr,
+                    'price_usd' => $payment->price_usd,
                     'exchange_rate' => $payment->exchange_rate,
                     'name' => $payment->name,
                     'email' => $payment->email,
@@ -290,24 +290,24 @@ class PaymentController extends Controller
         }
 
         $currency = $cacheData['price_currency'] ?? $plan->currency;
-        $amount = round((float) ($cacheData['price'] ?? $plan->price), 2);
-        $amountIdr = isset($cacheData['amount_idr']) ? (float) $cacheData['amount_idr'] : null;
-        $amountUsd = isset($cacheData['amount_usd']) ? (float) $cacheData['amount_usd'] : null;
+        $price = round((float) ($cacheData['price'] ?? $plan->price), 2);
+        $priceIdr = isset($cacheData['price_idr']) ? (float) $cacheData['price_idr'] : null;
+        $priceUsd = isset($cacheData['price_usd']) ? (float) $cacheData['price_usd'] : null;
         $exchangeRate = isset($cacheData['exchange_rate'])
             ? (float) $cacheData['exchange_rate']
             : $this->exchangeRateService->getRate('USD', 'IDR');
 
-        if ($amountIdr === null || $amountUsd === null) {
-            $amountIdr = $amountIdr ?? ($currency === 'IDR'
-                ? $amount
-                : $this->exchangeRateService->convert($amount, 'USD', 'IDR'));
-            $amountUsd = $amountUsd ?? ($currency === 'USD'
-                ? $amount
-                : $this->exchangeRateService->convert($amount, 'IDR', 'USD'));
+        if ($priceIdr === null || $priceUsd === null) {
+            $priceIdr = $priceIdr ?? ($currency === 'IDR'
+                ? $price
+                : $this->exchangeRateService->convert($price, 'USD', 'IDR'));
+            $priceUsd = $priceUsd ?? ($currency === 'USD'
+                ? $price
+                : $this->exchangeRateService->convert($price, 'IDR', 'USD'));
         }
 
-        $amountIdr = round($amountIdr, 2);
-        $amountUsd = round($amountUsd, 2);
+        $priceIdr = round($priceIdr, 2);
+        $priceUsd = round($priceUsd, 2);
 
         try {
             // Create a payment record for credit purchase
@@ -316,11 +316,11 @@ class PaymentController extends Controller
                 'name'            => $request->name,
                 'email'           => $request->email,
                 'phone'           => $request->phone,
-                'amount'          => $amount,
+                'price'           => $price,
                 'currency'        => $currency,
                 'exchange_rate'   => $exchangeRate,
-                'amount_idr'      => $amountIdr,
-                'amount_usd'      => $amountUsd,
+                'price_idr'       => $priceIdr,
+                'price_usd'       => $priceUsd,
                 'status'          => 'pending',
                 'due_date'        => Carbon::now()->addDays(1), // 1 days from now
                 'payment_method'  => $request->payment_method ?? 'manual',
@@ -348,7 +348,7 @@ class PaymentController extends Controller
                     $gateway = PaymentGatewayFactory::make($gatewayName);
 
                     $paymentData = [
-                        'amount' => $amount,
+                        'price' => $price,
                         'currency' => $currency,
                         'description' => 'Credit Purchase: ' . $plan->name . ' for ' . $plan->credit_points . ' Credits',
                         'return_url' => route('admin.payment.callback', ['gateway' => $gatewayName]) . '?paymentId=' . $payment->id,
@@ -422,7 +422,7 @@ class PaymentController extends Controller
             $gateway = PaymentGatewayFactory::make('paypal');
 
             $paymentData = [
-                'amount' => (float) $payment->amount,
+                'price' => (float) $payment->price,
                 'currency' => $payment->currency,
                 'description' => 'Payment for Credit Purchase: ' . $payment->credit_points . ' Credits',
                 'return_url' => route('admin.payment.callback', ['gateway' => 'paypal']) . '?paymentId=' . $payment->id,

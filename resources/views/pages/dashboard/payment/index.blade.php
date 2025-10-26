@@ -273,20 +273,20 @@
                             className: 'px-3 py-2 whitespace-nowrap text-sm'
                         },
                         {
-                            data: 'amount',
-                            name: 'amount',
+                            data: 'price',
+                            name: 'price',
                             className: 'px-3 py-2 whitespace-nowrap text-sm',
                             render: function(data, type, full, meta) {
                                 let output = formatCurrency(data, full.currency);
                                 let alternateCurrency = null;
                                 let alternateAmount = null;
 
-                                if (full.currency === 'IDR' && full.amount_usd) {
+                                if (full.currency === 'IDR' && full.price_usd) {
                                     alternateCurrency = 'USD';
-                                    alternateAmount = full.amount_usd;
-                                } else if (full.currency === 'USD' && full.amount_idr) {
+                                    alternateAmount = full.price_usd;
+                                } else if (full.currency === 'USD' && full.price_idr) {
                                     alternateCurrency = 'IDR';
-                                    alternateAmount = full.amount_idr;
+                                    alternateAmount = full.price_idr;
                                 }
 
                                 if (alternateCurrency && alternateAmount) {
@@ -472,11 +472,11 @@
                     $('#modal-customer-name').text(paymentData?.name || '-');
                     $('#modal-email').text(paymentData?.email || '-');
                     $('#modal-phone').text(paymentData?.phone || '-');
-                    let amountHtml = formatCurrency(paymentData?.amount, paymentData?.currency);
-                    if (paymentData?.currency === 'IDR' && paymentData?.amount_usd) {
-                        amountHtml += `<div class="text-xs text-foreground/60">≈ ${formatCurrency(paymentData?.amount_usd, 'USD')}</div>`;
-                    } else if (paymentData?.currency === 'USD' && paymentData?.amount_idr) {
-                        amountHtml += `<div class="text-xs text-foreground/60">≈ ${formatCurrency(paymentData?.amount_idr, 'IDR')}</div>`;
+                    let amountHtml = formatCurrency(paymentData?.price, paymentData?.currency);
+                    if (paymentData?.currency === 'IDR' && paymentData?.price_usd) {
+                        amountHtml += `<div class="text-xs text-foreground/60">≈ ${formatCurrency(paymentData?.price_usd, 'USD')}</div>`;
+                    } else if (paymentData?.currency === 'USD' && paymentData?.price_idr) {
+                        amountHtml += `<div class="text-xs text-foreground/60">≈ ${formatCurrency(paymentData?.price_idr, 'IDR')}</div>`;
                     }
 
                     if (paymentData?.exchange_rate) {

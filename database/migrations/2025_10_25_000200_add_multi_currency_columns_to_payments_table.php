@@ -14,12 +14,12 @@ return new class extends Migration
     {
         Schema::table('payments', function (Blueprint $table) {
             $table->decimal('exchange_rate', 18, 8)->nullable()->after('currency');
-            $table->decimal('amount_idr', 15, 2)->nullable()->after('exchange_rate');
-            $table->decimal('amount_usd', 15, 2)->nullable()->after('amount_idr');
+            $table->decimal('price_idr', 15, 2)->nullable()->after('exchange_rate');
+            $table->decimal('price_usd', 15, 2)->nullable()->after('price_idr');
         });
 
         DB::table('payments')
-            ->select(['id', 'amount', 'currency'])
+            ->select(['id', 'price', 'currency'])
             ->orderBy('id')
             ->chunkById(100, function ($payments) {
                 foreach ($payments as $payment) {
@@ -27,9 +27,9 @@ return new class extends Migration
                     $update = [];
 
                     if ($currency === 'IDR') {
-                        $update['amount_idr'] = $payment->amount;
+                        $update['price_idr'] = $payment->price;
                     } elseif ($currency === 'USD') {
-                        $update['amount_usd'] = $payment->amount;
+                        $update['price_usd'] = $payment->price;
                     }
 
                     if (!empty($update)) {
@@ -45,7 +45,7 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('payments', function (Blueprint $table) {
-            $table->dropColumn(['exchange_rate', 'amount_idr', 'amount_usd']);
+            $table->dropColumn(['exchange_rate', 'price_idr', 'price_usd']);
         });
     }
 };

@@ -17,7 +17,7 @@ return new class extends Migration
             $table->string('name')->nullable();
             $table->string('email')->nullable();
             $table->string('phone')->nullable();
-            $table->decimal('amount', 30, 2);
+            $table->decimal('price', 30, 2);
             $table->string('currency', 10)->default('USD');
             $table->enum('status', ['pending', 'waiting_verification', 'paid', 'failed', 'refunded', 'chargeback'])->default('pending');
             $table->timestamp('due_date')->nullable(); // tanggal batas akhir pembayaran
