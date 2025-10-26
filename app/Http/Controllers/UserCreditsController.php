@@ -353,7 +353,6 @@ class UserCreditsController extends Controller
 
         if ($id) {
             $cacheData = Cache::get($id);
-            dd($cacheData);
             if ($cacheData) {
                 $data = $cacheData;
 

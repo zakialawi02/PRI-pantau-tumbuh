@@ -280,7 +280,6 @@ class PaymentController extends Controller
         if (!$cacheData) {
             return redirect()->route('admin.purchase-credits')->with('error', 'Checkout failed, data not found or expired.');
         }
-        dd($cacheData);
         $plan = Plan::findOrFail($request->plan_id);
         $user = Auth::user();
 
