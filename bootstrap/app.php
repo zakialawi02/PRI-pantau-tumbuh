@@ -1,5 +1,6 @@
 <?php
 
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Http\Request;
 use Sentry\Laravel\Integration;
 use Illuminate\Auth\AuthenticationException;
@@ -14,6 +15,9 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__ . '/../routes/console.php',
         health: '/up',
     )
+    ->withSchedule(function (Schedule $schedule) {
+        $schedule->command('exchange:refresh')->weekly()->withoutOverlapping();
+    })
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->statefulApi();
 
