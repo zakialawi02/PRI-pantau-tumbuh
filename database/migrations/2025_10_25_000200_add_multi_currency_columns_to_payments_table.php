@@ -19,7 +19,7 @@ return new class extends Migration
         });
 
         DB::table('payments')
-            ->select(['id', 'price', 'currency'])
+            ->select(['id', 'amount', 'currency'])
             ->orderBy('id')
             ->chunkById(100, function ($payments) {
                 foreach ($payments as $payment) {
@@ -27,9 +27,9 @@ return new class extends Migration
                     $update = [];
 
                     if ($currency === 'IDR') {
-                        $update['price_idr'] = $payment->price;
+                        $update['price_idr'] = $payment->amount;
                     } elseif ($currency === 'USD') {
-                        $update['price_usd'] = $payment->price;
+                        $update['price_usd'] = $payment->amount;
                     }
 
                     if (!empty($update)) {
