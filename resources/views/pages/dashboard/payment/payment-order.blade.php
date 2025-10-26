@@ -156,7 +156,9 @@
                                     <td class="border-border border px-4 py-3">
                                         <div class="font-medium">Purchase credit points</div>
                                     </td>
-                                    <td class="border-border border px-4 py-3 text-right font-medium">{{ Number::currency($payment->amount, $payment->currency, app()->getLocale()) }}</td>
+                                    <td class="border-border border px-4 py-3 text-right font-medium">
+                                        {{ Number::currency($payment->price, $payment->currency, app()->getLocale()) }}
+                                    </td>
                                 </tr>
                             </tbody>
                         </table>
@@ -169,7 +171,7 @@
                         <div class="bg-base-content-muted/20 rounded-lg p-4">
                             <div class="border-border flex items-center justify-between border-b py-2">
                                 <span class="text-base-content-muted">Subtotal:</span>
-                                <span class="font-medium">{{ Number::currency($payment->amount, $payment->currency, app()->getLocale()) }}</span>
+                                <span class="font-medium">{{ Number::currency($payment->price, $payment->currency, app()->getLocale()) }}</span>
                             </div>
                             <div class="border-border flex items-center justify-between border-b py-2">
                                 <span class="text-base-content-muted">Tax (0%):</span>
@@ -183,7 +185,7 @@
                             @endif
                             <div class="border-border flex items-center justify-between border-t-2 py-3">
                                 <span class="text-base-content text-lg font-semibold">Total:</span>
-                                <span class="text-primary text-lg font-bold">{{ Number::currency($payment->amount, $payment->currency, app()->getLocale()) }}</span>
+                                <span class="text-primary text-lg font-bold">{{ Number::currency($payment->price, $payment->currency, app()->getLocale()) }}</span>
                             </div>
                         </div>
                     </div>

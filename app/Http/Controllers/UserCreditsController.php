@@ -7,6 +7,8 @@ use App\Models\User;
 use App\Models\UserCredit;
 use App\Models\UserCreditHistory;
 use App\Services\CreditService;
+use App\Services\ExchangeRateService;
+use App\Services\UserLocationService;
 use Illuminate\Support\Str;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
@@ -21,10 +23,17 @@ use Yajra\DataTables\Facades\DataTables;
 class UserCreditsController extends Controller
 {
     protected CreditService $creditService;
+    protected ExchangeRateService $exchangeRateService;
+    protected UserLocationService $userLocationService;
 
-    public function __construct(CreditService $creditService)
-    {
+    public function __construct(
+        CreditService $creditService,
+        ExchangeRateService $exchangeRateService,
+        UserLocationService $userLocationService
+    ) {
         $this->creditService = $creditService;
+        $this->exchangeRateService = $exchangeRateService;
+        $this->userLocationService = $userLocationService;
     }
 
     public function history(Request $request)
@@ -265,46 +274,70 @@ class UserCreditsController extends Controller
     /**
      * Display the credit purchase page for public/guest users.
      */
-    public function purchasePublic()
+    public function purchasePublic(Request $request)
     {
-        // Get all plans that are shown to users and have credit points
-        $plans = Plan::where('isShow', true)
-            ->where('credit_points', '>', 0)
-            ->orderBy('credit_points', 'asc')
-            ->get();
+        $ip = $request->header('CF-Connecting-IP') ?? $request->header('X-Forwarded-For') ?? $request->ip();
 
-        return view('pages.front.order.purchase-credits', compact('plans'));
+        $currency = $this->userLocationService->resolveCurrency($ip);
+        $plans = $this->getPlansForCurrency($currency);
+
+        return view('pages.front.order.purchase-credits', [
+            'plans' => $plans,
+            'displayCurrency' => $currency,
+        ]);
     }
 
     /**
      * Display the credit purchase page for users.
      */
-    public function purchase()
+    public function purchase(Request $request)
     {
-        // Get all plans that are shown to users and have credit points
-        $plans = Plan::where('isShow', true)
-            ->where('credit_points', '>', 0)
-            ->orderBy('credit_points', 'asc')
-            ->get();
+        $ip = $request->header('CF-Connecting-IP') ?? $request->header('X-Forwarded-For') ?? $request->ip();
 
-        return view('pages.dashboard.users.purchaseCredits', compact('plans'));
+        $currency = $this->userLocationService->resolveCurrency($ip);
+        $plans = $this->getPlansForCurrency($currency);
+
+        return view('pages.dashboard.users.purchaseCredits', [
+            'plans' => $plans,
+            'displayCurrency' => $currency,
+        ]);
     }
 
     public function orderCredit(Request $request)
     {
+        $ip = $request->header('CF-Connecting-IP') ?? $request->header('X-Forwarded-For') ?? $request->ip();
+
         $request->validate([
             'plan_id' => 'required|exists:plans,id',
         ]);
 
         $plan = Plan::findOrFail($request->plan_id);
 
-        // Create data array similar to the mapOrder method
+        [$priceIdr, $priceUsd] = $this->getPlanAmounts($plan);
+        $currency = $this->userLocationService->resolveCurrency($ip);
+        $displayPrice = $currency === 'IDR' ? $priceIdr : $priceUsd;
+        $allowedPaymentMethods = $this->userLocationService->resolvePaymentMethods($ip);
+
+        try {
+            $exchangeRate = $this->exchangeRateService->getRate('USD', 'IDR');
+        } catch (Throwable $exception) {
+            Log::warning('Falling back to default exchange rate', [
+                'plan_id' => $plan->id,
+                'error' => $exception->getMessage(),
+            ]);
+            $exchangeRate = (float) config('exchange.fallback_rates.USD_IDR', 15500);
+        }
+
         $timestamp = time();
         $data = [
             'timestamp' => $timestamp,
             'plan' => $plan,
-            'price_currency' => $plan->currency,
-            'price' => $plan->price,
+            'price_currency' => $currency,
+            'price' => $displayPrice,
+            'price_idr' => $priceIdr,
+            'price_usd' => $priceUsd,
+            'exchange_rate' => $exchangeRate,
+            'allowed_payment_methods' => $allowedPaymentMethods,
         ];
 
         $keyCache = 'Checkout_' . $timestamp . '_' . Str::random(10) . '';
@@ -320,8 +353,21 @@ class UserCreditsController extends Controller
 
         if ($id) {
             $cacheData = Cache::get($id);
+            dd($cacheData);
             if ($cacheData) {
                 $data = $cacheData;
+
+                if (!isset($data['allowed_payment_methods'])) {
+                    $data['allowed_payment_methods'] = $this->userLocationService->resolvePaymentMethods($request->ip());
+                }
+
+                if ($data['plan'] instanceof Plan) {
+                    [$priceIdr, $priceUsd] = $this->getPlanAmounts($data['plan']);
+                    $data['price_idr'] = $data['price_idr'] ?? $priceIdr;
+                    $data['price_usd'] = $data['price_usd'] ?? $priceUsd;
+                }
+
+                Cache::put($id, $data, now()->addHours(2));
             } else {
 
                 return redirect()->route('admin.purchase-credits')->with('error', 'Application data not found or has expired.');
@@ -358,5 +404,77 @@ class UserCreditsController extends Controller
                 'error' => $e->getMessage()
             ], 500);
         }
+    }
+
+    /**
+     * Prepare plans for display in the requested currency.
+     */
+    private function getPlansForCurrency(string $currency)
+    {
+        return Plan::where('isShow', true)
+            ->where('credit_points', '>', 0)
+            ->orderBy('credit_points', 'asc')
+            ->get()
+            ->map(function (Plan $plan) use ($currency) {
+                [$priceIdr, $priceUsd] = $this->getPlanAmounts($plan);
+
+                $plan->setAttribute('price_idr', $priceIdr);
+                $plan->setAttribute('price_usd', $priceUsd);
+                $plan->setAttribute('display_currency', $currency);
+                $plan->setAttribute('display_price', $currency === 'IDR' ? $priceIdr : $priceUsd);
+
+                return $plan;
+            });
+    }
+
+    /**
+     * Ensure both currency values are available for a plan.
+     */
+    private function getPlanAmounts(Plan $plan): array
+    {
+        $priceIdr = $plan->price_idr;
+        $priceUsd = $plan->price_usd;
+
+        if ($priceIdr !== null && $priceUsd !== null) {
+            return [round((float) $priceIdr, 2), round((float) $priceUsd, 2)];
+        }
+
+        $baseCurrency = Str::upper($plan->currency ?? 'IDR');
+        $basePrice = (float) $plan->price;
+
+        try {
+            if ($priceIdr === null) {
+                $priceIdr = $baseCurrency === 'IDR'
+                    ? $basePrice
+                    : $this->exchangeRateService->convert($basePrice, 'USD', 'IDR');
+            }
+
+            if ($priceUsd === null) {
+                $priceUsd = $baseCurrency === 'USD'
+                    ? $basePrice
+                    : $this->exchangeRateService->convert($basePrice, 'IDR', 'USD');
+            }
+        } catch (Throwable $exception) {
+            Log::warning('Failed to convert plan pricing', [
+                'plan_id' => $plan->id,
+                'error' => $exception->getMessage(),
+            ]);
+
+            $fallbackRate = (float) config('exchange.fallback_rates.USD_IDR', 15500);
+
+            if ($priceIdr === null) {
+                $priceIdr = $baseCurrency === 'IDR'
+                    ? $basePrice
+                    : round($basePrice * $fallbackRate, 2);
+            }
+
+            if ($priceUsd === null) {
+                $priceUsd = $baseCurrency === 'USD'
+                    ? $basePrice
+                    : round($basePrice / max($fallbackRate, 1), 2);
+            }
+        }
+
+        return [round((float) $priceIdr, 2), round((float) $priceUsd, 2)];
     }
 }

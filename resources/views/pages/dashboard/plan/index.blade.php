@@ -12,6 +12,22 @@
                 </x-button-primary>
             </div>
 
+            <div class="mb-4 rounded-lg bg-blue-50 p-4 dark:bg-blue-900">
+                <div class="flex items-center">
+                    <svg class="mr-2 h-5 w-5 text-blue-700 dark:text-blue-300" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>
+                    </svg>
+                    <span class="text-sm font-medium text-blue-700 dark:text-blue-300">
+                        Current USD to IDR Exchange Rate:
+                        @if (isset($exchangeRate) && $exchangeRate > 0)
+                            1 USD = {{ number_format($exchangeRate, 0, ',', '.') }} IDR
+                        @else
+                            1 USD = 0 IDR
+                        @endif
+                    </span>
+                </div>
+            </div>
+
             <div class="table-container">
                 <table class="display table" id="myTable">
                     <thead>
@@ -88,8 +104,8 @@
                             <div>
                                 <x-input-label for="currency" :value="__('Currency')" />
                                 <select class="focus:ring-primary focus:border-primary border-ring bg-input/50 text-foreground block w-full rounded-lg border p-2" id="currency" name="currency">
-                                    <option value="USD">USD - US Dollar</option>
                                     <option value="IDR">IDR - Indonesian Rupiah</option>
+                                    <option value="USD">USD - US Dollar</option>
                                 </select>
                             </div>
 
@@ -173,7 +189,44 @@
                         },
                         {
                             data: 'price',
-                            name: 'price'
+                            name: 'price',
+                            className: 'px-3 py-2 whitespace-nowrap text-sm',
+                            render: function(data, type, full) {
+                                if (type === 'display' || type === 'filter') {
+                                    const primaryCurrency = full?.currency || 'IDR';
+                                    let primaryAmount = data;
+
+                                    if ((primaryAmount === null || primaryAmount === undefined || primaryAmount === '') && primaryCurrency === 'IDR' && full?.price_idr) {
+                                        primaryAmount = full.price_idr;
+                                    } else if ((primaryAmount === null || primaryAmount === undefined || primaryAmount === '') && primaryCurrency === 'USD' && full?.price_usd) {
+                                        primaryAmount = full.price_usd;
+                                    }
+
+                                    let output = formatCurrency(primaryAmount, primaryCurrency);
+
+                                    let alternateCurrency = null;
+                                    let alternateAmount = null;
+
+                                    if (primaryCurrency === 'IDR' && full?.price_usd) {
+                                        alternateCurrency = 'USD';
+                                        alternateAmount = full.price_usd;
+                                    } else if (primaryCurrency === 'USD' && full?.price_idr) {
+                                        alternateCurrency = 'IDR';
+                                        alternateAmount = full.price_idr;
+                                    }
+
+                                    if (alternateCurrency && alternateAmount) {
+                                        output += `<div class="text-xs text-foreground/60">≈ ${formatCurrency(alternateAmount, alternateCurrency)}</div>`;
+
+                                        const usdAmount = alternateCurrency === 'USD' ? alternateAmount : primaryAmount;
+                                        const idrAmount = alternateCurrency === 'IDR' ? alternateAmount : primaryAmount;
+                                    }
+
+                                    return output;
+                                }
+
+                                return data;
+                            }
                         },
                         {
                             data: 'isShow',

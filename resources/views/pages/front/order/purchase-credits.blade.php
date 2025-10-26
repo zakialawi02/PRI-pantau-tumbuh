@@ -11,6 +11,11 @@
             <p class="text-foreground/70 mt-4">
                 Buy credit points to access premium features and services. Credits can be used for satellite imagery processing and other advanced features.
             </p>
+            @if (isset($displayCurrency))
+                <p class="text-foreground/60 mt-2 text-sm">
+                    Prices shown in {{ $displayCurrency === 'IDR' ? 'Indonesian Rupiah (IDR)' : 'United States Dollar (USD)' }}.
+                </p>
+            @endif
         </div>
 
         @if ($plans->isEmpty())
@@ -29,10 +34,15 @@
                                 @endif
                             </div>
 
+                            @php
+                                $displayCurrency = $plan->display_currency ?? $plan->currency;
+                                $displayPrice = $plan->display_price ?? $plan->price;
+                            @endphp
                             <div class="mt-4">
                                 <p class="text-foreground text-3xl font-bold">
-                                    {{ Number::currency($plan->price, $plan->currency, app()->getLocale()) }}
+                                    {{ Number::currency($displayPrice, $displayCurrency, app()->getLocale()) }}
                                 </p>
+
                                 <p class="text-foreground/70 mt-1">
                                     {{ $plan->credit_points }} Credit Points
                                 </p>

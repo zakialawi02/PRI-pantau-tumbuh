@@ -19,15 +19,33 @@ class Plan extends Model
         'name',
         'credit_points',
         'price',
+        'price_idr',
+        'price_usd',
         'currency',
         'isShow',
         'isFeatured'
     ];
 
+    protected $attributes = [
+        'currency' => 'IDR',
+    ];
+
     protected $casts = [
         'price' => 'decimal:2',
+        'price_idr' => 'decimal:2',
+        'price_usd' => 'decimal:2',
         'credit_points' => 'integer',
         'isShow' => 'boolean',
         'isFeatured' => 'boolean'
     ];
+
+    public function getPriceForCurrency(string $currency): float
+    {
+        $currency = strtoupper($currency);
+
+        return match ($currency) {
+            'IDR' => (float) ($this->price_idr ?? $this->price ?? 0),
+            default => (float) ($this->price_usd ?? $this->price ?? 0),
+        };
+    }
 }

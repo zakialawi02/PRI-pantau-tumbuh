@@ -7,7 +7,7 @@ interface PaymentGatewayInterface
     /**
      * Process a payment charge
      *
-     * @param array $data Payment data including amount, currency, description, etc.
+     * @param array $data Payment data including price, currency, description, etc.
      * @return array Result with status and transaction details
      */
     public function charge(array $data): array;
@@ -16,10 +16,10 @@ interface PaymentGatewayInterface
      * Refund a payment
      *
      * @param string $transactionId The transaction ID to refund
-     * @param float $amount The amount to refund
+     * @param float $price The price to refund
      * @return array Result with status and refund details
      */
-    public function refund(string $transactionId, float $amount): array;
+    public function refund(string $transactionId, float $price): array;
 
     /**
      * Get the status of a transaction
