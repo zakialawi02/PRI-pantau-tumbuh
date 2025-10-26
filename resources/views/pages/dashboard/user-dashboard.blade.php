@@ -80,7 +80,7 @@
                                     </p>
                                 </div>
                                 <div class="text-right">
-                                    <p class="font-medium">{{ Number::format($payment->amount, 2, locale: app()->getLocale()) }} {{ $payment->currency }}</p>
+                                    <p class="font-medium">{{ Number::format($payment->price, 2, locale: app()->getLocale()) }} {{ $payment->currency }}</p>
                                     <span class="bg-success/10 inline-flex rounded-full px-2 py-1 text-xs font-semibold text-green-800">
                                         Paid
                                     </span>

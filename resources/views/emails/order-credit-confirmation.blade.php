@@ -202,7 +202,7 @@
                         </tr>
                         <tr class="order-row">
                             <td><strong>Total</strong></td>
-                            <td class="text-right"><strong class="order-total">{{ Number::currency($payment->amount, $payment->currency, app()->getLocale()) }}</strong></td>
+                            <td class="text-right"><strong class="order-total">{{ Number::currency($payment->price, $payment->currency, app()->getLocale()) }}</strong></td>
                         </tr>
                     </table>
                 </div>

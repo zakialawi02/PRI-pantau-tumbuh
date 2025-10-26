@@ -40,7 +40,7 @@ class PaypalService implements PaymentGatewayInterface
                 "purchase_units" => [
                     [
                         "amount" => [
-                            "value" => number_format($data['amount'], 2, '.', ''),
+                            "value" => number_format($data['price'], 2, '.', ''),
                             "currency_code" => config('paypal.currency', 'USD')
                         ],
                     ]
@@ -121,7 +121,7 @@ class PaypalService implements PaymentGatewayInterface
     /**
      * Refund a payment
      */
-    public function refund(string $transactionId, float $amount): array
+    public function refund(string $transactionId, float $price): array
     {
         try {
             // First, we need to get the order details to find the capture ID
@@ -135,14 +135,14 @@ class PaypalService implements PaymentGatewayInterface
                 $refundResponse = $this->paypal->refundCapturedPayment(
                     $captureId,
                     '', // invoice_id (optional)
-                    $amount,
+                    $price,
                     'Refund for order' // note
                 );
 
                 if (isset($refundResponse['status']) && $refundResponse['status'] === 'COMPLETED') {
                     return [
                         'status' => 'success',
-                        'refunded_amount' => $amount,
+                        'refunded_amount' => $price,
                         'refund_id' => $refundResponse['id'],
                         'refund_data' => $refundResponse
                     ];
