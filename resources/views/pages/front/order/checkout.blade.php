@@ -4,9 +4,6 @@
     @php
         $allowedMethods = $data['allowed_payment_methods'] ?? ['bank_transfer', 'manual'];
         $defaultMethod = $allowedMethods[0] ?? 'manual';
-        $alternateCurrency = $data['alternate_currency'] ?? null;
-        $alternatePrice = $data['alternate_price'] ?? null;
-        $exchangeRate = $data['exchange_rate'] ?? null;
     @endphp
     <div class="mx-auto max-w-7xl p-4 md:p-8">
         <!-- Judul -->
@@ -62,9 +59,6 @@
                                     </div>
                                     <div class="text-right">
                                         <p class="text-foreground text-lg">{{ Number::currency($data['price'], $data['price_currency'], app()->getLocale()) }}</p>
-                                        @if ($alternatePrice)
-                                            <p class="text-foreground/60 text-xs">≈ {{ Number::currency($alternatePrice, $alternateCurrency, app()->getLocale()) }}</p>
-                                        @endif
                                     </div>
                                 </div>
 
@@ -72,12 +66,6 @@
                                     <h3 class="text-foreground text-lg font-semibold">Total</h3>
                                     <p class="text-primary text-xl font-bold">{{ Number::currency($data['price'], $data['price_currency'], app()->getLocale()) }}</p>
                                 </div>
-                                @if ($alternatePrice)
-                                    <p class="text-foreground/60 text-sm">Equivalent: {{ Number::currency($alternatePrice, $alternateCurrency, app()->getLocale()) }}</p>
-                                @endif
-                                @if ($exchangeRate)
-                                    <p class="text-foreground/60 text-sm">Exchange rate (1 USD): {{ Number::currency($exchangeRate, 'IDR', app()->getLocale()) }}</p>
-                                @endif
                             </div>
                         @else
                             <!-- Field Preview for regular orders -->
@@ -142,18 +130,15 @@
 
                                 <div class="mt-3 space-y-3">
                                     <!-- Credit Purchase Summary -->
-                                <div class="border-border flex justify-between border-b pb-1">
-                                    <div>
-                                        <h3 class="text-foreground font-medium">{{ $data['plan']['name'] ?? 'Credit Plan' }}</h3>
-                                        <p class="text-base-content-muted text-sm">{{ $data['plan']['credit_points'] ?? 0 }} Credit Points</p>
+                                    <div class="border-border flex justify-between border-b pb-1">
+                                        <div>
+                                            <h3 class="text-foreground font-medium">{{ $data['plan']['name'] ?? 'Credit Plan' }}</h3>
+                                            <p class="text-base-content-muted text-sm">{{ $data['plan']['credit_points'] ?? 0 }} Credit Points</p>
+                                        </div>
+                                        <div class="text-right">
+                                            <p class="text-foreground text-lg">{{ Number::currency($data['price'], $data['price_currency'], app()->getLocale()) }}</p>
+                                        </div>
                                     </div>
-                                    <div class="text-right">
-                                        <p class="text-foreground text-lg">{{ Number::currency($data['price'], $data['price_currency'], app()->getLocale()) }}</p>
-                                        @if ($alternatePrice)
-                                            <p class="text-foreground/60 text-xs">≈ {{ Number::currency($alternatePrice, $alternateCurrency, app()->getLocale()) }}</p>
-                                        @endif
-                                    </div>
-                                </div>
 
                                     <!-- Tax -->
                                     <div class="border-border flex justify-between border-b pb-1">
@@ -171,12 +156,6 @@
                                         <h3 class="text-foreground text-lg font-semibold">Total</h3>
                                         <p class="text-primary text-xl font-bold">{{ Number::currency($data['price'], $data['price_currency'], app()->getLocale()) }}</p>
                                     </div>
-                                    @if ($alternatePrice)
-                                        <p class="text-foreground/60 text-sm">Equivalent: {{ Number::currency($alternatePrice, $alternateCurrency, app()->getLocale()) }}</p>
-                                    @endif
-                                    @if ($exchangeRate)
-                                        <p class="text-foreground/60 text-sm">Exchange rate (1 USD): {{ Number::currency($exchangeRate, 'IDR', app()->getLocale()) }}</p>
-                                    @endif
                                 </div>
                             </div>
 

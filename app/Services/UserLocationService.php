@@ -2,9 +2,9 @@
 
 namespace App\Services;
 
-use Illuminate\Support\Facades\Log;
-use IPinfo\IPinfo;
 use Throwable;
+use ipinfo\ipinfo\IPinfo;
+use Illuminate\Support\Facades\Log;
 
 class UserLocationService
 {
@@ -19,7 +19,7 @@ class UserLocationService
     {
         $ip = $ip ?: request()?->ip();
 
-        if (empty($ip) || $ip === '127.0.0.1' || $ip === '::1') {
+        if (empty($ip) || in_array($ip, ['127.0.0.1', 'localhost', '::1'], true)) {
             return null;
         }
 

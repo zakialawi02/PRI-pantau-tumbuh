@@ -276,7 +276,9 @@ class UserCreditsController extends Controller
      */
     public function purchasePublic(Request $request)
     {
-        $currency = $this->userLocationService->resolveCurrency($request->ip());
+        $ip = $request->header('CF-Connecting-IP') ?? $request->header('X-Forwarded-For') ?? $request->ip();
+
+        $currency = $this->userLocationService->resolveCurrency($ip);
         $plans = $this->getPlansForCurrency($currency);
 
         return view('pages.front.order.purchase-credits', [
@@ -290,7 +292,9 @@ class UserCreditsController extends Controller
      */
     public function purchase(Request $request)
     {
-        $currency = $this->userLocationService->resolveCurrency($request->ip());
+        $ip = $request->header('CF-Connecting-IP') ?? $request->header('X-Forwarded-For') ?? $request->ip();
+
+        $currency = $this->userLocationService->resolveCurrency($ip);
         $plans = $this->getPlansForCurrency($currency);
 
         return view('pages.dashboard.users.purchaseCredits', [
@@ -301,6 +305,8 @@ class UserCreditsController extends Controller
 
     public function orderCredit(Request $request)
     {
+        $ip = $request->header('CF-Connecting-IP') ?? $request->header('X-Forwarded-For') ?? $request->ip();
+
         $request->validate([
             'plan_id' => 'required|exists:plans,id',
         ]);
@@ -308,20 +314,9 @@ class UserCreditsController extends Controller
         $plan = Plan::findOrFail($request->plan_id);
 
         [$priceIdr, $priceUsd] = $this->getPlanAmounts($plan);
-        $currency = $this->userLocationService->resolveCurrency($request->ip());
+        $currency = $this->userLocationService->resolveCurrency($ip);
         $displayPrice = $currency === 'IDR' ? $priceIdr : $priceUsd;
-        $alternateCurrency = $currency === 'IDR' ? 'USD' : 'IDR';
-        $allowedPaymentMethods = $this->userLocationService->resolvePaymentMethods($request->ip());
-
-        try {
-            $exchangeRate = $this->exchangeRateService->getRate('USD', 'IDR');
-        } catch (Throwable $exception) {
-            Log::warning('Falling back to default exchange rate', [
-                'plan_id' => $plan->id,
-                'error' => $exception->getMessage(),
-            ]);
-            $exchangeRate = (float) config('exchange.fallback_rates.USD_IDR', 15500);
-        }
+        $allowedPaymentMethods = $this->userLocationService->resolvePaymentMethods($ip);
 
         $timestamp = time();
         $data = [
@@ -329,13 +324,9 @@ class UserCreditsController extends Controller
             'plan' => $plan,
             'price_currency' => $currency,
             'price' => $displayPrice,
-            'amount_idr' => $priceIdr,
-            'amount_usd' => $priceUsd,
-            'exchange_rate' => $exchangeRate,
+            'price_idr' => $priceIdr,
+            'price_usd' => $priceUsd,
             'allowed_payment_methods' => $allowedPaymentMethods,
-            'alternate_currency' => $alternateCurrency,
-            'alternate_price' => $alternateCurrency === 'IDR' ? $priceIdr : $priceUsd,
-            'country_code' => $this->userLocationService->getCountryCode($request->ip()),
         ];
 
         $keyCache = 'Checkout_' . $timestamp . '_' . Str::random(10) . '';
@@ -360,18 +351,8 @@ class UserCreditsController extends Controller
 
                 if ($data['plan'] instanceof Plan) {
                     [$priceIdr, $priceUsd] = $this->getPlanAmounts($data['plan']);
-                    $data['amount_idr'] = $data['amount_idr'] ?? $priceIdr;
-                    $data['amount_usd'] = $data['amount_usd'] ?? $priceUsd;
-                }
-
-                if (!isset($data['alternate_currency'])) {
-                    $data['alternate_currency'] = ($data['price_currency'] ?? 'USD') === 'IDR' ? 'USD' : 'IDR';
-                }
-
-                if (!isset($data['alternate_price'])) {
-                    $data['alternate_price'] = $data['alternate_currency'] === 'IDR'
-                        ? ($data['amount_idr'] ?? 0)
-                        : ($data['amount_usd'] ?? 0);
+                    $data['price_idr'] = $data['price_idr'] ?? $priceIdr;
+                    $data['price_usd'] = $data['price_usd'] ?? $priceUsd;
                 }
 
                 Cache::put($id, $data, now()->addHours(2));
@@ -429,8 +410,6 @@ class UserCreditsController extends Controller
                 $plan->setAttribute('price_usd', $priceUsd);
                 $plan->setAttribute('display_currency', $currency);
                 $plan->setAttribute('display_price', $currency === 'IDR' ? $priceIdr : $priceUsd);
-                $plan->setAttribute('alternate_currency', $currency === 'IDR' ? 'USD' : 'IDR');
-                $plan->setAttribute('alternate_price', $currency === 'IDR' ? $priceUsd : $priceIdr);
 
                 return $plan;
             });

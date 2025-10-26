@@ -52,7 +52,7 @@ return [
     ],
 
     'ipinfo' => [
-        'token' => env('IPINFO_TOKEN', env('IPINFO_ACCESS_TOKEN')),
+        'token' => env('IPINFO_TOKEN', ""),
     ],
 
     'copernicus' => [

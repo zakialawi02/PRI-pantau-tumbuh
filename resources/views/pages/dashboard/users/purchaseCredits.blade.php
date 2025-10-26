@@ -36,18 +36,12 @@
                                     @php
                                         $displayCurrency = $plan->display_currency ?? $plan->currency;
                                         $displayPrice = $plan->display_price ?? $plan->price;
-                                        $alternateCurrency = $plan->alternate_currency ?? ($displayCurrency === 'IDR' ? 'USD' : 'IDR');
-                                        $alternatePrice = $plan->alternate_price ?? null;
                                     @endphp
                                     <div class="mt-4">
                                         <p class="text-foreground text-3xl font-bold">
                                             {{ Number::currency($displayPrice, $displayCurrency, app()->getLocale()) }}
                                         </p>
-                                        @if ($alternatePrice)
-                                            <p class="text-foreground/60 text-sm">
-                                                ≈ {{ Number::currency($alternatePrice, $alternateCurrency, app()->getLocale()) }}
-                                            </p>
-                                        @endif
+
                                         <p class="text-foreground/70 mt-1">
                                             {{ $plan->credit_points }} Credit Points
                                         </p>
