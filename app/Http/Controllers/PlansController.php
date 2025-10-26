@@ -8,7 +8,6 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Number;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
 use Throwable;
@@ -39,16 +38,10 @@ class PlansController extends Controller
                                 <button type="button" class="delete-plan inline-flex items-center px-2 py-1 bg-error border border-transparent rounded-md font-semibold text-xs text-primary-foreground uppercase tracking-widest hover:bg-error/80 focus:bg-error/80 active:bg-secondary/70 focus:outline-none focus:ring-2 focus:ring-secondary focus:ring-offset-2" data-id="' . $plan->id . '"> <i class="ri-delete-bin-line"></i></button>
                             </div>';
                 })
-                ->editColumn('price', function ($plan) {
-                    $idr = Number::currency($plan->price_idr ?? 0, 'IDR', app()->getLocale());
-                    $usd = Number::currency($plan->price_usd ?? 0, 'USD', app()->getLocale());
-
-                    return $idr . ' / ' . $usd;
-                })
                 ->editColumn('credit_points', function ($plan) {
                     return $plan->credit_points . ' credits';
                 })
-                ->rawColumns(['action', 'price', 'credit_points'])
+                ->rawColumns(['action', 'credit_points'])
                 ->make(true);
         }
 

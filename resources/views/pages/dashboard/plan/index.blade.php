@@ -173,7 +173,51 @@
                         },
                         {
                             data: 'price',
-                            name: 'price'
+                            name: 'price',
+                            className: 'px-3 py-2 whitespace-nowrap text-sm',
+                            render: function(data, type, full) {
+                                if (type === 'display' || type === 'filter') {
+                                    const primaryCurrency = full?.currency || 'IDR';
+                                    let primaryAmount = data;
+
+                                    if ((primaryAmount === null || primaryAmount === undefined || primaryAmount === '') && primaryCurrency === 'IDR' && full?.price_idr) {
+                                        primaryAmount = full.price_idr;
+                                    } else if ((primaryAmount === null || primaryAmount === undefined || primaryAmount === '') && primaryCurrency === 'USD' && full?.price_usd) {
+                                        primaryAmount = full.price_usd;
+                                    }
+
+                                    let output = formatCurrency(primaryAmount, primaryCurrency);
+
+                                    let alternateCurrency = null;
+                                    let alternateAmount = null;
+
+                                    if (primaryCurrency === 'IDR' && full?.price_usd) {
+                                        alternateCurrency = 'USD';
+                                        alternateAmount = full.price_usd;
+                                    } else if (primaryCurrency === 'USD' && full?.price_idr) {
+                                        alternateCurrency = 'IDR';
+                                        alternateAmount = full.price_idr;
+                                    }
+
+                                    if (alternateCurrency && alternateAmount) {
+                                        output += `<div class="text-xs text-foreground/60">≈ ${formatCurrency(alternateAmount, alternateCurrency)}</div>`;
+
+                                        const usdAmount = alternateCurrency === 'USD' ? alternateAmount : primaryAmount;
+                                        const idrAmount = alternateCurrency === 'IDR' ? alternateAmount : primaryAmount;
+
+                                        if (usdAmount && idrAmount && usdAmount !== 0 && !Number.isNaN(parseFloat(usdAmount))) {
+                                            const exchangeRate = parseFloat(idrAmount) / parseFloat(usdAmount);
+                                            if (exchangeRate && exchangeRate !== Infinity && !Number.isNaN(exchangeRate)) {
+                                                output += `<div class="text-xs text-foreground/60">1 USD = ${formatCurrency(exchangeRate, 'IDR')}</div>`;
+                                            }
+                                        }
+                                    }
+
+                                    return output;
+                                }
+
+                                return data;
+                            }
                         },
                         {
                             data: 'isShow',

@@ -29,7 +29,7 @@
                                 Customer Name
                             </th>
                             <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider" scope="col">
-                                Amount
+                                Price
                             </th>
                             <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider" scope="col">
                                 Status
