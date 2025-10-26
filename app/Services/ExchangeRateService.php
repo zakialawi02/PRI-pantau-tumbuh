@@ -13,6 +13,13 @@ class ExchangeRateService
     public const DEFAULT_BASE_CURRENCY = 'IDR';
     public const SUPPORTED_CURRENCIES = ['IDR', 'USD'];
 
+    /**
+     * Cache of fetched base currency rate tables for the lifetime of the service instance.
+     *
+     * @var array<string, array<string, float>>
+     */
+    private array $baseRatesCache = [];
+
     public function getRate(string $baseCurrency, string $targetCurrency): float
     {
         $base = strtoupper($baseCurrency);
@@ -52,29 +59,26 @@ class ExchangeRateService
             return 1.0;
         }
 
-        $endpoint = rtrim(config('exchange.api_base', 'https://cdn.jsdelivr.net/gh/fawazahmed0/exchange-api@1/latest/currencies'), '/');
-        $response = Http::timeout(10)
-            ->acceptJson()
-            ->retry(2, 250)
-            ->get(sprintf('%s/%s/%s.json', $endpoint, strtolower($base), strtolower($target)));
-
-        if ($response->failed()) {
+        try {
+            $rates = $this->getRatesForBase($base);
+        } catch (\Throwable $exception) {
             Log::warning('Exchange rate API request failed', [
                 'base' => $base,
                 'target' => $target,
-                'status' => $response->status(),
+                'error' => $exception->getMessage(),
             ]);
 
             return $this->fallbackRate($base, $target);
         }
 
-        $rate = (float) data_get($response->json(), strtolower($target));
+        $targetKey = strtoupper($target);
+        $rate = $rates[$targetKey] ?? null;
 
-        if ($rate <= 0) {
+        if (!is_float($rate) || $rate <= 0.0) {
             Log::warning('Exchange rate API returned invalid rate', [
                 'base' => $base,
                 'target' => $target,
-                'payload' => $response->json(),
+                'rates' => $rates,
             ]);
 
             return $this->fallbackRate($base, $target);
@@ -138,5 +142,58 @@ class ExchangeRateService
     private function cacheKey(string $baseCurrency, string $targetCurrency): string
     {
         return sprintf('exchange_rate:%s:%s', strtoupper($baseCurrency), strtoupper($targetCurrency));
+    }
+
+    /**
+     * Retrieve and normalise the exchange rate table for a given base currency.
+     *
+     * @param  string  $baseCurrency
+     * @return array<string, float>
+     */
+    private function getRatesForBase(string $baseCurrency): array
+    {
+        $base = strtoupper($baseCurrency);
+
+        if (isset($this->baseRatesCache[$base])) {
+            return $this->baseRatesCache[$base];
+        }
+
+        $endpoint = rtrim(config('exchange.api_base', 'https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies'), '/');
+
+        $response = Http::timeout(10)
+            ->acceptJson()
+            ->retry(2, 250)
+            ->get(sprintf('%s/%s.json', $endpoint, strtolower($base)));
+
+        if ($response->failed()) {
+            throw new \RuntimeException(sprintf('API request failed with status %s', $response->status()));
+        }
+
+        $payload = $response->json();
+        $rates = data_get($payload, strtolower($base));
+
+        if (!is_array($rates) || empty($rates)) {
+            throw new \RuntimeException('API payload did not contain a rates table.');
+        }
+
+        $normalised = [];
+
+        foreach ($rates as $currency => $value) {
+            if (!is_numeric($value)) {
+                continue;
+            }
+
+            $normalised[strtoupper((string) $currency)] = (float) $value;
+        }
+
+        if (!isset($normalised[$base])) {
+            $normalised[$base] = 1.0;
+        }
+
+        if (empty($normalised)) {
+            throw new \RuntimeException('API payload did not contain any numeric rates.');
+        }
+
+        return $this->baseRatesCache[$base] = $normalised;
     }
 }
