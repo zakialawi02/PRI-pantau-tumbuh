@@ -107,7 +107,7 @@
                 </button>
             </nav>
             <div class="text-foreground/70 mt-auto text-xs">© 2025</div>
-            <div class="text-foreground/70 mt-auto text-xs">v0.1.210</div>
+            <div class="text-foreground/70 mt-auto text-xs">v0.1.245</div>
         </aside>
 
         <!-- MOBILE SIDEBAR HORIZONTAL -->
