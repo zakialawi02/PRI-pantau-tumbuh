@@ -21,12 +21,6 @@ def parse_args() -> argparse.Namespace:
         help="Destination file path where the downloaded archive should be stored.",
     )
     parser.add_argument(
-        "--chunk-size",
-        type=int,
-        default=1024 * 1024,
-        help="Chunk size in bytes for streaming download (default: 1 MiB).",
-    )
-    parser.add_argument(
         "--timeout",
         type=int,
         default=600,
@@ -63,7 +57,6 @@ def build_result(path: str, size_bytes: int) -> Dict[str, Any]:
 def _stream_download(
     url: str,
     destination: str,
-    chunk_size: int,
     timeout: int,
 ) -> Dict[str, Any]:
     ensure_parent_directory(destination)
@@ -90,9 +83,7 @@ def _stream_download(
             response.raise_for_status()
 
             with open(temp_path, mode) as file_handle:
-                for chunk in response.iter_content(chunk_size=max(chunk_size, 1024)):
-                    if chunk:
-                        file_handle.write(chunk)
+                file_handle.write(response.content)
 
         break
 
@@ -105,7 +96,6 @@ def _stream_download(
 def download_file(
     url: str,
     destination: str,
-    chunk_size: int,
     timeout: int,
     retries: int,
 ) -> Dict[str, Any]:
@@ -115,7 +105,7 @@ def download_file(
 
     while attempt <= max_retries:
         try:
-            return _stream_download(url, destination, chunk_size, timeout)
+            return _stream_download(url, destination, timeout)
         except requests.RequestException as exc:
             last_error = exc
             attempt += 1
@@ -138,7 +128,6 @@ def main() -> int:
         result = download_file(
             args.url,
             args.output,
-            args.chunk_size,
             args.timeout,
             args.retries,
         )
