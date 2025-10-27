@@ -9,7 +9,6 @@ use App\Services\GeoServerService;
 use App\Services\PythonService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Support\Facades\File;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Queue\SerializesModels;
 use Symfony\Component\Process\Process;
@@ -84,55 +83,9 @@ class ProcessSentinelSceneJob implements ShouldQueue
         $outputPath = $imageryDir . DIRECTORY_SEPARATOR . $this->outputFilename;
 
         try {
-            if (File::exists($zipPath)) {
-                File::delete($zipPath);
-            }
-
-            $response = Http::withOptions([
-                'sink' => $zipPath,
-                // 'stream' => true,
-                'timeout' => 0,
-                'connect_timeout' => 300,
-            ])->get($this->downloadUrl);
-
-            if ($response->failed()) {
-                Log::error('ProcessSentinelSceneJob: Sentinel scene download failed.', [
-                    'imagery_id' => $this->imageryId,
-                    'zip_path' => $zipPath,
-                    'status' => $response->status(),
-                ]);
-                throw new \RuntimeException('Unable to download Sentinel scene. HTTP status: ' . $response->status());
-            }
-
-            if (!File::exists($zipPath)) {
-                Log::error('ProcessSentinelSceneJob: Sentinel scene download failed.', [
-                    'imagery_id' => $this->imageryId,
-                    'zip_path' => $zipPath,
-                    'status' => $response->status(),
-                ]);
-                throw new \RuntimeException('Sentinel scene download missing after request.' . ' ' . $response);
-            }
-
-            $downloadedSize = File::size($zipPath) / 1024 ?: 0;
-
-            Log::info('ProcessSentinelSceneJob: Sentinel scene downloaded.', [
-                'imagery_id' => $this->imageryId,
-                'zip_path' => $zipPath,
-                'size' => $downloadedSize,
-            ]);
-
-            $imagery->update([
-                'format' => "zip",
-                'upload_status' => 'done',
-                'size' => $downloadedSize,
-            ]);
-
-            if (File::exists($outputPath)) {
-                File::delete($outputPath);
-            }
-
             $scriptsBase = base_path('scripts');
-            $scriptPath = $scriptsBase . DIRECTORY_SEPARATOR . 'process_to_multispectral_auto.py';
+            $downloadPythonScriptPath = $scriptsBase . DIRECTORY_SEPARATOR . 'download_imagery.py';
+            $multispectralPythonScriptPath = $scriptsBase . DIRECTORY_SEPARATOR . 'process_to_multispectral_auto.py';
             $pythonPath = $pythonService->resolvePythonPath($scriptsBase);
 
             if (!$pythonPath) {
@@ -140,9 +93,90 @@ class ProcessSentinelSceneJob implements ShouldQueue
                 throw new \RuntimeException('Python executable for Sentinel processing not found.');
             }
 
-            if (!File::exists($scriptPath)) {
+            if (!File::exists($downloadPythonScriptPath)) {
+                Log::error('ProcessSentinelSceneJob: Download script not found.');
+                throw new \RuntimeException('Download script not found.');
+            }
+
+            if (!File::exists($multispectralPythonScriptPath)) {
                 Log::error('ProcessSentinelSceneJob: Multispectral processing script not found.');
                 throw new \RuntimeException('Multispectral processing script not found.');
+            }
+
+            if (File::exists($zipPath)) {
+                File::delete($zipPath);
+            }
+
+            $downloadEnv = $pythonService->buildProcessEnvironment();
+            $downloadTimeoutSeconds = 600;
+            $downloadRetryCount = 2;
+
+            Log::debug('ProcessSentinelSceneJob: Preparing Sentinel download.', [
+                'imagery_id' => $this->imageryId,
+                'timeout' => $downloadTimeoutSeconds,
+                'retries' => $downloadRetryCount,
+            ]);
+
+            $downloadProcess = new Process([
+                $pythonPath,
+                $downloadPythonScriptPath,
+                '--url',
+                $this->downloadUrl,
+                '--output',
+                $zipPath,
+                '--timeout',
+                (string) $downloadTimeoutSeconds,
+                '--retries',
+                (string) $downloadRetryCount,
+            ], $scriptsBase, $downloadEnv);
+
+            $downloadProcess->setTimeout(1800);
+            $downloadProcess->run();
+
+            $downloadStdout = trim($downloadProcess->getOutput());
+            $downloadStderr = trim($downloadProcess->getErrorOutput());
+
+            if ($downloadStdout !== '') {
+                Log::info('[Sentinel Download STDOUT] ' . $downloadStdout);
+            }
+
+            if ($downloadStderr !== '') {
+                Log::error('[Sentinel Download STDERR] ' . $downloadStderr);
+            }
+
+            if (!$downloadProcess->isSuccessful()) {
+                throw new \RuntimeException('Sentinel download script failed.');
+            }
+
+            if (!File::exists($zipPath)) {
+                throw new \RuntimeException('Sentinel download script did not produce an output file.');
+            }
+
+            $downloadData = json_decode($downloadStdout, true);
+            if (!is_array($downloadData)) {
+                throw new \RuntimeException('Sentinel download script returned invalid JSON.');
+            }
+
+            $downloadedSize = isset($downloadData['size_kb']) ? (float) $downloadData['size_kb'] : 0;
+            $downloadFormat = isset($downloadData['format']) && $downloadData['format'] !== ''
+                ? (string) $downloadData['format']
+                : 'zip';
+
+            Log::info('ProcessSentinelSceneJob: Sentinel scene downloaded.', [
+                'imagery_id' => $this->imageryId,
+                'zip_path' => $zipPath,
+                'size' => $downloadedSize,
+                'format' => $downloadFormat,
+            ]);
+
+            $imagery->update([
+                'format' => $downloadFormat,
+                'upload_status' => 'done',
+                'size' => $downloadedSize,
+            ]);
+
+            if (File::exists($outputPath)) {
+                File::delete($outputPath);
             }
 
             $overrides = [
@@ -158,8 +192,8 @@ class ProcessSentinelSceneJob implements ShouldQueue
 
             $processEnv = $pythonService->buildProcessEnvironment($overrides);
 
-            $process = new Process([$pythonPath, $scriptPath], $scriptsBase, $processEnv);
-            $process->setTimeout(7200);
+            $process = new Process([$pythonPath, $multispectralPythonScriptPath], $scriptsBase, $processEnv);
+            $process->setTimeout(1800);
             $process->run();
 
             $stdout = trim($process->getOutput());
