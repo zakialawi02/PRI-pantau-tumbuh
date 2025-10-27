@@ -225,7 +225,7 @@ class PaymentController extends Controller
         // Check if payment is still pending and not expired
         if ($payment->status !== 'pending' || ($payment->due_date && now()->isAfter($payment->due_date))) {
             return redirect()->route('admin.payment.show', $payment->id)
-                ->with('error', 'This payment cannot be updated.');
+                ->with('error', 'Payment is no longer pending or has expired.');
         }
 
         // Check if payment method is bank transfer or manual

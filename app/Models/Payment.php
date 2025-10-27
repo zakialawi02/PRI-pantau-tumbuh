@@ -85,40 +85,32 @@ class Payment extends Model
     }
 
     /**
-     * Determine if the payment should be marked as expired.
-     */
-    public function shouldMarkAsExpired(): bool
-    {
-        return in_array($this->status, ['pending', 'waiting_verification'], true)
-            && $this->due_date !== null
-            && now()->isAfter($this->due_date);
-    }
-
-    /**
-     * Mark the payment as expired if it is overdue.
-     */
-    public function markAsExpiredIfOverdue(): bool
-    {
-        if (! $this->shouldMarkAsExpired()) {
-            return false;
-        }
-
-        $this->forceFill([
-            'status' => 'expired',
-            'updated_at' => now(),
-        ]);
-
-        return $this->saveQuietly();
-    }
-
-    /**
      * Get the effective status of the payment, considering expiration.
      *
      * @return string
      */
     public function getCheckAndMarkAsExpiredAttribute()
     {
-        $this->markAsExpiredIfOverdue();
+        // If payment is already paid, return the current status without any checks
+        if ($this->status === 'paid') {
+            return $this->status;
+        }
+
+        // Check if payment should be marked as expired
+        if (
+            in_array($this->status, ['pending', 'waiting_verification'], true)
+            && $this->due_date !== null
+            && now()->isAfter($this->due_date)
+        ) {
+
+            // Update the status to expired
+            $this->forceFill([
+                'status' => 'expired',
+                'updated_at' => now(),
+            ]);
+
+            $this->saveQuietly();
+        }
 
         return $this->status;
     }

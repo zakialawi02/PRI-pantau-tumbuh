@@ -16,10 +16,7 @@ use Illuminate\Support\Facades\Log;
 use App\Jobs\ProcessSentinelClipJob;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\File;
-use Illuminate\Support\Facades\Mail;
 use App\Jobs\ProcessSentinelSceneJob;
-use Illuminate\Support\Facades\Cache;
-use App\Mail\OrderImageryConfirmation;
 use Illuminate\Support\Facades\Storage;
 use Yajra\DataTables\Facades\DataTables;
 
