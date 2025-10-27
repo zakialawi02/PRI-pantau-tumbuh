@@ -174,7 +174,7 @@ class PaymentController extends Controller
         }
 
         $request->validate([
-            'status' => 'required|in:pending,waiting_verification,paid,failed,refunded,chargeback',
+            'status' => 'required|in:pending,waiting_verification,paid,failed,refunded,chargeback,expired',
         ]);
 
         $payment = Payment::findOrFail($id);

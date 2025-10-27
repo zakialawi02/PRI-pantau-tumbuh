@@ -165,6 +165,7 @@
                                 <option value="failed">Failed</option>
                                 <option value="refunded">Refunded</option>
                                 <option value="chargeback">Chargeback</option>
+                                <option value="expired">Expired</option>
                             </select>
                         </div>
 
