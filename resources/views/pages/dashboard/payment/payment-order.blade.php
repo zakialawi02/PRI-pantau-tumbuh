@@ -27,13 +27,14 @@
             <!-- Invoice Content -->
             <div class="p-6">
                 <!-- Payment Status -->
-                @if (!isset($payment->due_date) || !\Carbon\Carbon::parse($payment->due_date)->isPast() || in_array($payment->status, ['paid', 'waiting_verification', 'refunded', 'chargeback']))
+                @if (!isset($payment->due_date) || !\Carbon\Carbon::parse($payment->due_date)->isPast() || in_array($payment->status, ['paid', 'waiting_verification', 'refunded', 'chargeback', 'expired']))
                     <div class="mb-6">
                         <div class="@if ($payment->status === 'paid') bg-green-100 border border-green-300
                         @elseif($payment->status === 'waiting_verification') bg-yellow-100 border border-yellow-300
                         @elseif($payment->status === 'failed') bg-red-100 border border-red-300
                         @elseif($payment->status === 'refunded') bg-blue-100 border border-blue-300
                         @elseif($payment->status === 'chargeback') bg-purple-100 border border-purple-300
+                        @elseif($payment->status === 'expired') bg-red-100 border border-red-300
                         @else bg-background border border-border @endif flex items-center justify-between rounded-lg p-4">
                             <div class="flex items-center">
                                 <div class="mr-3">
@@ -57,6 +58,10 @@
                                         <svg class="h-6 w-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
                                         </svg>
+                                    @elseif($payment->status === 'expired')
+                                        <svg class="h-6 w-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                        </svg>
                                     @else
                                         <svg class="text-base-content-muted h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"></path>
@@ -69,6 +74,7 @@
                                     @elseif($payment->status === 'failed') text-red-800
                                     @elseif($payment->status === 'refunded') text-blue-800
                                     @elseif($payment->status === 'chargeback') text-purple-800
+                                    @elseif($payment->status === 'expired') text-red-800
                                     @else text-base-content @endif font-semibold">
                                         Payment Status: {{ ucwords(str_replace('_', ' ', $payment->status)) }}
                                     </h4>
@@ -82,6 +88,8 @@
                                         <p class="text-sm text-blue-600">Payment has been refunded</p>
                                     @elseif($payment->status === 'chargeback')
                                         <p class="text-sm text-purple-600">Payment disputed by customer</p>
+                                    @elseif($payment->status === 'expired')
+                                        <p class="text-sm text-red-600">Payment expired due to the due date being missed@if(isset($payment->due_date)) on {{ $payment->due_date->isoFormat('LL, HH:mm') }}@endif</p>
                                     @else
                                         <p class="text-base-content-muted text-sm">Payment is pending</p>
                                     @endif
@@ -92,6 +100,7 @@
                             @elseif($payment->status === 'failed') bg-red-200 text-red-800
                             @elseif($payment->status === 'refunded') bg-blue-200 text-blue-800
                             @elseif($payment->status === 'chargeback') bg-purple-200 text-purple-800
+                            @elseif($payment->status === 'expired') bg-red-200 text-red-800
                             @else bg-border text-base-content @endif rounded-full px-3 py-1 text-sm font-semibold">
                                 {{ ucwords(str_replace('_', ' ', $payment->status)) }}
                             </span>
@@ -100,7 +109,21 @@
                 @endif
 
                 <!-- Due Date Notice (if overdue) -->
-                @if (isset($payment->due_date) && \Carbon\Carbon::parse($payment->due_date)->isPast() && !in_array($payment->status, ['paid', 'waiting_verification', 'refunded', 'chargeback']))
+                @if ($payment->status === 'expired')
+                    <div class="mb-6">
+                        <div class="rounded-lg border border-red-300 bg-red-100 p-4">
+                            <div class="flex items-center">
+                                <svg class="mr-3 h-6 w-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                                <div>
+                                    <h4 class="font-semibold text-red-800">Payment Expired</h4>
+                                    <p class="text-sm text-red-600">This invoice expired@if(isset($payment->due_date)) on {{ $payment->due_date->isoFormat('LL, HH:mm') }}@endif.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                @elseif (isset($payment->due_date) && \Carbon\Carbon::parse($payment->due_date)->isPast() && !in_array($payment->status, ['paid', 'waiting_verification', 'refunded', 'chargeback']))
                     <div class="mb-6">
                         <div class="rounded-lg border border-red-300 bg-red-100 p-4">
                             <div class="flex items-center">
