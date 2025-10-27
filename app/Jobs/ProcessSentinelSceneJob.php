@@ -90,6 +90,7 @@ class ProcessSentinelSceneJob implements ShouldQueue
 
             $response = Http::withOptions([
                 'sink' => $zipPath,
+                // 'stream' => true,
                 'timeout' => 0,
                 'connect_timeout' => 300,
             ])->get($this->downloadUrl);
@@ -109,7 +110,7 @@ class ProcessSentinelSceneJob implements ShouldQueue
                     'zip_path' => $zipPath,
                     'status' => $response->status(),
                 ]);
-                throw new \RuntimeException('Sentinel scene download missing after request.');
+                throw new \RuntimeException('Sentinel scene download missing after request.' . ' ' . $response);
             }
 
             $downloadedSize = File::size($zipPath) / 1024 ?: 0;
