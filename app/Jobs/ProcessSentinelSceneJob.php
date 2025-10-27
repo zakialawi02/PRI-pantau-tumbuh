@@ -84,8 +84,8 @@ class ProcessSentinelSceneJob implements ShouldQueue
 
         try {
             $scriptsBase = base_path('scripts');
-            $downloadScriptPath = $scriptsBase . DIRECTORY_SEPARATOR . 'download_imagery.py';
-            $scriptPath = $scriptsBase . DIRECTORY_SEPARATOR . 'process_to_multispectral_auto.py';
+            $downloadPythonScriptPath = $scriptsBase . DIRECTORY_SEPARATOR . 'download_imagery.py';
+            $multispectralPythonScriptPath = $scriptsBase . DIRECTORY_SEPARATOR . 'process_to_multispectral_auto.py';
             $pythonPath = $pythonService->resolvePythonPath($scriptsBase);
 
             if (!$pythonPath) {
@@ -93,12 +93,12 @@ class ProcessSentinelSceneJob implements ShouldQueue
                 throw new \RuntimeException('Python executable for Sentinel processing not found.');
             }
 
-            if (!File::exists($downloadScriptPath)) {
+            if (!File::exists($downloadPythonScriptPath)) {
                 Log::error('ProcessSentinelSceneJob: Download script not found.');
                 throw new \RuntimeException('Download script not found.');
             }
 
-            if (!File::exists($scriptPath)) {
+            if (!File::exists($multispectralPythonScriptPath)) {
                 Log::error('ProcessSentinelSceneJob: Multispectral processing script not found.');
                 throw new \RuntimeException('Multispectral processing script not found.');
             }
@@ -119,7 +119,7 @@ class ProcessSentinelSceneJob implements ShouldQueue
 
             $downloadProcess = new Process([
                 $pythonPath,
-                $downloadScriptPath,
+                $downloadPythonScriptPath,
                 '--url',
                 $this->downloadUrl,
                 '--output',
@@ -192,7 +192,7 @@ class ProcessSentinelSceneJob implements ShouldQueue
 
             $processEnv = $pythonService->buildProcessEnvironment($overrides);
 
-            $process = new Process([$pythonPath, $scriptPath], $scriptsBase, $processEnv);
+            $process = new Process([$pythonPath, $multispectralPythonScriptPath], $scriptsBase, $processEnv);
             $process->setTimeout(1800);
             $process->run();
 
