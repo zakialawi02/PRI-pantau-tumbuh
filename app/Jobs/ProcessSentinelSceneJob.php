@@ -108,6 +108,17 @@ class ProcessSentinelSceneJob implements ShouldQueue
             }
 
             $downloadEnv = $pythonService->buildProcessEnvironment();
+            $downloadChunkSize = (int) env('SENTINEL_DOWNLOAD_CHUNK_SIZE', 1024 * 1024);
+            $downloadTimeout = (int) env('SENTINEL_DOWNLOAD_TIMEOUT', 600);
+            $downloadRetries = (int) env('SENTINEL_DOWNLOAD_RETRIES', 2);
+
+            Log::debug('ProcessSentinelSceneJob: Preparing Sentinel download.', [
+                'imagery_id' => $this->imageryId,
+                'chunk_size' => $downloadChunkSize,
+                'timeout' => $downloadTimeout,
+                'retries' => $downloadRetries,
+            ]);
+
             $downloadProcess = new Process([
                 $pythonPath,
                 $downloadScriptPath,
@@ -115,6 +126,12 @@ class ProcessSentinelSceneJob implements ShouldQueue
                 $this->downloadUrl,
                 '--output',
                 $zipPath,
+                '--chunk-size',
+                (string) max($downloadChunkSize, 1024),
+                '--timeout',
+                (string) max($downloadTimeout, 1),
+                '--retries',
+                (string) max($downloadRetries, 0),
             ], $scriptsBase, $downloadEnv);
 
             $downloadProcess->setTimeout(7200);
