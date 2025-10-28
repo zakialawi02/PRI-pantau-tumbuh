@@ -269,7 +269,10 @@ const clipPolygonStrokeColor = "rgba(255, 0, 0, 1)";
 const clipPolygonStrokeWidth = 2;
 const clipPolygonStrokeDash = [10, 10];
 
-const clipSelectionStyle = new Style({
+/**
+ * Shared style definition for all clip polygons.
+ */
+const drawingStyle = new Style({
     fill: new Fill({
         color: clipPolygonFillColor,
     }),
@@ -289,24 +292,44 @@ const clipSelectionStyle = new Style({
     }),
 });
 
-const clipVectorSource = new VectorSource();
-const clipVectorLayer = new VectorLayer({
-    source: clipVectorSource,
-    style: clipSelectionStyle,
-    zIndex: 998,
-    visible: false,
-});
-map.addLayer(clipVectorLayer);
+/**
+ * Vector source and layer used for both drawn and stored clip polygons.
+ * @type {VectorSource}
+ */
+let vectorSourceDrawing = new VectorSource();
+/** @type {VectorLayer | undefined} */
+let vectorLayerDrawing;
+
+function ensureDrawingLayerVisible() {
+    if (!vectorLayerDrawing) {
+        vectorLayerDrawing = new VectorLayer({
+            source: vectorSourceDrawing,
+            style: drawingStyle,
+            zIndex: 999,
+        });
+        map.addLayer(vectorLayerDrawing);
+    } else if (!map.getLayers().getArray().includes(vectorLayerDrawing)) {
+        map.addLayer(vectorLayerDrawing);
+    }
+
+    vectorLayerDrawing.setVisible(true);
+}
 
 const clipGeojsonParser = new GeoJSON();
 
 function clearClipSelectionLayer() {
-    clipVectorSource.clear();
-    clipVectorLayer.setVisible(false);
+    vectorSourceDrawing.clear();
+    if (vectorLayerDrawing) {
+        vectorLayerDrawing.setVisible(false);
+    }
 }
 
 function fitClipSelectionExtent() {
-    const extent = clipVectorSource.getExtent();
+    if (!vectorSourceDrawing || vectorSourceDrawing.isEmpty()) {
+        return;
+    }
+
+    const extent = vectorSourceDrawing.getExtent();
     if (!extent || !extent.every((value) => Number.isFinite(value))) {
         return;
     }
@@ -337,15 +360,16 @@ function showClipFeatureCollection(featureCollection, options = {}) {
         return null;
     }
 
-    clipVectorSource.clear();
+    vectorSourceDrawing.clear();
 
     if (!features.length) {
         clearClipSelectionLayer();
         return null;
     }
 
-    clipVectorSource.addFeatures(features);
-    clipVectorLayer.setVisible(true);
+    ensureDrawingLayerVisible();
+    vectorSourceDrawing.addFeatures(features);
+    vectorLayerDrawing.setVisible(true);
 
     if (fitToExtent) {
         fitClipSelectionExtent();
@@ -1435,13 +1459,6 @@ let minimapVisible = false;
 let listener;
 
 /**
- * Vector source for drawing.
- * @type {VectorSource}
- */
-let vectorSourceDrawing = new VectorSource();
-let vectorLayerDrawing;
-
-/**
  * store current drawing interaction
  */
 let draw;
@@ -1499,6 +1516,10 @@ function clearDrawnClipPolygon() {
 
     if (vectorSourceDrawing) {
         vectorSourceDrawing.clear();
+    }
+
+    if (vectorLayerDrawing) {
+        vectorLayerDrawing.setVisible(false);
     }
 
     if (measureTooltip) {
@@ -1591,38 +1612,12 @@ const formatArea = function (polygon) {
     return output;
 };
 
-// Style definition
-const drawingStyle = new Style({
-    fill: new Fill({
-        color: clipPolygonFillColor,
-    }),
-    stroke: new Stroke({
-        color: clipPolygonStrokeColor,
-        lineDash: clipPolygonStrokeDash,
-        width: clipPolygonStrokeWidth,
-    }),
-    image: new CircleStyle({
-        radius: 5,
-        stroke: new Stroke({
-            color: clipPolygonStrokeColor,
-        }),
-        fill: new Fill({
-            color: clipPolygonFillColor,
-        }),
-    }),
-});
-
 /**
  * Adds a draw interaction to the map for measuring.
  * @param {string} [type="Polygon"] The type of geometry to draw. Can be "Polygon" or "LineString".
  * @returns {void}
  */
 function addInteraction(type = "Polygon") {
-    // Remove previous measurement layer and tooltips if any
-    if (vectorLayerDrawing) {
-        map.removeLayer(vectorLayerDrawing);
-    }
-
     // Clear the vector source to remove any existing features
     vectorSourceDrawing.clear();
 
@@ -1641,13 +1636,7 @@ function addInteraction(type = "Polygon") {
         helpTooltipElement.remove();
     }
 
-    // Create the vector layer for measuring
-    vectorLayerDrawing = new VectorLayer({
-        source: vectorSourceDrawing,
-        style: drawingStyle,
-        zIndex: 999,
-    });
-    map.addLayer(vectorLayerDrawing);
+    ensureDrawingLayerVisible();
 
     // Create a new draw interaction
     draw = new Draw({
