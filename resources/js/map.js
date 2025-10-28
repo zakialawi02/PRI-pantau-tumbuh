@@ -1710,9 +1710,15 @@ function addInteraction(type = "Polygon") {
             const clipCreditOutput =
                 document.getElementById("clipCreditOutput");
             if (clipCreditOutput) {
-                const creditRate = parseFloat(
-                    sentinelClipModule.dataset.creditRate || "0"
-                );
+                const creditRate =
+                    Number.parseFloat(
+                        window.AppMap?.constants?.clipCreditRate ?? ""
+                    ) ||
+                    Number.parseFloat(
+                        document.getElementById("sentinel-panel")?.dataset
+                            ?.sentinelCreditRate ?? ""
+                    ) ||
+                    0;
                 if (creditRate > 0) {
                     const estimatedCost = areaHa * creditRate;
                     clipCreditOutput.textContent = formatNumber(

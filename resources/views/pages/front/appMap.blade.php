@@ -240,7 +240,7 @@
             </section>
 
             <!-- ========== SENTINEL COLLECTION PANEL ========== -->
-            <section class="flex hidden h-full flex-col shadow-xl" id="sentinel-panel" data-sentinel-token="{{ $copernicusAccessToken ?? '' }}" data-sentinel-credentials="{{ $copernicusCredentialsConfigured ?? false ? 'true' : 'false' }}" data-sentinel-process-url="{{ auth()->check() ? route('admin.sentinel.process.scene') : '' }}" data-sentinel-clip-process-url="{{ auth()->check() ? route('admin.sentinel.process.clip') : '' }}" data-sentinel-processing-cost="{{ config('app-constants.imagery_processing_cost', 10) }}">
+            <section class="flex hidden h-full flex-col shadow-xl" id="sentinel-panel" data-sentinel-token="{{ $copernicusAccessToken ?? '' }}" data-sentinel-credentials="{{ $copernicusCredentialsConfigured ?? false ? 'true' : 'false' }}" data-sentinel-process-url="{{ auth()->check() ? route('admin.sentinel.process.scene') : '' }}" data-sentinel-clip-process-url="{{ auth()->check() ? route('admin.sentinel.process.clip') : '' }}" data-sentinel-processing-cost="{{ config('app-constants.imagery_processing_cost', 10) }}" data-sentinel-credit-rate="{{ config('app-constants.imagery_credit_cost_per_hectare') }}">
                 <div class="bg-background border-foreground/10 sticky top-0 z-20 flex items-center justify-between border-b p-2">
                     <h2 class="text-lg font-bold">🛰️ Sentinel-2 Collections</h2>
                     <button class="hover:bg-foreground/20 bg-foreground/10 rounded px-2 py-1 text-sm" onclick="closePanels()">✖</button>
@@ -334,7 +334,7 @@
                         @auth
                             <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
                             </div>
-                            <div class="space-y-3" id="sentinelClipModule" data-credit-rate="{{ config('app-constants.imagery_credit_cost_per_hectare') }}" data-process-url="{{ auth()->check() ? route('admin.sentinel.process.scene') : '' }}" data-clip-process-url="{{ auth()->check() ? route('admin.sentinel.process.clip') : '' }}" data-processing-cost="{{ config('app-constants.imagery_processing_cost', 10) }}" data-field-areas='@json($clipFieldAreas)'>
+                            <div class="space-y-3" id="sentinelClipModule" data-field-areas='@json($clipFieldAreas)'>
                                 <div class="bg-background/60 border-foreground/10 space-y-3 rounded-lg border p-3 shadow-sm">
                                     <div class="flex flex-wrap items-center justify-between gap-2">
                                         <div>
@@ -1787,6 +1787,7 @@
                     processUrl: (panel.dataset.sentinelProcessUrl || '').trim(),
                     clipProcessUrl: (panel.dataset.sentinelClipProcessUrl || '').trim(),
                     processingCost: Number.parseFloat(panel.dataset.sentinelProcessingCost ?? '') || 0,
+                    creditRate: Number.parseFloat(panel.dataset.sentinelCreditRate ?? '') || Number.parseFloat(@json((float) config('app-constants.imagery_credit_cost_per_hectare'))) || 0,
                     // Fallback Copernicus WMS endpoint & layer when the catalogue response omits one.
                     defaultWmsEndpoint: 'https://sh.dataspace.copernicus.eu/ogc/wms/1bd0fec1-0e52-427a-8e83-6e0dcd29a03a',
                     defaultWmsLayer: 'NATURAL-COLOR',
@@ -1803,6 +1804,9 @@
                 window.AppMap.constants = window.AppMap.constants || {};
                 if (!Number.isFinite(window.AppMap.constants.imageryProcessingCost) || window.AppMap.constants.imageryProcessingCost <= 0) {
                     window.AppMap.constants.imageryProcessingCost = config.processingCost;
+                }
+                if (!Number.isFinite(window.AppMap.constants.clipCreditRate) || window.AppMap.constants.clipCreditRate <= 0) {
+                    window.AppMap.constants.clipCreditRate = config.creditRate;
                 }
 
                 const clipModule = document.getElementById('sentinelClipModule');
@@ -1842,9 +1846,9 @@
                     activeFieldAreaId: null,
                 };
                 const clipConfig = {
-                    processUrl: (clipModule?.dataset.clipProcessUrl || config.clipProcessUrl || '').trim(),
-                    creditRate: Number.parseFloat(clipModule?.dataset.creditRate ?? '') || 0,
-                    processingCost: Number.parseFloat(clipModule?.dataset.processingCost ?? '') || 0,
+                    processUrl: config.clipProcessUrl,
+                    creditRate: config.creditRate,
+                    processingCost: config.processingCost,
                 };
                 const clipStatusToneClasses = ['text-success', 'text-warning', 'text-error', 'text-foreground/60'];
 
