@@ -264,13 +264,28 @@ function hideSpinner() {
     map.getTargetElement().classList.remove("spinner");
 }
 
+const clipPolygonFillColor = "rgba(255, 0, 0, 0.2)";
+const clipPolygonStrokeColor = "rgba(255, 0, 0, 1)";
+const clipPolygonStrokeWidth = 2;
+const clipPolygonStrokeDash = [10, 10];
+
 const clipSelectionStyle = new Style({
     fill: new Fill({
-        color: "rgba(34, 197, 94, 0.25)",
+        color: clipPolygonFillColor,
     }),
     stroke: new Stroke({
-        color: "rgba(34, 197, 94, 0.9)",
-        width: 2,
+        color: clipPolygonStrokeColor,
+        lineDash: clipPolygonStrokeDash,
+        width: clipPolygonStrokeWidth,
+    }),
+    image: new CircleStyle({
+        radius: 5,
+        stroke: new Stroke({
+            color: clipPolygonStrokeColor,
+        }),
+        fill: new Fill({
+            color: clipPolygonFillColor,
+        }),
     }),
 });
 
@@ -1579,20 +1594,20 @@ const formatArea = function (polygon) {
 // Style definition
 const drawingStyle = new Style({
     fill: new Fill({
-        color: "rgba(255, 0, 0, 0.2)",
+        color: clipPolygonFillColor,
     }),
     stroke: new Stroke({
-        color: "rgba(255, 0, 0, 1)",
-        lineDash: [10, 10],
-        width: 2,
+        color: clipPolygonStrokeColor,
+        lineDash: clipPolygonStrokeDash,
+        width: clipPolygonStrokeWidth,
     }),
     image: new CircleStyle({
         radius: 5,
         stroke: new Stroke({
-            color: "rgba(255, 0, 0, 1)",
+            color: clipPolygonStrokeColor,
         }),
         fill: new Fill({
-            color: "rgba(255, 0, 0, 0.2)",
+            color: clipPolygonFillColor,
         }),
     }),
 });
