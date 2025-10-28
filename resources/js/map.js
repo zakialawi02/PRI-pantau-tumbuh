@@ -1870,6 +1870,7 @@ $("#drawPolygonBtn").click(function (e) {
     if (drawingRunning) {
         drawingEnd();
     } else {
+        window.AppMap?.clip?.handleDrawStart?.();
         drawingStart();
     }
 });
