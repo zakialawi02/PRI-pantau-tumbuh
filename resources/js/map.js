@@ -264,6 +264,93 @@ function hideSpinner() {
     map.getTargetElement().classList.remove("spinner");
 }
 
+const clipSelectionStyle = new Style({
+    fill: new Fill({
+        color: "rgba(34, 197, 94, 0.25)",
+    }),
+    stroke: new Stroke({
+        color: "rgba(34, 197, 94, 0.9)",
+        width: 2,
+    }),
+});
+
+const clipVectorSource = new VectorSource();
+const clipVectorLayer = new VectorLayer({
+    source: clipVectorSource,
+    style: clipSelectionStyle,
+    zIndex: 998,
+    visible: false,
+});
+map.addLayer(clipVectorLayer);
+
+const clipGeojsonParser = new GeoJSON();
+
+function clearClipSelectionLayer() {
+    clipVectorSource.clear();
+    clipVectorLayer.setVisible(false);
+}
+
+function fitClipSelectionExtent() {
+    const extent = clipVectorSource.getExtent();
+    if (!extent || !extent.every((value) => Number.isFinite(value))) {
+        return;
+    }
+    map.getView().fit(extent, {
+        duration: 350,
+        padding: [60, 60, 60, 60],
+        maxZoom: 18,
+    });
+}
+
+function showClipFeatureCollection(featureCollection, options = {}) {
+    if (!featureCollection || typeof featureCollection !== "object") {
+        clearClipSelectionLayer();
+        return null;
+    }
+
+    const { fitToExtent = true } = options;
+
+    let features = [];
+    try {
+        features = clipGeojsonParser.readFeatures(featureCollection, {
+            dataProjection: "EPSG:4326",
+            featureProjection: map.getView().getProjection(),
+        });
+    } catch (error) {
+        console.error("Unable to parse clip feature collection", error);
+        clearClipSelectionLayer();
+        return null;
+    }
+
+    clipVectorSource.clear();
+
+    if (!features.length) {
+        clearClipSelectionLayer();
+        return null;
+    }
+
+    clipVectorSource.addFeatures(features);
+    clipVectorLayer.setVisible(true);
+
+    if (fitToExtent) {
+        fitClipSelectionExtent();
+    }
+
+    const totalArea = features.reduce((accumulator, feature) => {
+        const geometry = feature.getGeometry();
+        if (!geometry) {
+            return accumulator;
+        }
+        const area = getArea(geometry);
+        return Number.isFinite(area) ? accumulator + area : accumulator;
+    }, 0);
+
+    return {
+        features,
+        areaSquareMeters: totalArea,
+    };
+}
+
 window.addEventListener("resize", () => {
     if (window.innerWidth <= 768) {
         map.removeControl(mousePositionControl);
@@ -1386,6 +1473,40 @@ const continuePolygonMsg = "Click to continue drawing the polygon";
  */
 const continueLineMsg = "Click to continue drawing the line";
 
+function clearDrawnClipPolygon() {
+    if (typeof drawingRunning !== "undefined" && drawingRunning) {
+        try {
+            drawingEnd();
+        } catch (error) {
+            console.warn("Unable to terminate drawing interaction", error);
+        }
+    }
+
+    if (vectorSourceDrawing) {
+        vectorSourceDrawing.clear();
+    }
+
+    if (measureTooltip) {
+        map.removeOverlay(measureTooltip);
+        measureTooltip = null;
+    }
+
+    if (measureTooltipElement) {
+        measureTooltipElement.remove();
+        measureTooltipElement = null;
+    }
+
+    if (helpTooltipElement) {
+        helpTooltipElement.remove();
+        helpTooltipElement = null;
+    }
+
+    sketch = null;
+    geojsonFeature = null;
+    geojsonArea = null;
+    drawed = null;
+}
+
 /**
  * Handle pointer move.
  * @param {import("../src/ol/MapBrowserEvent").default} evt The event.
@@ -1643,6 +1764,8 @@ function addInteraction(type = "Polygon") {
  * @returns {void}
  */
 function drawingStart() {
+    clearDrawnClipPolygon();
+    clearClipSelectionLayer();
     addInteraction();
     drawingRunning = true;
     drawed = null;
@@ -1879,6 +2002,22 @@ window.AppMap.geoserver = Object.assign({}, window.AppMap.geoserver, {
     removeLayer: removeGeoserverLayer,
     zoomToLayer: zoomToGeoserverLayer,
     listLayers: () => Array.from(geoserverLayerRegistry.keys()),
+});
+window.AppMap.clip = Object.assign({}, window.AppMap.clip, {
+    showFeatureCollection: (featureCollection, options) =>
+        showClipFeatureCollection(featureCollection, options),
+    clear: () => {
+        clearClipSelectionLayer();
+        return true;
+    },
+    fitToExtent: () => {
+        fitClipSelectionExtent();
+        return true;
+    },
+    clearDrawnPolygon: () => {
+        clearDrawnClipPolygon();
+        return true;
+    },
 });
 try {
     window.dispatchEvent(
