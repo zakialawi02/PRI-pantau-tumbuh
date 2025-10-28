@@ -264,6 +264,127 @@ function hideSpinner() {
     map.getTargetElement().classList.remove("spinner");
 }
 
+/**
+ * Shared style definition for all clip polygons.
+ */
+const drawingStyle = new Style({
+    fill: new Fill({
+        color: "rgba(255, 0, 0, 0.2)",
+    }),
+    stroke: new Stroke({
+        color: "rgba(255, 0, 0, 1)",
+        lineDash: [10, 10],
+        width: 2,
+    }),
+    image: new CircleStyle({
+        radius: 5,
+        stroke: new Stroke({
+            color: "rgba(255, 0, 0, 1)",
+        }),
+        fill: new Fill({
+            color: "rgba(255, 0, 0, 0.2)",
+        }),
+    }),
+});
+
+/**
+ * Vector source and layer used for both drawn and stored clip polygons.
+ * @type {VectorSource}
+ */
+let vectorSourceDrawing = new VectorSource();
+/** @type {VectorLayer | undefined} */
+let vectorLayerDrawing;
+
+function ensureDrawingLayerVisible() {
+    if (!vectorLayerDrawing) {
+        vectorLayerDrawing = new VectorLayer({
+            source: vectorSourceDrawing,
+            style: drawingStyle,
+            zIndex: 999,
+        });
+        map.addLayer(vectorLayerDrawing);
+    } else if (!map.getLayers().getArray().includes(vectorLayerDrawing)) {
+        map.addLayer(vectorLayerDrawing);
+    }
+
+    vectorLayerDrawing.setVisible(true);
+}
+
+const clipGeojsonParser = new GeoJSON();
+
+function clearClipSelectionLayer() {
+    vectorSourceDrawing.clear();
+    if (vectorLayerDrawing) {
+        vectorLayerDrawing.setVisible(false);
+    }
+}
+
+function fitClipSelectionExtent() {
+    if (!vectorSourceDrawing || vectorSourceDrawing.isEmpty()) {
+        return;
+    }
+
+    const extent = vectorSourceDrawing.getExtent();
+    if (!extent || !extent.every((value) => Number.isFinite(value))) {
+        return;
+    }
+    map.getView().fit(extent, {
+        duration: 350,
+        padding: [60, 60, 60, 60],
+        maxZoom: 18,
+    });
+}
+
+function showClipFeatureCollection(featureCollection, options = {}) {
+    if (!featureCollection || typeof featureCollection !== "object") {
+        clearClipSelectionLayer();
+        return null;
+    }
+
+    const { fitToExtent = true } = options;
+
+    let features = [];
+    try {
+        features = clipGeojsonParser.readFeatures(featureCollection, {
+            dataProjection: "EPSG:4326",
+            featureProjection: map.getView().getProjection(),
+        });
+    } catch (error) {
+        console.error("Unable to parse clip feature collection", error);
+        clearClipSelectionLayer();
+        return null;
+    }
+
+    vectorSourceDrawing.clear();
+
+    if (!features.length) {
+        clearClipSelectionLayer();
+        return null;
+    }
+
+    ensureDrawingLayerVisible();
+    vectorSourceDrawing.addFeatures(features);
+    vectorLayerDrawing.setVisible(true);
+
+    if (fitToExtent) {
+        fitClipSelectionExtent();
+    }
+
+    const totalArea = features.reduce((accumulator, feature) => {
+        const geometry = feature.getGeometry();
+        if (!geometry) {
+            return accumulator;
+        }
+        const area = getArea(geometry);
+        return Number.isFinite(area) ? accumulator + area : accumulator;
+    }, 0);
+
+    return {
+        features,
+        areaSquareMeters: totalArea,
+    };
+}
+
 window.addEventListener("resize", () => {
     if (window.innerWidth <= 768) {
         map.removeControl(mousePositionControl);
@@ -1333,13 +1454,6 @@ let minimapVisible = false;
 let listener;
 
 /**
- * Vector source for drawing.
- * @type {VectorSource}
- */
-let vectorSourceDrawing = new VectorSource();
-let vectorLayerDrawing;
-
-/**
  * store current drawing interaction
  */
 let draw;
@@ -1385,6 +1499,44 @@ const continuePolygonMsg = "Click to continue drawing the polygon";
  * @type {string}
  */
 const continueLineMsg = "Click to continue drawing the line";
+
+function clearDrawnClipPolygon() {
+    if (typeof drawingRunning !== "undefined" && drawingRunning) {
+        try {
+            drawingEnd();
+        } catch (error) {
+            console.warn("Unable to terminate drawing interaction", error);
+        }
+    }
+
+    if (vectorSourceDrawing) {
+        vectorSourceDrawing.clear();
+    }
+
+    if (vectorLayerDrawing) {
+        vectorLayerDrawing.setVisible(false);
+    }
+
+    if (measureTooltip) {
+        map.removeOverlay(measureTooltip);
+        measureTooltip = null;
+    }
+
+    if (measureTooltipElement) {
+        measureTooltipElement.remove();
+        measureTooltipElement = null;
+    }
+
+    if (helpTooltipElement) {
+        helpTooltipElement.remove();
+        helpTooltipElement = null;
+    }
+
+    sketch = null;
+    geojsonFeature = null;
+    geojsonArea = null;
+    drawed = null;
+}
 
 /**
  * Handle pointer move.
@@ -1455,38 +1607,12 @@ const formatArea = function (polygon) {
     return output;
 };
 
-// Style definition
-const drawingStyle = new Style({
-    fill: new Fill({
-        color: "rgba(255, 0, 0, 0.2)",
-    }),
-    stroke: new Stroke({
-        color: "rgba(255, 0, 0, 1)",
-        lineDash: [10, 10],
-        width: 2,
-    }),
-    image: new CircleStyle({
-        radius: 5,
-        stroke: new Stroke({
-            color: "rgba(255, 0, 0, 1)",
-        }),
-        fill: new Fill({
-            color: "rgba(255, 0, 0, 0.2)",
-        }),
-    }),
-});
-
 /**
  * Adds a draw interaction to the map for measuring.
  * @param {string} [type="Polygon"] The type of geometry to draw. Can be "Polygon" or "LineString".
  * @returns {void}
  */
 function addInteraction(type = "Polygon") {
-    // Remove previous measurement layer and tooltips if any
-    if (vectorLayerDrawing) {
-        map.removeLayer(vectorLayerDrawing);
-    }
-
     // Clear the vector source to remove any existing features
     vectorSourceDrawing.clear();
 
@@ -1505,13 +1631,7 @@ function addInteraction(type = "Polygon") {
         helpTooltipElement.remove();
     }
 
-    // Create the vector layer for measuring
-    vectorLayerDrawing = new VectorLayer({
-        source: vectorSourceDrawing,
-        style: drawingStyle,
-        zIndex: 999,
-    });
-    map.addLayer(vectorLayerDrawing);
+    ensureDrawingLayerVisible();
 
     // Create a new draw interaction
     draw = new Draw({
@@ -1590,9 +1710,15 @@ function addInteraction(type = "Polygon") {
             const clipCreditOutput =
                 document.getElementById("clipCreditOutput");
             if (clipCreditOutput) {
-                const creditRate = parseFloat(
-                    sentinelClipModule.dataset.creditRate || "0"
-                );
+                const creditRate =
+                    Number.parseFloat(
+                        window.AppMap?.constants?.clipCreditRate ?? ""
+                    ) ||
+                    Number.parseFloat(
+                        document.getElementById("sentinel-panel")?.dataset
+                            ?.sentinelCreditRate ?? ""
+                    ) ||
+                    0;
                 if (creditRate > 0) {
                     const estimatedCost = areaHa * creditRate;
                     clipCreditOutput.textContent = formatNumber(
@@ -1643,6 +1769,8 @@ function addInteraction(type = "Polygon") {
  * @returns {void}
  */
 function drawingStart() {
+    clearDrawnClipPolygon();
+    clearClipSelectionLayer();
     addInteraction();
     drawingRunning = true;
     drawed = null;
@@ -1748,6 +1876,7 @@ $("#drawPolygonBtn").click(function (e) {
     if (drawingRunning) {
         drawingEnd();
     } else {
+        window.AppMap?.clip?.handleDrawStart?.();
         drawingStart();
     }
 });
@@ -1758,6 +1887,7 @@ if (clipDrawPolygonBtn) {
         if (drawingRunning) {
             drawingEnd();
         } else {
+            window.AppMap?.clip?.handleDrawStart?.();
             drawingStart();
         }
     });
@@ -1879,6 +2009,22 @@ window.AppMap.geoserver = Object.assign({}, window.AppMap.geoserver, {
     removeLayer: removeGeoserverLayer,
     zoomToLayer: zoomToGeoserverLayer,
     listLayers: () => Array.from(geoserverLayerRegistry.keys()),
+});
+window.AppMap.clip = Object.assign({}, window.AppMap.clip, {
+    showFeatureCollection: (featureCollection, options) =>
+        showClipFeatureCollection(featureCollection, options),
+    clear: () => {
+        clearClipSelectionLayer();
+        return true;
+    },
+    fitToExtent: () => {
+        fitClipSelectionExtent();
+        return true;
+    },
+    clearDrawnPolygon: () => {
+        clearDrawnClipPolygon();
+        return true;
+    },
 });
 try {
     window.dispatchEvent(

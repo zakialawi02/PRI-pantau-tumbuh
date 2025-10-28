@@ -240,7 +240,7 @@
             </section>
 
             <!-- ========== SENTINEL COLLECTION PANEL ========== -->
-            <section class="flex hidden h-full flex-col shadow-xl" id="sentinel-panel" data-sentinel-token="{{ $copernicusAccessToken ?? '' }}" data-sentinel-credentials="{{ $copernicusCredentialsConfigured ?? false ? 'true' : 'false' }}" data-sentinel-process-url="{{ auth()->check() ? route('admin.sentinel.process.scene') : '' }}" data-sentinel-clip-process-url="{{ auth()->check() ? route('admin.sentinel.process.clip') : '' }}" data-sentinel-processing-cost="{{ config('app-constants.imagery_processing_cost', 10) }}">
+            <section class="flex hidden h-full flex-col shadow-xl" id="sentinel-panel" data-sentinel-token="{{ $copernicusAccessToken ?? '' }}" data-sentinel-credentials="{{ $copernicusCredentialsConfigured ?? false ? 'true' : 'false' }}" data-sentinel-process-url="{{ auth()->check() ? route('admin.sentinel.process.scene') : '' }}" data-sentinel-clip-process-url="{{ auth()->check() ? route('admin.sentinel.process.clip') : '' }}" data-sentinel-processing-cost="{{ config('app-constants.imagery_processing_cost', 10) }}" data-sentinel-credit-rate="{{ config('app-constants.imagery_credit_cost_per_hectare') }}">
                 <div class="bg-background border-foreground/10 sticky top-0 z-20 flex items-center justify-between border-b p-2">
                     <h2 class="text-lg font-bold">🛰️ Sentinel-2 Collections</h2>
                     <button class="hover:bg-foreground/20 bg-foreground/10 rounded px-2 py-1 text-sm" onclick="closePanels()">✖</button>
@@ -321,10 +321,20 @@
 
                     <!-- Clip Tab Content -->
                     <div class="tab-content hidden" id="sentinel-clip-panel" role="tabpanel" aria-labelledby="sentinel-clip-tab">
+                        @php
+                            $clipFieldAreas = (auth()->check() && isset($fieldAreas) ? $fieldAreas : collect())
+                                ->map(fn($area) => [
+                                    'id' => $area->id,
+                                    'name' => $area->name,
+                                    'area_ha' => $area->area_ha,
+                                    'geom' => $area->geom,
+                                ])
+                                ->values();
+                        @endphp
                         @auth
                             <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
                             </div>
-                            <div class="space-y-3" id="sentinelClipModule" data-credit-rate="{{ config('app-constants.imagery_credit_cost_per_hectare') }}" data-process-url="{{ auth()->check() ? route('admin.sentinel.process.scene') : '' }}" data-clip-process-url="{{ auth()->check() ? route('admin.sentinel.process.clip') : '' }}" data-processing-cost="{{ config('app-constants.imagery_processing_cost', 10) }}">
+                            <div class="space-y-3" id="sentinelClipModule" data-field-areas='@json($clipFieldAreas)'>
                                 <div class="bg-background/60 border-foreground/10 space-y-3 rounded-lg border p-3 shadow-sm">
                                     <div class="flex flex-wrap items-center justify-between gap-2">
                                         <div>
@@ -336,19 +346,37 @@
                                                 <i class="ri-pencil-line"></i>
                                                 <span>Draw Polygon</span>
                                             </x-button-primary>
+                                            <x-button-secondary id="clipClearPolygonBtn" type="button" size="xsmall">
+                                                <i class="ri-eraser-line"></i>
+                                                <span>Clear</span>
+                                            </x-button-secondary>
                                         </div>
                                     </div>
 
+                                    @if (isset($fieldAreas) && $fieldAreas->isNotEmpty())
+                                        <div class="space-y-1">
+                                            <x-input-label class="text-sm font-medium" for="clipFieldAreaSelect">Existing Field Areas</x-input-label>
+                                            <select class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-1.5 py-1 text-sm focus:outline-none focus:ring" id="clipFieldAreaSelect" name="field_area_id">
+                                                <option value="">Select a field area</option>
+                                                @foreach ($fieldAreas as $area)
+                                                    <option value="{{ $area->id }}">
+                                                        {{ $area->name ?? 'Unnamed Field' }}@if (!is_null($area->area_ha)) ({{ Number::format($area->area_ha, 2, locale: app()->getLocale()) }} ha)@endif
+                                                    </option>
+                                                @endforeach
+                                            </select>
+                                        </div>
+                                    @endif
+
                                     <div class="space-y-1">
                                         <x-input-label class="text-sm font-medium" for="clipAreaOutput">Area (hectares)</x-input-label>
-                                        <div class="border-foreground/20 rounded-lg border border-dashed px-3 py-2 text-sm" id="clipAreaOutput">
+                                        <div class="border-foreground/20 rounded-lg border border-dashed px-3 py-2 text-sm" id="clipAreaOutput" data-placeholder="Draw a polygon to calculate the area.">
                                             Draw a polygon to calculate the area.
                                         </div>
                                     </div>
 
                                     <div class="space-y-1">
                                         <x-input-label class="text-sm font-medium" for="clipCreditOutput">Estimated Credit Cost</x-input-label>
-                                        <div class="border-foreground/20 rounded-lg border px-3 py-2 text-sm" id="clipCreditOutput">
+                                        <div class="border-foreground/20 rounded-lg border px-3 py-2 text-sm" id="clipCreditOutput" data-placeholder="–">
                                             –
                                         </div>
                                         <p class="text-foreground/60 text-xs">{{ Number::format(config('app-constants.imagery_credit_cost_per_hectare'), locale: app()->getLocale()) }} credit points per hectare.</p>
@@ -356,7 +384,7 @@
 
                                     <div class="space-y-1">
                                         <x-input-label class="text-sm font-medium" for="clipGeojsonOutput">AOI GeoJSON</x-input-label>
-                                        <div class="border-foreground/10 bg-foreground/5 max-h-14 overflow-auto rounded-lg border p-2 font-mono text-xs" id="clipGeojsonOutput">
+                                        <div class="border-foreground/10 bg-foreground/5 max-h-14 overflow-auto rounded-lg border p-2 font-mono text-xs" id="clipGeojsonOutput" data-placeholder="<span class=&quot;text-foreground/60&quot;>Coordinates will appear here after drawing.</span>">
                                             <span class="text-foreground/60">Coordinates will appear here after drawing.</span>
                                         </div>
                                     </div>
@@ -1759,6 +1787,7 @@
                     processUrl: (panel.dataset.sentinelProcessUrl || '').trim(),
                     clipProcessUrl: (panel.dataset.sentinelClipProcessUrl || '').trim(),
                     processingCost: Number.parseFloat(panel.dataset.sentinelProcessingCost ?? '') || 0,
+                    creditRate: Number.parseFloat(panel.dataset.sentinelCreditRate ?? '') || Number.parseFloat(@json((float) config('app-constants.imagery_credit_cost_per_hectare'))) || 0,
                     // Fallback Copernicus WMS endpoint & layer when the catalogue response omits one.
                     defaultWmsEndpoint: 'https://sh.dataspace.copernicus.eu/ogc/wms/1bd0fec1-0e52-427a-8e83-6e0dcd29a03a',
                     defaultWmsLayer: 'NATURAL-COLOR',
@@ -1776,6 +1805,9 @@
                 if (!Number.isFinite(window.AppMap.constants.imageryProcessingCost) || window.AppMap.constants.imageryProcessingCost <= 0) {
                     window.AppMap.constants.imageryProcessingCost = config.processingCost;
                 }
+                if (!Number.isFinite(window.AppMap.constants.clipCreditRate) || window.AppMap.constants.clipCreditRate <= 0) {
+                    window.AppMap.constants.clipCreditRate = config.creditRate;
+                }
 
                 const clipModule = document.getElementById('sentinelClipModule');
                 const clipElements = {
@@ -1783,11 +1815,40 @@
                     processBtn: document.getElementById('clipProcessImageryBtn'),
                     status: document.getElementById('clipProcessStatus'),
                     fieldName: document.getElementById('clipFieldName'),
+                    existingSelect: document.getElementById('clipFieldAreaSelect'),
+                    clearBtn: document.getElementById('clipClearPolygonBtn'),
+                };
+                const clipOutputs = {
+                    area: document.getElementById('clipAreaOutput'),
+                    credit: document.getElementById('clipCreditOutput'),
+                    geojson: document.getElementById('clipGeojsonOutput'),
+                };
+                const clipPlaceholders = {
+                    area: clipOutputs.area?.dataset?.placeholder || clipOutputs.area?.textContent?.trim() || 'Draw a polygon to calculate the area.',
+                    credit: clipOutputs.credit?.dataset?.placeholder || clipOutputs.credit?.textContent?.trim() || '–',
+                    geojson: clipOutputs.geojson?.dataset?.placeholder || clipOutputs.geojson?.innerHTML || '<span class="text-foreground/60">Coordinates will appear here after drawing.</span>',
+                };
+                const clipFieldAreas = (() => {
+                    if (!clipModule?.dataset?.fieldAreas) {
+                        return [];
+                    }
+                    try {
+                        const parsed = JSON.parse(clipModule.dataset.fieldAreas);
+                        return Array.isArray(parsed) ? parsed : [];
+                    } catch (error) {
+                        console.warn('Unable to parse existing field areas', error);
+                        return [];
+                    }
+                })();
+                const clipState = {
+                    fieldAreas: clipFieldAreas,
+                    defaultStatus: clipElements.status?.textContent?.trim() || 'Draw an area and provide a field name before processing.',
+                    activeFieldAreaId: null,
                 };
                 const clipConfig = {
-                    processUrl: (clipModule?.dataset.clipProcessUrl || config.clipProcessUrl || '').trim(),
-                    creditRate: Number.parseFloat(clipModule?.dataset.creditRate ?? '') || 0,
-                    processingCost: Number.parseFloat(clipModule?.dataset.processingCost ?? '') || 0,
+                    processUrl: config.clipProcessUrl,
+                    creditRate: config.creditRate,
+                    processingCost: config.processingCost,
                 };
                 const clipStatusToneClasses = ['text-success', 'text-warning', 'text-error', 'text-foreground/60'];
 
@@ -1808,6 +1869,146 @@
                         'text-foreground/60';
                     clipElements.status.classList.add(toneClass);
                 };
+
+                const resetClipOutputs = () => {
+                    if (clipOutputs.area) {
+                        clipOutputs.area.textContent = clipPlaceholders.area;
+                    }
+                    if (clipOutputs.credit) {
+                        clipOutputs.credit.textContent = clipPlaceholders.credit;
+                    }
+                    if (clipOutputs.geojson) {
+                        clipOutputs.geojson.innerHTML = clipPlaceholders.geojson;
+                    }
+                };
+
+                const applyClipOutputs = ({ areaHa, featureCollection }) => {
+                    const locale = document.documentElement.lang || 'en';
+
+                    if (clipOutputs.area) {
+                        if (Number.isFinite(areaHa) && areaHa > 0) {
+                            clipOutputs.area.textContent = `${formatNumber(areaHa, 2, locale)} ha`;
+                        } else {
+                            clipOutputs.area.textContent = clipPlaceholders.area;
+                        }
+                    }
+
+                    if (clipOutputs.credit) {
+                        if (Number.isFinite(areaHa) && areaHa > 0 && Number.isFinite(clipConfig.creditRate) && clipConfig.creditRate > 0) {
+                            const estimatedCost = areaHa * clipConfig.creditRate;
+                            clipOutputs.credit.textContent = formatNumber(estimatedCost, 2, locale);
+                        } else {
+                            clipOutputs.credit.textContent = clipPlaceholders.credit;
+                        }
+                    }
+
+                    if (clipOutputs.geojson) {
+                        if (featureCollection && typeof featureCollection === 'object') {
+                            clipOutputs.geojson.innerHTML = `<pre class="whitespace-pre-wrap">${JSON.stringify(featureCollection, null, 2)}</pre>`;
+                        } else {
+                            clipOutputs.geojson.innerHTML = clipPlaceholders.geojson;
+                        }
+                    }
+                };
+
+                const clearClipSelection = ({ resetFieldName = true, resetStatus = true } = {}) => {
+                    if (clipElements.existingSelect) {
+                        clipElements.existingSelect.value = '';
+                    }
+
+                    clipState.activeFieldAreaId = null;
+                    resetClipOutputs();
+
+                    if (resetFieldName && clipElements.fieldName) {
+                        clipElements.fieldName.value = '';
+                    }
+
+                    if (resetStatus) {
+                        updateClipStatus(clipState.defaultStatus, 'muted');
+                    }
+
+                    window.geojsonFeature = null;
+                    window.geojsonArea = null;
+
+                    if (window.AppMap?.clip) {
+                        window.AppMap.clip.clear?.();
+                        window.AppMap.clip.clearDrawnPolygon?.();
+                    }
+                };
+
+                window.AppMap = window.AppMap || {};
+                window.AppMap.clip = Object.assign({}, window.AppMap.clip, {
+                    handleDrawStart: () => clearClipSelection(),
+                    resetSelection: (options = {}) => clearClipSelection(options),
+                });
+
+                const setClipSelectionFromFieldArea = (fieldArea, { fitToExtent = true } = {}) => {
+                    if (!fieldArea || !fieldArea.geom) {
+                        clearClipSelection({ resetFieldName: false, resetStatus: false });
+                        return;
+                    }
+
+                    let areaHa = Number.parseFloat(fieldArea.area_ha ?? '');
+                    const featureCollection = fieldArea.geom;
+                    let areaSquareMeters = Number.isFinite(areaHa) && areaHa > 0 ? areaHa * 10000 : null;
+
+                    if (window.AppMap?.clip?.showFeatureCollection) {
+                        const result = window.AppMap.clip.showFeatureCollection(featureCollection, { fitToExtent });
+                        if (result?.areaSquareMeters && result.areaSquareMeters > 0) {
+                            areaSquareMeters = result.areaSquareMeters;
+                            areaHa = areaSquareMeters / 10000;
+                        }
+                    }
+
+                    if ((!Number.isFinite(areaHa) || areaHa <= 0) && Number.isFinite(areaSquareMeters) && areaSquareMeters > 0) {
+                        areaHa = areaSquareMeters / 10000;
+                    }
+
+                    if (!Number.isFinite(areaHa) || areaHa <= 0) {
+                        areaHa = Number.parseFloat(fieldArea.area_ha ?? '');
+                        if (Number.isFinite(areaHa) && areaHa > 0) {
+                            areaSquareMeters = areaHa * 10000;
+                        }
+                    }
+
+                    if (clipElements.fieldName && typeof fieldArea.name === 'string') {
+                        clipElements.fieldName.value = fieldArea.name;
+                    }
+
+                    applyClipOutputs({ areaHa, featureCollection });
+
+                    window.geojsonFeature = featureCollection?.features?.[0] ?? null;
+                    window.geojsonArea = Number.isFinite(areaSquareMeters) ? areaSquareMeters : (Number.isFinite(areaHa) ? areaHa * 10000 : null);
+
+                    clipState.activeFieldAreaId = fieldArea.id ?? null;
+                    updateClipStatus(`Loaded field area${fieldArea.name ? `: ${fieldArea.name}` : ''}.`, 'success');
+                };
+
+                const handleClipFieldAreaSelection = (event) => {
+                    const selectedId = event?.target?.value || '';
+                    if (!selectedId) {
+                        clearClipSelection({ resetFieldName: false });
+                        return;
+                    }
+
+                    const fieldArea = clipState.fieldAreas.find((item) => item.id === selectedId);
+                    if (!fieldArea) {
+                        MyZkToast?.warning?.('Selected field area could not be found.');
+                        return;
+                    }
+
+                    setClipSelectionFromFieldArea(fieldArea, { fitToExtent: true });
+                };
+
+                if (clipElements.existingSelect) {
+                    clipElements.existingSelect.addEventListener('change', handleClipFieldAreaSelection);
+                }
+
+                if (clipElements.clearBtn) {
+                    clipElements.clearBtn.addEventListener('click', () => {
+                        clearClipSelection();
+                    });
+                }
 
                 const computeClipCredits = (areaHa) => {
                     if (!Number.isFinite(areaHa) || areaHa <= 0 || !Number.isFinite(clipConfig.creditRate) || clipConfig.creditRate <= 0) {
