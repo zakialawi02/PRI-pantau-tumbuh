@@ -264,30 +264,25 @@ function hideSpinner() {
     map.getTargetElement().classList.remove("spinner");
 }
 
-const clipPolygonFillColor = "rgba(255, 0, 0, 0.2)";
-const clipPolygonStrokeColor = "rgba(255, 0, 0, 1)";
-const clipPolygonStrokeWidth = 2;
-const clipPolygonStrokeDash = [10, 10];
-
 /**
  * Shared style definition for all clip polygons.
  */
 const drawingStyle = new Style({
     fill: new Fill({
-        color: clipPolygonFillColor,
+        color: "rgba(255, 0, 0, 0.2)",
     }),
     stroke: new Stroke({
-        color: clipPolygonStrokeColor,
-        lineDash: clipPolygonStrokeDash,
-        width: clipPolygonStrokeWidth,
+        color: "rgba(255, 0, 0, 1)",
+        lineDash: [10, 10],
+        width: 2,
     }),
     image: new CircleStyle({
         radius: 5,
         stroke: new Stroke({
-            color: clipPolygonStrokeColor,
+            color: "rgba(255, 0, 0, 1)",
         }),
         fill: new Fill({
-            color: clipPolygonFillColor,
+            color: "rgba(255, 0, 0, 0.2)",
         }),
     }),
 });
