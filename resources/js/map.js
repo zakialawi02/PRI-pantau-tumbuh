@@ -1880,6 +1880,7 @@ if (clipDrawPolygonBtn) {
         if (drawingRunning) {
             drawingEnd();
         } else {
+            window.AppMap?.clip?.handleDrawStart?.();
             drawingStart();
         }
     });

@@ -1932,6 +1932,12 @@
                     }
                 };
 
+                window.AppMap = window.AppMap || {};
+                window.AppMap.clip = Object.assign({}, window.AppMap.clip, {
+                    handleDrawStart: () => clearClipSelection(),
+                    resetSelection: (options = {}) => clearClipSelection(options),
+                });
+
                 const setClipSelectionFromFieldArea = (fieldArea, { fitToExtent = true } = {}) => {
                     if (!fieldArea || !fieldArea.geom) {
                         clearClipSelection({ resetFieldName: false, resetStatus: false });
