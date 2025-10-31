@@ -2100,6 +2100,10 @@
                         estimated_credits: estimatedCredits,
                     };
 
+                    if (clipState.activeFieldAreaId) {
+                        payload.field_area_id = clipState.activeFieldAreaId;
+                    }
+
                     const enqueueClipProcessing = async (payload) => {
                         if (!clipElements.processBtn || !clipConfig.processUrl) {
                             return;

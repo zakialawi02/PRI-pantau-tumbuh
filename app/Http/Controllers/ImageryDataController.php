@@ -18,6 +18,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\File;
 use App\Jobs\ProcessSentinelSceneJob;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
 use Yajra\DataTables\Facades\DataTables;
 
 class ImageryDataController extends Controller
@@ -1084,13 +1085,38 @@ class ImageryDataController extends Controller
 
         $validated = $request->validate([
             'field_name' => ['required', 'string', 'max:255'],
-            'geojson' => ['required'],
+            'geojson' => ['required_without:field_area_id'],
             'geometry' => ['nullable'],
             'area_hectares' => ['required', 'numeric', 'min:0.01'],
             'estimated_credits' => ['nullable', 'numeric', 'min:0'],
+            'field_area_id' => ['nullable', 'uuid', Rule::exists('field_areas', 'id')->where('user_id', $user->id)],
         ]);
 
-        $geojsonPayload = $validated['geojson'];
+        $geojsonPayload = $validated['geojson'] ?? null;
+        $fieldArea = null;
+
+        if (!empty($validated['field_area_id'])) {
+            $fieldArea = FieldArea::where('id', $validated['field_area_id'])
+                ->where('user_id', $user->id)
+                ->first();
+
+            if (!$fieldArea) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Selected field area could not be found.',
+                ], 404);
+            }
+
+            $geojsonPayload = $fieldArea->geom ?? $geojsonPayload;
+        }
+
+        if (is_null($geojsonPayload)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'GeoJSON payload is required.',
+            ], 422);
+        }
+
         if (is_string($geojsonPayload)) {
             $decoded = json_decode($geojsonPayload, true);
             if (json_last_error() !== JSON_ERROR_NONE) {
@@ -1162,17 +1188,33 @@ class ImageryDataController extends Controller
         $storedName =  $outputFilename;
         $originalName = str_replace(' ', '_', ($rawFieldName !== '' ? $rawFieldName : pathinfo($outputFilename, PATHINFO_FILENAME))) . '_' . now()->format('YmdHis') . '.tif';
 
-        $fieldArea = null;
         $imagery = null;
         $deductedCredits = false;
+        $shouldDeleteFieldAreaOnFailure = false;
 
         try {
-            $fieldArea = FieldArea::create([
-                'user_id' => $user->id,
-                'name' => $rawFieldName !== '' ? $rawFieldName : $displayBase,
-                'area_ha' => $areaHa,
-                'geom' => $geojsonPayload,
-            ]);
+            if (!$fieldArea) {
+                $fieldArea = FieldArea::create([
+                    'user_id' => $user->id,
+                    'name' => $rawFieldName !== '' ? $rawFieldName : $displayBase,
+                    'area_ha' => $areaHa,
+                    'geom' => $geojsonPayload,
+                ]);
+                $shouldDeleteFieldAreaOnFailure = true;
+            } else {
+                $updates = [];
+                if ($rawFieldName !== '' && $fieldArea->name !== $rawFieldName) {
+                    $updates['name'] = $rawFieldName;
+                }
+                if ($areaHa > 0 && (float) $fieldArea->area_ha !== (float) $areaHa) {
+                    $updates['area_ha'] = $areaHa;
+                }
+
+                if (!empty($updates)) {
+                    $fieldArea->fill($updates);
+                    $fieldArea->save();
+                }
+            }
 
             $imagery = ImageryData::create([
                 'user_id' => $user->id,
@@ -1206,7 +1248,9 @@ class ImageryDataController extends Controller
                 if (!$deductedCredits) {
                     $currentCredits = $this->creditService->getRemainingCredits($user->id);
                     $imagery->delete();
-                    $fieldArea->delete();
+                    if ($shouldDeleteFieldAreaOnFailure && $fieldArea) {
+                        $fieldArea->delete();
+                    }
 
                     return response()->json([
                         'success' => false,
@@ -1254,7 +1298,7 @@ class ImageryDataController extends Controller
                 $imagery->delete();
             }
 
-            if ($fieldArea) {
+            if ($shouldDeleteFieldAreaOnFailure && $fieldArea) {
                 $fieldArea->delete();
             }
 
