@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use InvalidArgumentException;
+use App\Services\PaymentGateway\MidtransService;
 use App\Services\PaymentGateway\PaypalService;
 use Exception;
 use Illuminate\Support\Facades\Log;
@@ -14,7 +15,7 @@ class PaymentGatewayFactory
         try {
             return match ($gateway) {
                 'paypal' => new PaypalService(),
-                // 'midtrans' => new MidtransService(),
+                'midtrans' => new MidtransService(),
                 default => throw new InvalidArgumentException("Unsupported gateway: {$gateway}")
             };
         } catch (InvalidArgumentException $e) {

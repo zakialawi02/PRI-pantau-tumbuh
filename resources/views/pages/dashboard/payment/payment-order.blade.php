@@ -298,6 +298,34 @@
                                     <p class="mt-1 text-sm">Status: {{ ucwords(str_replace('_', ' ', $payment->status)) }}</p>
                                 </div>
                             @endif
+                        @elseif ($payment->payment_method === 'midtrans')
+                            @if (in_array($payment->status, ['pending', 'failed']))
+                                <h4 class="text-info mb-2 font-semibold">Midtrans Payment</h4>
+                                <p class="text-blue-800">Click the button below to continue your payment via Midtrans.</p>
+                                @if (isset($payment->due_date))
+                                    <p class="text-secondary mt-2 text-sm">Payment due by: {{ $payment->due_date->isoFormat('LL, HH:mm') }}</p>
+                                @endif
+                                @php
+                                    $midtransUrl = data_get($payment->gateway_payload, 'redirect_url') ?? data_get($payment->gateway_payload, 'deeplink_url');
+                                @endphp
+                                <div class="mt-4">
+                                    @if ($midtransUrl)
+                                        <a class="inline-flex items-center rounded bg-blue-500 px-4 py-2 font-bold text-white hover:bg-blue-600" href="{{ $midtransUrl }}" target="_blank" rel="noopener">
+                                            <i class="ri-external-link-line mr-2"></i>
+                                            Pay with Midtrans
+                                        </a>
+                                    @else
+                                        <div class="rounded bg-yellow-100 p-3 text-yellow-800">
+                                            <p>Payment link unavailable. Please contact support for assistance.</p>
+                                        </div>
+                                    @endif
+                                </div>
+                            @else
+                                <div class="rounded bg-blue-100 p-3 text-blue-800">
+                                    <p>This Midtrans payment has already been processed.</p>
+                                    <p class="mt-1 text-sm">Status: {{ ucwords(str_replace('_', ' ', $payment->status)) }}</p>
+                                </div>
+                            @endif
                         @else
                             <p class="text-blue-800">Payment Method: <span class="font-semibold">{{ ucfirst($payment->payment_method) }}</span></p>
                             @if (isset($payment->due_date))
