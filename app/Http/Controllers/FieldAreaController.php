@@ -82,4 +82,21 @@ class FieldAreaController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Remove the specified field area from storage.
+     *
+     * @param  \App\Models\FieldArea  $fieldArea
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    public function destroy(FieldArea $fieldArea)
+    {
+        try {
+            $fieldArea->delete();
+
+            return redirect()->route('admin.field-area.index')->with('success', 'Field area deleted successfully.');
+        } catch (\Exception $e) {
+            return redirect()->back()->with('error', 'Failed to delete field area: ' . $e->getMessage());
+        }
+    }
 }

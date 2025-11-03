@@ -26,9 +26,7 @@
             <p>{{ __('Manage') }}</p>
         </div>
 
-        @if ($isSuperadmin)
-            <x-dashboard.nav-item href="admin.field-area.index" icon="ri-map-pin-line" text="{{ __('Field Area') }}" />
-        @endif
+        <x-dashboard.nav-item href="admin.field-area.index" icon="ri-map-pin-line" text="{{ __('Field Area') }}" />
 
         <x-dashboard.nav-item href="admin.imagery.index" icon="ri-map-line" text="{{ $isAdmin ? __('Imagery') : __('My Imagery') }}" />
 

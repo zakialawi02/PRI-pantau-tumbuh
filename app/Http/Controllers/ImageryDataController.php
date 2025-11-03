@@ -511,6 +511,7 @@ class ImageryDataController extends Controller
                         'uploaded_at' => now(),
                     ]);
 
+                    ## TODO: use deductCreditsForProcessing method
                     $this->creditService->logHistory(
                         $user,
                         'debit',
@@ -743,6 +744,7 @@ class ImageryDataController extends Controller
                 $lockedUserCredit->credits = $balanceBefore - $requiredCredits;
                 $lockedUserCredit->save();
 
+                ## TODO: use deductCreditsForProcessing method
                 $this->creditService->logHistory(
                     $user,
                     'debit',

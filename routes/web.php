@@ -13,6 +13,7 @@ use App\Http\Controllers\ImageryDataController;
 use App\Http\Controllers\UserCreditsController;
 use App\Http\Controllers\Socialite\ProviderCallbackController;
 use App\Http\Controllers\Socialite\ProviderRedirectController;
+use OpenSpout\Common\Entity\Row;
 
 Route::get('/auth/{provider}/redirect', ProviderRedirectController::class)->name('auth.redirect');
 Route::get('/auth/{provider}/callback', ProviderCallbackController::class)->name('auth.callback');
@@ -45,6 +46,7 @@ Route::prefix('dashboard')->name('admin.')->group(function () {
         // field areas
         Route::get('/field-area', [FieldAreaController::class, 'index'])->name('field-area.index');
         Route::get('/field-area/{fieldArea}', [FieldAreaController::class, 'show'])->name('fieldArea.show');
+        Route::delete('/field-area/{fieldArea}', [FieldAreaController::class, 'destroy'])->name('field-area.destroy');
 
         // Imagery
         Route::get('/imagery', [ImageryDataController::class, 'index'])->name('imagery.index');

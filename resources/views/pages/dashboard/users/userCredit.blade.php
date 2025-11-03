@@ -147,7 +147,7 @@
                             data: 'credits',
                             name: 'credits',
                             render: function(data, type, row) {
-                                return formatNumber(data);
+                                return formatNumber(data, 2);
                             }
                         },
                         {

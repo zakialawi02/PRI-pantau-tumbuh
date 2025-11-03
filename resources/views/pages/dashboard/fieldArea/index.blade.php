@@ -52,9 +52,16 @@
                                 <td>{{ Number::format($fieldArea->area_ha ?? 0, 3, locale: app()->getLocale()) }} ha</td>
                                 <td>{{ $fieldArea->created_at->isoFormat('LL, HH:mm') }}</td>
                                 <td>
-                                    <x-button-primary class="bg-secondary/80 hover:bg-secondary/60 btn-view-area text-neutral inline-flex items-center rounded-full px-2 py-1 text-xs font-medium" data-id="{{ $fieldArea->id }}" type="button" title="View Details" size="small">
+                                    <x-button-secondary class="btn-view-area" data-id="{{ $fieldArea->id }}" type="button" title="View Details" variant="outline" size="xsmall">
                                         <i class="ri-eye-line mr-1"></i> View
-                                    </x-button-primary>
+                                    </x-button-secondary>
+                                    <form class="btn-delete-area inline-block" action="{{ route('admin.field-area.destroy', $fieldArea->id) }}" method="POST">
+                                        @csrf
+                                        @method('DELETE')
+                                        <x-button-danger data-id="{{ $fieldArea->id }}" type="submit" title="Delete Field Area" size="xsmall">
+                                            <i class="ri-delete-bin-line mr-1"></i> Delete
+                                        </x-button-danger>
+                                    </form>
                                 </td>
                             </tr>
                         @empty
@@ -298,6 +305,21 @@
                     openModal('#field-area-modal');
                     getAreaDetails(areaId);
                 });
+
+
+                $(document).on('click', '.btn-delete-area', function(e) {
+                    e.preventDefault();
+                    let form = $(this).closest('form');
+                    ZkPopAlert.show({
+                        message: "Are you sure you want to delete this field area?",
+                        confirmText: "Yes, delete it",
+                        cancelText: "No, cancel",
+                        onConfirm: () => {
+                            form.submit();
+                        }
+                    });
+                });
+
 
                 function getAreaDetails(areaId) {
                     // Show loader

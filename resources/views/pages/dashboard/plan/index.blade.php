@@ -20,7 +20,7 @@
                     <span class="text-sm font-medium text-blue-700 dark:text-blue-300">
                         Current USD to IDR Exchange Rate:
                         @if (isset($exchangeRate) && $exchangeRate > 0)
-                            1 USD = {{ number_format($exchangeRate, 0, ',', '.') }} IDR
+                            1 USD = {{ Number::format($exchangeRate, 2, locale: app()->getLocale()) }} IDR
                         @else
                             1 USD = 0 IDR
                         @endif
@@ -96,7 +96,7 @@
                                 <!-- Price -->
                                 <div class="w-full md:w-1/2">
                                     <x-input-label for="price" :value="__('Price')" />
-                                    <x-text-input class="px-1! py-1.5! block w-full" id="price" name="price" type="number" step="0.01" min="0" :value="old('price')" required placeholder="1.00" />
+                                    <x-text-input class="px-1! py-1.5! block w-full" id="price" name="price" type="number" step="1" min="0" :value="old('price')" required placeholder="10.0" />
                                 </div>
                             </div>
 
