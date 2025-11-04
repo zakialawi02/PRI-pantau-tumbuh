@@ -68,6 +68,10 @@
     flex-shrink: 0;
 }
 
+.driver-popover.driverjs-theme {
+    max-width: 32rem;
+}
+
 /* Mouse Position */
 .ol-custom-mouse-position {
     padding: 0.3rem 0.5rem;

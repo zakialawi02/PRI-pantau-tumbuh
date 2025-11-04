@@ -1,10 +1,10 @@
 @section('title', 'PantauTumbuh.id - Satellite-Based Plant Health Monitoring')
 
-@section('meta_description', 'PantauTumbuh.id adalah sistem informasi berbasis citra satelit untuk mendeteksi stres tanaman menggunakan nilai Photochemical Reflectance Index (PRI). Sistem ini membantu petani, peneliti, dan pemangku kepentingan dalam memantau kesehatan tanaman secara efisien dan akurat.')
-@section('meta_keywords', 'PRI, photochemical reflectance index, stres tanaman, citra satelit, pantautumbuh, pantautumbuh.id, kesehatan tanaman, webgis pertanian, remote sensing, sentinel-2, deep learning, pertanian presisi')
+@section('meta_description', 'PantauTumbuh.id is an advanced satellite-based plant health monitoring system that utilizes the Photochemical Reflectance Index (PRI) to detect crop stress early. Our platform empowers farmers, agricultural researchers, and stakeholders with precise, real-time insights for efficient crop management and enhanced yield productivity.')
+@section('meta_keywords', 'PRI, photochemical reflectance index, plant stress detection, satellite imagery, pantautumbuh, pantautumbuh.id, crop health monitoring, agricultural webgis, remote sensing technology, sentinel-2 satellite, deep learning agriculture, precision farming, vegetasi stress analysis, ndvi monitoring, crop monitoring system, stres tanaman, kesehatan tanaman, pertanian, citra satelit')
 
-@section('og_title', 'PantauTumbuh.id - Satellite-Based Plant Health Monitoring')
-@section('og_description', 'PantauTumbuh.id memanfaatkan citra satelit dan model deep learning untuk menghitung nilai Photochemical Reflectance Index (PRI), memberikan informasi spasial tentang tingkat stres tanaman secara akurat bagi petani, peneliti, dan pengambil keputusan.')
+@section('og_title', 'PantauTumbuh.id - Advanced Plant Stress Detection Using Satellite Technology')
+@section('og_description', 'Monitor crop health and detect plant stress early with PantauTumbuh.id. Our platform leverages satellite imagery and deep learning to calculate Photochemical Reflectance Index (PRI) values, delivering accurate spatial information about vegetation conditions for farmers, researchers, and agricultural decision-makers.')
 
 <x-app-front-layout header="transparent">
     <!-- Hero Section -->

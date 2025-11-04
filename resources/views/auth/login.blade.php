@@ -1,5 +1,10 @@
 @section('title', $data['title'] ?? 'Login' . ' | ' . config('app.name'))
-@section('meta_description', '')
+
+@section('meta_description', 'PantauTumbuh.id is an advanced satellite-based plant health monitoring system that utilizes the Photochemical Reflectance Index (PRI) to detect crop stress early. Our platform empowers farmers, agricultural researchers, and stakeholders with precise, real-time insights for efficient crop management and enhanced yield productivity.')
+@section('meta_keywords', 'PRI, photochemical reflectance index, plant stress detection, satellite imagery, pantautumbuh, pantautumbuh.id, crop health monitoring, agricultural webgis, remote sensing technology, sentinel-2 satellite, deep learning agriculture, precision farming, vegetasi stress analysis, ndvi monitoring, crop monitoring system, stres tanaman, kesehatan tanaman, pertanian, citra satelit')
+
+@section('og_title', 'PantauTumbuh.id - Advanced Plant Stress Detection Using Satellite Technology')
+@section('og_description', 'Monitor crop health and detect plant stress early with PantauTumbuh.id. Our platform leverages satellite imagery and deep learning to calculate Photochemical Reflectance Index (PRI) values, delivering accurate spatial information about vegetation conditions for farmers, researchers, and agricultural decision-makers.')
 
 <x-guest-layout>
     <div class="bg-background mx-auto flex h-screen w-full flex-col overflow-hidden p-2 md:flex-row">

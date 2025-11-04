@@ -1,10 +1,10 @@
 @section('title', 'PantauTumbuh.id - Satellite-Based Plant Health Monitoring')
 
-@section('meta_description', 'PantauTumbuh.id adalah sistem informasi berbasis citra satelit untuk mendeteksi stres tanaman menggunakan nilai Photochemical Reflectance Index (PRI). Sistem ini membantu petani, peneliti, dan pemangku kepentingan dalam memantau kesehatan tanaman secara efisien dan akurat.')
-@section('meta_keywords', 'PRI, photochemical reflectance index, stres tanaman, citra satelit, pantautumbuh, pantautumbuh.id, kesehatan tanaman, webgis pertanian, remote sensing, sentinel-2, deep learning, pertanian presisi')
+@section('meta_description', 'PantauTumbuh.id is an advanced satellite-based plant health monitoring system that utilizes the Photochemical Reflectance Index (PRI) to detect crop stress early. Our platform empowers farmers, agricultural researchers, and stakeholders with precise, real-time insights for efficient crop management and enhanced yield productivity.')
+@section('meta_keywords', 'PRI, photochemical reflectance index, plant stress detection, satellite imagery, pantautumbuh, pantautumbuh.id, crop health monitoring, agricultural webgis, remote sensing technology, sentinel-2 satellite, deep learning agriculture, precision farming, vegetasi stress analysis, ndvi monitoring, crop monitoring system, stres tanaman, kesehatan tanaman, pertanian, citra satelit')
 
-@section('og_title', 'PantauTumbuh.id - WebGIS Stres Tanaman Berbasis PRI')
-@section('og_description', 'PantauTumbuh.id memanfaatkan citra satelit dan model deep learning untuk menghitung nilai Photochemical Reflectance Index (PRI), memberikan informasi spasial tentang tingkat stres tanaman secara akurat bagi petani, peneliti, dan pengambil keputusan.')
+@section('og_title', 'PantauTumbuh.id - Advanced Plant Stress Detection Using Satellite Technology')
+@section('og_description', 'Monitor crop health and detect plant stress early with PantauTumbuh.id. Our platform leverages satellite imagery and deep learning to calculate Photochemical Reflectance Index (PRI) values, delivering accurate spatial information about vegetation conditions for farmers, researchers, and agricultural decision-makers.')
 
 <x-app-front-map-layout class="flex h-screen w-screen flex-col overflow-hidden">
     <!-- HEADER -->
@@ -61,6 +61,8 @@
                 </div>
             @endauth
 
+            <x-button-primary class="px-1! py-0.5!" id="show-tour-again" type="button" title="Show Tour/Help" size="xsmall" variant="outline"><i class="ri-question-line text-[20px]"></i></x-button-primary>
+
             @guest
                 <x-button-primary href="{{ route('login') }}" size="small" variant="outline">Login</x-button-primary>
             @endguest
@@ -81,33 +83,33 @@
 
 
     <!-- MAIN LAYOUT -->
-    <div class="flex flex-1 overflow-hidden">
+    <div class="flex flex-1 overflow-hidden" id="main-layout-app-imagery">
         <!-- DESKTOP SIDEBAR -->
         <aside class="bg-background hidden shadow-lg md:flex md:w-20 md:flex-col md:items-center md:py-4">
             <nav class="flex flex-1 flex-col items-center space-y-6">
-                <button class="sidebar-btn hover:text-primary flex flex-col items-center text-xs" onclick="showPanel('data-panel', this)">
+                <button class="sidebar-btn hover:text-primary flex flex-col items-center text-xs" id="data-panel-button-dt" onclick="showPanel('data-panel', this)">
                     <span class="text-xl">🗺️</span>
                     <span>My Data</span>
                 </button>
-                <button class="sidebar-btn hover:text-primary flex flex-col items-center text-xs" onclick="showPanel('uploads-panel', this)">
+                <button class="sidebar-btn hover:text-primary flex flex-col items-center text-xs" id="uploads-panel-button-dt" onclick="showPanel('uploads-panel', this)">
                     <span class="text-xl">⬆️</span>
                     <span>Uploads</span>
                 </button>
-                <button class="sidebar-btn hover:text-primary flex flex-col items-center text-xs" onclick="showPanel('sentinel-panel', this)">
+                <button class="sidebar-btn hover:text-primary flex flex-col items-center text-xs" id="sentinel-panel-button-dt" onclick="showPanel('sentinel-panel', this)">
                     <span class="text-xl">🛰️</span>
                     <span>Sentinel-2</span>
                 </button>
-                <button class="sidebar-btn hover:text-primary flex flex-col items-center text-xs" onclick="showPanel('seasons-panel', this)">
+                {{-- <button id="seasons-panel-button-dt" class="sidebar-btn hover:text-primary flex flex-col items-center text-xs" onclick="showPanel('seasons-panel', this)">
                     <span class="text-xl">📅</span>
                     <span>Seasons</span>
                 </button>
-                <button class="sidebar-btn hover:text-primary flex flex-col items-center text-xs" onclick="showPanel('settings-panel', this)">
+                <button id="settings-panel-button-dt" class="sidebar-btn hover:text-primary flex flex-col items-center text-xs" onclick="showPanel('settings-panel', this)">
                     <span class="text-xl">⚙️</span>
                     <span>Settings</span>
-                </button>
+                </button> --}}
             </nav>
             <div class="text-foreground/70 mt-auto text-xs">© 2025</div>
-            <div class="text-foreground/70 mt-auto text-xs">v0.1.255</div>
+            <div class="text-foreground/70 mt-auto text-xs">v0.1.266</div>
         </aside>
 
         <!-- MOBILE SIDEBAR HORIZONTAL -->
@@ -117,26 +119,26 @@
             </button>
 
             <div class="flex space-x-2 overflow-x-hidden scroll-smooth" id="scroll-container">
-                <button class="sidebar-btn bg-neutral inline-flex items-center space-x-2 rounded-full border border-gray-300 px-3 py-1 text-sm font-medium" onclick="showPanel('data-panel', this)">
+                <button class="sidebar-btn bg-neutral inline-flex items-center space-x-2 rounded-full border border-gray-300 px-3 py-1 text-sm font-medium" id="data-panel-button-mobile" onclick="showPanel('data-panel', this)">
                     <span class="text-xl">🗺️</span>
                     <span>My Data</span>
                 </button>
-                <button class="sidebar-btn bg-neutral inline-flex items-center space-x-2 rounded-full border border-gray-300 px-3 py-1 text-sm font-medium" onclick="showPanel('uploads-panel', this)">
+                <button class="sidebar-btn bg-neutral inline-flex items-center space-x-2 rounded-full border border-gray-300 px-3 py-1 text-sm font-medium" id="uploads-panel-button-mobile" onclick="showPanel('uploads-panel', this)">
                     <span class="text-xl">⬆️</span>
                     <span>Uploads</span>
                 </button>
-                <button class="sidebar-btn bg-neutral inline-flex items-center space-x-2 rounded-full border border-gray-300 px-3 py-1 text-sm font-medium" onclick="showPanel('sentinel-panel', this)">
+                <button class="sidebar-btn bg-neutral inline-flex items-center space-x-2 rounded-full border border-gray-300 px-3 py-1 text-sm font-medium" id="sentinel-panel-button-mobile" onclick="showPanel('sentinel-panel', this)">
                     <span class="text-xl">🛰️</span>
                     <span>Sentinel-2</span>
                 </button>
-                <button class="sidebar-btn bg-neutral inline-flex items-center space-x-2 rounded-full border border-gray-300 px-3 py-1 text-sm font-medium" onclick="showPanel('seasons-panel', this)">
+                {{-- <button id="seasons-panel-button-mobile" class="sidebar-btn bg-neutral inline-flex items-center space-x-2 rounded-full border border-gray-300 px-3 py-1 text-sm font-medium" onclick="showPanel('seasons-panel', this)">
                     <span class="text-xl">📅</span>
                     <span>Seasons</span>
                 </button>
-                <button class="sidebar-btn bg-neutral inline-flex items-center space-x-2 rounded-full border border-gray-300 px-3 py-1 text-sm font-medium" onclick="showPanel('settings-panel', this)">
+                <button id="settings-panel-button-mobile" class="sidebar-btn bg-neutral inline-flex items-center space-x-2 rounded-full border border-gray-300 px-3 py-1 text-sm font-medium" onclick="showPanel('settings-panel', this)">
                     <span class="text-xl">⚙️</span>
                     <span>Settings</span>
-                </button>
+                </button> --}}
             </div>
 
             <button class="bg-neutral border-foreground/70 hover:bg-muted absolute right-0 top-1/2 z-10 mx-0.5 -translate-y-1/2 rounded-full border px-1 py-0.5" id="scroll-right">
@@ -274,7 +276,7 @@
                                 <div class="grid grid-cols-2 gap-1">
                                     <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="sentinelCloudFilter">
                                         <span>Max Cloud Cover (%)</span>
-                                        <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-1.5 py-0.5 text-sm focus:outline-none focus:ring" id="sentinelCloudFilter" name="cloud-cover" type="number" value="40" max="100" min="0" placeholder="e.g. 30" step="1" />
+                                        <input class="border-foreground/20 bg-background focus:border-primary focus:ring-primary/30 w-full rounded-lg border px-1.5 py-0.5 text-sm focus:outline-none focus:ring" id="sentinelCloudFilter" name="cloud-cover" type="number" value="80" max="100" min="0" placeholder="e.g. 30" step="1" />
                                     </label>
                                     <label class="text-foreground/80 flex flex-col space-y-0.5 text-xs font-medium" for="sentinelProductLevel">
                                         <span>Product Level</span>
@@ -323,12 +325,14 @@
                     <div class="tab-content hidden" id="sentinel-clip-panel" role="tabpanel" aria-labelledby="sentinel-clip-tab">
                         @php
                             $clipFieldAreas = (auth()->check() && isset($fieldAreas) ? $fieldAreas : collect())
-                                ->map(fn($area) => [
-                                    'id' => $area->id,
-                                    'name' => $area->name,
-                                    'area_ha' => $area->area_ha,
-                                    'geom' => $area->geom,
-                                ])
+                                ->map(
+                                    fn($area) => [
+                                        'id' => $area->id,
+                                        'name' => $area->name,
+                                        'area_ha' => $area->area_ha,
+                                        'geom' => $area->geom,
+                                    ],
+                                )
                                 ->values();
                         @endphp
                         @auth
@@ -360,7 +364,9 @@
                                                 <option value="">Select a field area</option>
                                                 @foreach ($fieldAreas as $area)
                                                     <option value="{{ $area->id }}">
-                                                        {{ $area->name ?? 'Unnamed Field' }}@if (!is_null($area->area_ha)) ({{ Number::format($area->area_ha, 2, locale: app()->getLocale()) }} ha)@endif
+                                                        {{ $area->name ?? 'Unnamed Field' }}@if (!is_null($area->area_ha))
+                                                            ({{ Number::format($area->area_ha, 2, locale: app()->getLocale()) }} ha)
+                                                        @endif
                                                     </option>
                                                 @endforeach
                                             </select>
@@ -751,7 +757,7 @@
             </div>
 
             <!-- Bottom Date Selector -->
-            <div class="absolute bottom-1 left-2 flex flex-wrap space-x-1 text-xs md:text-sm">
+            <div class="absolute bottom-1 left-2 flex flex-wrap space-x-1 text-xs opacity-50 md:text-sm">
                 <div class="bg-muted flex space-x-1 rounded-md p-1">
                     <button class="bg-neutral rounded px-1 py-0.5">1M</button>
                     <button class="bg-neutral rounded px-1 py-0.5">3M</button>
@@ -768,8 +774,225 @@
 
 
     </div>
+
+    @push('css')
+        <link href="https://cdn.jsdelivr.net/npm/driver.js@latest/dist/driver.css" rel="stylesheet" />
+    @endpush
+
     @push('javascript')
+        <script src="https://cdn.jsdelivr.net/npm/driver.js@latest/dist/driver.js.iife.js"></script>
+
         <script>
+            $(document).ready(function() {
+                window.addEventListener('resize', () => {
+                    location.reload(); // reload halaman agar tour cocok dengan ukuran baru
+                });
+
+                const driver = window.driver.js.driver;
+                const tourDisabled = localStorage.getItem('dontShowTour') === 'true';
+                const isMobile = window.matchMedia("(max-width: 768px)").matches;
+
+                const stepsMobile = [{
+                        element: '#main-layout-app-imagery #top-center',
+                        popover: {
+                            title: 'Welcome to PantauTumbuh.id',
+                            description: 'PantauTumbuh.id is an advanced satellite-based plant health monitoring platform designed to empower farmers, agricultural researchers, and stakeholders with precise, real-time insights. By utilizing the Photochemical Reflectance Index (PRI) derived from Sentinel-2 satellite imagery, our system enables early detection of crop stress, facilitating timely interventions that enhance yield productivity and promote sustainable farming practices. Monitor your crops\' health, analyze vegetation conditions, and make data-driven decisions with our intuitive web-based mapping interface.',
+                            side: "top",
+                            align: 'center'
+                        }
+                    },
+                    {
+                        element: '#data-panel-button-mobile',
+                        popover: {
+                            title: 'My Data Access',
+                            description: 'Access and manage your uploaded satellite imagery data Here.'
+                        }
+                    },
+                    {
+                        element: '#data-panel',
+                        popover: {
+                            title: 'My Data Panel',
+                            description: 'Manage your uploaded satellite imagery data (Login Required). View, analyze, and monitor crop health using PRI and other vegetation indices.'
+                        }
+                    },
+                    {
+                        element: '#uploads-panel-button-mobile',
+                        popover: {
+                            title: 'Uploads Own Imagery Access',
+                            description: 'Upload your satellite image data here for processing.'
+                        }
+                    },
+                    {
+                        element: '#uploads-panel',
+                        popover: {
+                            title: 'Imagery Uploads',
+                            description: 'Upload your satellite image data here for processing. Supported formats: GeoTIFF (.tif, .tiff, .geotif). Compatible with Sentinel-2 imagery [band order: 1, 2, 3, 4, 5, 6, 7, 8, 8A, 9, 11, 12]. Get detailed plant stress analysis with our AI-powered engine. (Login Required)'
+                        }
+                    },
+                    {
+                        element: '#sentinel-panel-button-mobile',
+                        popover: {
+                            title: 'Sentinel-2 Collection Access',
+                            description: 'Access Sentinel-2 Collection imagery data Here.'
+                        }
+                    },
+                    {
+                        element: '#sentinel-panel',
+                        popover: {
+                            title: 'Sentinel-2 Collection List',
+                            description: 'View available Sentinel-2 satellite imagery collections. Select a scene to preview on the map, download the raw data, or process (login required) it for advanced plant health analysis using our PRI-based algorithms. You can filter scenes by cloud cover, date range, and location to find the most suitable imagery for your agricultural monitoring needs.'
+                        }
+                    },
+                    {
+                        element: '[role="tablist"]',
+                        popover: {
+                            title: 'Sentinel-2 Data Access Methods',
+                            description: 'Choose between two methods for processing Sentinel-2 data: "Data Collection (Scene)" for complete satellite scenes, or "Imagery by Clip" to define a specific area of interest for targeted analysis.'
+                        }
+                    },
+                ];
+
+                // 💻 Langkah-langkah untuk DESKTOP
+                const stepsDesktop = [{
+                        element: '#main-layout-app-imagery #top-center',
+                        popover: {
+                            title: 'Welcome to PantauTumbuh.id',
+                            description: 'PantauTumbuh.id is an advanced satellite-based plant health monitoring platform designed to empower farmers, agricultural researchers, and stakeholders with precise, real-time insights. By utilizing the Photochemical Reflectance Index (PRI) derived from Sentinel-2 satellite imagery, our system enables early detection of crop stress, facilitating timely interventions that enhance yield productivity and promote sustainable farming practices. Monitor your crops\' health, analyze vegetation conditions, and make data-driven decisions with our intuitive web-based mapping interface.',
+                            side: "top",
+                            align: 'center'
+                        }
+                    },
+                    {
+                        element: '#data-panel-button-dt',
+                        popover: {
+                            title: 'My Data Access',
+                            description: 'Access and manage your uploaded satellite imagery data Here.'
+                        }
+                    },
+                    {
+                        element: '#data-panel',
+                        popover: {
+                            title: 'My Data Panel',
+                            description: 'Manage your uploaded satellite imagery data (Login Required). View, analyze, and monitor crop health using PRI and other vegetation indices.'
+                        }
+                    },
+                    {
+                        element: '#uploads-panel-button-dt',
+                        popover: {
+                            title: 'Uploads Own Imagery Access',
+                            description: 'Upload your satellite image data here for processing.'
+                        }
+                    },
+                    {
+                        element: '#uploads-panel',
+                        popover: {
+                            title: 'Imagery Uploads',
+                            description: 'Upload your satellite image data here for processing. Supported formats: GeoTIFF (.tif, .tiff, .geotif). Compatible with Sentinel-2 imagery [band order: 1, 2, 3, 4, 5, 6, 7, 8, 8A, 9, 11, 12]. Get detailed plant stress analysis with our AI-powered engine. (Login Required)'
+                        }
+                    },
+                    {
+                        element: '#sentinel-panel-button-dt',
+                        popover: {
+                            title: 'Sentinel-2 Collection Access',
+                            description: 'Access Sentinel-2 Collection imagery data Here.'
+                        }
+                    },
+                    {
+                        element: '#sentinel-panel',
+                        popover: {
+                            title: 'Sentinel-2 Collection List',
+                            description: 'View available Sentinel-2 satellite imagery collections. Select a scene to preview on the map, download the raw data, or process (login required) it for advanced plant health analysis using our PRI-based algorithms. You can filter scenes by cloud cover, date range, and location to find the most suitable imagery for your agricultural monitoring needs.'
+                        }
+                    },
+                    {
+                        element: '[role="tablist"]',
+                        popover: {
+                            title: 'Sentinel-2 Data Access Methods',
+                            description: 'Choose between two methods for processing Sentinel-2 data: "Data Collection (Scene)" for complete satellite scenes, or "Imagery by Clip" to define a specific area of interest for targeted analysis.'
+                        }
+                    },
+                ];
+
+                const driverObj = driver({
+                    popoverClass: 'driverjs-theme',
+                    showProgress: true,
+
+                    onPopoverRender: (popover, {
+                        config,
+                        state
+                    }) => {
+                        // Tombol "Go to First"
+                        const firstButton = document.createElement("button");
+                        firstButton.innerText = "Go to First";
+                        popover.footerButtons.appendChild(firstButton);
+
+                        firstButton.addEventListener("click", () => {
+                            driverObj.drive(0);
+                        });
+
+                        // Tambahkan checkbox 'don't show this tour again'
+                        const checkboxContainer = document.createElement("div");
+                        checkboxContainer.classList.add("dont-show-tour-container");
+                        checkboxContainer.innerHTML = `
+                            <label style="margin-right: 8px; font-size: 12px; display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                                <input type="checkbox" id="dont-show-tour" style="cursor: pointer;" checked />
+                                Don't show this tour again
+                            </label>
+                            `;
+
+                        // 🧭 Sisipkan di sisi kiri footer popover
+                        popover.footer.insertBefore(checkboxContainer, popover.footer.firstChild);
+                    },
+                    onDestroyStarted: () => {
+                        // Saat tour selesai, baca nilai terakhir dari checkbox dan simpan
+                        const isChecked = $('#dont-show-tour').is(':checked');
+                        localStorage.setItem('dontShowTour', isChecked);
+                        driverObj.destroy();
+                        console.log('Tour destroyed');
+                    },
+
+                    onHighlightStarted: (element, step) => {
+                        if (step.element === '#data-panel') {
+                            console.log('Opening data panel...');
+                            $("#data-panel-button-dt").trigger("click");
+                        }
+                        if (step.element === '#uploads-panel') {
+                            console.log('Opening uploads panel...');
+                            $("#uploads-panel-button-dt").trigger("click");
+                        }
+                        if (step.element === '#sentinel-panel') {
+                            console.log('Opening sentinel panel...');
+                            $("#sentinel-panel-button-dt").trigger("click");
+                        }
+                        if (step.element === '#data-panel') {
+                            console.log('Opening data panel...');
+                            $("#data-panel-button-mobile").trigger("click");
+                        }
+                        if (step.element === '#uploads-panel') {
+                            console.log('Opening uploads panel...');
+                            $("#uploads-panel-button-mobile").trigger("click");
+                        }
+                        if (step.element === '#sentinel-panel') {
+                            console.log('Opening sentinel panel...');
+                            $("#sentinel-panel-button-mobile").trigger("click");
+                        }
+                    },
+                    steps: isMobile ? stepsMobile : stepsDesktop
+                });
+
+                // Jalankan tour hanya jika belum dinonaktifkan
+                if (!tourDisabled) {
+                    driverObj.drive();
+                }
+
+                $('#show-tour-again').click(() => {
+                    localStorage.setItem('dontShowTour', false);
+                    console.log('Tour reset!');
+                    driverObj.drive();
+                });
+            });
+
+
             window.appConfig = {
                 imageryProcessingCost: {{ config('app-constants.imagery_processing_cost') }}
             };
@@ -1882,7 +2105,10 @@
                     }
                 };
 
-                const applyClipOutputs = ({ areaHa, featureCollection }) => {
+                const applyClipOutputs = ({
+                    areaHa,
+                    featureCollection
+                }) => {
                     const locale = document.documentElement.lang || 'en';
 
                     if (clipOutputs.area) {
@@ -1911,7 +2137,10 @@
                     }
                 };
 
-                const clearClipSelection = ({ resetFieldName = true, resetStatus = true } = {}) => {
+                const clearClipSelection = ({
+                    resetFieldName = true,
+                    resetStatus = true
+                } = {}) => {
                     if (clipElements.existingSelect) {
                         clipElements.existingSelect.value = '';
                     }
@@ -1942,9 +2171,14 @@
                     resetSelection: (options = {}) => clearClipSelection(options),
                 });
 
-                const setClipSelectionFromFieldArea = (fieldArea, { fitToExtent = true } = {}) => {
+                const setClipSelectionFromFieldArea = (fieldArea, {
+                    fitToExtent = true
+                } = {}) => {
                     if (!fieldArea || !fieldArea.geom) {
-                        clearClipSelection({ resetFieldName: false, resetStatus: false });
+                        clearClipSelection({
+                            resetFieldName: false,
+                            resetStatus: false
+                        });
                         return;
                     }
 
@@ -1953,7 +2187,9 @@
                     let areaSquareMeters = Number.isFinite(areaHa) && areaHa > 0 ? areaHa * 10000 : null;
 
                     if (window.AppMap?.clip?.showFeatureCollection) {
-                        const result = window.AppMap.clip.showFeatureCollection(featureCollection, { fitToExtent });
+                        const result = window.AppMap.clip.showFeatureCollection(featureCollection, {
+                            fitToExtent
+                        });
                         if (result?.areaSquareMeters && result.areaSquareMeters > 0) {
                             areaSquareMeters = result.areaSquareMeters;
                             areaHa = areaSquareMeters / 10000;
@@ -1975,7 +2211,10 @@
                         clipElements.fieldName.value = fieldArea.name;
                     }
 
-                    applyClipOutputs({ areaHa, featureCollection });
+                    applyClipOutputs({
+                        areaHa,
+                        featureCollection
+                    });
 
                     window.geojsonFeature = featureCollection?.features?.[0] ?? null;
                     window.geojsonArea = Number.isFinite(areaSquareMeters) ? areaSquareMeters : (Number.isFinite(areaHa) ? areaHa * 10000 : null);
@@ -1987,7 +2226,9 @@
                 const handleClipFieldAreaSelection = (event) => {
                     const selectedId = event?.target?.value || '';
                     if (!selectedId) {
-                        clearClipSelection({ resetFieldName: false });
+                        clearClipSelection({
+                            resetFieldName: false
+                        });
                         return;
                     }
 
@@ -1997,7 +2238,9 @@
                         return;
                     }
 
-                    setClipSelectionFromFieldArea(fieldArea, { fitToExtent: true });
+                    setClipSelectionFromFieldArea(fieldArea, {
+                        fitToExtent: true
+                    });
                 };
 
                 if (clipElements.existingSelect) {
@@ -3389,7 +3632,7 @@
                  */
                 const resetFilters = () => {
                     if (elements.cloudInput) {
-                        elements.cloudInput.value = '40';
+                        elements.cloudInput.value = '80';
                     }
                     if (elements.productInput) {
                         elements.productInput.value = 'S2MSI2A';

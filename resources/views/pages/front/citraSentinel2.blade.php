@@ -1,10 +1,10 @@
 @section('title', 'Citra Sentinel 2 | ' . config('app.name'))
 
-@section('meta_description', 'PantauTumbuh.id adalah sistem informasi berbasis citra satelit untuk mendeteksi stres tanaman menggunakan nilai Photochemical Reflectance Index (PRI). Sistem ini membantu petani, peneliti, dan pemangku kepentingan dalam memantau kesehatan tanaman secara efisien dan akurat.')
-@section('meta_keywords', 'PRI, photochemical reflectance index, stres tanaman, citra satelit, pantautumbuh, pantautumbuh.id, kesehatan tanaman, webgis pertanian, remote sensing, sentinel-2, deep learning, pertanian presisi')
+@section('meta_description', 'Sentinel-2 is an advanced Earth observation satellite by ESA providing high-resolution multispectral imagery for agricultural monitoring, environmental analysis, and land use mapping with 10-meter spatial resolution.')
+@section('meta_keywords', 'Sentinel-2, ESA satellite, multispectral imagery, Earth observation, agricultural monitoring, environmental analysis, land use mapping, precision farming, remote sensing, vegetation index, crop health, satellite data')
 
-@section('og_title', 'PantauTumbuh.id - WebGIS Stres Tanaman Berbasis PRI')
-@section('og_description', 'PantauTumbuh.id memanfaatkan citra satelit dan model deep learning untuk menghitung nilai Photochemical Reflectance Index (PRI), memberikan informasi spasial tentang tingkat stres tanaman secara akurat bagi petani, peneliti, dan pengambil keputusan.')
+@section('og_title', 'Sentinel-2 - Advanced Earth Observation Satellite')
+@section('og_description', 'Discover how Sentinel-2 satellite technology delivers high-resolution multispectral data for precision agriculture, environmental monitoring, and land use analysis. Monitor crop health and vegetation changes with 10-meter accuracy.')
 
 <x-app-front-layout header="transparent">
     <!-- Hero Section -->

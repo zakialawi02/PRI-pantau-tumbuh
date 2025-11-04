@@ -10,9 +10,9 @@
         <title>@yield('title', config('app.name'))</title>
 
         <!-- SEO Meta Tags -->
-        <meta name="description" content="@yield('meta_description', '')">
+        <meta name="description" content="@yield('meta_description', 'PantauTumbuh.id is an advanced satellite-based plant health monitoring system that utilizes the Photochemical Reflectance Index (PRI) to detect crop stress early. Our platform empowers farmers, agricultural researchers, and stakeholders with precise, real-time insights for efficient crop management and enhanced yield productivity.')">
         <meta name="author" content="@yield('meta_author', 'Ahmad Zaki Alawi')">
-        <meta name="keywords" content="@yield('meta_keywords', '')">
+        <meta name="keywords" content="@yield('meta_keywords', 'PRI, photochemical reflectance index, plant stress detection, satellite imagery, pantautumbuh, pantautumbuh.id, crop health monitoring, agricultural webgis, remote sensing technology, sentinel-2 satellite, deep learning agriculture, precision farming, vegetasi stress analysis, ndvi monitoring, crop monitoring system, stres tanaman, kesehatan tanaman, pertanian, citra satelit')">
 
         <!-- Open Graph Meta Tags -->
         <meta property="og:title" content="@yield('og_title', config('app.name'))" />
