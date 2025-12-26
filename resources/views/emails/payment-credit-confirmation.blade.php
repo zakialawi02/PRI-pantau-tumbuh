@@ -172,6 +172,8 @@
                                     Bank Transfer
                                 @elseif($payment->payment_method === 'paypal')
                                     PayPal
+                                @elseif($payment->payment_method === 'midtrans')
+                                    Midtrans
                                 @else
                                     {{ ucfirst(str_replace('_', ' ', $payment->payment_method)) }}
                                 @endif

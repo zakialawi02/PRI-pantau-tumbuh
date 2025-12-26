@@ -39,9 +39,9 @@ class Payment extends Model
         'verified_by',
         'payment_method',
         'transaction_ref',
+        'gateway_token',
+        'gateway_payload',
         'paid_at',
-
-
     ];
 
     protected $casts = [
@@ -53,6 +53,7 @@ class Payment extends Model
         'price_idr' => 'decimal:2',
         'price_usd' => 'decimal:2',
         'credit_points' => 'decimal:2',
+        'gateway_payload' => 'array',
     ];
 
     protected $attributes = [

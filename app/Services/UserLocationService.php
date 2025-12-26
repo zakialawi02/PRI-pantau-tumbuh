@@ -54,7 +54,7 @@ class UserLocationService
         $currency = $this->resolveCurrency($ip);
 
         if ($currency === 'IDR') {
-            return ['bank_transfer', 'manual'];
+            return ['bank_transfer', 'midtrans', 'manual'];
         }
 
         return ['paypal', 'manual'];

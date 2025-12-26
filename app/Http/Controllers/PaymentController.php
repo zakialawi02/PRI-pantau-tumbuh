@@ -139,6 +139,8 @@ class PaymentController extends Controller
                     'email' => $payment->email,
                     'phone' => $payment->phone,
                     'payment_method' => $payment->payment_method,
+                    'gateway_token' => $payment->gateway_token,
+                    'gateway_payload' => $payment->gateway_payload,
                     'due_date' => $payment->due_date ? $payment->due_date->format('Y-m-d H:i:s') : null,
                     'paid_at' => $payment->paid_at ? $payment->paid_at->format('Y-m-d H:i:s') : null,
                     'created_at' => $payment->created_at->format('Y-m-d H:i:s'),
@@ -273,7 +275,7 @@ class PaymentController extends Controller
             'name' => 'required|string|max:255',
             'email' => 'required|email',
             'phone' => 'required|string|max:20',
-            'payment_method' => 'required|string|in:bank_transfer,paypal,stripe,manual',
+            'payment_method' => 'required|string|in:bank_transfer,paypal,midtrans,stripe,manual',
         ]);
 
         $cacheData = Cache::get($request->order_id);
@@ -352,17 +354,32 @@ class PaymentController extends Controller
                         'description' => 'Credit Purchase: ' . $plan->name . ' for ' . $plan->credit_points . ' Credits',
                         'return_url' => route('admin.payment.callback', ['gateway' => $gatewayName]) . '?paymentId=' . $payment->id,
                         'cancel_url' => route('admin.payment.show', $payment->id),
-                        'payment_id' => $payment->id // Pass payment ID for callback
+                        'payment_id' => $payment->id, // Pass payment ID for callback
+                        'customer' => [
+                            'first_name' => $request->name,
+                            'email' => $request->email,
+                            'phone' => $request->phone,
+                        ],
                     ];
 
                     $result = $gateway->charge($paymentData);
 
                     if ($result['status'] === 'success') {
                         // Update payment with transaction details
-                        $payment->update([
+                        $updateData = [
                             'transaction_ref' => $result['transaction_id'],
-                            'status' => 'pending' // Still pending until confirmed
-                        ]);
+                            'status' => 'pending', // Still pending until confirmed
+                        ];
+
+                        if (!empty($result['payment_token'])) {
+                            $updateData['gateway_token'] = $result['payment_token'];
+                        }
+
+                        if (!empty($result['payment_data'])) {
+                            $updateData['gateway_payload'] = $result['payment_data'];
+                        }
+
+                        $payment->update($updateData);
 
                         // Redirect to payment gateway
                         if (isset($result['approval_url'])) {
@@ -426,17 +443,32 @@ class PaymentController extends Controller
                 'description' => 'Payment for Credit Purchase: ' . $payment->credit_points . ' Credits',
                 'return_url' => route('admin.payment.callback', ['gateway' => 'paypal']) . '?paymentId=' . $payment->id,
                 'cancel_url' => route('admin.payment.show', $payment->id),
-                'payment_id' => $payment->id // Pass payment ID for callback
+                'payment_id' => $payment->id, // Pass payment ID for callback
+                'customer' => [
+                    'first_name' => $payment->name,
+                    'email' => $payment->email,
+                    'phone' => $payment->phone,
+                ],
             ];
 
             $result = $gateway->charge($paymentData);
 
             if ($result['status'] === 'success') {
                 // Update payment with transaction details
-                $payment->update([
+                $updateData = [
                     'transaction_ref' => $result['transaction_id'],
-                    'status' => 'pending' // Still pending until confirmed
-                ]);
+                    'status' => 'pending', // Still pending until confirmed
+                ];
+
+                if (!empty($result['payment_token'])) {
+                    $updateData['gateway_token'] = $result['payment_token'];
+                }
+
+                if (!empty($result['payment_data'])) {
+                    $updateData['gateway_payload'] = $result['payment_data'];
+                }
+
+                $payment->update($updateData);
 
                 // Redirect to PayPal
                 if (isset($result['approval_url'])) {
@@ -526,10 +558,78 @@ class PaymentController extends Controller
                 }
             } else {
                 // For other gateways, use the existing getTransactionStatus method
-                $gatewayService = PaymentGatewayFactory::make($gateway);
-                $status = $gatewayService->getTransactionStatus($payment->transaction_ref);
+                $status = $gatewayService->getTransactionStatus($payment->transaction_ref ?? $payment->id);
 
-                if (strtolower($status['status']) === 'completed') {
+                if (isset($status['raw']) && is_array($status['raw'])) {
+                    $payment->update([
+                        'gateway_payload' => $status['raw'],
+                    ]);
+                }
+
+                if ($gateway === 'midtrans') {
+                    if (($status['status'] ?? '') === 'error') {
+                        $payment->update([
+                            'status' => 'failed',
+                            'updated_at' => now(),
+                        ]);
+
+                        return redirect()->route('admin.payment.show', $payment->id)
+                            ->with('error', 'Payment failed to complete through Midtrans. ' . ($status['message'] ?? ''));
+                    }
+
+                    if (!empty($status['is_success'])) {
+                        $payment->update([
+                            'status' => 'paid',
+                            'paid_at' => now(),
+                            'updated_at' => now(),
+                        ]);
+
+                        if ($payment->credit_points > 0) {
+                            $this->creditService->addCreditsToUser(
+                                $payment->user_id,
+                                $payment->credit_points,
+                                'PaymentController',
+                                __('Credits added from payment completion #:invoice', ['invoice' => $payment->invoice_number ?? $payment->id]),
+                                [
+                                    'payment_id' => $payment->id,
+                                    'gateway' => $gateway,
+                                    'trigger' => 'gateway_status',
+                                ],
+                                'payment',
+                                (string) $payment->id
+                            );
+                        }
+
+                        try {
+                            Mail::to($payment->email)->queue(new PaymentCreditConfirmation($payment));
+                        } catch (Exception $e) {
+                            Log::error("Failed to send payment confirmation email: " . $e->getMessage());
+                        }
+
+                        return redirect()->route('admin.payment.show', $payment->id)
+                            ->with('success', 'Payment completed successfully.');
+                    }
+
+                    if (!empty($status['is_pending'])) {
+                        $payment->update([
+                            'status' => 'pending',
+                            'updated_at' => now(),
+                        ]);
+
+                        return redirect()->route('admin.payment.show', $payment->id)
+                            ->with('warning', 'Payment is still pending confirmation from Midtrans.');
+                    }
+
+                    $payment->update([
+                        'status' => 'failed',
+                        'updated_at' => now(),
+                    ]);
+
+                    return redirect()->route('admin.payment.show', $payment->id)
+                        ->with('error', 'Payment failed or was cancelled. Midtrans status: ' . ($status['status'] ?? 'unknown'));
+                }
+
+                if (strtolower((string) ($status['status'] ?? '')) === 'completed') {
                     // Update payment status
                     $payment->update([
                         'status' => 'paid',
@@ -564,15 +664,15 @@ class PaymentController extends Controller
 
                     return redirect()->route('admin.payment.show', $payment->id)
                         ->with('success', 'Payment completed successfully.');
-                } else {
-                    $payment->update([
-                        'status' => 'failed',
-                        'updated_at' => now(),
-                    ]);
-
-                    return redirect()->route('admin.payment.show', $payment->id)
-                        ->with('error', 'Payment failed or cancelled.');
                 }
+
+                $payment->update([
+                    'status' => 'failed',
+                    'updated_at' => now(),
+                ]);
+
+                return redirect()->route('admin.payment.show', $payment->id)
+                    ->with('error', 'Payment failed or cancelled.');
             }
         } catch (Exception $e) {
             Log::error("Payment callback error: " . $e->getMessage());
